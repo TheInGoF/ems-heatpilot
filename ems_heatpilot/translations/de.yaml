@@ -1,0 +1,53 @@
+configuration:
+  mode:
+    name: Modus
+    description: "observe = nur beobachten und lernen (Version 0.1)"
+  sample_interval_s:
+    name: Abtastintervall (s)
+  backfill_days:
+    name: Historie übernehmen (Tage)
+    description: Einzelwerte aus dem Recorder beim ersten Start
+  statistics_backfill_days:
+    name: Langzeitstatistik übernehmen (Tage)
+  outdoor_sensors:
+    name: Außenfühler
+    description: Ein oder mehrere Sensoren, es wird das Minimum verwendet. Leer = Außenfühler der Therme
+  rooms:
+    name: Räume
+    description: "Je Raum: name, climate (Tado-Klima-Entität), optional temperature, heating_power (Ventil %), humidity. Leer = Tado-Räume automatisch"
+  emsesp_host:
+    name: EMS-ESP-Adresse
+    description: "IP oder Name von EMS-ESP, z. B. 192.168.188.102 – liest alle Werte direkt, schreibt nie. Leer = nur über Home Assistant"
+  gas_sensor:
+    name: Gaszähler
+    description: Zählerstand in m³ (oder kWh), z. B. sensor.analogsensor_21
+  demand_sensor:
+    name: Heizungsanforderung
+    description: Optional, Sensor der bestehenden Automation (wird nur aufgezeichnet)
+  weather_entity:
+    name: Wetter-Entität
+  gas_calorific_value:
+    name: Brennwert (kWh/m³)
+    description: Laut Gasrechnung, typisch 10,5–11,5
+  gas_z_number:
+    name: Zustandszahl
+    description: Laut Gasrechnung, typisch 0,93–0,97
+  gas_price_eur_per_kwh:
+    name: Arbeitspreis (€/kWh)
+  gas_base_fee_eur_per_year:
+    name: Grundpreis (€/Jahr)
+  design_outdoor_temp:
+    name: Auslegungs-Außentemperatur (°C)
+  max_flow_temp:
+    name: Maximale Vorlauftemperatur (°C)
+  away_temp:
+    name: Temperatur bei Abwesenheit (°C)
+  night_temp:
+    name: Nachttemperatur (°C)
+  night_start:
+    name: Nacht ab
+  night_end:
+    name: Nacht bis
+  overrides:
+    name: Zuordnungen erzwingen
+    description: "Format rolle=entity_id, z. B. flow_temp=sensor.boiler_curflowtemp"
