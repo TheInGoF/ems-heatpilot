@@ -77,6 +77,7 @@ class Discovered:
     weather: str | None = None
     gas: str | None = None
     gas_unit: str | None = None
+    demand_sensor: str | None = None  # z. B. sensor.heizungsanforderung (Ventile in %)
     home_zone: tuple[float, float] | None = None
 
     def all_sensor_ids(self) -> list[str]:
@@ -85,6 +86,8 @@ class Discovered:
             ids += [x for x in (r.heating_power, r.humidity, r.temp_sensor) if x]
         if self.gas:
             ids.append(self.gas)
+        if self.demand_sensor:
+            ids.append(self.demand_sensor)
         return sorted(set(ids))
 
     def as_dict(self) -> dict:
@@ -97,6 +100,7 @@ class Discovered:
             "weather": self.weather,
             "gas": self.gas,
             "gas_unit": self.gas_unit,
+            "demand_sensor": self.demand_sensor,
             "home_zone": self.home_zone,
         }
 
@@ -191,9 +195,11 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
         weathers = sorted(e for e in ids if e.startswith("weather."))
         d.weather = weathers[0] if weathers else None
 
-    if cfg.gas_sensor:
+    if cfg.gas_sensor and cfg.gas_sensor in by_id:
         d.gas = cfg.gas_sensor
     else:
+        if cfg.gas_sensor:
+            log.warning("Gaszähler %s nicht gefunden – suche automatisch", cfg.gas_sensor)
         gas = sorted(
             e for e in ids
             if e.startswith("sensor.")
@@ -207,6 +213,9 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
         d.gas_unit = "kWh" if d.gas else None
     elif d.gas in by_id:
         d.gas_unit = by_id[d.gas].get("attributes", {}).get("unit_of_measurement")
+
+    if cfg.demand_sensor and cfg.demand_sensor in by_id:
+        d.demand_sensor = cfg.demand_sensor
 
     zone = by_id.get("zone.home", {}).get("attributes", {})
     if "latitude" in zone:

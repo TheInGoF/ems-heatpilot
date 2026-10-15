@@ -20,6 +20,10 @@ configuration:
     description: "IP oder Name von EMS-ESP, z. B. 192.168.188.102 – liest alle Werte direkt, schreibt nie. Leer = nur über Home Assistant"
   gas_sensor:
     name: Gaszähler
+    description: Zählerstand in m³ (oder kWh), z. B. sensor.analogsensor_21
+  demand_sensor:
+    name: Heizungsanforderung
+    description: Optional, Sensor der bestehenden Automation (wird nur aufgezeichnet)
   weather_entity:
     name: Wetter-Entität
   gas_calorific_value:

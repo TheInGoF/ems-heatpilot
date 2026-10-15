@@ -25,7 +25,9 @@ class Config:
     outdoor_sensors: list[str] = field(default_factory=lambda: ["sensor.aussen_temperatur"])
     # Räume: [{name, climate, temperature?, heating_power?, humidity?}], leer = Tado automatisch
     rooms: list[dict] = field(default_factory=list)
-    gas_sensor: str | None = None
+    gas_sensor: str | None = "sensor.analogsensor_21"
+    # Heizungsanforderung der bestehenden Automation (nur aufzeichnen)
+    demand_sensor: str | None = "sensor.heizungsanforderung"
     weather_entity: str | None = None
     emsesp_host: str | None = None
     # Gasabrechnung: kWh = m³ × Brennwert × Zustandszahl (Werte von der Gasrechnung)
@@ -59,7 +61,7 @@ class Config:
                 value = {k.strip(): v.strip() for k, v in value.items()}
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
-        for key in ("gas_sensor", "weather_entity", "emsesp_host"):
+        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host"):
             if getattr(cfg, key) == "":
                 setattr(cfg, key, None)
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]

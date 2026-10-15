@@ -26,6 +26,8 @@ STALE_S = 12 * 3600
 
 
 def num(value) -> float | None:
+    if isinstance(value, str):
+        value = value.strip().replace(",", ".")  # z. B. EMS-ESP-Zähler "4321,57"
     try:
         v = float(value)
     except (TypeError, ValueError):
@@ -72,6 +74,7 @@ class Engine:
         self._live_prev: dict = {}
         self._demand: bool | None = None
         self._mode_wait_start: float | None = None  # Beginn der aktuellen Wartephase
+        self._last_enabled: int | None = None
         off = store.query("SELECT MAX(ts) AS t FROM burner_events WHERE state = 0")
         self._last_off_ts: float | None = off[0]["t"] if off else None
         self._live_entities = {
@@ -190,6 +193,11 @@ class Engine:
         locked = bool(
             period and self._last_off_ts is not None and now - self._last_off_ts < period * 60
         )
+        if enabled is not None:
+            if self._last_enabled is not None and enabled != self._last_enabled:
+                # viele Wechsel am Tag = Automationen schalten gegeneinander
+                self.store.add_daily(local(now).date().isoformat(), "mode_switch_count", 1)
+            self._last_enabled = enabled
         mode_wait = burner == 0 and demand is True and enabled == 0 and not locked
         if mode_wait and self._mode_wait_start is None:
             self._mode_wait_start = now
@@ -268,6 +276,7 @@ class Engine:
             "pump_mod": num(self._boiler("pump_mod")),
             "dhw_temp": num(self._boiler("dhw_temp")),
             "flame": num(self._boiler("flame_current")),
+            "demand_pct": num(self._val(self.found.demand_sensor)),
         }
         rooms = []
         for r in self.found.rooms:
@@ -441,6 +450,7 @@ class Engine:
         cycling["mode_wait_min"] = round(live.get("mode_wait_min", 0.0), 1)
         cycling["enable_delay_min"] = round(live.get("enable_delay_min", 0.0), 1)
         cycling["enable_delay_count"] = int(live.get("enable_delay_count", 0))
+        cycling["mode_switch_count"] = int(live.get("mode_switch_count", 0))
         cycling["overrun_min"] = round(live.get("overrun_min", 0.0), 1)
         cycling["overrun_kwh"] = round(live.get("overrun_kwh", 0.0), 2)
         starts, runtime = num(self._boiler("heat_starts")), num(self._boiler("heat_runtime"))
@@ -538,6 +548,7 @@ class Engine:
             "hc_seltemp": num(self._thermo("hc_seltemp")),
             "remote_temp": num(self._thermo("hc_remotetemp")),
             "pump_mod": num(self._boiler("pump_mod")),
+            "demand_pct": num(self._val(self.found.demand_sensor)),
             "setpoint_demand": self._demand,
             "emsesp": bool(self.ems),
             "discovered": self.found.as_dict(),

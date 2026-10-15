@@ -41,6 +41,7 @@ SAMPLE_COLS = (
     "boiler_temp", "calc_flow", "heating_off", "burn_starts", "heat_starts", "heat_min",
     # seit 0.3
     "hc_day", "hc_seltemp", "remote_temp", "pump_mod", "dhw_temp", "flame",
+    "demand_pct",
 )
 
 

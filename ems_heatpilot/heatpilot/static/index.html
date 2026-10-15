@@ -245,6 +245,8 @@ async function load() {
   const h = s.house, c = s.cycling, sv = s.savings;
   $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
     ` · Wärmebedarf laut Tado-Soll: <b>${s.setpoint_demand === null ? "–" : s.setpoint_demand ? "ja" : "nein"}</b>` +
+    (s.demand_pct !== null ? ` · Heizungsanforderung ${fmt(s.demand_pct, 0)} %` : "") +
+    ` · Regler: ${s.hc_mode ?? "–"}` +
     (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "");
   $("tiles").innerHTML = [
     tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
@@ -253,7 +255,7 @@ async function load() {
     tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", "Zeitkonstante des Auskühlens"),
     tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
     tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
-    tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · gesperrt insgesamt ${fmt(c.mode_wait_min, 0)} min · jetzt: ${s.hc_mode ?? "–"}`),
+    tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),
     tile("Brenner ohne Bedarf", fmt(c.overrun_min, 0), "min heute", `≈ ${fmt(c.overrun_kwh, 1)} kWh · alle Räume waren am Soll`),
     tile("Gaskosten", fmt(s.costs.eur, 0), s.costs.full_year ? "€ / Jahr" : `€ in ${fmt(s.costs.days, 0)} Tagen`, `${fmt(s.costs.kwh, 0)} kWh inkl. anteiligem Grundpreis` + (s.costs.full_year ? "" : " – noch kein volles Jahr")),
     tile("Ersparnis-Schätzung", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`),

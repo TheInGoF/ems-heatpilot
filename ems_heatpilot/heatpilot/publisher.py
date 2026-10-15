@@ -53,6 +53,7 @@ async def publish(ha: HAClient, s: dict) -> None:
         "sensor.heatpilot_startverzoegerung_heute": _sensor(
             cyc["enable_delay_min"], "Startverzögerung durch Automation heute", "min",
             "mdi:timer-sand-paused", anzahl=cyc["enable_delay_count"],
+            tag_nacht_wechsel=cyc["mode_switch_count"],
         ),
         "sensor.heatpilot_nachlauf_ohne_bedarf_heute": _sensor(
             cyc["overrun_min"], "Brenner ohne Wärmebedarf heute", "min", "mdi:fire-alert",

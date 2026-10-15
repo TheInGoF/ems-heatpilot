@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+- Gaszähler `sensor.analogsensor_21` (EMS-ESP-Zähleingang, m³) voreingestellt; Dezimalkomma wird verstanden
+- Fehlt der eingestellte Gaszähler, wird gewarnt und automatisch gesucht
+- `sensor.heizungsanforderung` wird aufgezeichnet; Zähler für Tag/Nacht-Wechsel pro Tag
+- Historie beim ersten Start bis 365 Tage einstellbar (Vorgabe 60)
+
 ## 0.3.0
 - EMS-ESP-Entitäten mit langen Namen (Standard in HA) werden erkannt, auch mit Präfix
 - EMS-ESP-Adresse vorbelegt (192.168.188.102), weiterhin änderbar; nur lesend

@@ -198,3 +198,19 @@ def test_short_enable_wait_counts_as_automation_delay(tmp_path):
     d = eng.store.daily(day)[day]
     assert d["enable_delay_count"] == 1
     assert abs(d["enable_delay_min"] - 8.0) < 0.05
+
+
+def test_comma_decimal_gas_counter_and_mode_switches(tmp_path):
+    from heatpilot.engine import num
+
+    assert num("4321,57") == 4321.57
+    assert num(" 12.5 ") == 12.5
+    eng = make_engine(tmp_path)
+    eng.found.thermostat["hc_mode"] = "select.m"
+    burner(eng, False)
+    for i, mode in enumerate(["Nacht", "Tag", "Nacht", "Nacht", "Tag"]):
+        eng.states["select.m"] = {"state": mode, "attributes": {}}
+        eng.update_live(T0 + i * 60)
+    eng.store.commit()
+    day = datetime.fromtimestamp(T0).date().isoformat()
+    assert eng.store.daily(day)[day]["mode_switch_count"] == 3
