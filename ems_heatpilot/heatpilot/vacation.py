@@ -6,9 +6,11 @@ Quellen (eine reicht):
 * Option ``vacation_entity``: z. B. ``input_boolean.urlaub`` – an = Urlaub.
 
 Rückkehr – das Live-Signal schlägt den Plan:
-1. **GPS:** Kommt jemand schnell näher (Autobahn/Bahn: ≥ 20 km/h über eine
-   Viertelstunde), gilt dessen berechnete Ankunft – auch 1–2 Tage vor oder nach
-   dem geplanten Ende.
+1. **GPS:** Erst wenn jemand *sicher und ununterbrochen* heimkommt (mind. 30 min
+   lückenlos näher, ≥ 15 km und 10 % der Strecke, im Schnitt ≥ 20 km/h – siehe
+   ``PersonLearner.steady_return``), gilt dessen berechnete Ankunft – auch 1–2 Tage
+   vor oder nach dem geplanten Ende. Kehrtwende oder lange ohne Fortschritt hebt
+   das wieder auf.
 2. **Geplantes Ende mit Uhrzeit:** genau diese Zeit.
 3. **Nur Datum:** dieser Tag zur Standard-Uhrzeit (``vacation_arrival_time``,
    Vorgabe 18:00) – an dem Tag verfeinert GPS.
@@ -34,7 +36,6 @@ _PART = r"(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?"
 _RANGE = re.compile(rf"^\s*{_PART}\s*(?:-|–|bis)\s*{_PART}\s*$")
 
 RETURN_GRACE_DAYS = 3
-FAST_APPROACH_KMH = 20.0
 RETURN_HOME_MIN = 10
 
 
@@ -118,12 +119,12 @@ class Vacation:
         """Erwartete Rückkehr: schnelle GPS-Annäherung schlägt den Plan."""
         best = None
         for p in persons:
-            info = p.eta(when)
-            if (info["source"] == "gps" and info["speed_kmh"] is not None
-                    and info["speed_kmh"] >= FAST_APPROACH_KMH and info["eta"] is not None
-                    and info["eta"] - when <= timedelta(hours=24)):
-                if best is None or info["eta"] < best["eta"]:
-                    best = {**info, "source": "gps"}
+            ret = p.steady_return(when)
+            if ret and ret["eta"] - when <= timedelta(hours=24):
+                if best is None or ret["eta"] < best["eta"]:
+                    best = {"person": p.person, "home": False, "dist_km": ret["dist_km"],
+                            "speed_kmh": ret["speed_kmh"], "eta": ret["eta"], "confidence": 0.9,
+                            "source": "gps", "since": ret["since"]}
         if best:
             return best
         t = self.trip(when)

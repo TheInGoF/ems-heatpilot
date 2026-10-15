@@ -163,15 +163,15 @@ def test_early_return_by_gps_beats_planned_end(tmp_path):
     t0 = int(datetime(2026, 10, 18, 12, 0).timestamp())
     lat0 = 53.55 + 250 / 111  # 250 km nördlich
     _away(eng, "person.maria", lat0, t0)
-    for i in range(6):  # 30 min Autobahn: 100 km/h
+    for i in range(8):  # 35 min Autobahn: 100 km/h
         _away(eng, "person.ingo", lat0 - (100 * i / 12) / 111, t0)
         eng.tick(t0 + i * 300)
-    arrival = eng.vacation.arrival(datetime.fromtimestamp(t0 + 5 * 300).astimezone(),
-                                   list(eng.persons.values()))
+    now = datetime.fromtimestamp(t0 + 7 * 300).astimezone()
+    arrival = eng.vacation.arrival(now, list(eng.persons.values()))
     assert arrival["source"] == "gps" and arrival["person"] == "person.ingo"
-    hours = (arrival["eta"] - datetime.fromtimestamp(t0 + 5 * 300).astimezone()).total_seconds() / 3600
-    assert 1.5 < hours < 4.5  # noch ~210 km
-    assert eng.on_vacation(t0 + 5 * 300)  # unterwegs: Urlaub noch aktiv, Gewohnheiten pausiert
+    hours = (arrival["eta"] - now).total_seconds() / 3600
+    assert 1.8 < hours < 2.2  # noch ~192 km bei 100 km/h
+    assert eng.on_vacation(t0 + 7 * 300)  # unterwegs: Urlaub noch aktiv, Gewohnheiten pausiert
 
 
 def test_slow_movement_at_holiday_place_is_ignored(tmp_path):
@@ -199,3 +199,47 @@ def test_being_home_ends_vacation_and_resumes_learning(tmp_path):
     assert eng.store.get("vacation_returned")  # bleibt über Neustarts erhalten
     eng2 = Engine(eng.cfg, eng.store, eng.found)
     assert not eng2.on_vacation(t0 + 4 * 300)
+
+
+def _drive(learner, start, kms):
+    """Entfernungen (km) im 5-Minuten-Takt in den Tracker einspielen."""
+    for i, d in enumerate(kms):
+        learner.observe(start + timedelta(minutes=5 * i), False, d, learn=False)
+    return start + timedelta(minutes=5 * (len(kms) - 1))
+
+
+def test_return_needs_uninterrupted_approach():
+    from heatpilot.presence import PersonLearner
+
+    start = datetime(2026, 10, 18, 12, 0).astimezone()
+    # 20 min schnell in Richtung Heimat: noch nicht sicher
+    p = PersonLearner("person.ingo")
+    now = _drive(p, start, [300 - 8 * i for i in range(5)])
+    assert p.steady_return(now) is None
+    # Zickzack: 100 km/h hin und her – nie ununterbrochen näher
+    p = PersonLearner("person.ingo")
+    now = _drive(p, start, [300, 292, 298, 290, 296, 288, 294, 286, 292, 284])
+    assert p.steady_return(now) is None
+    # 35 min durchgehend mit 100 km/h näher: bestätigt
+    p = PersonLearner("person.ingo")
+    now = _drive(p, start, [300 - 8.33 * i for i in range(8)])
+    ret = p.steady_return(now)
+    assert ret is not None and 90 < ret["speed_kmh"] < 110
+
+
+def test_confirmed_return_survives_rest_stop_but_not_turning_back():
+    from heatpilot.presence import PersonLearner
+
+    start = datetime(2026, 10, 18, 12, 0).astimezone()
+    p = PersonLearner("person.ingo")
+    kms = [300 - 8.33 * i for i in range(8)]
+    now = _drive(p, start, kms)
+    eta_before = p.steady_return(now)["eta"]
+    # 30 min Rast: bleibt bestätigt, Ankunft verschiebt sich nach hinten
+    rest = [kms[-1]] * 6
+    now = _drive(p, now + timedelta(minutes=5), rest)
+    ret = p.steady_return(now)
+    assert ret is not None and ret["eta"] > eta_before
+    # Kehrtwende: 10 km wieder weiter weg -> aufgehoben, Plan gilt wieder
+    now = _drive(p, now + timedelta(minutes=5), [kms[-1] + 5, kms[-1] + 10])
+    assert p.steady_return(now) is None

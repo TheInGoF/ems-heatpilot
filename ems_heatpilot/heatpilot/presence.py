@@ -19,6 +19,15 @@ from datetime import datetime, timedelta
 SLOTS_PER_DAY = 96
 SLOT_MIN = 15
 
+# Sichere Heimfahrt (z. B. Urlaubsrückkehr): erst bestätigen, wenn ununterbrochen näher
+STEADY_MIN = 30          # mindestens so lange ohne Unterbrechung näher
+STEADY_DROP_KM = 15.0    # dabei mindestens so viel geschafft (und 10 % der Strecke)
+STEADY_SPEED_KMH = 20.0  # im Schnitt mindestens so schnell
+JITTER_KM = 0.5          # GPS-Schwankung, die nicht als "weiter weg" zählt
+REVERSAL_KM = 3.0        # danach wieder so viel weiter weg = Kehrtwende, Abbruch
+STALL_MIN = 45           # so lange ohne Fortschritt (Rast) = Abbruch
+MAX_GAP_MIN = 20         # größere Lücken in den GPS-Daten unterbrechen die Serie
+
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
     r = 6371.0
@@ -45,6 +54,7 @@ class PersonLearner:
     dist_km: float | None = None
     _approach_start: tuple[datetime, float] | None = None
     _last_slot_learned: int | None = None
+    _return: dict | None = None  # bestätigte Heimfahrt
 
     def observe(self, ts: datetime, home: bool, dist_km: float | None, learn: bool = True) -> None:
         """Position verfolgen; ``learn=False`` (Urlaub): Gewohnheiten nicht anpassen."""
@@ -74,8 +84,56 @@ class PersonLearner:
             self._approach_start = None
         if home:
             self._approach_start = None
+            self._return = None
             self.track.clear()
         self.home = home
+
+    def steady_return(self, now: datetime) -> dict | None:
+        """Sichere Heimfahrt erkennen: ununterbrochen näher, schnell genug, weit genug.
+
+        Bestätigt nur, wenn die letzten Messpunkte lückenlos immer näher kommen
+        (bis auf GPS-Schwankung) – mindestens STEADY_MIN Minuten, STEADY_DROP_KM und
+        10 % der Strecke, im Schnitt ≥ STEADY_SPEED_KMH. Danach bleibt die Bestätigung
+        bei Rast oder kleinem Umweg bestehen und fällt erst bei Kehrtwende
+        (> REVERSAL_KM weiter weg) oder STALL_MIN ohne Fortschritt.
+        Ankunft = Restentfernung / Durchschnittstempo der Heimfahrt.
+        """
+        pts = [p for p in self.track if p[0] <= now]
+        if self.home or not pts:
+            self._return = None
+            return None
+        t_last, d_last = pts[-1]
+
+        i = len(pts) - 1
+        while i > 0:
+            (t0, d0), (t1, d1) = pts[i - 1], pts[i]
+            if (t1 - t0).total_seconds() > MAX_GAP_MIN * 60 or d1 > d0 + JITTER_KM:
+                break
+            i -= 1
+        seg = pts[i:]
+        dur_h = (seg[-1][0] - seg[0][0]).total_seconds() / 3600
+        drop = seg[0][1] - seg[-1][1]
+        speed = drop / dur_h if dur_h > 0 else 0.0
+        if (dur_h * 60 >= STEADY_MIN and drop >= max(STEADY_DROP_KM, 0.1 * seg[0][1])
+                and speed >= STEADY_SPEED_KMH):
+            if self._return is None:
+                self._return = {"since": seg[0][0], "min_dist": d_last, "progress_at": t_last}
+            self._return["speed"] = speed
+
+        r = self._return
+        if r is None:
+            return None
+        if d_last < r["min_dist"] - JITTER_KM:
+            r["min_dist"], r["progress_at"] = d_last, t_last
+        if d_last > r["min_dist"] + REVERSAL_KM or (now - r["progress_at"]).total_seconds() > STALL_MIN * 60:
+            self._return = None  # Kehrtwende oder zu lange kein Fortschritt
+            return None
+        return {
+            "since": r["since"],
+            "dist_km": round(d_last, 1),
+            "speed_kmh": round(r["speed"], 1),
+            "eta": now + timedelta(hours=d_last / max(r["speed"], 5.0)),
+        }
 
     def approach_speed_now(self, now: datetime) -> float | None:
         """Annäherungsgeschwindigkeit km/h (positiv = kommt näher)."""

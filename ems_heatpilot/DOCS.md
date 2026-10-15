@@ -146,9 +146,16 @@ vacation_entity: input_boolean.urlaub  # optional: an = Urlaub
 
 **Rückkehr – das Live-Signal schlägt den Plan:**
 
-1. **GPS:** Kommt jemand schnell näher (≥ 20 km/h über eine Viertelstunde,
-   also Auto/Bahn), gilt dessen berechnete Ankunft – egal ob 1–2 Tage vor oder
-   nach dem geplanten Ende. Langsames Bewegen am Urlaubsort löst nichts aus.
+1. **GPS – nur bei sicherer Heimfahrt.** Bestätigt wird erst, wenn jemand
+   **mindestens 30 Minuten ununterbrochen näher** kommt (kein Schritt weiter weg,
+   bis auf 0,5 km GPS-Schwankung), dabei **≥ 15 km und ≥ 10 % der Strecke**
+   schafft und **im Schnitt ≥ 20 km/h** fährt. Dann gilt dessen Ankunft
+   (Restentfernung / Durchschnittstempo der Heimfahrt) – egal ob 1–2 Tage vor
+   oder nach dem geplanten Ende. Eine Rast bis 45 min und kleine Umwege bis 3 km
+   heben die Bestätigung nicht auf (die Ankunft verschiebt sich nur);
+   **Kehrtwende** (> 3 km wieder weiter weg) oder **45 min ohne Fortschritt**
+   schon – dann gilt wieder der Plan. Zickzack und Ausflüge am Urlaubsort lösen
+   nichts aus.
 2. **Geplantes Ende mit Uhrzeit:** genau diese Zeit.
 3. **Nur Datum:** dieser Tag zur `vacation_arrival_time`; an dem Tag verfeinert GPS.
 
