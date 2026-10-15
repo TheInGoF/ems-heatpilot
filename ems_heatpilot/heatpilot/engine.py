@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from . import analysis
 from .config import Config
+from .dhw import DhwModel, DhwShadow
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
 from .presence import PersonLearner, haversine_km, next_arrival
@@ -66,6 +67,11 @@ class Engine:
         for p in found.persons:
             saved = store.get(f"model.person.{p}")
             self.persons[p] = PersonLearner.from_dict(saved) if saved else PersonLearner(p)
+        saved = store.get("model.dhw")
+        self.dhw = DhwModel.from_dict(saved) if saved else DhwModel()
+        self.dhw_shadow = DhwShadow()
+        self._prev_dhw: tuple[int, float | None] | None = None
+        self.dhw_rec: dict | None = None
         self.forecast: list[dict] = []
         self.last_plan: dict | None = None
         self._last_burner: int | None = None
@@ -277,6 +283,7 @@ class Engine:
             "dhw_temp": num(self._boiler("dhw_temp")),
             "flame": num(self._boiler("flame_current")),
             "demand_pct": num(self._val(self.found.demand_sensor)),
+            "dhw_set": num(self._boiler("dhw_seltemp")),
         }
         rooms = []
         for r in self.found.rooms:
@@ -306,6 +313,7 @@ class Engine:
         now = local(ts)
         for p, is_home, dist in persons:
             self.persons[p].observe(now, bool(is_home), dist)
+        self.dhw_step(ts, sample)
         self.store.commit()
 
         step = ts - ts % int(ROOM_STEP_H * 3600)
@@ -414,7 +422,41 @@ class Engine:
             self.store.add_snapshot(ts, "room", climate, m.summary(t_out or 5.0, self.cfg.max_flow_temp))
         self.store.commit()
 
+    def dhw_step(self, ts: int, sample: dict) -> None:
+        """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
+        t_cur = sample.get("dhw_temp")
+        prev, self._prev_dhw = self._prev_dhw, (ts, t_cur)
+        if prev is None:
+            return
+        dt_h = (ts - prev[0]) / 3600
+        nom = num(self._boiler("nom_power"))
+        kw = None
+        if sample.get("burner_pow") is not None and nom:
+            kw = sample["burner_pow"] / 100 * nom
+        now = local(ts)
+        res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw)
+        home = sample.get("home_count")
+        arrival = None
+        if home == 0:
+            nxt = next_arrival(list(self.persons.values()), now)
+            arrival = nxt["eta"] if nxt else None
+        self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg)
+        sh = self.dhw_shadow.step(
+            self.dhw, t_cur, self.dhw_rec["target"], res["draw_k"], dt_h, self.cfg.dhw_comfort_temp
+        )
+        day = now.date().isoformat()
+        for key, val in (
+            ("dhw_draw_k", res["draw_k"]),
+            ("dhw_loss_kwh", res["loss_kwh"]),
+            ("dhw_charge_kwh", res["charge_kwh"]),
+            ("dhw_loss_strategy_kwh", sh["loss_kwh"]),
+            ("dhw_cold_draws", sh["cold_draw"]),
+        ):
+            if val:
+                self.store.add_daily(day, key, val)
+
     def save(self) -> None:
+        self.store.put("model.dhw", self.dhw.to_dict())
         self.store.put("model.house", self.house.to_dict())
         for climate, m in self.rooms.items():
             self.store.put(f"model.room.{climate}", m.to_dict())
@@ -515,6 +557,7 @@ class Engine:
             ],
             "cycling": cycling,
             "costs": costs,
+            "dhw": self.dhw_summary(),
             "savings": {
                 "hours": savings.hours,
                 "actual_kwh": savings.actual_kwh,
@@ -552,6 +595,34 @@ class Engine:
             "setpoint_demand": self._demand,
             "emsesp": bool(self.ems),
             "discovered": self.found.as_dict(),
+        }
+
+    def dhw_summary(self) -> dict:
+        t_now = num(self._boiler("dhw_temp"))
+        rows = self.store.query(
+            "SELECT key, SUM(value) AS v, COUNT(DISTINCT day) AS days FROM daily "
+            "WHERE key LIKE 'dhw_%' GROUP BY key"
+        )
+        tot = {r["key"]: r["v"] for r in rows}
+        days = max((r["days"] for r in rows), default=0)
+        loss, loss_s = tot.get("dhw_loss_kwh", 0.0), tot.get("dhw_loss_strategy_kwh", 0.0)
+        charge = tot.get("dhw_charge_kwh", 0.0)
+        today = local(time.time()).date().isoformat()
+        return {
+            **self.dhw.summary(t_now),
+            "temp": t_now,
+            "set": num(self._boiler("dhw_seltemp")),
+            "recommendation": self.dhw_rec,
+            "today": {k: round(v, 2) for k, v in self.store.daily(today).get(today, {}).items()
+                      if k.startswith("dhw_")},
+            "period_days": days,
+            "charge_kwh": round(charge, 1),
+            "loss_kwh": round(loss, 1),
+            "loss_strategy_kwh": round(loss_s, 1),
+            "saved_kwh": round(loss - loss_s, 1),
+            "saved_pct": round(100 * (loss - loss_s) / charge, 1) if charge > 1 else None,
+            "saved_eur": round((loss - loss_s) * self.cfg.gas_price_eur_per_kwh, 2),
+            "cold_draws": int(tot.get("dhw_cold_draws", 0)),
         }
 
     def counter_days(self, since_day: str) -> dict[str, dict]:

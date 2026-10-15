@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.0
+- Warmwasser lernen: Auskühlen/Bereitschaftsverlust je Temperatur, Ladekosten je Kelvin (kalter vs. warmer Start), Zapfprofil (Tag + Woche), Nachladegeschwindigkeit
+- Warmwasser-Empfehlung nach Anwesenheit, Ankunft und erwarteter Zapfung; Strategie läuft im Schatten mit (Ersparnis, „zu kalt“-Zähler)
+- Neue Optionen `dhw_min_temp`, `dhw_comfort_temp`, `dhw_max_temp`; neue Sensoren und Oberflächenbereich „Warmwasser“
+
 ## 0.3.1
 - Gaszähler `sensor.analogsensor_21` (EMS-ESP-Zähleingang, m³) voreingestellt; Dezimalkomma wird verstanden
 - Fehlt der eingestellte Gaszähler, wird gewarnt und automatisch gesucht

@@ -113,6 +113,21 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     <div id="chart-savings"></div>
   </div>
 
+  <h2 style="margin:20px 0 8px">Warmwasser</h2>
+  <div class="tiles" id="dhw-tiles"></div>
+  <div class="grid2">
+    <div class="card">
+      <h2>Wann gezapft wird</h2>
+      <p>Gelernter Temperaturabfall des Speichers durch Zapfungen je Tagesstunde (K). Hier sollte Warmwasser bereitstehen – sonst reicht das Minimum.</p>
+      <div id="chart-dhw-profile"></div>
+    </div>
+    <div class="card">
+      <h2>Was Warmhalten kostet</h2>
+      <p>Gelernter Bereitschaftsverlust des Speichers als Gasleistung (W) je Speichertemperatur. Jedes Grad weniger spart dauerhaft.</p>
+      <div id="chart-dhw-loss"></div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:12px">
     <h2>Räume</h2>
     <p>Pro Raum gelernt: Zeitkonstante (wie schnell er auskühlt), Aufheizzeit für +2 K bei maximalem Vorlauf und der Vorlauf, der 21 °C hält.</p>
@@ -261,6 +276,18 @@ async function load() {
     tile("Ersparnis-Schätzung", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`),
     tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `Kessel-Soll ${fmt(s.flow_current_setpoint, 0)} °C` + (s.flow_calculated !== null ? ` · Regler ${fmt(s.flow_calculated, 0)} °C` : "")),
   ].join("");
+
+  const w = s.dhw;
+  const kpk = w.kwh_per_k;
+  $("dhw-tiles").innerHTML = [
+    tile("Speicher", fmt(w.temp, 0), "°C", `Soll ${fmt(w.set, 0)} °C · lädt mit ${fmt(w.charge_rate_kh, 0)} K/h nach`),
+    tile("Empfehlung jetzt", w.recommendation ? fmt(w.recommendation.target, 0) : "–", "°C", w.recommendation ? w.recommendation.reason : "lernt noch"),
+    tile("Bereitschaftsverlust", fmt(w.loss_w_now, 0), "W", `bei 45 °C ${fmt(w.loss_w_at[45], 0)} W · bei 55 °C ${fmt(w.loss_w_at[55], 0)} W`),
+    tile("Ladekosten", fmt(kpk.kalt ?? kpk.warm, 3), "kWh/K", `Start unter 47 °C: ${fmt(kpk.kalt, 3)} (${w.kwh_per_k_n.kalt}×) · darüber: ${fmt(kpk.warm, 3)} (${w.kwh_per_k_n.warm}×)`),
+    tile("Ersparnis-Schätzung", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
+  ].join("");
+  barChart($("chart-dhw-profile"), w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
+  barChart($("chart-dhw-loss"), Object.entries(w.loss_w_at).map(([t, v]) => [t + " °C", v ?? 0, ""]), "W", "Bereitschaftsverlust je Speichertemperatur");
 
   demandChart($("chart-demand"), hist.hourly, h);
   const hs = hist.snapshots.filter((x) => x.kind === "house");

@@ -36,6 +36,14 @@ configuration:
     name: Arbeitspreis (€/kWh)
   gas_base_fee_eur_per_year:
     name: Grundpreis (€/Jahr)
+  dhw_min_temp:
+    name: Warmwasser Minimum (°C)
+    description: Darunter fällt der Speicher nie (z. B. wenn niemand zu Hause ist)
+  dhw_comfort_temp:
+    name: Warmwasser Komfort (°C)
+    description: Mindesttemperatur, wenn eine Zapfung (Dusche, Bad) erwartet wird
+  dhw_max_temp:
+    name: Warmwasser Maximum (°C)
   design_outdoor_temp:
     name: Auslegungs-Außentemperatur (°C)
   max_flow_temp:

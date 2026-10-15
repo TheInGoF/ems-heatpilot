@@ -1,6 +1,6 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.3 macht
+## Was das Add-on in Version 0.4 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -45,6 +45,9 @@
 | `sensor.heatpilot_laufzeit_je_start` | mittlere Laufzeit je Heizstart heute, Attribut: seit Einbau |
 | `sensor.heatpilot_gaskosten` | Gaskosten der letzten 12 Monate inkl. anteiligem Grundpreis |
 | `sensor.heatpilot_ersparnis_schaetzung` | geschätzte Ersparnis durch Absenken (%), kWh/€ als Attribute |
+| `sensor.heatpilot_ww_empfehlung` | sparsamste Speichertemperatur jetzt (nur Empfehlung) mit Begründung |
+| `sensor.heatpilot_ww_bereitschaftsverlust` | was das Warmhalten gerade kostet (W Gas), Attribut je Temperatur |
+| `sensor.heatpilot_ww_ersparnis_schaetzung` | Ersparnis der Warmwasser-Strategie (% der Warmwasser-Energie) |
 | `sensor.heatpilot_naechste_ankunft` | vorhergesagte Ankunft |
 | `sensor.heatpilot_vorheizen_start` | wann das Vorheizen beginnen müsste |
 
@@ -90,6 +93,25 @@ Das Add-on bewertet den Bedarf deshalb nach **Soll gegen Ist** (Bedarf ab
 ereignisgenau, wie lange der Brenner ohne Bedarf lief und wie lange Räume
 wegen der Taktsperre warten mussten. In Phase 2 wird genau dieses Signal
 den Brenner direkt freigeben bzw. sperren.
+
+## Warmwasser
+
+Gelernt wird aus Speichertemperatur, Ladestatus und Brennerleistung:
+
+- **Auskühlen** des Speichers und daraus der Bereitschaftsverlust je Temperatur
+- **Ladekosten** in Gas-kWh je Kelvin, getrennt nach Ladestart unter/über 47 °C
+  (zeigt, ob Laden aus kälterem Speicher wirklich effizienter ist)
+- **Zapfprofil:** wann im Tages-/Wochenverlauf Warmwasser gebraucht wird
+- **Nachladegeschwindigkeit** in K/h
+
+Strategie (läuft im Schatten mit, setzt nichts): Niemand zu Hause und keine
+Ankunft absehbar → `dhw_min_temp`. Zapfung in Kürze erwartet → `dhw_comfort_temp`
+(bei viel Verbrauch so hoch, dass der Speicher danach nicht unter das
+Minimum fällt). Sonst → Minimum. Nachgeladen wird rechtzeitig, weil die
+Ladegeschwindigkeit bekannt ist. Die Ersparnis ist der eingesparte
+Bereitschaftsverlust bei denselben Zapfungen; Zapfungen, bei denen der
+Speicher unter `dhw_comfort_temp` gewesen wäre, werden als „zu kalt“ gezählt.
+Die wöchentliche Desinfektion des Reglers bleibt unberührt.
 
 ## Entitätsnamen
 

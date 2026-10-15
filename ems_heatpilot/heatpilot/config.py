@@ -35,6 +35,10 @@ class Config:
     gas_z_number: float = 0.95
     gas_price_eur_per_kwh: float = 0.12
     gas_base_fee_eur_per_year: float = 150.0
+    # Warmwasser-Strategie (nur Empfehlung): nie unter min, für Nutzung comfort
+    dhw_min_temp: float = 40.0
+    dhw_comfort_temp: float = 50.0
+    dhw_max_temp: float = 60.0
     design_outdoor_temp: float = -12.0
     max_flow_temp: int = 75
     away_temp: float = 19.0

@@ -74,6 +74,20 @@ async def publish(ha: HAClient, s: dict) -> None:
             kwh_pro_jahr=sav["year_kwh"], euro_pro_jahr=sav["year_eur"],
             ausgewertete_tage=sav["span_days"],
         ),
+        "sensor.heatpilot_ww_empfehlung": _sensor(
+            (s["dhw"]["recommendation"] or {}).get("target"), "Warmwasser-Empfehlung", "°C",
+            "mdi:water-boiler", device_class="temperature",
+            grund=(s["dhw"]["recommendation"] or {}).get("reason"), aktuelles_soll=s["dhw"]["set"],
+        ),
+        "sensor.heatpilot_ww_bereitschaftsverlust": _sensor(
+            s["dhw"]["loss_w_now"], "Warmwasser-Bereitschaftsverlust", "W", "mdi:water-thermometer",
+            device_class="power", je_temperatur=s["dhw"]["loss_w_at"],
+        ),
+        "sensor.heatpilot_ww_ersparnis_schaetzung": _sensor(
+            s["dhw"]["saved_pct"], "Warmwasser-Ersparnis-Schätzung", "%", "mdi:piggy-bank-outline",
+            kwh=s["dhw"]["saved_kwh"], euro=s["dhw"]["saved_eur"], tage=s["dhw"]["period_days"],
+            zu_kalt=s["dhw"]["cold_draws"],
+        ),
         "sensor.heatpilot_naechste_ankunft": _sensor(
             arrival.get("eta"), "Nächste Ankunft", icon="mdi:home-import-outline",
             device_class="timestamp", person=arrival.get("person"), quelle=arrival.get("source"),

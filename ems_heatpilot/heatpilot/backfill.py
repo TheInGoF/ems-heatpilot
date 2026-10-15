@@ -155,6 +155,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
         now = local(ts)
         for p, is_home, dist in persons:
             eng.persons[p].observe(now, bool(is_home), dist)
+        eng.dhw_step(ts, sample)
         count += 1
     eng.store.commit()
 

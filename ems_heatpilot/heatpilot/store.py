@@ -42,6 +42,8 @@ SAMPLE_COLS = (
     # seit 0.3
     "hc_day", "hc_seltemp", "remote_temp", "pump_mod", "dhw_temp", "flame",
     "demand_pct",
+    # seit 0.4
+    "dhw_set",
 )
 
 

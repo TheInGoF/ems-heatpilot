@@ -40,6 +40,7 @@ def simulate():
     starts = 1000
     heat_starts, burn_min, heat_min = 900, 4000.0, 3000.0
     t_boiler = 30.0
+    t_dhw, dhw = 55.0, False
     mode = "Nacht"
     targets_lag = [21.0, 21.0]  # Tado-Ventile reagieren ~10 min verzögert
     states = {}
@@ -85,7 +86,18 @@ def simulate():
         valves = {r: max(0, min(100, (valve_target - temps[r] + 0.1) * 80)) for r in ROOMS}
         demand = max(valves.values())
         sel_flow = round(34 + (14 - t_out) * 0.8)  # Heizkurve des Reglers
-        dhw = 6.5 <= hour < 6.75 or 18.0 <= hour < 18.25
+        # Warmwasser wie Ingos Automation: Tag 55, Nacht 45, alle weg 40; lädt unter Soll - 10
+        anyone = any(home.values())
+        dhw_set = 40 if not anyone else (45 if hour >= 21 or hour < 4.5 else 55)
+        t_dhw -= 0.04 * (t_dhw - 18) * STEP / 3600
+        if anyone and dt.minute == 0 and dt.hour == 7:
+            t_dhw -= 15  # Duschen
+        if anyone and dt.minute == 0 and dt.hour == 19:
+            t_dhw -= 8   # Abwasch
+        if not dhw and t_dhw < dhw_set - 10:
+            dhw = True
+        elif dhw and t_dhw >= dhw_set:
+            dhw = False
         pow_pct = 0
         for minute in range(5):  # minütlich: Kesselwasser, Brenner mit Hysterese -2/+10 K
             heat_demand = demand > 0
@@ -103,6 +115,8 @@ def simulate():
             pow_pct = (100 if dhw else max(30, min(100, load / 18 * 100))) if burner else 0
             p_kw = pow_pct / 100 * 18
             t_boiler += ((0 if dhw else p_kw) - load - 0.05 * (t_boiler - 20)) / 0.06 / 60
+            if dhw and burner:
+                t_dhw += p_kw * 0.9 / 0.186 / 60
             if burner:
                 burn_min += 1
                 heat_min += 0 if dhw else 1
@@ -131,6 +145,8 @@ def simulate():
             "sensor.boiler_burnstarts": starts,
             "binary_sensor.boiler_heatingpump": "on" if (burner and not dhw) else "off",
             "binary_sensor.boiler_dhw_charging": "on" if dhw else "off",
+            "sensor.boiler_dhw_curtemp": round(t_dhw, 1),
+            "number.boiler_dhw_seltemp": dhw_set,
             "sensor.boiler_outdoortemp": round(t_out + 1, 1),
             "number.boiler_burnminperiod": 25,
             "number.boiler_nompower": 18,
