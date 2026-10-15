@@ -57,12 +57,39 @@ th { color: var(--text-secondary); font-weight: 500; }
   color: var(--text-primary); padding: 6px 8px; border-radius: 6px; font-size: 12px; display: none; z-index: 10;
   box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
 details summary { cursor: pointer; color: var(--text-secondary); }
+.tabs { display: flex; gap: 4px; margin: 8px 0 14px; border-bottom: 1px solid var(--border); }
+.tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit;
+  color: var(--text-secondary); cursor: pointer; }
+.tabs button.active { color: var(--text-primary); border-bottom-color: var(--series-1); font-weight: 600; }
+.banner { background: var(--surface-1); border: 1px solid var(--series-1); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+.form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 16px; }
+.field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 3px; }
+.field .hint { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+input[type=text], input[type=number], input[type=date], input[type=time], input:not([type]) {
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
+  background: var(--bg); color: var(--text-primary); font: inherit; font-size: 13px; }
+input[type=checkbox] { width: 16px; height: 16px; }
+.btn { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-1);
+  color: var(--text-primary); font: inherit; cursor: pointer; }
+.btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; font-weight: 600; }
+.btn.small { padding: 3px 9px; font-size: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+#outdoor-list .row input { flex: 1; width: auto; min-width: 0; }
+.msg-ok { color: var(--good); } .msg-err { color: #e34948; }
+.savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; border-top: 1px solid var(--border);
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+table.form td { padding: 4px 6px; vertical-align: middle; }
+table.form input { min-width: 140px; }
 pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--text-secondary); }
 </style>
 </head>
 <body>
 <main>
   <h1>EMS HeatPilot</h1>
+  <nav class="tabs"><button id="tab-overview" class="active" onclick="showTab('overview')">Übersicht</button><button id="tab-settings" onclick="showTab('settings')">Einstellungen</button></nav>
+  <div id="setup-banner" class="banner" hidden>Noch nicht eingerichtet – bitte einmal die <a href="#" onclick="showTab('settings');return false">Einstellungen</a> prüfen und speichern. Vorschläge aus der automatischen Erkennung sind schon eingetragen.</div>
+  <section id="view-settings" hidden></section>
+  <section id="view-overview">
   <p class="sub" id="status">Lade …</p>
 
   <div class="tiles" id="tiles"></div>
@@ -149,6 +176,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   <div class="card">
     <details><summary>Gefundene Entitäten</summary><pre id="disc"></pre></details>
   </div>
+  </section>
 </main>
 <div id="tip"></div>
 <script>
@@ -257,6 +285,7 @@ const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "
 async function load() {
   const s = await (await fetch("api/summary")).json();
   if (s.starting) { $("status").textContent = "Startet: " + (s.status || "…"); setTimeout(load, 5000); return; }
+  $("setup-banner").hidden = !!s.configured;
   const hist = await (await fetch("api/history?days=60")).json();
   const h = s.house, c = s.cycling, sv = s.savings;
   $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
@@ -327,7 +356,194 @@ async function load() {
 
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
 }
-load().catch((e) => { $("status").textContent = "Fehler: " + e; });
+// ---------------------------------------------------------------- Einstellungen
+let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null;
+const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+
+function showTab(name) {
+  for (const t of ["overview", "settings"]) {
+    $("view-" + t).hidden = t !== name;
+    $("tab-" + t).classList.toggle("active", t === name);
+  }
+  if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
+}
+
+const isTemp = (e) => e.id.startsWith("sensor.") && (e.device_class === "temperature" || e.unit === "°C");
+const isSensor = (e) => e.id.startsWith("sensor.") || e.id.startsWith("counter.");
+const PICKERS = {
+  temp: { filter: isTemp, label: "Temperatur-Sensoren" },
+  sensor: { filter: isSensor, label: "Sensoren" },
+  weather: { filter: (e) => e.id.startsWith("weather."), label: "Wetter" },
+  climate: { filter: (e) => e.id.startsWith("climate."), label: "Thermostate" },
+  toggle: { filter: (e) => /^(input_boolean|switch|binary_sensor)\./.test(e.id), label: "Schalter" },
+  any: { filter: () => true, label: "Alle" },
+};
+
+function datalists() {
+  return Object.entries(PICKERS).map(([key, p]) =>
+    `<datalist id="dl-${key}">${ENT.filter(p.filter).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}${e.state != null ? " · " + esc(e.state) + (e.unit ? " " + esc(e.unit) : "") : ""}</option>`).join("")}</datalist>`).join("");
+}
+const ent = (id, value, picker, ph = "") => `<input id="${id}" list="dl-${picker}" value="${esc(value)}" placeholder="${esc(ph)}" autocomplete="off">`;
+const field = (label, inner, hint = "") => `<div class="field"><label>${label}</label>${inner}${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
+const num = (id, value, step = "any") => `<input id="${id}" type="number" step="${step}" value="${esc(value)}">`;
+const tim = (id, value) => `<input id="${id}" type="time" value="${esc(value)}">`;
+const card = (title, body, open = true) => `<details class="card" style="margin-bottom:12px" ${open ? "open" : ""}><summary><h2 style="display:inline">${title}</h2></summary><div style="margin-top:10px">${body}</div></details>`;
+
+const VAC = /^\s*(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?\s*(?:-|–|bis)\s*(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?\s*$/;
+function vacRow(v = "") {
+  const m = VAC.exec(v) || [];
+  return `<div class="row vac" style="margin-bottom:6px"><input type="date" class="v-sd" value="${m[1] || ""}" style="width:auto"><input type="time" class="v-st" value="${m[2] || ""}" style="width:auto" title="optional"> bis <input type="date" class="v-ed" value="${m[3] || ""}" style="width:auto"><input type="time" class="v-et" value="${m[4] || ""}" style="width:auto" title="optional – leer = Standard-Rückkehrzeit"><button class="btn small" onclick="this.parentNode.remove()">entfernen</button></div>`;
+}
+
+function roomRows() {
+  const climates = ENT.filter((e) => e.id.startsWith("climate."));
+  const chosen = Object.fromEntries((SET.rooms || []).map((r) => [r.climate, r]));
+  const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
+  const auto = !(SET.rooms || []).length;
+  return climates.map((c) => {
+    const r = chosen[c.id] || {}, g = sug[c.id] || {};
+    const on = chosen[c.id] ? true : (auto && !!sug[c.id]);
+    return `<tr class="room" data-climate="${esc(c.id)}">
+      <td><input type="checkbox" class="r-on" ${on ? "checked" : ""}></td>
+      <td><input class="r-name" value="${esc(r.name || g.name || c.name)}"><div class="hint">${esc(c.id)}</div></td>
+      <td style="text-align:center"><input type="checkbox" class="r-floor" ${(SET.floor_heating_rooms || []).includes(c.id) ? "checked" : ""}></td>
+      <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || "")}" placeholder="Ventil % (optional)"></td>
+      <td><input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || "")}" placeholder="Temperatur (optional)"></td>
+      <td><input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || "")}" placeholder="Feuchte (optional)"></td></tr>`;
+  }).join("");
+}
+
+function renderSettings() {
+  const s = SET;
+  const discovered = (role) => (DISC.boiler || {})[role] || (DISC.thermostat || {})[role] || "";
+  const overrides = Object.fromEntries((s.overrides || []).map((o) => o.split("=")));
+  const outdoor = (s.outdoor_sensors || []).length ? s.outdoor_sensors : (SUG.outdoor || []);
+  $("view-settings").innerHTML = datalists() +
+    `<p class="sub">Alles, was das Add-on braucht. Felder mit Vorschlag sind aus der automatischen Erkennung vorausgefüllt – prüfen und speichern. Speichern wirkt sofort, ohne Neustart.</p>` +
+    card("Verbindung", `<div class="form-grid">${field("EMS-ESP-Adresse", `<div class="row"><input id="f-emsesp_host" value="${esc(s.emsesp_host)}" placeholder="z. B. 192.168.1.50 oder ems-esp.local" style="flex:1"><button class="btn small" onclick="testEms()">Testen</button></div><div id="ems-msg" class="hint"></div>`, "Optional. Liest alle Kesselwerte direkt – nur lesend, ohne Token. Leer = nur über Home Assistant.")}</div>`) +
+    card("Messwerte", `<div class="form-grid">
+      ${field("Außenfühler", `<div id="outdoor-list">${outdoor.map((o, i) => `<div class="row" style="margin-bottom:4px">${ent("f-out-" + i, o, "temp")}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`).join("")}</div><button class="btn small" onclick="addOutdoor()">+ Fühler</button>`, "Einer oder mehrere – es zählt das Minimum. Leer = Außenfühler der Therme.")}
+      ${field("Gaszähler", ent("f-gas_sensor", s.gas_sensor || SUG.gas || "", "sensor", "sensor.…"), "Zählerstand in m³ oder kWh. Leer = Energie-Schätzung von EMS-ESP.")}
+      ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Für die Vorhersage beim Vorheizen.")}
+      ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
+    </div>`) +
+    card("Räume", `<p>Häkchen = Raum wird gelernt. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
+      <div class="scroll"><table class="form"><tr><th></th><th>Name</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+    card("Gas & Kosten", `<div class="form-grid">
+      ${field("Brennwert (kWh/m³)", num("f-gas_calorific_value", s.gas_calorific_value), "Laut Gasrechnung, typisch 10,5–11,5")}
+      ${field("Zustandszahl", num("f-gas_z_number", s.gas_z_number), "Laut Gasrechnung, typisch 0,93–0,97")}
+      ${field("Arbeitspreis (€/kWh)", num("f-gas_price_eur_per_kwh", s.gas_price_eur_per_kwh))}
+      ${field("Grundpreis (€/Jahr)", num("f-gas_base_fee_eur_per_year", s.gas_base_fee_eur_per_year))}
+    </div><p class="muted" id="kwh-hint"></p>`) +
+    card("Komfort & Strategie", `<div class="form-grid">
+      ${field("Temperatur bei Abwesenheit (°C)", num("f-away_temp", s.away_temp, "0.5"), "Untergrenze – nie kälter")}
+      ${field("Nachttemperatur (°C)", num("f-night_temp", s.night_temp, "0.5"))}
+      ${field("Nacht ab", tim("f-night_start", s.night_start))}
+      ${field("Nacht bis", tim("f-night_end", s.night_end))}
+      ${field("Maximale Vorlauftemperatur (°C)", num("f-max_flow_temp", s.max_flow_temp, "1"))}
+      ${field("Auslegungs-Außentemperatur (°C)", num("f-design_outdoor_temp", s.design_outdoor_temp, "1"), "Für die Normheizlast, z. B. Hamburg −12 °C")}
+    </div>`) +
+    card("Warmwasser", `<div class="form-grid">
+      ${field("Minimum (°C)", num("f-dhw_min_temp", s.dhw_min_temp, "1"), "Darunter nie, z. B. wenn niemand zu Hause ist")}
+      ${field("Komfort (°C)", num("f-dhw_comfort_temp", s.dhw_comfort_temp, "1"), "Mindestens zu Beginn einer Nutzung")}
+      ${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}
+    </div>`) +
+    card("Urlaub", `<p>Im Urlaub lernt das Add-on keine Gewohnheiten. Ohne Uhrzeit beim Ende gilt die Standard-Rückkehrzeit. Kommt jemand per GPS sicher heim, zählt die GPS-Ankunft.</p>
+      <div id="vac-list">${(s.vacations || []).map(vacRow).join("")}</div><button class="btn small" onclick="addVac()">+ Urlaub</button>
+      <div class="form-grid" style="margin-top:10px">
+        ${field("Standard-Rückkehrzeit", tim("f-vacation_arrival_time", s.vacation_arrival_time))}
+        ${field("Urlaubs-Schalter", ent("f-vacation_entity", s.vacation_entity, "toggle", "optional, z. B. input_boolean.urlaub"), "An = Urlaub")}
+      </div>`) +
+    card("Zuordnungen (Experten)", `<p>Nur nötig, wenn die automatische Erkennung etwas nicht oder falsch gefunden hat.</p>
+      <div class="scroll"><table class="form"><tr><th>Wert</th><th>Erkannt</th><th>Eigene Zuordnung</th></tr>
+      ${ROLES.map((r) => `<tr><td>${esc(r.label)}<div class="hint">${r.group}</div></td><td>${esc(discovered(r.role)) || '<span class="muted">– nicht gefunden</span>'}</td><td><input class="ov" data-role="${r.role}" list="dl-any" value="${esc(overrides[r.role] || "")}" placeholder="leer = automatisch"></td></tr>`).join("")}
+      </table></div>`, false) +
+    card("Erweitert", `<div class="form-grid">
+      ${field("Abtastintervall (s)", num("f-sample_interval_s", s.sample_interval_s, "1"))}
+      ${field("Historie beim ersten Start (Tage)", num("f-backfill_days", s.backfill_days, "1"), "Einzelwerte aus dem Recorder")}
+      ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
+    </div><p style="margin-top:10px"><button class="btn small" onclick="reloadHistory()">Historie neu einlesen</button> <span class="muted">z. B. nach Wechsel des Gaszählers – dauert je nach Umfang einige Minuten.</span></p>`, false) +
+    `<div class="savebar"><button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="applySuggestions()">Vorschläge übernehmen</button><span id="save-msg"></span></div>`;
+  const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
+  $("f-gas_calorific_value").oninput = upd; $("f-gas_z_number").oninput = upd; upd();
+}
+
+let outdoorN = 100;
+function addOutdoor() { $("outdoor-list").insertAdjacentHTML("beforeend", `<div class="row" style="margin-bottom:4px">${ent("f-out-" + (outdoorN++), "", "temp")}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`); }
+function addVac() { $("vac-list").insertAdjacentHTML("beforeend", vacRow()); }
+
+function collect() {
+  const v = (id) => $(id).value.trim();
+  const out = { outdoor_sensors: [...document.querySelectorAll("#outdoor-list input")].map((i) => i.value.trim()).filter(Boolean) };
+  for (const k of ["emsesp_host", "gas_sensor", "weather_entity", "demand_sensor", "vacation_entity",
+                   "night_start", "night_end", "vacation_arrival_time"]) out[k] = v("f-" + k);
+  for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
+                   "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp",
+                   "dhw_comfort_temp", "dhw_max_temp", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
+  out.rooms = []; out.floor_heating_rooms = [];
+  for (const tr of document.querySelectorAll("tr.room")) {
+    if (!tr.querySelector(".r-on").checked) continue;
+    const c = tr.dataset.climate;
+    out.rooms.push({ climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
+                     temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim() });
+    if (tr.querySelector(".r-floor").checked) out.floor_heating_rooms.push(c);
+  }
+  out.vacations = [...document.querySelectorAll(".vac")].map((r) => {
+    const g = (c) => r.querySelector(c).value;
+    if (!g(".v-sd") || !g(".v-ed")) return "";
+    return `${g(".v-sd")}${g(".v-st") ? " " + g(".v-st") : ""} - ${g(".v-ed")}${g(".v-et") ? " " + g(".v-et") : ""}`;
+  }).filter(Boolean);
+  out.overrides = [...document.querySelectorAll("input.ov")].filter((i) => i.value.trim()).map((i) => `${i.dataset.role}=${i.value.trim()}`);
+  return out;
+}
+
+async function saveSettings() {
+  const msg = $("save-msg");
+  msg.className = ""; msg.textContent = "Speichere …";
+  const r = await fetch("api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collect()) });
+  const j = await r.json();
+  if (!j.ok) { msg.className = "msg-err"; msg.innerHTML = "Nicht gespeichert: " + j.errors.map(esc).join(" · "); return; }
+  msg.className = "msg-ok"; msg.textContent = "Gespeichert und übernommen.";
+  SET = null; await loadSettings(); load().catch(() => {});
+  $("save-msg").className = "msg-ok"; $("save-msg").textContent = "Gespeichert und übernommen.";
+}
+
+function applySuggestions() {
+  if (SUG.gas) $("f-gas_sensor").value = SUG.gas;
+  if (SUG.weather) $("f-weather_entity").value = SUG.weather;
+  if ((SUG.outdoor || []).length) { $("outdoor-list").innerHTML = ""; SUG.outdoor.forEach((o) => { addOutdoor(); $("outdoor-list").lastElementChild.querySelector("input").value = o; }); }
+  const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
+  for (const tr of document.querySelectorAll("tr.room")) {
+    const g = sug[tr.dataset.climate];
+    tr.querySelector(".r-on").checked = !!g;
+    if (g) { tr.querySelector(".r-valve").value = g.heating_power || ""; tr.querySelector(".r-temp").value = g.temp_sensor || ""; tr.querySelector(".r-hum").value = g.humidity || ""; }
+  }
+  $("save-msg").className = ""; $("save-msg").textContent = "Vorschläge eingetragen – prüfen und speichern.";
+}
+
+async function testEms() {
+  $("ems-msg").textContent = "Teste …";
+  const r = await fetch("api/test_emsesp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ host: $("f-emsesp_host").value }) });
+  const j = await r.json();
+  $("ems-msg").className = j.ok ? "hint msg-ok" : "hint msg-err";
+  $("ems-msg").textContent = (j.ok ? "Verbunden – " : "Fehler: ") + j.message;
+}
+
+async function reloadHistory() {
+  if (!confirm("Historie aus Home Assistant neu einlesen? Gelerntes bleibt erhalten, Auswertungen werden neu berechnet.")) return;
+  await fetch("api/reload_history", { method: "POST" });
+  $("save-msg").className = ""; $("save-msg").textContent = "Historie wird neu eingelesen – die Übersicht aktualisiert sich danach.";
+}
+
+async function loadSettings() {
+  const j = await (await fetch("api/settings")).json();
+  if (j.starting) { $("view-settings").textContent = "Startet: " + (j.status || "…"); setTimeout(loadSettings, 5000); return; }
+  ENT = await (await fetch("api/entities")).json();
+  SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered;
+  renderSettings();
+}
+
+load().then(() => { if (!$("setup-banner").hidden) showTab("settings"); }).catch((e) => { $("status").textContent = "Fehler: " + e; });
 setInterval(() => load().catch(() => {}), 300000);
 let resizeTimer; addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => load().catch(() => {}), 300); });
 </script>

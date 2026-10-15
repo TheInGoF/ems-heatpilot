@@ -1,6 +1,27 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.7 macht
+## Einrichten
+
+Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
+Reiter **Einstellungen**. Dort ist alles einstellbar – ohne YAML:
+
+- **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Token)
+- **Messwerte:** Außenfühler (einer oder mehrere, Minimum zählt), Gaszähler,
+  Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
+  Entitäten in Home Assistant
+- **Räume:** alle Thermostate als Tabelle – Häkchen, Name, Fußbodenheizung,
+  optionale Ventil-/Temperatur-/Feuchtesensoren
+- **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub**
+- **Zuordnungen (Experten):** was die Erkennung gefunden hat, mit eigener Korrektur
+- **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“
+
+Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
+(„Vorschläge übernehmen“ setzt sie erneut). **Speichern** prüft alle Eingaben,
+erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
+`/data/settings.json` und haben Vorrang vor den YAML-Optionen des Add-ons, die
+als Rückfall bleiben.
+
+## Was das Add-on in Version 0.8 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

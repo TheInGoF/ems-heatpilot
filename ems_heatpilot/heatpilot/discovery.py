@@ -54,6 +54,42 @@ THERMOSTAT_ROLES: dict[str, tuple[str, ...]] = {
     "damped_outdoor": ("dampedoutdoortemp", "damped_outdoor_temperature"),
 }
 
+# Beschriftungen für die Oberfläche (Zuordnungen)
+ROLE_LABELS: dict[str, str] = {
+    "flow_temp": "Vorlauftemperatur (Ist)",
+    "sel_flow_temp": "Vorlauftemperatur (Soll am Kessel)",
+    "return_temp": "Rücklauftemperatur",
+    "burner_power": "Brennerleistung (%)",
+    "burner_on": "Brenner an (Gas)",
+    "burner_starts": "Brennerstarts (Zähler)",
+    "heating_pump": "Heizungspumpe",
+    "heating_active": "Heizen aktiv",
+    "dhw_active": "Warmwasser lädt",
+    "dhw_seltemp": "Warmwasser-Soll",
+    "dhw_temp": "Speichertemperatur",
+    "boiler_outdoor": "Außenfühler am Kessel",
+    "min_period": "Antipendelzeit",
+    "hyst_on": "Einschaltdifferenz",
+    "hyst_off": "Ausschaltdifferenz",
+    "min_power": "Minimale Brennerleistung",
+    "max_power": "Maximale Brennerleistung",
+    "nom_power": "Nennleistung (kW)",
+    "heating_off": "Heizen abschalten",
+    "boiler_temp": "Kesseltemperatur",
+    "pump_mod": "Pumpenmodulation",
+    "flame_current": "Flammenstrom",
+    "burner_runtime": "Brennerlaufzeit (Zähler)",
+    "heat_starts": "Brennerstarts Heizen (Zähler)",
+    "heat_runtime": "Heizlaufzeit (Zähler)",
+    "nrg_total": "Energie gesamt (EMS-ESP)",
+    "nrg_heat": "Energie Heizen (EMS-ESP)",
+    "hc_seltemp": "Regler: Raum-Soll",
+    "hc_calc_flow": "Regler: berechnete Vorlauftemperatur",
+    "hc_mode": "Regler: Betriebsart (Tag/Nacht)",
+    "hc_remotetemp": "Regler: Raumtemperatur (Remote)",
+    "damped_outdoor": "Regler: gedämpfte Außentemperatur",
+}
+
 # Betriebsart, in der der Heizkreis heizt (EMS-ESP liefert je nach Sprache)
 HEAT_MODES = {"tag", "day", "comfort", "heat", "heizen", "an", "on"}
 

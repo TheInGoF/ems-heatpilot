@@ -1,19 +1,138 @@
-"""Add-on-Optionen aus /data/options.json laden."""
+"""Einstellungen: Vorgaben ← HA-Add-on-Optionen (options.json) ← Weboberfläche (settings.json).
+
+Die Weboberfläche ist der normale Weg zum Einrichten. Was dort gespeichert wird,
+liegt in ``/data/settings.json`` und hat Vorrang vor den YAML-Optionen in HA.
+"""
 
 from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import time
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("HEATPILOT_DATA", "/data"))
+SETTINGS_NAME = "settings.json"
+
+_ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
+_TIME = re.compile(r"^(\d{1,2}):(\d{2})$")
+
+# Feld -> (Typ, min, max). Typen: int, float, str, entity, entities, time, strings, rooms, overrides
+FIELDS: dict[str, tuple] = {
+    "sample_interval_s": ("int", 60, 900),
+    "backfill_days": ("int", 0, 365),
+    "statistics_backfill_days": ("int", 0, 1095),
+    "outdoor_sensors": ("entities",),
+    "rooms": ("rooms",),
+    "gas_sensor": ("entity",),
+    "demand_sensor": ("entity",),
+    "weather_entity": ("entity",),
+    "emsesp_host": ("str",),
+    "gas_calorific_value": ("float", 8, 13),
+    "gas_z_number": ("float", 0.8, 1.1),
+    "gas_price_eur_per_kwh": ("float", 0, 1),
+    "gas_base_fee_eur_per_year": ("float", 0, 2000),
+    "dhw_min_temp": ("float", 30, 60),
+    "dhw_comfort_temp": ("float", 35, 65),
+    "dhw_max_temp": ("float", 40, 70),
+    "design_outdoor_temp": ("float", -25, 0),
+    "max_flow_temp": ("int", 30, 90),
+    "away_temp": ("float", 10, 24),
+    "night_temp": ("float", 10, 24),
+    "night_start": ("time",),
+    "night_end": ("time",),
+    "floor_heating_rooms": ("entities",),
+    "vacations": ("strings",),
+    "vacation_entity": ("entity",),
+    "vacation_arrival_time": ("time",),
+    "overrides": ("overrides",),
+}
 
 
 def _parse_time(value: str) -> time:
     hours, minutes = value.split(":")
     return time(int(hours), int(minutes))
+
+
+def validate(raw: dict) -> tuple[dict, list[str]]:
+    """Eingaben aus der Oberfläche prüfen und bereinigen. Gibt (sauber, Fehler) zurück."""
+    from .vacation import _RANGE  # spätes Import, vermeidet Zyklus
+
+    clean: dict = {}
+    errors: list[str] = []
+    for key, value in raw.items():
+        if key not in FIELDS:
+            continue
+        kind = FIELDS[key][0]
+        try:
+            if kind in ("int", "float"):
+                lo, hi = FIELDS[key][1:]
+                v = int(value) if kind == "int" else float(str(value).replace(",", "."))
+                if not lo <= v <= hi:
+                    raise ValueError(f"muss zwischen {lo} und {hi} liegen")
+                clean[key] = v
+            elif kind == "str":
+                clean[key] = str(value or "").strip()
+            elif kind == "entity":
+                v = str(value or "").strip()
+                if v and not _ENTITY.match(v):
+                    raise ValueError("keine gültige Entität (z. B. sensor.name)")
+                clean[key] = v
+            elif kind == "entities":
+                items = [str(v).strip() for v in (value or []) if str(v).strip()]
+                bad = [v for v in items if not _ENTITY.match(v)]
+                if bad:
+                    raise ValueError(f"ungültig: {', '.join(bad)}")
+                clean[key] = list(dict.fromkeys(items))
+            elif kind == "time":
+                m = _TIME.match(str(value).strip())
+                if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+                    raise ValueError("Uhrzeit als HH:MM")
+                clean[key] = f"{int(m.group(1)):02d}:{m.group(2)}"
+            elif kind == "strings":
+                items = [str(v).strip() for v in (value or []) if str(v).strip()]
+                if key == "vacations":
+                    bad = [v for v in items if not _RANGE.match(v)]
+                    if bad:
+                        raise ValueError(f"Format JJJJ-MM-TT [HH:MM] - JJJJ-MM-TT [HH:MM]: {', '.join(bad)}")
+                clean[key] = items
+            elif kind == "rooms":
+                rooms = []
+                for r in value or []:
+                    climate = str(r.get("climate", "")).strip()
+                    if not _ENTITY.match(climate):
+                        raise ValueError(f"Raum ohne gültige climate-Entität: {climate or '(leer)'}")
+                    room = {"name": str(r.get("name") or "").strip(), "climate": climate}
+                    for opt in ("temperature", "heating_power", "humidity"):
+                        v = str(r.get(opt) or "").strip()
+                        if v:
+                            if not _ENTITY.match(v):
+                                raise ValueError(f"{climate}: {opt} ungültig")
+                            room[opt] = v
+                    rooms.append(room)
+                clean[key] = rooms
+            elif kind == "overrides":
+                items = []
+                for item in value or []:
+                    item = str(item).strip()
+                    if not item:
+                        continue
+                    role, _, ent = item.partition("=")
+                    if not role.strip() or not _ENTITY.match(ent.strip()):
+                        raise ValueError(f"Format rolle=entity_id: {item}")
+                    items.append(f"{role.strip()}={ent.strip()}")
+                clean[key] = items
+        except (TypeError, ValueError) as err:
+            errors.append(f"{key}: {err}")
+    if not errors:
+        lo = clean.get("dhw_min_temp", raw.get("dhw_min_temp"))
+        mid = clean.get("dhw_comfort_temp", raw.get("dhw_comfort_temp"))
+        hi = clean.get("dhw_max_temp", raw.get("dhw_max_temp"))
+        if None not in (lo, mid, hi) and not (float(lo) <= float(mid) <= float(hi)):
+            errors.append("Warmwasser: Minimum ≤ Komfort ≤ Maximum")
+    return clean, errors
 
 
 @dataclass
@@ -55,19 +174,24 @@ class Config:
     overrides: dict[str, str] = field(default_factory=dict)
 
     @classmethod
-    def load(cls, path: Path | None = None) -> "Config":
+    def load(cls, path: Path | None = None, settings_path: Path | None = None) -> "Config":
         path = path or DATA_DIR / "options.json"
+        settings_path = settings_path or path.parent / SETTINGS_NAME
         raw: dict = {}
         if path.exists():
-            raw = json.loads(path.read_text())
+            raw.update(json.loads(path.read_text()))
+        if settings_path.exists():  # Weboberfläche hat Vorrang
+            raw.update(json.loads(settings_path.read_text()))
+        return cls.from_raw(raw)
+
+    @classmethod
+    def from_raw(cls, raw: dict) -> "Config":
         cfg = cls()
         for key, value in raw.items():
             if key in ("night_start", "night_end", "vacation_arrival_time"):
                 value = _parse_time(value)
             elif key == "overrides":
-                value = dict(
-                    item.split("=", 1) for item in value if "=" in item
-                )
+                value = dict(item.split("=", 1) for item in value if "=" in item)
                 value = {k.strip(): v.strip() for k, v in value.items()}
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
@@ -77,6 +201,20 @@ class Config:
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
         return cfg
 
+    def to_raw(self) -> dict:
+        """Für die Oberfläche: JSON-fähig, im selben Format wie gespeichert."""
+        out = {}
+        for key in FIELDS:
+            v = getattr(self, key)
+            if isinstance(v, time):
+                v = v.strftime("%H:%M")
+            elif key == "overrides":
+                v = [f"{k}={e}" for k, e in v.items()]
+            elif v is None:
+                v = ""
+            out[key] = v
+        return out
+
     @property
     def gas_kwh_per_m3(self) -> float:
         return self.gas_calorific_value * self.gas_z_number
@@ -85,3 +223,14 @@ class Config:
         if self.night_start <= self.night_end:
             return self.night_start <= t < self.night_end
         return t >= self.night_start or t < self.night_end
+
+
+def save_settings(clean: dict, data_dir: Path | None = None) -> Path:
+    """Geprüfte Einstellungen speichern (atomar)."""
+    path = (data_dir or DATA_DIR) / SETTINGS_NAME
+    current = json.loads(path.read_text()) if path.exists() else {}
+    current.update(clean)
+    tmp = path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2))
+    tmp.replace(path)
+    return path

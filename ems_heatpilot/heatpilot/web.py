@@ -2,33 +2,111 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 from aiohttp import web
 
+from .config import Config
+from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
+from .emsesp import EmsEsp
+
 STATIC = Path(__file__).parent / "static"
 
+# Domains, aus denen die Oberfläche Entitäten zur Auswahl anbietet
+PICK_DOMAINS = ("sensor", "binary_sensor", "climate", "weather", "input_boolean", "switch",
+                "number", "select", "person", "counter")
 
-def make_app(engine_ref: dict) -> web.Application:
-    app = web.Application()
+
+def make_app(app) -> web.Application:
+    """``app``: main.App (cfg, eng, status, apply_settings, suggestions, reload_history, ...)."""
+    web_app = web.Application()
 
     async def index(_req):
         return web.FileResponse(STATIC / "index.html")
 
     async def summary(_req):
-        eng = engine_ref.get("engine")
-        if eng is None:
-            return web.json_response({"starting": True, "status": engine_ref.get("status")})
-        return web.json_response(eng.summary())
+        if app.eng is None:
+            return web.json_response({"starting": True, "status": app.status})
+        return web.json_response({**app.eng.summary(), "configured": app.configured})
 
     async def history(req):
-        eng = engine_ref.get("engine")
-        if eng is None:
+        if app.eng is None:
             return web.json_response({"starting": True})
         days = int(req.query.get("days", "30"))
-        return web.json_response(eng.history(min(max(days, 1), 400)))
+        return web.json_response(app.eng.history(min(max(days, 1), 400)))
 
-    app.router.add_get("/", index)
-    app.router.add_get("/api/summary", summary)
-    app.router.add_get("/api/history", history)
-    return app
+    async def get_settings(_req):
+        if app.eng is None:
+            return web.json_response({"starting": True, "status": app.status})
+        roles = [{"role": r, "label": ROLE_LABELS.get(r, r), "group": "Kessel"} for r in BOILER_ROLES]
+        roles += [{"role": r, "label": ROLE_LABELS.get(r, r), "group": "Regler"} for r in THERMOSTAT_ROLES]
+        return web.json_response({
+            "settings": app.cfg.to_raw(),
+            "defaults": Config().to_raw(),
+            "configured": app.configured,
+            "discovered": app.eng.found.as_dict(),
+            "suggested": await app.suggestions(),
+            "roles": roles,
+        })
+
+    async def entities(_req):
+        """Alle wählbaren Entitäten mit Name, Einheit, Klasse und Gerät (für Raum-Vorschläge)."""
+        if app.eng is None:
+            return web.json_response([])
+        reg = {r["entity_id"]: r for r in await app.registry()}
+        out = []
+        for eid, st in sorted(app.eng.states.items()):
+            if eid.split(".", 1)[0] not in PICK_DOMAINS:
+                continue
+            a = st.get("attributes", {})
+            out.append({
+                "id": eid,
+                "name": a.get("friendly_name", eid),
+                "unit": a.get("unit_of_measurement"),
+                "device_class": a.get("device_class"),
+                "state": st.get("state"),
+                "device_id": reg.get(eid, {}).get("device_id"),
+                "platform": reg.get(eid, {}).get("platform"),
+            })
+        return web.json_response(out)
+
+    async def post_settings(req):
+        try:
+            raw = await req.json()
+        except ValueError:
+            return web.json_response({"ok": False, "errors": ["Ungültige Daten"]}, status=400)
+        errors = await app.apply_settings(raw)
+        if errors:
+            return web.json_response({"ok": False, "errors": errors}, status=400)
+        return web.json_response({"ok": True})
+
+    async def test_emsesp(req):
+        host = (await req.json()).get("host", "").strip()
+        if not host:
+            return web.json_response({"ok": False, "message": "Keine Adresse angegeben"})
+        ems = EmsEsp(host)
+        try:
+            values = await asyncio.wait_for(ems.read(), timeout=20)
+        except Exception as err:  # noqa: BLE001
+            return web.json_response({"ok": False, "message": str(err) or "keine Antwort"})
+        finally:
+            await ems.close()
+        if not values:
+            return web.json_response({"ok": False, "message": "Keine Antwort von /api/boiler bzw. /api/thermostat"})
+        counts = {dev: len(v) for dev, v in values.items()}
+        return web.json_response({"ok": True, "message": ", ".join(f"{d}: {n} Werte" for d, n in counts.items())})
+
+    async def reload_history(_req):
+        asyncio.create_task(app.reload_history())
+        return web.json_response({"ok": True})
+
+    web_app.router.add_get("/", index)
+    web_app.router.add_get("/api/summary", summary)
+    web_app.router.add_get("/api/history", history)
+    web_app.router.add_get("/api/settings", get_settings)
+    web_app.router.add_post("/api/settings", post_settings)
+    web_app.router.add_get("/api/entities", entities)
+    web_app.router.add_post("/api/test_emsesp", test_emsesp)
+    web_app.router.add_post("/api/reload_history", reload_history)
+    return web_app

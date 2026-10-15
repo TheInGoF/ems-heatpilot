@@ -13,7 +13,7 @@ HeatPilot ist ein Home-Assistant-Add-on für Kessel mit **EMS-Bus** (Buderus,
 Bosch, Junkers, Sieger u. a.) über **EMS-ESP**, mit Raumregelung über **Tado**
 und Anwesenheit über die Home-Assistant-App.
 
-## Was es heute kann (0.6, Beobachtungsmodus)
+## Was es heute kann (0.8, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume lernen:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil
@@ -23,6 +23,7 @@ und Anwesenheit über die Home-Assistant-App.
   Startverzögerung der Automationen, Brenner-Nachlauf ohne Wärmebedarf
 - **Ersparnis ehrlich schätzen:** nur bei gleichem Komfort, mit realistischem Wiederaufheizen
 - **Urlaubsmodus:** Gewohnheiten pausieren, nichts wird umgelernt
+- **Alles in der Oberfläche einstellbar** – Einrichtung ohne YAML, mit Vorschlägen
 - Oberfläche in der HA-Seitenleiste und Sensoren `sensor.heatpilot_*` für eigene Dashboards
 
 ## Grundsätze
@@ -40,7 +41,7 @@ und Anwesenheit über die Home-Assistant-App.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.6** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.8** |
 | 2 | Kesselseite: Heizfreigabe ereignisgesteuert, Sammelbetrieb bei Abwesenheit statt vieler Kurzstarts, Nachlauf vermeiden | geplant |
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |
@@ -58,8 +59,9 @@ und Anwesenheit über die Home-Assistant-App.
 
 1. Home Assistant → Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories
 2. URL dieses Repos eintragen (privates Repo: siehe [DOCS.md](ems_heatpilot/DOCS.md))
-3. „EMS HeatPilot“ installieren, Optionen prüfen, starten
-4. In der Seitenleiste erscheint „HeatPilot“
+3. „EMS HeatPilot“ installieren und starten
+4. In der Seitenleiste „HeatPilot“ öffnen – der Reiter **Einstellungen** führt
+   durch die Einrichtung (Vorschläge sind vorausgefüllt, kein YAML nötig)
 
 Ausführliche Doku: [ems_heatpilot/DOCS.md](ems_heatpilot/DOCS.md) · Änderungen: [CHANGELOG.md](CHANGELOG.md)
 

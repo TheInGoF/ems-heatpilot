@@ -54,3 +54,8 @@ class EmsEsp:
                     log.warning("EMS-ESP %s nicht erreichbar: %s", device, err)
         self.ok = bool(out)
         return out
+
+    async def close(self) -> None:
+        if self._session is not None:
+            await self._session.close()
+            self._session = None
