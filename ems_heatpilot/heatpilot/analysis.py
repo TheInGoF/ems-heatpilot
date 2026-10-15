@@ -50,6 +50,7 @@ class SavingsResult:
     saved_kwh: float
     saved_pct: float | None
     daily: list[dict]
+    cold_hours: int = 0
 
 
 def estimate_savings(
@@ -58,41 +59,67 @@ def estimate_savings(
     away_temp: float,
     night_temp: float,
     is_night,
+    p_max_kw: float = 18.0,
 ) -> SavingsResult:
-    """Was hätte die Strategie (Absenken bei Abwesenheit/nachts) gespart?
+    """Was hätte die Strategie (Absenken bei Abwesenheit/nachts) gespart – bei gleichem Komfort?
 
-    Energiebilanz: Verbrauch ~ H * Σ (T_innen - T_außen). Die Strategie lässt
-    das Haus mit seiner gelernten Trägheit (tau = C/H) auskühlen und heizt
-    rechtzeitig zur Ankunft wieder auf; das Wiederaufheizen ist über C
-    enthalten. Ersparnis = H * Σ (T_ist - T_strategie).
+    Leitplanken gegen Schönrechnen:
+    * Die Strategie darf nie unter ``away_temp``/``night_temp`` und nie über die
+      tatsächliche Raumtemperatur gehen.
+    * Aufheizen geht nur so schnell, wie die Therme kann:
+      dT/h = (P_max - H * (T - T_außen)) / C. Deshalb muss sie rechtzeitig vor der
+      Ankunft starten (Vorlauf aus dem gelernten Modell).
+    * Jede Stunde mit Anwesenheit, in der es trotzdem mehr als 0,5 K kälter
+      gewesen wäre, zählt als ``cold_hours`` – Ersparnis ohne Komfort zählt nicht.
     """
     h = house.h_kw_per_k
+    c = house.c_kwh_per_k
     tau = house.tau_h or 30.0
-    t_sim: float | None = None
-    saved = 0.0
-    actual = 0.0
-    hours = 0
-    daily: dict[str, dict] = {}
+    rows = []
     for row in hourly:
+        when = datetime.fromtimestamp(row["ts"]).astimezone()
+        home = row.get("home_frac")
+        rows.append((row, when, home is None or home > 0, is_night(when.time())))
+
+    def lead_hours(t_from: float, t_to: float, t_out: float) -> int:
+        if c <= 0 or t_to <= t_from:
+            return 0
+        net = p_max_kw - h * (t_to - t_out)
+        if net <= 0.1:
+            return 24
+        return min(int(math.ceil((t_to - t_from) * c / net)), 24)
+
+    t_sim: float | None = None
+    saved = actual = 0.0
+    hours = cold = 0
+    daily: dict[str, dict] = {}
+    for i, (row, when, occupied, night) in enumerate(rows):
         t_in, t_out = row.get("t_in"), row.get("t_out")
         if t_in is None or t_out is None:
             t_sim = None
             continue
-        when = datetime.fromtimestamp(row["ts"]).astimezone()
-        home = row.get("home_frac")
-        occupied = home is None or home > 0
+        if t_sim is None:
+            t_sim = t_in
         target = t_in
-        if is_night(when.time()):
+        if night:
             target = min(t_in, night_temp)
         elif not occupied:
             target = min(t_in, away_temp)
-        if t_sim is None:
-            t_sim = t_in
+        if target < t_in:
+            # rechtzeitig vorheizen: Komfort wird in den nächsten L Stunden gebraucht?
+            lead = lead_hours(t_sim, t_in, t_out)
+            for _, _, occ_j, night_j in rows[i + 1 : i + 1 + lead]:
+                if occ_j and not night_j:
+                    target = t_in
+                    break
         if t_sim > target:
             cooled = t_out + (t_sim - t_out) * math.exp(-1.0 / tau)
             t_sim = max(cooled, target)
-        else:
-            t_sim = target
+        elif t_sim < target:
+            rise = (p_max_kw - h * (t_sim - t_out)) / c if c > 0 else 99.0
+            t_sim = min(target, t_sim + max(rise, 0.0))
+        if occupied and not night and t_sim < t_in - 0.5:
+            cold += 1
         diff = h * (t_in - t_sim)
         saved += diff
         gas = row.get("gas_kwh") or 0.0
@@ -106,7 +133,7 @@ def estimate_savings(
         d["actual_kwh"] = round(d["actual_kwh"], 2)
         d["saved_kwh"] = round(d["saved_kwh"], 2)
     pct = round(100 * saved / actual, 1) if actual > 1 else None
-    return SavingsResult(hours, round(actual, 1), round(saved, 1), pct, list(daily.values()))
+    return SavingsResult(hours, round(actual, 1), round(saved, 1), pct, list(daily.values()), cold)
 
 
 def preheat_plan(

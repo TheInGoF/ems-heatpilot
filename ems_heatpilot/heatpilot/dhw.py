@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from .guards import DHW_MARGIN_DECAY, DHW_MARGIN_MAX, DHW_MARGIN_STEP
 from .rls import RLS
 
 SLOTS = 7 * 24
@@ -42,6 +43,8 @@ class DhwModel:
     profile: list[float] = field(default_factory=lambda: [0.0] * SLOTS)  # je Wochenstunde
     profile_n: list[int] = field(default_factory=lambda: [0] * SLOTS)
     daily: list[float] = field(default_factory=lambda: [0.0] * 24)  # je Tagesstunde, lernt täglich
+    # Selbstkorrektur: zusätzliche Reserve nach zu kalten Zapfungen (gedeckelt, baut sich ab)
+    comfort_margin: float = 0.0
     # laufende Zustände
     _charge: dict | None = None
     _slot: int | None = None
@@ -159,7 +162,12 @@ class DhwModel:
             hour = self._slot % 24
             self.daily[hour] += 0.15 * (self._slot_draw - self.daily[hour])
         if slot != self._slot:
+            if self._slot is not None:
+                self.comfort_margin = max(self.comfort_margin - DHW_MARGIN_DECAY / 24, 0.0)
             self._slot, self._slot_draw, self._slot_valid = slot, 0.0, False
+
+    def note_cold_draw(self) -> None:
+        self.comfort_margin = min(self.comfort_margin + DHW_MARGIN_STEP, DHW_MARGIN_MAX)
 
     # ------------------------------------------------------------------ Strategie
     def recommend(
@@ -170,7 +178,8 @@ class DhwModel:
         cfg,
     ) -> dict:
         """Empfohlene Speichertemperatur jetzt (nur Empfehlung, wird nicht gesetzt)."""
-        reheat_h = (cfg.dhw_comfort_temp - cfg.dhw_min_temp) / max(self.charge_rate_kh, 5.0)
+        comfort = min(cfg.dhw_comfort_temp + self.comfort_margin, cfg.dhw_max_temp)
+        reheat_h = (comfort - cfg.dhw_min_temp) / max(self.charge_rate_kh, 5.0)
         horizon = reheat_h + 1.0
         if someone_home is False:
             if next_arrival is None or (next_arrival - now).total_seconds() / 3600 > horizon:
@@ -179,7 +188,7 @@ class DhwModel:
         if draw >= 1.0:
             # Komfort zu Beginn der Nutzung; bei viel Verbrauch so hoch, dass er danach
             # nicht unter das Minimum fällt
-            target = min(max(cfg.dhw_comfort_temp, cfg.dhw_min_temp + draw), cfg.dhw_max_temp)
+            target = min(max(comfort, cfg.dhw_min_temp + draw), cfg.dhw_max_temp)
             return {"target": round(target), "reason": f"Zapfung erwartet (≈{draw:.0f} K)"}
         return {"target": cfg.dhw_min_temp, "reason": "keine Zapfung erwartet"}
 
@@ -196,6 +205,7 @@ class DhwModel:
             "charges": self.charges,
             "loss_updates": self.loss.updates,
             "profile_hours": [round(h, 2) for h in hours],
+            "comfort_margin": round(self.comfort_margin, 1),
         }
 
     # ------------------------------------------------------------------ Speichern
@@ -209,6 +219,7 @@ class DhwModel:
             "profile": self.profile,
             "profile_n": self.profile_n,
             "daily": self.daily,
+            "comfort_margin": self.comfort_margin,
         }
 
     @classmethod
@@ -222,6 +233,7 @@ class DhwModel:
             profile=d["profile"],
             profile_n=d["profile_n"],
             daily=d.get("daily", [0.0] * 24),
+            comfort_margin=d.get("comfort_margin", 0.0),
         )
         return m
 

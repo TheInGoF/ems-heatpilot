@@ -66,6 +66,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   <p class="sub" id="status">Lade …</p>
 
   <div class="tiles" id="tiles"></div>
+  <div class="card" id="guards" style="margin-bottom:12px"></div>
 
   <div class="grid2">
     <div class="card">
@@ -273,10 +274,15 @@ async function load() {
     tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),
     tile("Brenner ohne Bedarf", fmt(c.overrun_min, 0), "min heute", `≈ ${fmt(c.overrun_kwh, 1)} kWh · alle Räume waren am Soll`),
     tile("Gaskosten", fmt(s.costs.eur, 0), s.costs.full_year ? "€ / Jahr" : `€ in ${fmt(s.costs.days, 0)} Tagen`, `${fmt(s.costs.kwh, 0)} kWh inkl. anteiligem Grundpreis` + (s.costs.full_year ? "" : " – noch kein volles Jahr")),
-    tile("Ersparnis-Schätzung", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`),
+    tile(sv.reliable ? "Ersparnis-Schätzung Heizen" : "Ersparnis Heizen (Modell lernt noch)", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`),
     tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `Kessel-Soll ${fmt(s.flow_current_setpoint, 0)} °C` + (s.flow_calculated !== null ? ` · Regler ${fmt(s.flow_calculated, 0)} °C` : "")),
   ].join("");
 
+  const g = s.guards;
+  const status = (name, chk) => `<li><b>${name}:</b> ${chk.ok ? "plausibel – darf empfehlen" : "keine Empfehlung – " + chk.reasons.join("; ")}</li>`;
+  $("guards").innerHTML = `<h2>Leitplanken</h2><p>Gespart wird nur bei gleichem Komfort und gemessen am Gaszähler für das ganze Haus. Feste Untergrenzen: Räume ${fmt(s.limits.away_temp)} °C bei Abwesenheit, ${fmt(s.limits.night_temp)} °C nachts, Warmwasser ${fmt(s.limits.dhw_min_temp)} °C. Unplausible oder zu junge Modelle geben keine Empfehlung.</p>` +
+    `<ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary)">${status("Hausmodell", g.house)}${status("Warmwasser", g.dhw)}<li><b>Räume:</b> ${g.rooms_ok} von ${g.rooms_total} plausibel</li>` +
+    `<li><b>Komfort-Kontrolle:</b> Heizen ${sv.cold_hours} Stunden zu kalt · Warmwasser ${s.dhw.cold_draws}× zu kalt (Reserve aktuell +${fmt(s.dhw.comfort_margin)} K)</li></ul>`;
   const w = s.dhw;
   const kpk = w.kwh_per_k;
   $("dhw-tiles").innerHTML = [

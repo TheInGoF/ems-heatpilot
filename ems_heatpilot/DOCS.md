@@ -1,6 +1,6 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.4 macht
+## Was das Add-on in Version 0.5 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -93,6 +93,30 @@ Das Add-on bewertet den Bedarf deshalb nach **Soll gegen Ist** (Bedarf ab
 ereignisgenau, wie lange der Brenner ohne Bedarf lief und wie lange Räume
 wegen der Taktsperre warten mussten. In Phase 2 wird genau dieses Signal
 den Brenner direkt freigeben bzw. sperren.
+
+## Leitplanken – sparen ja, übertreiben nein
+
+Ein Optimierer, der nur „Gas sparen“ kennt, findet Abkürzungen: gar nicht heizen,
+oder Verluste von einem Bereich in den anderen schieben (z. B. den Heizraum
+heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
+(`guards.py`):
+
+1. **Komfort ist eine harte Grenze.** Tado-Soll bei Anwesenheit und Warmwasser
+   zur Zapfzeit müssen erreicht werden. Die Ersparnis-Rechnung heizt nur so
+   schnell wieder auf, wie die Therme kann, und startet dafür rechtzeitig vor
+   der Ankunft. Wo das nicht reicht, verzichtet sie auf die Absenkung. Jede
+   Stunde, die trotzdem zu kalt gewesen wäre, und jede zu kalte Zapfung wird
+   angezeigt.
+2. **Gezählt wird am Gaszähler, fürs ganze Haus** – Verschieben spart nichts.
+3. **Feste Untergrenzen:** Abwesenheits-/Nachttemperatur, Warmwasser-Minimum.
+   „Nie heizen“ ist keine erlaubte Strategie.
+4. **Nur plausible Modelle empfehlen.** Liegen gelernte Werte außerhalb
+   physikalischer Grenzen (z. B. Wärmeverlust, Trägheit, Grundlast, Speicher-
+   Umgebung) oder ist zu wenig gelernt, gibt es keine Empfehlung.
+5. **Kleine, gedeckelte Selbstkorrektur:** Nach einer zu kalten Zapfung +2 K
+   Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag.
+
+Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 
 ## Warmwasser
 

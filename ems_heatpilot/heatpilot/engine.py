@@ -11,7 +11,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from . import analysis
+from . import analysis, guards
 from .config import Config
 from .dhw import DhwModel, DhwShadow
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
@@ -440,10 +440,19 @@ class Engine:
         if home == 0:
             nxt = next_arrival(list(self.persons.values()), now)
             arrival = nxt["eta"] if nxt else None
-        self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg)
+        check = guards.check_dhw(self.dhw)
+        if check["ok"]:
+            self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg)
+            shadow_target = self.dhw_rec["target"]
+        else:
+            # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll
+            self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
+            shadow_target = sample.get("dhw_set") or self.cfg.dhw_comfort_temp
         sh = self.dhw_shadow.step(
-            self.dhw, t_cur, self.dhw_rec["target"], res["draw_k"], dt_h, self.cfg.dhw_comfort_temp
+            self.dhw, t_cur, shadow_target, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp
         )
+        if sh["cold_draw"] and check["ok"]:
+            self.dhw.note_cold_draw()
         day = now.date().isoformat()
         for key, val in (
             ("dhw_draw_k", res["draw_k"]),
@@ -501,9 +510,13 @@ class Engine:
         )
 
         hourly = [dict(r) for r in self.store.query("SELECT * FROM hourly ORDER BY ts")]
+        nom = num(self._boiler("nom_power"))
         savings = analysis.estimate_savings(
-            hourly, self.house, self.cfg.away_temp, self.cfg.night_temp, self.cfg.is_night
+            hourly, self.house, self.cfg.away_temp, self.cfg.night_temp, self.cfg.is_night,
+            p_max_kw=(nom or 18.0) * 0.95,
         )
+        house_check = guards.check_house(self.house)
+        room_checks = {c: guards.check_room(m) for c, m in self.rooms.items()}
         gas_total = sum(h["gas_kwh"] or 0 for h in hourly)
         span_days = (hourly[-1]["ts"] - hourly[0]["ts"]) / 86400 if len(hourly) > 1 else 0
         price, fee = self.cfg.gas_price_eur_per_kwh, self.cfg.gas_base_fee_eur_per_year
@@ -522,10 +535,11 @@ class Engine:
         persons = [p.eta(now) for p in self.persons.values()]
         arrival = next_arrival(list(self.persons.values()), now)
         plan = None
-        if arrival and arrival["eta"] and t_out is not None:
+        if arrival and arrival["eta"] and t_out is not None and house_check["ok"]:
             room_inputs = []
             for climate, temp, target, _, _ in rooms:
-                if temp is not None and target is not None and climate in self.rooms:
+                if (temp is not None and target is not None and climate in self.rooms
+                        and room_checks[climate]["ok"]):
                     room_inputs.append((self.rooms[climate], temp, target))
             t_out_arrival = self.outdoor_forecast_at(arrival["eta"])
             plan = analysis.preheat_plan(
@@ -539,7 +553,7 @@ class Engine:
             needs = [
                 self.rooms[c].required_flow(target, t_out)
                 for c, temp, target, _, _ in rooms
-                if target is not None and c in self.rooms and self.rooms[c].rls.updates > 20
+                if target is not None and c in self.rooms and room_checks[c]["ok"]
             ]
             if needs:
                 flow_needed = round(min(max(max(needs), 25), self.cfg.max_flow_temp), 1)
@@ -552,14 +566,28 @@ class Engine:
             "house": self.house.summary(self.cfg.design_outdoor_temp, t_out, t_in),
             "rooms": [
                 {**self.rooms[c].summary(t_out if t_out is not None else 5.0, self.cfg.max_flow_temp),
-                 "temp": temp, "target": target, "valve": valve, "humidity": hum}
+                 "temp": temp, "target": target, "valve": valve, "humidity": hum,
+                 "check": room_checks[c]}
                 for c, temp, target, valve, hum in rooms if c in self.rooms
             ],
             "cycling": cycling,
             "costs": costs,
             "dhw": self.dhw_summary(),
+            "limits": {
+                "away_temp": self.cfg.away_temp,
+                "night_temp": self.cfg.night_temp,
+                "dhw_min_temp": self.cfg.dhw_min_temp,
+            },
+            "guards": {
+                "house": house_check,
+                "dhw": guards.check_dhw(self.dhw),
+                "rooms_ok": sum(1 for r in room_checks.values() if r["ok"]),
+                "rooms_total": len(room_checks),
+            },
             "savings": {
                 "hours": savings.hours,
+                "cold_hours": savings.cold_hours,
+                "reliable": house_check["ok"],
                 "actual_kwh": savings.actual_kwh,
                 "saved_kwh": savings.saved_kwh,
                 "saved_pct": savings.saved_pct,
