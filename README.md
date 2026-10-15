@@ -16,7 +16,7 @@ Anwesenheitserkennung. Keine Cloud: alle Daten bleiben auf dem Home-Assistant-Re
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **diese Version** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.2** |
 | 2 | Taktsperre dynamisch steuern (`burnminperiod`, Hysterese), Vorlauf vorgeben | geplant |
 | 3 | Absenken bei Abwesenheit/nachts + Vorheizen über Tado-Solltemperaturen | geplant |
 | 4 | Wirkungsgrad je Vorlauftemperatur aus dem Gasverbrauch lernen | geplant |

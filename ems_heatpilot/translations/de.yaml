@@ -11,16 +11,27 @@ configuration:
     name: Langzeitstatistik übernehmen (Tage)
   outdoor_sensors:
     name: Außenfühler
-    description: Es wird das Minimum verwendet. Leer = Außenfühler der Therme
+    description: Ein oder mehrere Sensoren, es wird das Minimum verwendet. Leer = Außenfühler der Therme
+  rooms:
+    name: Räume
+    description: "Je Raum: name, climate (Tado-Klima-Entität), optional temperature, heating_power (Ventil %), humidity. Leer = Tado-Räume automatisch"
+  emsesp_host:
+    name: EMS-ESP-Adresse
+    description: "Optional, z. B. ems-esp.local oder 192.168.1.50 – liest alle Werte direkt (nur lesen)"
   gas_sensor:
     name: Gaszähler
   weather_entity:
     name: Wetter-Entität
-  gas_kwh_per_m3:
-    name: kWh pro m³ Gas
-    description: Brennwert × Zustandszahl laut Gasrechnung
+  gas_calorific_value:
+    name: Brennwert (kWh/m³)
+    description: Laut Gasrechnung, typisch 10,5–11,5
+  gas_z_number:
+    name: Zustandszahl
+    description: Laut Gasrechnung, typisch 0,93–0,97
   gas_price_eur_per_kwh:
-    name: Gaspreis (€/kWh)
+    name: Arbeitspreis (€/kWh)
+  gas_base_fee_eur_per_year:
+    name: Grundpreis (€/Jahr)
   design_outdoor_temp:
     name: Auslegungs-Außentemperatur (°C)
   max_flow_temp:

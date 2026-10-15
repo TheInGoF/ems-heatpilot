@@ -1,4 +1,4 @@
-"""Auswertungen: Takten, blockierter Wärmebedarf, Ersparnis-Schätzung, Vorheizplan."""
+"""Auswertungen: Takten, Ersparnis-Schätzung, Vorheizplan."""
 
 from __future__ import annotations
 
@@ -41,30 +41,6 @@ def cycling_stats(events: list[tuple[int, int]], day_start: int, day_end: int) -
         "avg_pause_min": round(sum(pauses) / len(pauses), 1) if pauses else None,
         "short_runs": sum(1 for r in runs if r < 10),
     }
-
-
-def blocked_minutes(
-    samples: list[dict],
-    last_off_before: dict[int, int | None],
-    interval_s: int,
-) -> float:
-    """Minuten, in denen Räume Wärme wollten, der Brenner aber wegen Taktsperre wartete.
-
-    ``samples``: {ts, burner_on, min_period, demand} – demand = ein Raum ist
-    deutlich unter Soll und sein Ventil weit offen.
-    ``last_off_before``: ts -> Zeitpunkt der letzten Brennerabschaltung.
-    """
-    total = 0.0
-    for s in samples:
-        if s.get("burner_on") or not s.get("demand") or s.get("dhw"):
-            continue
-        off = last_off_before.get(s["ts"])
-        period = s.get("min_period")
-        if off is None or not period:
-            continue
-        if (s["ts"] - off) < period * 60:
-            total += interval_s / 60
-    return round(total, 1)
 
 
 @dataclass

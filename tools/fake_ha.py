@@ -38,6 +38,9 @@ def simulate():
     burner = False
     last_off = -10**9
     starts = 1000
+    heat_starts, burn_min, heat_min = 900, 4000.0, 3000.0
+    t_boiler = 30.0
+    targets_lag = [21.0, 21.0]  # Tado-Ventile reagieren ~10 min verzögert
     states = {}
 
     def rec(eid, ts, s, a=None):
@@ -76,22 +79,34 @@ def simulate():
 
         night = hour >= 22.5 or hour < 6
         target = 18.0 if night else 21.0
-        demand = max(target - temps[r] for r in ROOMS)
-        valves = {r: max(0, min(100, (target - temps[r] + 0.5) * 80)) for r in ROOMS}
-        sel_flow = 55.0 if demand > 0 else 25.0
+        targets_lag.append(target)
+        valve_target = targets_lag.pop(0)
+        valves = {r: max(0, min(100, (valve_target - temps[r] + 0.1) * 80)) for r in ROOMS}
+        demand = max(valves.values())
+        sel_flow = round(34 + (14 - t_out) * 0.8)  # Heizkurve des Reglers
         dhw = 6.5 <= hour < 6.75 or 18.0 <= hour < 18.25
-        if not burner and (demand > 0 or dhw) and ts - last_off >= 30 * 60:
-            burner, starts = True, starts + 1
-        elif burner and demand <= 0.0 and not dhw:
-            burner, last_off = False, ts
-        flow = sel_flow if burner and not dhw else 28.0
-        pow_pct = 100 if dhw and burner else (min(100, max(30, demand * 60)) if burner else 0)
-        if burner:
-            gas += 15 * pow_pct / 100 * STEP / 3600 / 10.3
-        for r, p in ROOMS.items():
-            u = max(flow - temps[r], 0) * valves[r] / 100 * (burner and not dhw)
-            for _ in range(5):
+        pow_pct = 0
+        for _ in range(5):  # minütlich: Kesselwasser, Brenner mit Hysterese -2/+10 K
+            heat_demand = demand > 0
+            if not burner and (dhw or (heat_demand and t_boiler < sel_flow - 2)) \
+                    and ts - last_off >= 25 * 60:
+                burner, starts = True, starts + 1
+                heat_starts += 0 if dhw else 1
+            elif burner and not dhw and (not heat_demand or t_boiler > sel_flow + 10):
+                burner, last_off = False, ts
+            load = sum(0.06 * max(t_boiler - temps[r], 0) * valves[r] / 100 for r in ROOMS)
+            pow_pct = (100 if dhw else max(30, min(100, load / 18 * 100))) if burner else 0
+            p_kw = pow_pct / 100 * 18
+            t_boiler += ((0 if dhw else p_kw) - load - 0.05 * (t_boiler - 20)) / 0.06 / 60
+            if burner:
+                burn_min += 1
+                heat_min += 0 if dhw else 1
+                gas += p_kw / 0.95 / 60 / 10.64
+            for r, p in ROOMS.items():
+                u = max(t_boiler - temps[r], 0) * valves[r] / 100
                 temps[r] += (p["a"] * u + p["b"] * (t_out - temps[r]) + p["c"] + 0.15 * sun) / 60
+        flow = t_boiler
+        for r in ROOMS:
             attrs = {"current_temperature": round(temps[r], 1), "temperature": target,
                      "hvac_action": "heating" if valves[r] > 0 else "idle",
                      "current_humidity": 50, "friendly_name": r.title()}
@@ -112,9 +127,16 @@ def simulate():
             "binary_sensor.boiler_heatingpump": "on" if (burner and not dhw) else "off",
             "binary_sensor.boiler_dhw_charging": "on" if dhw else "off",
             "sensor.boiler_outdoortemp": round(t_out + 1, 1),
-            "number.boiler_burnminperiod": 30,
+            "number.boiler_burnminperiod": 25,
+            "number.boiler_nompower": 18,
+            "sensor.boiler_burnworkmin": round(burn_min),
+            "sensor.boiler_heatstarts": heat_starts,
+            "sensor.boiler_heatworkmin": round(heat_min),
+            "switch.boiler_heatingoff": "off" if demand > 0 else "on",
+            "sensor.thermostat_hc1_targetflowtemp": round(34 + (14 - t_out) * 0.8),
             "sensor.aussen_nord": round(t_out, 1),
             "sensor.aussen_sued": round(t_out + 2 * sun, 1),
+            "sensor.aussen_temperatur": round(t_out, 1),
             "sensor.gaszaehler": round(gas, 3),
         }
         for eid, val in vals.items():
@@ -154,7 +176,9 @@ def history(msg):
     e = datetime.fromisoformat(msg["end_time"]).timestamp()
     out = {}
     for eid in msg["entity_ids"]:
-        rows = [dict(x) for x in HIST.get(eid, []) if s <= x["lu"] < e]
+        allrows = HIST.get(eid, [])
+        before = [x for x in allrows if x["lu"] < s]
+        rows = ([{**before[-1], "lu": s}] if before else []) + [dict(x) for x in allrows if s <= x["lu"] < e]
         if msg.get("no_attributes"):
             for x in rows:
                 x.pop("a", None)
@@ -213,6 +237,31 @@ async def ws_handler(request):
     return ws
 
 
+def ems_api(device):
+    """Nachbildung von GET /api/boiler bzw. /api/thermostat (Kurznamen, verschachtelt)."""
+    out: dict = {}
+    for eid, (val, _a) in STATES.items():
+        prefix = f"{device}_"
+        name = eid.split(".", 1)[1]
+        if not name.startswith(prefix):
+            continue
+        key = name[len(prefix):]
+        try:
+            v = float(val)
+        except ValueError:
+            v = val
+        if key.startswith(("dhw_", "hc1_")):
+            group, sub = key.split("_", 1)
+            out.setdefault(group, {})[sub] = v
+        else:
+            out[key] = v
+    return out
+
+
+async def ems_handler(request):
+    return web.json_response(ems_api(request.match_info["device"]))
+
+
 async def post_state(request):
     PUBLISHED[request.match_info["eid"]] = await request.json()
     return web.json_response({})
@@ -226,6 +275,7 @@ app = web.Application()
 app.router.add_get("/websocket", ws_handler)
 app.router.add_post("/api/states/{eid}", post_state)
 app.router.add_get("/published", get_published)
+app.router.add_get("/api/{device}", ems_handler)
 
 if __name__ == "__main__":
     web.run_app(app, port=8123)

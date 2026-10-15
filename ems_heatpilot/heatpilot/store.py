@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS hourly(
 CREATE TABLE IF NOT EXISTS burner_events(ts INTEGER, state INTEGER);
 CREATE TABLE IF NOT EXISTS snapshots(ts INTEGER, kind TEXT, key TEXT, data TEXT);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
+CREATE TABLE IF NOT EXISTS daily(day TEXT, key TEXT, value REAL, PRIMARY KEY(day, key));
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
 CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 """
@@ -36,6 +37,8 @@ CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 SAMPLE_COLS = (
     "t_out", "flow", "sel_flow", "ret", "burner_pow", "burner_on",
     "heating", "dhw", "gas", "min_period", "home_count",
+    # seit 0.2
+    "boiler_temp", "calc_flow", "heating_off", "burn_starts", "heat_starts", "heat_min",
 )
 
 
@@ -44,6 +47,10 @@ class Store:
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(samples)")}
+        for col in SAMPLE_COLS:
+            if col not in have:
+                self.db.execute(f"ALTER TABLE samples ADD COLUMN {col} REAL")
         self.db.commit()
 
     # --- Schlüssel/Wert ---
@@ -88,6 +95,19 @@ class Store:
         self.db.execute(
             "INSERT INTO snapshots VALUES(?, ?, ?, ?)", (ts, kind, key, json.dumps(data))
         )
+
+    def add_daily(self, day: str, key: str, delta: float) -> None:
+        self.db.execute(
+            "INSERT INTO daily VALUES(?, ?, ?) "
+            "ON CONFLICT(day, key) DO UPDATE SET value = value + excluded.value",
+            (day, key, delta),
+        )
+
+    def daily(self, since_day: str) -> dict[str, dict[str, float]]:
+        out: dict[str, dict[str, float]] = {}
+        for r in self.db.execute("SELECT * FROM daily WHERE day >= ? ORDER BY day", (since_day,)):
+            out.setdefault(r["day"], {})[r["key"]] = r["value"]
+        return out
 
     def commit(self) -> None:
         self.db.commit()

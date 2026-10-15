@@ -29,6 +29,24 @@ BOILER_ROLES: dict[str, tuple[str, ...]] = {
     "hyst_off": ("boilhystoff",),
     "min_power": ("burnminpower",),
     "max_power": ("burnmaxpower",),
+    "nom_power": ("nompower",),
+    "heating_off": ("heatingoff", "forceheatingoff"),
+    "boiler_temp": ("boiltemp",),
+    "pump_mod": ("heatingpumpmod",),
+    "burner_runtime": ("burnworkmin",),
+    "heat_starts": ("heatstarts",),
+    "heat_runtime": ("heatworkmin",),
+    "nrg_total": ("nrgtotal",),
+    "nrg_heat": ("nrgheat",),
+}
+
+# Regler (ES73/RC35 …), Heizkreis 1
+THERMOSTAT_ROLES: dict[str, tuple[str, ...]] = {
+    "hc_seltemp": ("hc1_seltemp",),
+    "hc_calc_flow": ("hc1_targetflowtemp", "hc1_calcflowtemp"),
+    "hc_mode": ("hc1_mode",),
+    "hc_remotetemp": ("hc1_remotetemp",),
+    "damped_outdoor": ("dampedoutdoortemp",),
 }
 
 
@@ -44,6 +62,7 @@ class Room:
 @dataclass
 class Discovered:
     boiler: dict[str, str] = field(default_factory=dict)
+    thermostat: dict[str, str] = field(default_factory=dict)
     rooms: list[Room] = field(default_factory=list)
     persons: list[str] = field(default_factory=list)
     outdoor: list[str] = field(default_factory=list)
@@ -53,7 +72,7 @@ class Discovered:
     home_zone: tuple[float, float] | None = None
 
     def all_sensor_ids(self) -> list[str]:
-        ids = list(self.boiler.values()) + list(self.outdoor)
+        ids = list(self.boiler.values()) + list(self.thermostat.values()) + list(self.outdoor)
         for r in self.rooms:
             ids += [x for x in (r.heating_power, r.humidity, r.temp_sensor) if x]
         if self.gas:
@@ -63,6 +82,7 @@ class Discovered:
     def as_dict(self) -> dict:
         return {
             "boiler": self.boiler,
+            "thermostat": self.thermostat,
             "rooms": [r.__dict__ for r in self.rooms],
             "persons": self.persons,
             "outdoor": self.outdoor,
@@ -73,27 +93,19 @@ class Discovered:
         }
 
 
-def _find_boiler(entity_ids: list[str], keys: tuple[str, ...]) -> str | None:
+def _find_boiler(entity_ids: list[str], keys: tuple[str, ...], device: str = "boiler") -> str | None:
     for key in keys:
-        pattern = re.compile(rf"^(sensor|binary_sensor|number|switch)\..*boiler_(.*_)?{key}$")
+        pattern = re.compile(
+            rf"^(sensor|binary_sensor|number|switch|select)\..*{device}_(.*_)?{key}$"
+        )
         hits = sorted(e for e in entity_ids if pattern.match(e))
         if hits:
             return hits[0]
     return None
 
 
-def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
-    by_id = {s["entity_id"]: s for s in states}
-    ids = list(by_id)
-    reg = {r["entity_id"]: r for r in registry}
-    d = Discovered()
-
-    for role, keys in BOILER_ROLES.items():
-        hit = _find_boiler(ids, keys)
-        if hit:
-            d.boiler[role] = hit
-
-    # Tado-Räume: climate-Entitäten der Tado-Integration, Zusatzsensoren über das Gerät
+def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[dict], reg: dict) -> None:
+    """Tado-Räume: climate-Entitäten der Tado-Integration, Zusatzsensoren über das Gerät."""
     tado_climates = [
         e for e in ids
         if e.startswith("climate.") and reg.get(e, {}).get("platform") == "tado"
@@ -123,6 +135,40 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
                 room.temp_sensor = s
         d.rooms.append(room)
 
+
+def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
+    by_id = {s["entity_id"]: s for s in states}
+    ids = list(by_id)
+    reg = {r["entity_id"]: r for r in registry}
+    d = Discovered()
+
+    for role, keys in BOILER_ROLES.items():
+        hit = _find_boiler(ids, keys)
+        if hit:
+            d.boiler[role] = hit
+
+    for role, keys in THERMOSTAT_ROLES.items():
+        hit = _find_boiler(ids, keys, "thermostat")
+        if hit:
+            d.thermostat[role] = hit
+
+    if cfg.rooms:
+        for r in cfg.rooms:
+            name = r.get("name") or by_id.get(r["climate"], {}).get("attributes", {}).get(
+                "friendly_name", r["climate"]
+            )
+            d.rooms.append(
+                Room(
+                    name=name,
+                    climate=r["climate"],
+                    heating_power=r.get("heating_power"),
+                    humidity=r.get("humidity"),
+                    temp_sensor=r.get("temperature"),
+                )
+            )
+    else:
+        _discover_tado(d, ids, by_id, registry, reg)
+
     d.persons = sorted(e for e in ids if e.startswith("person."))
 
     d.outdoor = [e for e in cfg.outdoor_sensors if e in by_id]
@@ -145,7 +191,11 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
             and by_id[e].get("attributes", {}).get("state_class") in ("total", "total_increasing")
         )
         d.gas = gas[0] if gas else None
-    if d.gas and d.gas in by_id:
+    if not d.gas:
+        # Notlösung: von EMS-ESP geschätzte Energie (Brennerleistung × Nennleistung)
+        d.gas = d.boiler.get("nrg_total") or d.boiler.get("nrg_heat")
+        d.gas_unit = "kWh" if d.gas else None
+    elif d.gas in by_id:
         d.gas_unit = by_id[d.gas].get("attributes", {}).get("unit_of_measurement")
 
     zone = by_id.get("zone.home", {}).get("attributes", {})
@@ -156,6 +206,8 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
     for role, entity in cfg.overrides.items():
         if role in BOILER_ROLES:
             d.boiler[role] = entity
+        elif role in THERMOSTAT_ROLES:
+            d.thermostat[role] = entity
         elif role == "gas":
             d.gas = entity
         elif role == "weather":

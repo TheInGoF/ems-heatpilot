@@ -1,6 +1,6 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.1 macht
+## Was das Add-on in Version 0.2 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein.
 
@@ -37,7 +37,10 @@
 | `sensor.heatpilot_vorlauf_empfehlung` | Vorlauf, der die Soll-Temperaturen hält (°C) |
 | `sensor.heatpilot_brennerstarts_heute` | Starts, mittlere Lauf- und Pausenzeit |
 | `sensor.heatpilot_taktsperre_wartezeit_heute` | Minuten, in denen Räume Wärme wollten, die Taktsperre aber blockierte |
-| `sensor.heatpilot_ersparnis_prognose_jahr` | geschätzte Ersparnis durch Absenken (kWh/Jahr) |
+| `sensor.heatpilot_nachlauf_ohne_bedarf_heute` | Minuten (und kWh), die der Brenner lief, obwohl laut Tado-Soll kein Raum mehr Wärme brauchte |
+| `sensor.heatpilot_laufzeit_je_start` | mittlere Laufzeit je Heizstart heute, Attribut: seit Einbau |
+| `sensor.heatpilot_gaskosten` | Gaskosten der letzten 12 Monate inkl. anteiligem Grundpreis |
+| `sensor.heatpilot_ersparnis_schaetzung` | geschätzte Ersparnis durch Absenken (%), kWh/€ als Attribute |
 | `sensor.heatpilot_naechste_ankunft` | vorhergesagte Ankunft |
 | `sensor.heatpilot_vorheizen_start` | wann das Vorheizen beginnen müsste |
 
@@ -48,16 +51,41 @@ Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 
 | Option | Bedeutung |
 |---|---|
-| `outdoor_sensors` | Außenfühler; es wird – wie in deiner Automation – das Minimum genommen. Leer = EMS-ESP-Außenfühler |
-| `gas_sensor` | Gaszähler-Entität (m³ oder kWh). Leer = automatisch suchen |
+| `outdoor_sensors` | ein oder mehrere Außenfühler, es zählt das Minimum. Vorgabe: `sensor.aussen_temperatur`. Leer = EMS-ESP-Außenfühler |
+| `rooms` | Räume einzeln festlegen (siehe unten). Leer = alle Tado-Räume automatisch |
+| `gas_sensor` | Gaszähler-Entität (m³ oder kWh). Leer = automatisch suchen, notfalls Energiezähler von EMS-ESP |
 | `weather_entity` | Wetter-Entität für die Vorhersage. Leer = automatisch |
-| `gas_kwh_per_m3` | Brennwert × Zustandszahl laut Gasrechnung |
-| `gas_price_eur_per_kwh` | für die Euro-Angaben |
+| `emsesp_host` | optional, z. B. `ems-esp.local`: alle Werte direkt von EMS-ESP lesen (nur lesen) |
+| `gas_calorific_value`, `gas_z_number` | Brennwert und Zustandszahl laut Gasrechnung: kWh = m³ × Brennwert × Zustandszahl |
+| `gas_price_eur_per_kwh`, `gas_base_fee_eur_per_year` | Arbeitspreis und Grundpreis für die Euro-Angaben |
 | `design_outdoor_temp` | Auslegungs-Außentemperatur (Hamburg: −12 °C) |
 | `max_flow_temp` | maximale Vorlauftemperatur |
 | `away_temp`, `night_temp`, `night_start`, `night_end` | Strategie für die Ersparnis-Schätzung |
 | `backfill_days`, `statistics_backfill_days` | wie viel Historie beim ersten Start übernommen wird |
 | `overrides` | Zuordnung erzwingen, z. B. `flow_temp=sensor.boiler_curflowtemp` |
+
+## Räume konfigurieren
+
+```yaml
+rooms:
+  - name: Wohnzimmer
+    climate: climate.wohnzimmer          # Tado-Thermostat (Soll + Ist)
+    heating_power: sensor.wohnzimmer_heating   # optional: Ventil/Heizleistung %
+    temperature: sensor.wohnzimmer_temperature # optional: für die Langzeitstatistik
+    humidity: sensor.wohnzimmer_humidity       # optional
+  - name: Bad
+    climate: climate.bad
+```
+
+## Wärmebedarf aus dem Tado-Soll
+
+Tado senkt nachts die Solltemperatur sofort ab, die Ventile schließen aber
+erst mit Verzögerung – der Brenner läuft dann oft noch ~10 Minuten nach.
+Das Add-on bewertet den Bedarf deshalb nach **Soll gegen Ist** (Bedarf ab
+0,2 K unter Soll, kein Bedarf wenn alle Räume am Soll sind) und zählt
+ereignisgenau, wie lange der Brenner ohne Bedarf lief und wie lange Räume
+wegen der Taktsperre warten mussten. In Phase 2 wird genau dieses Signal
+den Brenner direkt freigeben bzw. sperren.
 
 ## Privates GitHub-Repo als Add-on-Quelle
 

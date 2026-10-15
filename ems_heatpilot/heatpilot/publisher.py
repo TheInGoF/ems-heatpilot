@@ -47,10 +47,26 @@ async def publish(ha: HAClient, s: dict) -> None:
         ),
         "sensor.heatpilot_taktsperre_wartezeit_heute": _sensor(
             cyc["blocked_min"], "Wartezeit durch Taktsperre heute", "min", "mdi:timer-lock-outline",
+            raeume_warten_gesamt_min=cyc["waiting_min"],
         ),
-        "sensor.heatpilot_ersparnis_prognose_jahr": _sensor(
-            sav["year_kwh"], "Ersparnis-Prognose Jahr", "kWh", "mdi:piggy-bank-outline",
-            prozent=sav["saved_pct"], euro=sav["year_eur"], ausgewertete_tage=sav["span_days"],
+        "sensor.heatpilot_nachlauf_ohne_bedarf_heute": _sensor(
+            cyc["overrun_min"], "Brenner ohne Wärmebedarf heute", "min", "mdi:fire-alert",
+            gas_kwh=cyc["overrun_kwh"],
+        ),
+        "sensor.heatpilot_laufzeit_je_start": _sensor(
+            cyc.get("avg_run_min"), "Laufzeit je Heizstart heute", "min", "mdi:timer-outline",
+            gesamt_seit_einbau_min=cyc.get("lifetime_run_per_start_min"),
+        ),
+        "sensor.heatpilot_gaskosten": _sensor(
+            s["costs"]["eur"], "Gaskosten (letzte 12 Monate)", "€", "mdi:currency-eur",
+            kwh_ausgewertet=s["costs"]["kwh"], tage_ausgewertet=s["costs"]["days"],
+            volles_jahr=s["costs"]["full_year"],
+        ),
+        "sensor.heatpilot_ersparnis_schaetzung": _sensor(
+            sav["saved_pct"], "Ersparnis-Schätzung", "%", "mdi:piggy-bank-outline",
+            kwh_im_zeitraum=sav["saved_kwh"], euro_im_zeitraum=sav["saved_eur"],
+            kwh_pro_jahr=sav["year_kwh"], euro_pro_jahr=sav["year_eur"],
+            ausgewertete_tage=sav["span_days"],
         ),
         "sensor.heatpilot_naechste_ankunft": _sensor(
             arrival.get("eta"), "Nächste Ankunft", icon="mdi:home-import-outline",

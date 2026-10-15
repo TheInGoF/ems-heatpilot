@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from . import analysis
 from .config import Config
-from .discovery import Discovered
+from .discovery import BOILER_ROLES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
 from .presence import PersonLearner, haversine_km, next_arrival
 from .store import Store
@@ -52,6 +52,7 @@ class Engine:
         self.store = store
         self.found = found
         self.states: dict[str, dict] = {}
+        self.ems: dict[str, dict] = {}  # direkt von EMS-ESP gelesen (optional)
         self.gas_factor = 1.0 if (found.gas_unit or "").lower() == "kwh" else cfg.gas_kwh_per_m3
         self.house = HouseModel.from_dict(store.get("model.house")) if store.get("model.house") else HouseModel()
         self.rooms: dict[str, RoomModel] = {}
@@ -65,6 +66,16 @@ class Engine:
         self.forecast: list[dict] = []
         self.last_plan: dict | None = None
         self._last_burner: int | None = None
+        # Live-Zähler (Nachlauf, Taktsperre) – ereignisgenau statt 5-min-Raster
+        self._live_ts: float | None = None
+        self._live_prev: dict = {}
+        self._demand: bool | None = None
+        off = store.query("SELECT MAX(ts) AS t FROM burner_events WHERE state = 0")
+        self._last_off_ts: float | None = off[0]["t"] if off else None
+        self._live_entities = {
+            *(r.climate for r in found.rooms),
+            *(found.boiler.get(k) for k in ("burner_on", "burner_power", "dhw_active", "min_period")),
+        }
         self._last_room_step: int | None = store.get("last_room_step")
         self._last_hour: int | None = store.get("last_hour")
 
@@ -74,12 +85,12 @@ class Engine:
             self.states.pop(entity_id, None)
             return
         self.states[entity_id] = state
-        if entity_id == self.found.boiler.get("burner_on"):
-            on = flag(state.get("state"))
-            if on is not None and on != self._last_burner:
-                self.store.add_burner_event(int(time.time()), on)
-                self.store.commit()
-                self._last_burner = on
+        if entity_id in self._live_entities:
+            self.update_live()
+
+    def set_ems(self, values: dict[str, dict]) -> None:
+        self.ems = values
+        self.update_live()
 
     def _val(self, entity_id: str | None):
         if not entity_id or entity_id not in self.states:
@@ -87,7 +98,95 @@ class Engine:
         return self.states[entity_id].get("state")
 
     def _boiler(self, role: str):
+        ems = self.ems.get("boiler")
+        if ems:
+            for key in BOILER_ROLES.get(role, ()):
+                if key in ems:
+                    return ems[key]
         return self._val(self.found.boiler.get(role))
+
+    def _thermo(self, role: str):
+        ems = self.ems.get("thermostat")
+        if ems:
+            for key in THERMOSTAT_ROLES.get(role, ()):
+                if key in ems:
+                    return ems[key]
+        return self._val(self.found.thermostat.get(role))
+
+    def burner_on(self) -> int | None:
+        on = flag(self._boiler("burner_on"))
+        if on is None:
+            p = num(self._boiler("burner_power"))
+            on = None if p is None else int(p > 0)
+        return on
+
+    def setpoint_demand(self) -> bool | None:
+        """Wärmebedarf aus Tado-Soll vs. Ist – reagiert sofort, ohne Ventil-Verzögerung.
+
+        Bedarf ab 0,2 K unter Soll, kein Bedarf wenn alle Räume am Soll sind,
+        dazwischen bleibt der letzte Zustand (Hysterese).
+        """
+        gaps = []
+        for r in self.found.rooms:
+            st = self.states.get(r.climate)
+            if not st:
+                continue
+            a = st.get("attributes", {})
+            temp, target = num(a.get("current_temperature")), num(a.get("temperature"))
+            if st.get("state") == "off" or target is None:
+                gaps.append(-99.0)
+            elif temp is not None:
+                gaps.append(target - temp)
+        if not gaps:
+            return None
+        if max(gaps) >= 0.2:
+            self._demand = True
+        elif max(gaps) <= 0.0:
+            self._demand = False
+        return self._demand
+
+    def update_live(self, now: float | None = None, record_events: bool = True) -> None:
+        """Zeit seit dem letzten Aufruf den passenden Tageszählern gutschreiben."""
+        now = time.time() if now is None else now
+        burner = self.burner_on()
+        if burner is not None and burner != self._last_burner:
+            if record_events:
+                self.store.add_burner_event(int(now), burner)
+            if burner == 0 and self._last_burner == 1:
+                self._last_off_ts = now
+            self._last_burner = burner
+
+        prev = self._live_prev
+        if self._live_ts is not None and prev:
+            dt = min(now - self._live_ts, 2 * self.cfg.sample_interval_s)
+            day = local(self._live_ts).date().isoformat()
+            if dt > 0:
+                if prev["overrun"]:
+                    self.store.add_daily(day, "overrun_min", dt / 60)
+                    if prev["kw"] is not None:
+                        self.store.add_daily(day, "overrun_kwh", prev["kw"] * dt / 3600)
+                if prev["blocked"]:
+                    self.store.add_daily(day, "blocked_min", dt / 60)
+                if prev["waiting"]:
+                    self.store.add_daily(day, "waiting_min", dt / 60)
+
+        dhw = flag(self._boiler("dhw_active")) or 0
+        demand = self.setpoint_demand()
+        period = num(self._boiler("min_period"))
+        power, nom = num(self._boiler("burner_power")), num(self._boiler("nom_power"))
+        locked = bool(
+            period and self._last_off_ts is not None and now - self._last_off_ts < period * 60
+        )
+        self._live_prev = {
+            # Brenner heizt, obwohl laut Tado-Soll kein Raum mehr Wärme braucht
+            "overrun": burner == 1 and not dhw and demand is False,
+            "kw": None if power is None or nom is None else power / 100 * nom,
+            # Räume wollen Wärme, Brenner darf wegen Taktsperre nicht
+            "blocked": burner == 0 and not dhw and demand is True and locked,
+            # Räume wollen Wärme, Brenner aus (egal warum)
+            "waiting": burner == 0 and demand is True,
+        }
+        self._live_ts = now
 
     def outdoor_now(self) -> float | None:
         vals = [num(self._val(e)) for e in self.found.outdoor]
@@ -100,9 +199,7 @@ class Engine:
 
     def snapshot(self) -> tuple[dict, list[tuple], list[tuple]]:
         burner_pow = num(self._boiler("burner_power"))
-        burner_on = flag(self._boiler("burner_on"))
-        if burner_on is None and burner_pow is not None:
-            burner_on = int(burner_pow > 0)
+        burner_on = self.burner_on()
         dhw = flag(self._boiler("dhw_active"))
         heating = flag(self._boiler("heating_pump"))
         if heating is None and burner_on is not None:
@@ -132,6 +229,12 @@ class Engine:
             "gas": num(self._val(self.found.gas)),
             "min_period": num(self._boiler("min_period")),
             "home_count": home if self.found.persons else None,
+            "boiler_temp": num(self._boiler("boiler_temp")),
+            "calc_flow": num(self._thermo("hc_calc_flow")),
+            "heating_off": flag(self._boiler("heating_off")),
+            "burn_starts": num(self._boiler("burner_starts")),
+            "heat_starts": num(self._boiler("heat_starts")),
+            "heat_min": num(self._boiler("heat_runtime")),
         }
         rooms = []
         for r in self.found.rooms:
@@ -153,6 +256,7 @@ class Engine:
     def tick(self, now_ts: int | None = None) -> None:
         now_ts = now_ts or int(time.time())
         ts = now_ts - now_ts % self.cfg.sample_interval_s
+        self.update_live(now_ts)
         sample, rooms, persons = self.snapshot()
         self.store.add_sample(ts, sample)
         self.store.add_room_samples((ts, *r) for r in rooms)
@@ -294,7 +398,19 @@ class Engine:
             )
         ]
         cycling = analysis.cycling_stats(events, day_start, now_ts + 1)
-        cycling["blocked_min"] = self._blocked_today(day_start, now_ts, events)
+        today = now.date().isoformat()
+        counters = self.counter_days(today).get(today)
+        if counters:  # Zähler der Therme sind genauer als Ein/Aus-Ereignisse
+            cycling.update(counters)
+        live = self.store.daily(today).get(today, {})
+        cycling["blocked_min"] = round(live.get("blocked_min", 0.0), 1)
+        cycling["waiting_min"] = round(live.get("waiting_min", 0.0), 1)
+        cycling["overrun_min"] = round(live.get("overrun_min", 0.0), 1)
+        cycling["overrun_kwh"] = round(live.get("overrun_kwh", 0.0), 2)
+        starts, runtime = num(self._boiler("heat_starts")), num(self._boiler("heat_runtime"))
+        cycling["lifetime_run_per_start_min"] = (
+            round(runtime / starts, 1) if starts and runtime else None
+        )
 
         hourly = [dict(r) for r in self.store.query("SELECT * FROM hourly ORDER BY ts")]
         savings = analysis.estimate_savings(
@@ -302,6 +418,18 @@ class Engine:
         )
         gas_total = sum(h["gas_kwh"] or 0 for h in hourly)
         span_days = (hourly[-1]["ts"] - hourly[0]["ts"]) / 86400 if len(hourly) > 1 else 0
+        price, fee = self.cfg.gas_price_eur_per_kwh, self.cfg.gas_base_fee_eur_per_year
+        last_year = [h for h in hourly if h["ts"] >= now_ts - 365 * 86400]
+        year_kwh = sum(h["gas_kwh"] or 0 for h in last_year)
+        year_span = (now_ts - last_year[0]["ts"]) / 86400 if last_year else 0
+        costs = {
+            "kwh": round(year_kwh, 0),
+            "days": round(year_span, 1),
+            "eur": round(year_kwh * price + fee * year_span / 365, 0),
+            # Jahreswert nur mit vollen 12 Monaten – Hochrechnen aus Teilen verzerrt (Sommer/Winter)
+            "eur_per_year": round(year_kwh * price + fee, 0) if year_span >= 360 else None,
+            "full_year": year_span >= 360,
+        }
 
         persons = [p.eta(now) for p in self.persons.values()]
         arrival = next_arrival(list(self.persons.values()), now)
@@ -340,15 +468,17 @@ class Engine:
                 for c, temp, target, valve, hum in rooms if c in self.rooms
             ],
             "cycling": cycling,
+            "costs": costs,
             "savings": {
                 "hours": savings.hours,
                 "actual_kwh": savings.actual_kwh,
                 "saved_kwh": savings.saved_kwh,
                 "saved_pct": savings.saved_pct,
                 "saved_eur": round(savings.saved_kwh * self.cfg.gas_price_eur_per_kwh, 2),
-                "year_kwh": round(savings.saved_kwh * 365 / span_days, 0) if span_days >= 14 else None,
+                # Jahreswert nur mit vollem Jahr, sonst bleibt der Prozentwert die Aussage
+                "year_kwh": round(savings.saved_kwh * 365 / span_days, 0) if span_days >= 360 else None,
                 "year_eur": round(savings.saved_kwh * 365 / span_days * self.cfg.gas_price_eur_per_kwh, 0)
-                if span_days >= 14 else None,
+                if span_days >= 360 else None,
                 "gas_total_kwh": round(gas_total, 1),
                 "span_days": round(span_days, 1),
                 "daily": savings.daily[-60:],
@@ -362,37 +492,35 @@ class Engine:
             },
             "flow_recommendation": flow_needed,
             "flow_current_setpoint": num(self._boiler("sel_flow_temp")),
+            "flow_calculated": num(self._thermo("hc_calc_flow")),
             "min_period": num(self._boiler("min_period")),
+            "hyst_on": num(self._boiler("hyst_on")),
+            "hyst_off": num(self._boiler("hyst_off")),
+            "heating_off": flag(self._boiler("heating_off")),
+            "setpoint_demand": self._demand,
+            "emsesp": bool(self.ems),
             "discovered": self.found.as_dict(),
         }
 
-    def _blocked_today(self, day_start: int, now_ts: int, events: list[tuple[int, int]]) -> float:
+    def counter_days(self, since_day: str) -> dict[str, dict]:
+        """Starts und Laufzeit je Tag aus den Zählern der Therme (Differenz Max-Min)."""
         rows = self.store.query(
-            "SELECT ts, burner_on, min_period, dhw FROM samples WHERE ts >= ? ORDER BY ts", (day_start,)
+            "SELECT date(ts, 'unixepoch', 'localtime') AS day, "
+            "MAX(burn_starts) - MIN(burn_starts) AS starts, "
+            "MAX(heat_starts) - MIN(heat_starts) AS heat_starts, "
+            "MAX(heat_min) - MIN(heat_min) AS heat_min "
+            "FROM samples WHERE burn_starts IS NOT NULL AND ts >= ? GROUP BY day",
+            (int(datetime.fromisoformat(since_day).timestamp()),),
         )
-        room_rows = self.store.query(
-            "SELECT ts, temp, target, valve FROM room_samples WHERE ts >= ?", (day_start,)
-        )
-        demand_ts = {
-            r["ts"] for r in room_rows
-            if r["temp"] is not None and r["target"] is not None
-            and r["target"] - r["temp"] >= 0.3 and (r["valve"] or 0) >= 40
-        }
-        offs = [ts for ts, st in events if st == 0]
-        last_off: dict[int, int | None] = {}
-        i = 0
-        cur = None
+        out = {}
         for r in rows:
-            while i < len(offs) and offs[i] <= r["ts"]:
-                cur = offs[i]
-                i += 1
-            last_off[r["ts"]] = cur
-        samples = [
-            {"ts": r["ts"], "burner_on": r["burner_on"], "min_period": r["min_period"],
-             "dhw": r["dhw"], "demand": r["ts"] in demand_ts}
-            for r in rows
-        ]
-        return analysis.blocked_minutes(samples, last_off, self.cfg.sample_interval_s)
+            d = {"starts": int(r["starts"]), "source": "zaehler"}
+            if r["heat_starts"] is not None:
+                d["heat_starts"] = int(r["heat_starts"])
+                if r["heat_starts"] and r["heat_min"] is not None:
+                    d["avg_run_min"] = round(r["heat_min"] / r["heat_starts"], 1)
+            out[r["day"]] = d
+        return out
 
     def history(self, days: int = 30) -> dict:
         since = int(time.time()) - days * 86400
@@ -409,6 +537,13 @@ class Engine:
                 "SELECT ts, state FROM burner_events WHERE ts >= ? AND ts < ? ORDER BY ts", (s - 86400, e))]
             st = analysis.cycling_stats(ev, s, e)
             daily_cycles.append({"day": day.date().isoformat(), **st})
+        first = daily_cycles[-1]["day"] if daily_cycles else local(time.time()).date().isoformat()
+        counters = self.counter_days(first)
+        live = self.store.daily(first)
+        for d in daily_cycles:
+            d.update(counters.get(d["day"], {}))
+            for k, v in live.get(d["day"], {}).items():
+                d[k] = round(v, 2)
         return {"hourly": hourly, "snapshots": snaps, "cycles": list(reversed(daily_cycles))}
 
     # ------------------------------------------------------------------ Vorhersage

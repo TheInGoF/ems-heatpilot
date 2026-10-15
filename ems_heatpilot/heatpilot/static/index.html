@@ -94,6 +94,19 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     </div>
   </div>
 
+  <div class="grid2">
+    <div class="card">
+      <h2>Brenner ohne Wärmebedarf</h2>
+      <p>Minuten pro Tag, in denen der Brenner lief, obwohl laut Tado-Soll alle Räume warm genug waren – etwa weil die Ventile verzögert schließen.</p>
+      <div id="chart-overrun"></div>
+    </div>
+    <div class="card">
+      <h2>Wartezeit durch Taktsperre</h2>
+      <p>Minuten pro Tag, in denen Räume Wärme wollten, der Brenner aber wegen der Antipendelzeit nicht starten durfte.</p>
+      <div id="chart-blocked"></div>
+    </div>
+  </div>
+
   <div class="card" style="margin-bottom:12px">
     <h2>Geschätzte Ersparnis pro Tag</h2>
     <p id="savings-text">Was Absenken bei Abwesenheit und nachts an diesem Tag gespart hätte (kWh Gas), berechnet mit dem gelernten Modell.</p>
@@ -230,23 +243,30 @@ async function load() {
   if (s.starting) { $("status").textContent = "Startet: " + (s.status || "…"); setTimeout(load, 5000); return; }
   const hist = await (await fetch("api/history?days=60")).json();
   const h = s.house, c = s.cycling, sv = s.savings;
-  $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt`;
+  $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
+    ` · Wärmebedarf laut Tado-Soll: <b>${s.setpoint_demand === null ? "–" : s.setpoint_demand ? "ja" : "nein"}</b>` +
+    (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "");
   $("tiles").innerHTML = [
     tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
     tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
     tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
     tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", "Zeitkonstante des Auskühlens"),
-    tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø Lauf ${fmt(c.avg_run_min)} min · Ø Pause ${fmt(c.avg_pause_min)} min`),
-    tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Taktsperre ${fmt(s.min_period, 0)} min`),
-    tile("Ersparnis-Schätzung", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `${fmt(sv.span_days)} Tage ausgewertet`),
-    tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `aktuell eingestellt ${fmt(s.flow_current_setpoint, 0)} °C`),
+    tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
+    tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
+    tile("Brenner ohne Bedarf", fmt(c.overrun_min, 0), "min heute", `≈ ${fmt(c.overrun_kwh, 1)} kWh · alle Räume waren am Soll`),
+    tile("Gaskosten", fmt(s.costs.eur, 0), s.costs.full_year ? "€ / Jahr" : `€ in ${fmt(s.costs.days, 0)} Tagen`, `${fmt(s.costs.kwh, 0)} kWh inkl. anteiligem Grundpreis` + (s.costs.full_year ? "" : " – noch kein volles Jahr")),
+    tile("Ersparnis-Schätzung", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`),
+    tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `Kessel-Soll ${fmt(s.flow_current_setpoint, 0)} °C` + (s.flow_calculated !== null ? ` · Regler ${fmt(s.flow_calculated, 0)} °C` : "")),
   ].join("");
 
   demandChart($("chart-demand"), hist.hourly, h);
   const hs = hist.snapshots.filter((x) => x.kind === "house");
   lineChart($("chart-h"), hs.map((x) => [x.ts, x.data.heat_loss_w_per_k]), "W/K", "Wärmeverlust über die Zeit");
   lineChart($("chart-err"), hs.filter((x) => x.data.rmse_kw !== null).map((x) => [x.ts, x.data.rmse_kw]), "kW", "Modellfehler über die Zeit");
-  barChart($("chart-starts"), hist.cycles.map((d) => [d.day.slice(8, 10) + "." + d.day.slice(5, 7), d.starts, `Ø Lauf ${fmt(d.avg_run_min)} min · ${d.short_runs} Kurzläufer`]), "Starts", "Brennerstarts pro Tag");
+  const dlabel = (d) => d.day.slice(8, 10) + "." + d.day.slice(5, 7);
+  barChart($("chart-starts"), hist.cycles.map((d) => [dlabel(d), d.starts, `Ø ${fmt(d.avg_run_min)} min je Heizstart`]), "Starts", "Brennerstarts pro Tag");
+  barChart($("chart-overrun"), hist.cycles.map((d) => [dlabel(d), d.overrun_min || 0, `≈ ${fmt(d.overrun_kwh || 0, 1)} kWh`]), "min", "Brenner ohne Wärmebedarf pro Tag");
+  barChart($("chart-blocked"), hist.cycles.map((d) => [dlabel(d), d.blocked_min || 0, `Räume warteten insgesamt ${fmt(d.waiting_min || 0, 0)} min`]), "min", "Wartezeit durch Taktsperre pro Tag");
   barChart($("chart-savings"), sv.daily.map((d) => [d.day.slice(8, 10) + "." + d.day.slice(5, 7), d.saved_kwh, `Verbrauch ${fmt(d.actual_kwh)} kWh`]), "kWh", "Geschätzte Ersparnis pro Tag");
   $("savings-text").textContent = `Was Absenken bei Abwesenheit und nachts gespart hätte, berechnet mit dem gelernten Modell. Über ${fmt(sv.span_days)} Tage: ${fmt(sv.saved_kwh, 0)} kWh von ${fmt(sv.actual_kwh, 0)} kWh (${fmt(sv.saved_pct)} %, ≈ ${fmt(sv.saved_eur, 0)} €). Schätzung – sie wird genauer, je länger das Modell lernt.`;
 

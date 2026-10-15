@@ -12,6 +12,7 @@ from . import __version__
 from .backfill import run_backfill
 from .config import DATA_DIR, Config
 from .discovery import discover
+from .emsesp import EmsEsp
 from .engine import Engine
 from .ha_client import HAClient
 from .publisher import publish
@@ -57,6 +58,9 @@ async def main() -> None:
     engine_ref["engine"] = eng
     engine_ref["status"] = "läuft"
 
+    if cfg.emsesp_host:
+        asyncio.create_task(poll_emsesp(EmsEsp(cfg.emsesp_host), eng))
+
     last_forecast = 0.0
     while True:
         try:
@@ -71,6 +75,19 @@ async def main() -> None:
         except Exception:  # noqa: BLE001
             log.exception("Fehler im Takt")
         await asyncio.sleep(cfg.sample_interval_s - time.time() % cfg.sample_interval_s + 1)
+
+
+async def poll_emsesp(ems: EmsEsp, eng: Engine, interval_s: int = 30) -> None:
+    """Alle Werte direkt von EMS-ESP lesen (nur lesen, kein Token nötig)."""
+    while True:
+        try:
+            values = await ems.read()
+            if values:
+                eng.set_ems(values)
+                eng.store.commit()
+        except Exception:  # noqa: BLE001
+            log.exception("EMS-ESP-Abfrage fehlgeschlagen")
+        await asyncio.sleep(interval_s)
 
 
 if __name__ == "__main__":

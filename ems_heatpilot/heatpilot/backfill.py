@@ -95,7 +95,8 @@ class _Cursor:
     def at(self, ts: float) -> tuple[str, dict] | None:
         while self.i + 1 < len(self.s) and self.s[self.i + 1][0] <= ts:
             self.i += 1
-        if self.i < 0 or ts - self.s[self.i][0] > 12 * 3600:
+        # HA liefert pro Abfrage den Zustand zum Startzeitpunkt mit, Werte gelten bis zur Änderung
+        if self.i < 0 or ts - self.s[self.i][0] > (CHUNK_DAYS + 1) * 86400:
             return None
         return self.s[self.i][1], self.s[self.i][2]
 
@@ -108,7 +109,8 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     end_ts = int(time.time())
     end_ts -= end_ts % step
     start_ts = end_ts - days * 86400
-    plain = sorted(set(f.boiler.values()) | set(f.outdoor) | ({f.gas} if f.gas else set())
+    plain = sorted(set(f.boiler.values()) | set(f.thermostat.values()) | set(f.outdoor)
+                   | ({f.gas} if f.gas else set())
                    | {r.heating_power for r in f.rooms if r.heating_power}
                    | {r.humidity for r in f.rooms if r.humidity})
     with_attrs = [r.climate for r in f.rooms] + f.persons
@@ -145,6 +147,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
             hit = cur[ent].at(ts)
             if hit:
                 eng.states[ent] = {"state": hit[0], "attributes": hit[1]}
+        eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
         eng.store.add_sample(ts, sample)
         eng.store.add_room_samples((ts, *r) for r in rooms)
@@ -159,6 +162,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     eng._last_room_step = end_ts - end_ts % int(ROOM_STEP_H * 3600)
     eng._last_hour = end_ts - end_ts % 3600
     eng.states = {}
+    eng._live_ts, eng._live_prev = None, {}
     log.info("Historie: %d Abtastpunkte übernommen", count)
     return count
 

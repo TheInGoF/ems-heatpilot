@@ -136,15 +136,3 @@ def test_preheat_plan_prefers_feasible_cheapest():
     assert plan["best"]["start"] <= now + timedelta(hours=3)
     assert all(o["duration_h"] > 0 for o in plan["options"])
 
-
-def test_blocked_minutes_only_counts_lockout_with_demand():
-    from heatpilot.analysis import blocked_minutes
-    off = 10_000
-    samples = [
-        {"ts": off + 300, "burner_on": 0, "min_period": 30, "demand": True},   # gesperrt + Bedarf
-        {"ts": off + 600, "burner_on": 0, "min_period": 30, "demand": False},  # kein Bedarf
-        {"ts": off + 2400, "burner_on": 0, "min_period": 30, "demand": True},  # Sperre vorbei
-        {"ts": off + 900, "burner_on": 0, "min_period": 30, "demand": True, "dhw": 1},
-    ]
-    last_off = {s["ts"]: off for s in samples}
-    assert blocked_minutes(samples, last_off, 300) == 5.0

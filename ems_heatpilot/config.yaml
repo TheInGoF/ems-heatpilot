@@ -1,5 +1,5 @@
 name: EMS HeatPilot
-version: "0.1.0"
+version: "0.2.0"
 slug: ems_heatpilot
 description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
 url: https://github.com/TheInGoF/ems-heatpilot
@@ -19,9 +19,13 @@ options:
   sample_interval_s: 300
   backfill_days: 30
   statistics_backfill_days: 365
-  outdoor_sensors: []
-  gas_kwh_per_m3: 10.3
+  outdoor_sensors:
+    - sensor.aussen_temperatur
+  rooms: []
+  gas_calorific_value: 11.2
+  gas_z_number: 0.95
   gas_price_eur_per_kwh: 0.12
+  gas_base_fee_eur_per_year: 150
   design_outdoor_temp: -12
   max_flow_temp: 75
   away_temp: 19
@@ -36,10 +40,19 @@ schema:
   statistics_backfill_days: int(0,1095)
   outdoor_sensors:
     - str
+  rooms:
+    - name: str
+      climate: str
+      temperature: str?
+      heating_power: str?
+      humidity: str?
   gas_sensor: str?
   weather_entity: str?
-  gas_kwh_per_m3: float(5,15)
+  emsesp_host: str?
+  gas_calorific_value: float(8,13)
+  gas_z_number: float(0.8,1.1)
   gas_price_eur_per_kwh: float(0,1)
+  gas_base_fee_eur_per_year: float(0,2000)
   design_outdoor_temp: float(-25,0)
   max_flow_temp: int(30,90)
   away_temp: float(10,24)
