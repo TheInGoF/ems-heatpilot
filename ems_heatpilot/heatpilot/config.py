@@ -22,12 +22,12 @@ class Config:
     sample_interval_s: int = 300
     backfill_days: int = 30
     statistics_backfill_days: int = 365
-    outdoor_sensors: list[str] = field(default_factory=lambda: ["sensor.aussen_temperatur"])
+    outdoor_sensors: list[str] = field(default_factory=list)
     # Räume: [{name, climate, temperature?, heating_power?, humidity?}], leer = Tado automatisch
     rooms: list[dict] = field(default_factory=list)
-    gas_sensor: str | None = "sensor.analogsensor_21"
+    gas_sensor: str | None = None
     # Heizungsanforderung der bestehenden Automation (nur aufzeichnen)
-    demand_sensor: str | None = "sensor.heizungsanforderung"
+    demand_sensor: str | None = None
     weather_entity: str | None = None
     emsesp_host: str | None = None
     # Gasabrechnung: kWh = m³ × Brennwert × Zustandszahl (Werte von der Gasrechnung)

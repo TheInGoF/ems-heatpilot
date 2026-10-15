@@ -116,7 +116,7 @@ def test_configured_rooms_and_outdoor_sensors():
 
 
 def test_long_entity_names_from_real_installation():
-    """Entity-IDs wie in Ingos HA (EMS-ESP mit langen Namen)."""
+    """Entity-IDs einer echten Installation (EMS-ESP mit langen Namen)."""
     ids = [
         "binary_sensor.boiler_gas", "sensor.boiler_current_flow_temperature",
         "number.boiler_selected_flow_temperature", "sensor.boiler_burner_current_power",

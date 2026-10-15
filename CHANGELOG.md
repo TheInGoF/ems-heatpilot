@@ -31,14 +31,14 @@
 - Neue Optionen `dhw_min_temp`, `dhw_comfort_temp`, `dhw_max_temp`; neue Sensoren und Oberflächenbereich „Warmwasser“
 
 ## 0.3.1
-- Gaszähler `sensor.analogsensor_21` (EMS-ESP-Zähleingang, m³) voreingestellt; Dezimalkomma wird verstanden
+- Gaszähler am EMS-ESP-Zähleingang (m³) unterstützt; Dezimalkomma wird verstanden
 - Fehlt der eingestellte Gaszähler, wird gewarnt und automatisch gesucht
-- `sensor.heizungsanforderung` wird aufgezeichnet; Zähler für Tag/Nacht-Wechsel pro Tag
+- Optionaler Sensor für die Heizungsanforderung (`demand_sensor`) wird aufgezeichnet; Zähler für Tag/Nacht-Wechsel pro Tag
 - Historie beim ersten Start bis 365 Tage einstellbar (Vorgabe 60)
 
 ## 0.3.0
 - EMS-ESP-Entitäten mit langen Namen (Standard in HA) werden erkannt, auch mit Präfix
-- EMS-ESP-Adresse vorbelegt (192.168.188.102), weiterhin änderbar; nur lesend
+- EMS-ESP-Adresse als Option (`emsesp_host`); nur lesend
 - Harte Schreibsperre: Add-on darf nur `sensor.heatpilot_*` setzen
 - Regler-Betriebsart (Tag/Nacht) als Heizfreigabe; neue Zähler: Startverzögerung bis zur Freigabe, Sperrzeit
 - Zusätzlich erfasst: Raum-Soll und Remote-Temperatur am Regler, Pumpenmodulation, Flammenstrom, Speichertemperatur

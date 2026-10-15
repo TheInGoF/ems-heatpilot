@@ -19,12 +19,8 @@ options:
   sample_interval_s: 300
   backfill_days: 60
   statistics_backfill_days: 365
-  outdoor_sensors:
-    - sensor.aussen_temperatur
+  outdoor_sensors: []
   rooms: []
-  emsesp_host: 192.168.188.102
-  gas_sensor: sensor.analogsensor_21
-  demand_sensor: sensor.heizungsanforderung
   gas_calorific_value: 11.2
   gas_z_number: 0.95
   gas_price_eur_per_kwh: 0.12

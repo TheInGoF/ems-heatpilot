@@ -58,11 +58,11 @@ Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 
 | Option | Bedeutung |
 |---|---|
-| `outdoor_sensors` | ein oder mehrere Außenfühler, es zählt das Minimum. Vorgabe: `sensor.aussen_temperatur`. Leer = EMS-ESP-Außenfühler |
+| `outdoor_sensors` | ein oder mehrere Außenfühler, es zählt das Minimum. Leer = EMS-ESP-Außenfühler |
 | `rooms` | Räume einzeln festlegen (siehe unten). Leer = alle Tado-Räume automatisch |
 | `gas_sensor` | Gaszähler-Entität (m³ oder kWh). Leer = automatisch suchen, notfalls Energiezähler von EMS-ESP |
 | `weather_entity` | Wetter-Entität für die Vorhersage. Leer = automatisch |
-| `emsesp_host` | IP/Name von EMS-ESP (Vorgabe `192.168.188.102`): alle Werte direkt lesen. Leer = nur über HA |
+| `emsesp_host` | IP/Name von EMS-ESP, z. B. `192.168.1.50`: alle Werte direkt lesen. Leer = nur über HA |
 | `gas_calorific_value`, `gas_z_number` | Brennwert und Zustandszahl laut Gasrechnung: kWh = m³ × Brennwert × Zustandszahl |
 | `gas_price_eur_per_kwh`, `gas_base_fee_eur_per_year` | Arbeitspreis und Grundpreis für die Euro-Angaben |
 | `design_outdoor_temp` | Auslegungs-Außentemperatur (Hamburg: −12 °C) |

@@ -17,7 +17,7 @@ from datetime import datetime, timezone
 from aiohttp import web
 
 HOME = (53.55, 10.0)
-WORK = {"person.ingo": (53.60, 10.25), "person.partner": (53.48, 9.90)}
+WORK = {"person.a": (53.60, 10.25), "person.b": (53.48, 9.90)}
 ROOMS = {
     "wohnzimmer": dict(a=0.05, b=0.035, c=0.10),
     "buero": dict(a=0.04, b=0.05, c=0.05),
@@ -64,10 +64,10 @@ def simulate():
         home = {}
         for p in WORK:
             weekday = dt.weekday() < 5
-            away = weekday and (8 <= hour < 17 if p == "person.ingo" else 7.5 <= hour < 16.5)
-            commute = weekday and (16.9 <= hour < 17.4 if p == "person.ingo" else 16.4 <= hour < 16.9)
+            away = weekday and (8 <= hour < 17 if p == "person.a" else 7.5 <= hour < 16.5)
+            commute = weekday and (16.9 <= hour < 17.4 if p == "person.a" else 16.4 <= hour < 16.9)
             if commute:
-                frac = (hour - (16.9 if p == "person.ingo" else 16.4)) / 0.5
+                frac = (hour - (16.9 if p == "person.a" else 16.4)) / 0.5
                 lat = WORK[p][0] + (HOME[0] - WORK[p][0]) * frac
                 lon = WORK[p][1] + (HOME[1] - WORK[p][1]) * frac
                 st = "not_home"
@@ -86,7 +86,7 @@ def simulate():
         valves = {r: max(0, min(100, (valve_target - temps[r] + 0.1) * 80)) for r in ROOMS}
         demand = max(valves.values())
         sel_flow = round(34 + (14 - t_out) * 0.8)  # Heizkurve des Reglers
-        # Warmwasser wie Ingos Automation: Tag 55, Nacht 45, alle weg 40; lädt unter Soll - 10
+        # Warmwasser wie eine typische Automation: Tag 55, Nacht 45, alle weg 40; lädt unter Soll - 10
         anyone = any(home.values())
         dhw_set = 40 if not anyone else (45 if hour >= 21 or hour < 4.5 else 55)
         t_dhw -= 0.04 * (t_dhw - 18) * STEP / 3600
@@ -101,7 +101,7 @@ def simulate():
         pow_pct = 0
         for minute in range(5):  # minütlich: Kesselwasser, Brenner mit Hysterese -2/+10 K
             heat_demand = demand > 0
-            # wie Ingos Automation: alle 10 min Tag/Nacht, "Flamme hält Tag"
+            # wie eine typische Automation: alle 10 min Tag/Nacht, "Flamme hält Tag"
             if (ts // 60 + minute) % 10 == 0:
                 mode = "Tag" if (heat_demand or burner) and not night else "Nacht"
             heating_ok = mode == "Tag"

@@ -17,10 +17,10 @@ configuration:
     description: "Je Raum: name, climate (Tado-Klima-Entität), optional temperature, heating_power (Ventil %), humidity. Leer = Tado-Räume automatisch"
   emsesp_host:
     name: EMS-ESP-Adresse
-    description: "IP oder Name von EMS-ESP, z. B. 192.168.188.102 – liest alle Werte direkt, schreibt nie. Leer = nur über Home Assistant"
+    description: "IP oder Name von EMS-ESP, z. B. 192.168.1.50 oder ems-esp.local – liest alle Werte direkt, schreibt nie. Leer = nur über Home Assistant"
   gas_sensor:
     name: Gaszähler
-    description: Zählerstand in m³ (oder kWh), z. B. sensor.analogsensor_21
+    description: Zählerstand in m³ (oder kWh), z. B. ein EMS-ESP-Zähleingang wie sensor.analogsensor_21
   demand_sensor:
     name: Heizungsanforderung
     description: Optional, Sensor der bestehenden Automation (wird nur aufgezeichnet)
