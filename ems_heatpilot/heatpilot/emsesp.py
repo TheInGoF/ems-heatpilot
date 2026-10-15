@@ -6,7 +6,8 @@ sind. Verschachtelte Werte (``dhw``, ``hc1``) werden zu ``dhw_charging``,
 ``hc1_seltemp`` usw. flachgeklopft – passend zu den Kurznamen in
 ``discovery.BOILER_ROLES``/``THERMOSTAT_ROLES``.
 
-Version 0.2 liest nur. Schreiben (mit Token) kommt in Phase 2.
+Diese Klasse kann ausschließlich lesen (GET). Es gibt bewusst keinen Code,
+der Werte an EMS-ESP sendet – Einstellungen der Therme bleiben unangetastet.
 """
 
 from __future__ import annotations

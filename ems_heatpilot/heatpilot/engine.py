@@ -13,13 +13,14 @@ from datetime import datetime, timedelta
 
 from . import analysis
 from .config import Config
-from .discovery import BOILER_ROLES, THERMOSTAT_ROLES, Discovered
+from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
 from .presence import PersonLearner, haversine_km, next_arrival
 from .store import Store
 
 log = logging.getLogger(__name__)
 
+ENABLE_DELAY_MAX_MIN = 15
 ON_STATES = {"on", "true", "1", "heat", "heating"}
 STALE_S = 12 * 3600
 
@@ -70,11 +71,13 @@ class Engine:
         self._live_ts: float | None = None
         self._live_prev: dict = {}
         self._demand: bool | None = None
+        self._mode_wait_start: float | None = None  # Beginn der aktuellen Wartephase
         off = store.query("SELECT MAX(ts) AS t FROM burner_events WHERE state = 0")
         self._last_off_ts: float | None = off[0]["t"] if off else None
         self._live_entities = {
             *(r.climate for r in found.rooms),
             *(found.boiler.get(k) for k in ("burner_on", "burner_power", "dhw_active", "min_period")),
+            found.thermostat.get("hc_mode"),
         }
         self._last_room_step: int | None = store.get("last_room_step")
         self._last_hour: int | None = store.get("last_hour")
@@ -119,6 +122,13 @@ class Engine:
             p = num(self._boiler("burner_power"))
             on = None if p is None else int(p > 0)
         return on
+
+    def heat_enabled(self) -> int | None:
+        """Heizfreigabe am Regler: Betriebsart Tag = heizen, Nacht = aus (Absenkmodus Frostschutz)."""
+        mode = self._thermo("hc_mode")
+        if mode is None or mode in ("unknown", "unavailable"):
+            return None
+        return int(str(mode).strip().lower() in HEAT_MODES)
 
     def setpoint_demand(self) -> bool | None:
         """Wärmebedarf aus Tado-Soll vs. Ist – reagiert sofort, ohne Ventil-Verzögerung.
@@ -169,14 +179,28 @@ class Engine:
                     self.store.add_daily(day, "blocked_min", dt / 60)
                 if prev["waiting"]:
                     self.store.add_daily(day, "waiting_min", dt / 60)
+                if prev["mode_wait"]:
+                    self.store.add_daily(day, "mode_wait_min", dt / 60)
 
         dhw = flag(self._boiler("dhw_active")) or 0
         demand = self.setpoint_demand()
+        enabled = self.heat_enabled()
         period = num(self._boiler("min_period"))
         power, nom = num(self._boiler("burner_power")), num(self._boiler("nom_power"))
         locked = bool(
             period and self._last_off_ts is not None and now - self._last_off_ts < period * 60
         )
+        mode_wait = burner == 0 and demand is True and enabled == 0 and not locked
+        if mode_wait and self._mode_wait_start is None:
+            self._mode_wait_start = now
+        elif not mode_wait and self._mode_wait_start is not None:
+            # Kurze Wartephasen = Verzögerung der Automation, lange = gewollte Sperre (Nacht/weg)
+            minutes = (now - self._mode_wait_start) / 60
+            day_ = local(self._mode_wait_start).date().isoformat()
+            if minutes <= ENABLE_DELAY_MAX_MIN:
+                self.store.add_daily(day_, "enable_delay_min", minutes)
+                self.store.add_daily(day_, "enable_delay_count", 1)
+            self._mode_wait_start = None
         self._live_prev = {
             # Brenner heizt, obwohl laut Tado-Soll kein Raum mehr Wärme braucht
             "overrun": burner == 1 and not dhw and demand is False,
@@ -185,6 +209,9 @@ class Engine:
             "blocked": burner == 0 and not dhw and demand is True and locked,
             # Räume wollen Wärme, Brenner aus (egal warum)
             "waiting": burner == 0 and demand is True,
+            # Räume wollen Wärme, aber der Regler steht (noch) auf Nacht – z. B. weil
+            # die Automation nur alle 10 min prüft
+            "mode_wait": mode_wait,
         }
         self._live_ts = now
 
@@ -235,6 +262,12 @@ class Engine:
             "burn_starts": num(self._boiler("burner_starts")),
             "heat_starts": num(self._boiler("heat_starts")),
             "heat_min": num(self._boiler("heat_runtime")),
+            "hc_day": self.heat_enabled(),
+            "hc_seltemp": num(self._thermo("hc_seltemp")),
+            "remote_temp": num(self._thermo("hc_remotetemp")),
+            "pump_mod": num(self._boiler("pump_mod")),
+            "dhw_temp": num(self._boiler("dhw_temp")),
+            "flame": num(self._boiler("flame_current")),
         }
         rooms = []
         for r in self.found.rooms:
@@ -405,6 +438,9 @@ class Engine:
         live = self.store.daily(today).get(today, {})
         cycling["blocked_min"] = round(live.get("blocked_min", 0.0), 1)
         cycling["waiting_min"] = round(live.get("waiting_min", 0.0), 1)
+        cycling["mode_wait_min"] = round(live.get("mode_wait_min", 0.0), 1)
+        cycling["enable_delay_min"] = round(live.get("enable_delay_min", 0.0), 1)
+        cycling["enable_delay_count"] = int(live.get("enable_delay_count", 0))
         cycling["overrun_min"] = round(live.get("overrun_min", 0.0), 1)
         cycling["overrun_kwh"] = round(live.get("overrun_kwh", 0.0), 2)
         starts, runtime = num(self._boiler("heat_starts")), num(self._boiler("heat_runtime"))
@@ -497,6 +533,11 @@ class Engine:
             "hyst_on": num(self._boiler("hyst_on")),
             "hyst_off": num(self._boiler("hyst_off")),
             "heating_off": flag(self._boiler("heating_off")),
+            "heat_enabled": self.heat_enabled(),
+            "hc_mode": self._thermo("hc_mode"),
+            "hc_seltemp": num(self._thermo("hc_seltemp")),
+            "remote_temp": num(self._thermo("hc_remotetemp")),
+            "pump_mod": num(self._boiler("pump_mod")),
             "setpoint_demand": self._demand,
             "emsesp": bool(self.ems),
             "discovered": self.found.as_dict(),

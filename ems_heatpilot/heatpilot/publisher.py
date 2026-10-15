@@ -48,6 +48,11 @@ async def publish(ha: HAClient, s: dict) -> None:
         "sensor.heatpilot_taktsperre_wartezeit_heute": _sensor(
             cyc["blocked_min"], "Wartezeit durch Taktsperre heute", "min", "mdi:timer-lock-outline",
             raeume_warten_gesamt_min=cyc["waiting_min"],
+            warten_auf_heizfreigabe_min=cyc["mode_wait_min"],
+        ),
+        "sensor.heatpilot_startverzoegerung_heute": _sensor(
+            cyc["enable_delay_min"], "Startverzögerung durch Automation heute", "min",
+            "mdi:timer-sand-paused", anzahl=cyc["enable_delay_count"],
         ),
         "sensor.heatpilot_nachlauf_ohne_bedarf_heute": _sensor(
             cyc["overrun_min"], "Brenner ohne Wärmebedarf heute", "min", "mdi:fire-alert",

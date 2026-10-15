@@ -1,8 +1,11 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.2 macht
+## Was das Add-on in Version 0.3 macht
 
-**Nur beobachten und lernen.** Es greift nicht in die Heizung ein.
+**Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
+- An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
+- In Home Assistant schreibt es nur seine eigenen `sensor.heatpilot_*`. Jeder
+  andere Schreibversuch wird im Code hart abgewiesen.
 
 1. **Daten übernehmen:** Beim ersten Start holt sich das Add-on selbst die
    vorhandenen Daten aus Home Assistant. Ein Export ist nicht nötig.
@@ -37,6 +40,7 @@
 | `sensor.heatpilot_vorlauf_empfehlung` | Vorlauf, der die Soll-Temperaturen hält (°C) |
 | `sensor.heatpilot_brennerstarts_heute` | Starts, mittlere Lauf- und Pausenzeit |
 | `sensor.heatpilot_taktsperre_wartezeit_heute` | Minuten, in denen Räume Wärme wollten, die Taktsperre aber blockierte |
+| `sensor.heatpilot_startverzoegerung_heute` | Minuten, die Räume Wärme wollten, bis der Regler auf „Tag“ ging (Wartephasen bis 15 min) |
 | `sensor.heatpilot_nachlauf_ohne_bedarf_heute` | Minuten (und kWh), die der Brenner lief, obwohl laut Tado-Soll kein Raum mehr Wärme brauchte |
 | `sensor.heatpilot_laufzeit_je_start` | mittlere Laufzeit je Heizstart heute, Attribut: seit Einbau |
 | `sensor.heatpilot_gaskosten` | Gaskosten der letzten 12 Monate inkl. anteiligem Grundpreis |
@@ -55,7 +59,7 @@ Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 | `rooms` | Räume einzeln festlegen (siehe unten). Leer = alle Tado-Räume automatisch |
 | `gas_sensor` | Gaszähler-Entität (m³ oder kWh). Leer = automatisch suchen, notfalls Energiezähler von EMS-ESP |
 | `weather_entity` | Wetter-Entität für die Vorhersage. Leer = automatisch |
-| `emsesp_host` | optional, z. B. `ems-esp.local`: alle Werte direkt von EMS-ESP lesen (nur lesen) |
+| `emsesp_host` | IP/Name von EMS-ESP (Vorgabe `192.168.188.102`): alle Werte direkt lesen. Leer = nur über HA |
 | `gas_calorific_value`, `gas_z_number` | Brennwert und Zustandszahl laut Gasrechnung: kWh = m³ × Brennwert × Zustandszahl |
 | `gas_price_eur_per_kwh`, `gas_base_fee_eur_per_year` | Arbeitspreis und Grundpreis für die Euro-Angaben |
 | `design_outdoor_temp` | Auslegungs-Außentemperatur (Hamburg: −12 °C) |
@@ -86,6 +90,12 @@ Das Add-on bewertet den Bedarf deshalb nach **Soll gegen Ist** (Bedarf ab
 ereignisgenau, wie lange der Brenner ohne Bedarf lief und wie lange Räume
 wegen der Taktsperre warten mussten. In Phase 2 wird genau dieses Signal
 den Brenner direkt freigeben bzw. sperren.
+
+## Entitätsnamen
+
+EMS-ESP-Entitäten werden in beiden Schreibweisen erkannt: Kurzname
+(`binary_sensor.boiler_burngas`) und langer Name (`binary_sensor.boiler_gas`),
+auch mit Präfix (`number.ems_esp_thermostat_hc1_remotetemp`).
 
 ## Privates GitHub-Repo als Add-on-Quelle
 

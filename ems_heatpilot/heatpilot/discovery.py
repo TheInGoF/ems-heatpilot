@@ -12,42 +12,50 @@ from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
 
-# Rolle -> mögliche EMS-ESP-Kurznamen (Ende der entity_id)
+# Rolle -> EMS-ESP-Namen. Je Rolle zuerst der Kurzname (so heißen die Werte in
+# der EMS-ESP-API und bei "Entity-ID-Format: Kurzname"), dann der lange Name
+# (Standard-Entity-IDs in HA, z. B. sensor.boiler_flame_current).
 BOILER_ROLES: dict[str, tuple[str, ...]] = {
-    "flow_temp": ("curflowtemp",),
-    "sel_flow_temp": ("selflowtemp",),
-    "return_temp": ("rettemp",),
-    "burner_power": ("curburnpow",),
-    "burner_on": ("burngas",),
-    "burner_starts": ("burnstarts",),
-    "heating_pump": ("heatingpump",),
-    "heating_active": ("heatingactive",),
-    "dhw_active": ("dhw_charging", "wwcharging", "dhw_active", "wwactive"),
-    "boiler_outdoor": ("outdoortemp",),
-    "min_period": ("burnminperiod",),
-    "hyst_on": ("boilhyston",),
-    "hyst_off": ("boilhystoff",),
-    "min_power": ("burnminpower",),
-    "max_power": ("burnmaxpower",),
-    "nom_power": ("nompower",),
-    "heating_off": ("heatingoff", "forceheatingoff"),
-    "boiler_temp": ("boiltemp",),
-    "pump_mod": ("heatingpumpmod",),
-    "burner_runtime": ("burnworkmin",),
-    "heat_starts": ("heatstarts",),
-    "heat_runtime": ("heatworkmin",),
-    "nrg_total": ("nrgtotal",),
-    "nrg_heat": ("nrgheat",),
+    "flow_temp": ("curflowtemp", "current_flow_temperature"),
+    "sel_flow_temp": ("selflowtemp", "selected_flow_temperature"),
+    "return_temp": ("rettemp", "return_temperature"),
+    "burner_power": ("curburnpow", "burner_current_power"),
+    "burner_on": ("burngas", "gas"),
+    "burner_starts": ("burnstarts", "burner_starts"),
+    "heating_pump": ("heatingpump", "heating_pump"),
+    "heating_active": ("heatingactive", "heating_active"),
+    "dhw_active": ("dhw_charging", "wwcharging", "dhw_active"),
+    "dhw_seltemp": ("dhw_seltemp", "dhw_selected_temperature"),
+    "dhw_temp": ("dhw_curtemp", "dhw_current_intern_temperature"),
+    "boiler_outdoor": ("outdoortemp", "outside_temperature"),
+    "min_period": ("burnminperiod", "burner_min_period"),
+    "hyst_on": ("boilhyston", "hysteresis_on_temperature"),
+    "hyst_off": ("boilhystoff", "hysteresis_off_temperature"),
+    "min_power": ("burnminpower", "burner_min_power"),
+    "max_power": ("burnmaxpower", "burner_max_power"),
+    "nom_power": ("nompower", "nominal_power", "nominal_Power"),
+    "heating_off": ("heatingoff", "forceheatingoff", "force_heating_off"),
+    "boiler_temp": ("boiltemp", "actual_boiler_temperature"),
+    "pump_mod": ("heatingpumpmod", "heating_pump_modulation"),
+    "flame_current": ("flamecurr", "flame_current"),
+    "burner_runtime": ("burnworkmin", "total_burner_operating_time"),
+    "heat_starts": ("heatstarts", "burner_starts_heating"),
+    "heat_runtime": ("heatworkmin", "total_heat_operating_time"),
+    "nrg_total": ("nrgtotal", "total_energy"),
+    "nrg_heat": ("nrgheat", "energy_heating"),
 }
 
 # Regler (ES73/RC35 …), Heizkreis 1
 THERMOSTAT_ROLES: dict[str, tuple[str, ...]] = {
-    "hc_seltemp": ("hc1_seltemp",),
-    "hc_calc_flow": ("hc1_targetflowtemp", "hc1_calcflowtemp"),
-    "hc_mode": ("hc1_mode",),
-    "hc_remotetemp": ("hc1_remotetemp",),
-    "damped_outdoor": ("dampedoutdoortemp",),
+    "hc_seltemp": ("hc1_seltemp", "hc1_selected_room_temperature"),
+    "hc_calc_flow": ("hc1_targetflowtemp", "hc1_calcflowtemp", "hc1_target_flow_temperature"),
+    "hc_mode": ("hc1_mode", "hc1_operating_mode"),
+    "hc_remotetemp": ("hc1_remotetemp", "hc1_room_temperature_from_remote"),
+    "damped_outdoor": ("dampedoutdoortemp", "damped_outdoor_temperature"),
 }
+
+# Betriebsart, in der der Heizkreis heizt (EMS-ESP liefert je nach Sprache)
+HEAT_MODES = {"tag", "day", "comfort", "heat", "heizen", "an", "on"}
 
 
 @dataclass
@@ -95,8 +103,10 @@ class Discovered:
 
 def _find_boiler(entity_ids: list[str], keys: tuple[str, ...], device: str = "boiler") -> str | None:
     for key in keys:
+        # optionales Präfix vor dem Gerät, z. B. number.ems_esp_thermostat_hc1_remotetemp
         pattern = re.compile(
-            rf"^(sensor|binary_sensor|number|switch|select)\..*{device}_(.*_)?{key}$"
+            rf"^(sensor|binary_sensor|number|switch|select)\.(.*_)?{device}_{re.escape(key)}$",
+            re.IGNORECASE,
         )
         hits = sorted(e for e in entity_ids if pattern.match(e))
         if hits:

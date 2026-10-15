@@ -113,3 +113,88 @@ def test_configured_rooms_and_outdoor_sensors():
     assert d.outdoor == ["sensor.a", "sensor.b"]
     assert d.gas == "sensor.boiler_nrgtotal" and d.gas_unit == "kWh"
     assert abs(cfg.gas_kwh_per_m3 - 11.2 * 0.95) < 1e-9
+
+
+def test_long_entity_names_from_real_installation():
+    """Entity-IDs wie in Ingos HA (EMS-ESP mit langen Namen)."""
+    ids = [
+        "binary_sensor.boiler_gas", "sensor.boiler_current_flow_temperature",
+        "number.boiler_selected_flow_temperature", "sensor.boiler_burner_current_power",
+        "number.boiler_burner_min_period", "number.boiler_hysteresis_off_temperature",
+        "sensor.boiler_burner_starts", "sensor.boiler_burner_starts_heating",
+        "sensor.boiler_total_heat_operating_time", "sensor.boiler_flame_current",
+        "number.boiler_dhw_selected_temperature", "sensor.boiler_dhw_current_intern_temperature",
+        "switch.boiler_force_heating_off", "number.boiler_nominal_Power",
+        "select.thermostat_hc1_operating_mode", "number.thermostat_hc1_selected_room_temperature",
+        "number.ems_esp_thermostat_hc1_remotetemp", "sensor.thermostat_hc1_target_flow_temperature",
+    ]
+    states = [{"entity_id": e, "state": "1", "attributes": {}} for e in ids]
+    d = discover(states, [], Config())
+    assert d.boiler["burner_on"] == "binary_sensor.boiler_gas"
+    assert d.boiler["burner_starts"] == "sensor.boiler_burner_starts"
+    assert d.boiler["heat_starts"] == "sensor.boiler_burner_starts_heating"
+    assert d.boiler["min_period"] == "number.boiler_burner_min_period"
+    assert d.boiler["nom_power"] == "number.boiler_nominal_Power"
+    assert d.boiler["heating_off"] == "switch.boiler_force_heating_off"
+    assert d.boiler["dhw_seltemp"] == "number.boiler_dhw_selected_temperature"
+    assert d.thermostat["hc_mode"] == "select.thermostat_hc1_operating_mode"
+    assert d.thermostat["hc_seltemp"] == "number.thermostat_hc1_selected_room_temperature"
+    assert d.thermostat["hc_remotetemp"] == "number.ems_esp_thermostat_hc1_remotetemp"
+    assert d.thermostat["hc_calc_flow"] == "sensor.thermostat_hc1_target_flow_temperature"
+
+
+def test_wait_for_heating_enable_is_counted_separately(tmp_path):
+    eng = make_engine(tmp_path)
+    eng.found.thermostat["hc_mode"] = "select.thermostat_hc1_operating_mode"
+    eng.states["select.thermostat_hc1_operating_mode"] = {"state": "Nacht", "attributes": {}}
+    room(eng, "climate.wz", 20.0, 21.0)
+    room(eng, "climate.bad", 21.0, 21.0)
+    burner(eng, False)
+    eng.update_live(T0)
+    eng.update_live(T0 + 480)  # 8 min bis die Automation auf Tag schaltet
+    eng.states["select.thermostat_hc1_operating_mode"] = {"state": "Tag", "attributes": {}}
+    assert eng.heat_enabled() == 1
+    eng.update_live(T0 + 481)
+    burner(eng, True)
+    eng.update_live(T0 + 541)
+    eng.store.commit()
+    day = datetime.fromtimestamp(T0).date().isoformat()
+    d = eng.store.daily(day)[day]
+    assert abs(d["mode_wait_min"] - 481 / 60) < 0.05
+    assert abs(d["waiting_min"] - 541 / 60) < 0.05
+    assert "blocked_min" not in d
+
+
+def test_writing_anything_but_own_sensors_is_blocked():
+    import asyncio
+
+    import pytest
+
+    from heatpilot.ha_client import HAClient
+
+    ha = HAClient("http://x", "t")
+    for entity in ("number.boiler_burner_min_period", "select.thermostat_hc1_operating_mode",
+                   "climate.wohnzimmer"):
+        with pytest.raises(PermissionError):
+            asyncio.run(ha.set_state(entity, 1, {}))
+
+
+def test_short_enable_wait_counts_as_automation_delay(tmp_path):
+    eng = make_engine(tmp_path)
+    eng.found.thermostat["hc_mode"] = "select.m"
+    burner(eng, False)
+    room(eng, "climate.bad", 21.0, 21.0)
+    for start, wait in ((T0, 8 * 60), (T0 + 7200, 3 * 3600)):  # 8 min Verzögerung, 3 h Nachtsperre
+        eng.states["select.m"] = {"state": "Nacht", "attributes": {}}
+        room(eng, "climate.wz", 20.0, 21.0)
+        eng.update_live(start)
+        eng.update_live(start + wait)
+        eng.states["select.m"] = {"state": "Tag", "attributes": {}}
+        eng.update_live(start + wait + 1)
+        room(eng, "climate.wz", 21.0, 21.0)
+        eng.update_live(start + wait + 2)
+    eng.store.commit()
+    day = datetime.fromtimestamp(T0).date().isoformat()
+    d = eng.store.daily(day)[day]
+    assert d["enable_delay_count"] == 1
+    assert abs(d["enable_delay_min"] - 8.0) < 0.05

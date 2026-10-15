@@ -40,6 +40,7 @@ def simulate():
     starts = 1000
     heat_starts, burn_min, heat_min = 900, 4000.0, 3000.0
     t_boiler = 30.0
+    mode = "Nacht"
     targets_lag = [21.0, 21.0]  # Tado-Ventile reagieren ~10 min verzögert
     states = {}
 
@@ -86,13 +87,17 @@ def simulate():
         sel_flow = round(34 + (14 - t_out) * 0.8)  # Heizkurve des Reglers
         dhw = 6.5 <= hour < 6.75 or 18.0 <= hour < 18.25
         pow_pct = 0
-        for _ in range(5):  # minütlich: Kesselwasser, Brenner mit Hysterese -2/+10 K
+        for minute in range(5):  # minütlich: Kesselwasser, Brenner mit Hysterese -2/+10 K
             heat_demand = demand > 0
-            if not burner and (dhw or (heat_demand and t_boiler < sel_flow - 2)) \
+            # wie Ingos Automation: alle 10 min Tag/Nacht, "Flamme hält Tag"
+            if (ts // 60 + minute) % 10 == 0:
+                mode = "Tag" if (heat_demand or burner) and not night else "Nacht"
+            heating_ok = mode == "Tag"
+            if not burner and (dhw or (heating_ok and t_boiler < sel_flow - 2)) \
                     and ts - last_off >= 25 * 60:
                 burner, starts = True, starts + 1
                 heat_starts += 0 if dhw else 1
-            elif burner and not dhw and (not heat_demand or t_boiler > sel_flow + 10):
+            elif burner and not dhw and (not heating_ok or t_boiler > sel_flow + 10):
                 burner, last_off = False, ts
             load = sum(0.06 * max(t_boiler - temps[r], 0) * valves[r] / 100 for r in ROOMS)
             pow_pct = (100 if dhw else max(30, min(100, load / 18 * 100))) if burner else 0
@@ -132,7 +137,8 @@ def simulate():
             "sensor.boiler_burnworkmin": round(burn_min),
             "sensor.boiler_heatstarts": heat_starts,
             "sensor.boiler_heatworkmin": round(heat_min),
-            "switch.boiler_heatingoff": "off" if demand > 0 else "on",
+            "switch.boiler_heatingoff": "off",
+            "select.thermostat_hc1_mode": mode,
             "sensor.thermostat_hc1_targetflowtemp": round(34 + (14 - t_out) * 0.8),
             "sensor.aussen_nord": round(t_out, 1),
             "sensor.aussen_sued": round(t_out + 2 * sun, 1),

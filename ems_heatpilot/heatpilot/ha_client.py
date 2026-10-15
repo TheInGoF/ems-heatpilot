@@ -183,7 +183,13 @@ class HAClient:
         return resp.get(entity_id, {}).get("forecast", [])
 
     async def set_state(self, entity_id: str, state: Any, attributes: dict) -> None:
-        """Eigene Sensoren in HA anlegen/aktualisieren (REST /api/states)."""
+        """Eigene Sensoren in HA anlegen/aktualisieren (REST /api/states).
+
+        Sicherung: Das Add-on darf ausschließlich seine eigenen
+        ``sensor.heatpilot_*`` schreiben – niemals Therme, Regler oder Tado.
+        """
+        if not entity_id.startswith("sensor.heatpilot_"):
+            raise PermissionError(f"Schreiben auf {entity_id} ist gesperrt")
         url = f"{self.base_url}/api/states/{entity_id}"
         async with self._session.post(
             url,
