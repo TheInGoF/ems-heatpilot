@@ -72,3 +72,12 @@ python tools/fake_ha.py         # simuliertes Home Assistant + EMS-ESP mit 30 Ta
 cd ems_heatpilot && HA_URL=http://127.0.0.1:8123 SUPERVISOR_TOKEN=x \
   HEATPILOT_DATA=/tmp/hp python -m heatpilot.main   # Oberfläche: http://localhost:8099
 ```
+
+## Lizenz
+
+Wie [EMS-ESP](https://github.com/emsesp/EMS-ESP32) steht EMS HeatPilot unter der
+**GNU Lesser General Public License v3.0** (oder einer späteren Version) –
+siehe [LICENSE](LICENSE). Da die LGPL auf der GNU GPL v3 aufbaut, liegt deren
+Text als [COPYING](COPYING) bei.
+
+`SPDX-License-Identifier: LGPL-3.0-or-later`
