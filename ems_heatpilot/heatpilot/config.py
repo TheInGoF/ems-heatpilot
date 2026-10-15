@@ -50,6 +50,7 @@ class Config:
     # Urlaub: ["2026-12-20 - 2027-01-03", "2027-02-01 08:00 - 2027-02-05 17:30"]
     vacations: list[str] = field(default_factory=list)
     vacation_entity: str | None = None  # z. B. input_boolean.urlaub
+    vacation_arrival_time: time = time(18, 0)  # Rückkehr, wenn nur ein Datum angegeben ist
     # "rolle=entity_id", z. B. "flow_temp=sensor.boiler_curflowtemp"
     overrides: dict[str, str] = field(default_factory=dict)
 
@@ -61,7 +62,7 @@ class Config:
             raw = json.loads(path.read_text())
         cfg = cls()
         for key, value in raw.items():
-            if key in ("night_start", "night_end"):
+            if key in ("night_start", "night_end", "vacation_arrival_time"):
                 value = _parse_time(value)
             elif key == "overrides":
                 value = dict(

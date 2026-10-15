@@ -46,9 +46,10 @@ class PersonLearner:
     _approach_start: tuple[datetime, float] | None = None
     _last_slot_learned: int | None = None
 
-    def observe(self, ts: datetime, home: bool, dist_km: float | None) -> None:
+    def observe(self, ts: datetime, home: bool, dist_km: float | None, learn: bool = True) -> None:
+        """Position verfolgen; ``learn=False`` (Urlaub): Gewohnheiten nicht anpassen."""
         slot = slot_of(ts)
-        if slot != self._last_slot_learned:
+        if learn and slot != self._last_slot_learned:
             self.week[slot] += self.alpha * ((1.0 if home else 0.0) - self.week[slot])
             self._last_slot_learned = slot
 
@@ -66,7 +67,7 @@ class PersonLearner:
         if home and self.home is False and self._approach_start is not None:
             start_ts, start_dist = self._approach_start
             hours = (ts - start_ts).total_seconds() / 3600
-            if 0.05 < hours < 4:
+            if learn and 0.05 < hours < 4:
                 observed = start_dist / hours
                 self.approach_speed_kmh += 0.2 * (observed - self.approach_speed_kmh)
                 self.arrivals_learned += 1

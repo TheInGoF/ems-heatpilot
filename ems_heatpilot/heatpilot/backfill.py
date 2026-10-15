@@ -150,14 +150,14 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
                 eng.states[ent] = {"state": hit[0], "attributes": hit[1]}
         eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
+        eng.track_vacation_return(ts, persons)
         sample["vacation"] = int(eng.on_vacation(ts))
         eng.store.add_sample(ts, sample)
         eng.store.add_room_samples((ts, *r) for r in rooms)
         eng.store.add_person_samples((ts, *p) for p in persons)
         now = local(ts)
-        if not sample["vacation"]:
-            for p, is_home, dist in persons:
-                eng.persons[p].observe(now, bool(is_home), dist)
+        for p, is_home, dist in persons:
+            eng.persons[p].observe(now, bool(is_home), dist, learn=not sample["vacation"])
         eng.dhw_step(ts, sample)
         count += 1
     eng.store.commit()

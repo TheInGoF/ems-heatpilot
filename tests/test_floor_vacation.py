@@ -51,7 +51,10 @@ def test_vacation_ranges_parse_and_end_is_arrival():
     assert len(v.ranges) == 2
     inside = datetime(2026, 12, 24, 12, 0).astimezone()
     assert v.active(inside) and v.end(inside).hour == 18
-    assert not v.active(datetime(2027, 1, 3, 19, 0).astimezone())
+    assert not v.trips[0].end_exact and v.trips[1].end_exact
+    # niemand zurück: Urlaub bleibt nach Plan-Ende aktiv (bis zu 3 Tage), dann vorbei
+    assert v.active(datetime(2027, 1, 4, 12, 0).astimezone())
+    assert not v.active(datetime(2027, 1, 7, 12, 0).astimezone())
     assert v.active(datetime(2027, 1, 10).astimezone(), "on")  # Schalter
 
 
@@ -140,3 +143,59 @@ def test_dhw_cooling_and_charge_time():
     m.charge_rate_kh = 50.0
     assert abs(m.cool(55.0, 24) - (18 + 37 * math.exp(-0.04 * 24))) < 0.01
     assert abs(m.charge_hours(30.0, 55.0) - 0.5) < 1e-9
+
+
+def _trip_engine(tmp_path, ranges):
+    cfg = Config()
+    cfg.vacations = ranges
+    found = Discovered(rooms=[Room("Wz", "climate.wz")], persons=["person.ingo", "person.maria"],
+                       home_zone=(53.55, 10.0))
+    return Engine(cfg, Store(tmp_path / "trip.db"), found)
+
+
+def _away(eng, person, lat, ts):
+    eng.states[person] = {"state": "not_home", "attributes": {"latitude": lat, "longitude": 10.0}}
+
+
+def test_early_return_by_gps_beats_planned_end(tmp_path):
+    """Plan: Rückkehr in 2 Tagen. Ingo fährt aber heute schon mit 100 km/h Richtung Heimat."""
+    eng = _trip_engine(tmp_path, ["2026-10-10 - 2026-10-20 15:00"])
+    t0 = int(datetime(2026, 10, 18, 12, 0).timestamp())
+    lat0 = 53.55 + 250 / 111  # 250 km nördlich
+    _away(eng, "person.maria", lat0, t0)
+    for i in range(6):  # 30 min Autobahn: 100 km/h
+        _away(eng, "person.ingo", lat0 - (100 * i / 12) / 111, t0)
+        eng.tick(t0 + i * 300)
+    arrival = eng.vacation.arrival(datetime.fromtimestamp(t0 + 5 * 300).astimezone(),
+                                   list(eng.persons.values()))
+    assert arrival["source"] == "gps" and arrival["person"] == "person.ingo"
+    hours = (arrival["eta"] - datetime.fromtimestamp(t0 + 5 * 300).astimezone()).total_seconds() / 3600
+    assert 1.5 < hours < 4.5  # noch ~210 km
+    assert eng.on_vacation(t0 + 5 * 300)  # unterwegs: Urlaub noch aktiv, Gewohnheiten pausiert
+
+
+def test_slow_movement_at_holiday_place_is_ignored(tmp_path):
+    eng = _trip_engine(tmp_path, ["2026-10-10 - 2026-10-20"])
+    t0 = int(datetime(2026, 10, 15, 12, 0).timestamp())
+    lat0 = 53.55 + 600 / 111
+    _away(eng, "person.maria", lat0, t0)
+    for i in range(6):  # Spaziergang 4 km/h Richtung Heimat
+        _away(eng, "person.ingo", lat0 - (4 * i / 12) / 111, t0)
+        eng.tick(t0 + i * 300)
+    arrival = eng.vacation.arrival(datetime.fromtimestamp(t0 + 5 * 300).astimezone(),
+                                   list(eng.persons.values()))
+    assert arrival["source"] == "urlaub_datum"  # nur Datum -> Standard-Uhrzeit
+    assert arrival["eta"].hour == 18 and arrival["eta"].day == 20
+
+
+def test_being_home_ends_vacation_and_resumes_learning(tmp_path):
+    eng = _trip_engine(tmp_path, ["2026-10-10 - 2026-10-20"])
+    t0 = int(datetime(2026, 10, 18, 17, 0).timestamp())
+    for p in ("person.ingo", "person.maria"):
+        eng.states[p] = {"state": "home", "attributes": {"latitude": 53.55, "longitude": 10.0}}
+    for i in range(4):  # 15 min zu Hause
+        eng.tick(t0 + i * 300)
+    assert not eng.on_vacation(t0 + 4 * 300)
+    assert eng.store.get("vacation_returned")  # bleibt über Neustarts erhalten
+    eng2 = Engine(eng.cfg, eng.store, eng.found)
+    assert not eng2.on_vacation(t0 + 4 * 300)

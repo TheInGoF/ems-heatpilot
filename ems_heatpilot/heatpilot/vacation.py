@@ -3,30 +3,53 @@
 Quellen (eine reicht):
 * Optionen ``vacations``: Liste von Zeiträumen, z. B.
   ``"2026-12-20 - 2027-01-03"`` oder ``"2026-12-20 08:00 - 2027-01-03 17:30"``.
-  Ohne Uhrzeit beginnt der Urlaub um 00:00 und endet um 18:00 (Rückkehr am Abend).
 * Option ``vacation_entity``: z. B. ``input_boolean.urlaub`` – an = Urlaub.
 
-Während des Urlaubs:
-* Anwesenheitsgewohnheiten, Warmwasser-Zapfprofil und Raummodelle lernen nicht –
-  nach dem Urlaub geht es mit dem Gelernten weiter wie vorher.
-* Das Hausmodell (Wärmeverlust) lernt weiter – Physik ändert sich im Urlaub nicht.
-* Die Ersparnis-Rechnung lässt Urlaubsstunden aus.
-* Ist das Ende bekannt, gilt es als Ankunft: rechtzeitig vorheizen und Warmwasser laden.
+Rückkehr – das Live-Signal schlägt den Plan:
+1. **GPS:** Kommt jemand schnell näher (Autobahn/Bahn: ≥ 20 km/h über eine
+   Viertelstunde), gilt dessen berechnete Ankunft – auch 1–2 Tage vor oder nach
+   dem geplanten Ende.
+2. **Geplantes Ende mit Uhrzeit:** genau diese Zeit.
+3. **Nur Datum:** dieser Tag zur Standard-Uhrzeit (``vacation_arrival_time``,
+   Vorgabe 18:00) – an dem Tag verfeinert GPS.
+
+Ende des Urlaubsmodus: sobald jemand 10 Minuten zu Hause ist. Ist niemand da,
+bleibt er nach dem geplanten Ende noch bis zu ``RETURN_GRACE_DAYS`` aktiv.
+
+Während des Urlaubs pausieren Gewohnheiten (Anwesenheitsmuster, Zapfprofil,
+Raummodelle); Physik (Wärmeverlust, Speicher) lernt weiter, die GPS-Entfernung
+wird weiter verfolgt.
 """
 
 from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime, time
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 
 log = logging.getLogger(__name__)
 
 _PART = r"(\d{4}-\d{2}-\d{2})(?:[ T](\d{1,2}:\d{2}))?"
 _RANGE = re.compile(rf"^\s*{_PART}\s*(?:-|–|bis)\s*{_PART}\s*$")
 
+RETURN_GRACE_DAYS = 3
+FAST_APPROACH_KMH = 20.0
+RETURN_HOME_MIN = 10
 
-def parse_ranges(items: list[str]) -> list[tuple[datetime, datetime]]:
+
+@dataclass
+class Trip:
+    start: datetime
+    end: datetime
+    end_exact: bool  # Uhrzeit angegeben (sonst nur Datum + Standard-Uhrzeit)
+
+    @property
+    def key(self) -> str:
+        return self.start.isoformat()
+
+
+def parse_ranges(items: list[str], default_arrival: time = time(18, 0)) -> list[Trip]:
     out = []
     for item in items:
         m = _RANGE.match(item)
@@ -35,25 +58,77 @@ def parse_ranges(items: list[str]) -> list[tuple[datetime, datetime]]:
             continue
         d1, t1, d2, t2 = m.groups()
         start = datetime.combine(datetime.fromisoformat(d1).date(), time.fromisoformat(t1 or "00:00"))
-        end = datetime.combine(datetime.fromisoformat(d2).date(), time.fromisoformat(t2 or "18:00"))
+        end = datetime.combine(datetime.fromisoformat(d2).date(),
+                               time.fromisoformat(t2) if t2 else default_arrival)
         if end > start:
-            out.append((start.astimezone(), end.astimezone()))
+            out.append(Trip(start.astimezone(), end.astimezone(), t2 is not None))
     return out
 
 
 class Vacation:
-    def __init__(self, ranges: list[str], entity: str | None) -> None:
-        self.ranges = parse_ranges(ranges)
+    def __init__(self, ranges: list[str], entity: str | None, default_arrival: time = time(18, 0)) -> None:
+        self.trips = parse_ranges(ranges, default_arrival)
         self.entity = entity
+        self.returned: set[str] = set()  # Reisen, von denen schon jemand zurück ist
+        self._home_since: datetime | None = None
+
+    @property
+    def ranges(self) -> list[tuple[datetime, datetime]]:
+        return [(t.start, t.end) for t in self.trips]
+
+    def trip(self, when: datetime) -> Trip | None:
+        """Laufende Reise (inkl. Nachlauf, falls niemand pünktlich zurück ist)."""
+        for t in self.trips:
+            if t.start <= when < t.end + timedelta(days=RETURN_GRACE_DAYS) and t.key not in self.returned:
+                return t
+        return None
 
     def active(self, when: datetime, entity_state: str | None = None) -> bool:
         if entity_state is not None and str(entity_state).lower() in ("on", "true", "1"):
-            return True
-        return any(s <= when < e for s, e in self.ranges)
+            return "entity" not in self.returned
+        return self.trip(when) is not None
 
     def end(self, when: datetime) -> datetime | None:
-        """Ende des laufenden Urlaubs aus den Zeiträumen (für die Entität unbekannt)."""
-        for s, e in self.ranges:
-            if s <= when < e:
-                return e
+        t = self.trip(when)
+        return t.end if t and t.end > when else None
+
+    def note_presence(self, when: datetime, anyone_home: bool, entity_state: str | None = None) -> bool:
+        """Rückkehr erkennen: jemand ≥ 10 min zu Hause -> Urlaub vorbei. True bei Rückkehr."""
+        if not self.active(when, entity_state):
+            self._home_since = None
+            if entity_state is not None and str(entity_state).lower() not in ("on", "true", "1"):
+                self.returned.discard("entity")  # Schalter aus: beim nächsten Einschalten neu
+            return False
+        if not anyone_home:
+            self._home_since = None
+            return False
+        self._home_since = self._home_since or when
+        if when - self._home_since < timedelta(minutes=RETURN_HOME_MIN):
+            return False
+        t = self.trip(when)
+        if t:
+            self.returned.add(t.key)
+        if entity_state is not None and str(entity_state).lower() in ("on", "true", "1"):
+            self.returned.add("entity")
+        self._home_since = None
+        log.info("Rückkehr aus dem Urlaub erkannt (%s)", when.isoformat())
+        return True
+
+    def arrival(self, when: datetime, persons: list) -> dict | None:
+        """Erwartete Rückkehr: schnelle GPS-Annäherung schlägt den Plan."""
+        best = None
+        for p in persons:
+            info = p.eta(when)
+            if (info["source"] == "gps" and info["speed_kmh"] is not None
+                    and info["speed_kmh"] >= FAST_APPROACH_KMH and info["eta"] is not None
+                    and info["eta"] - when <= timedelta(hours=24)):
+                if best is None or info["eta"] < best["eta"]:
+                    best = {**info, "source": "gps"}
+        if best:
+            return best
+        t = self.trip(when)
+        if t and t.end > when:
+            return {"person": "Urlaub", "eta": t.end, "home": False, "dist_km": None, "speed_kmh": None,
+                    "confidence": 0.9 if t.end_exact else 0.5,
+                    "source": "urlaub" if t.end_exact else "urlaub_datum"}
         return None

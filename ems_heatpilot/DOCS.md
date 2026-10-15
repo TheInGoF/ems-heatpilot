@@ -138,19 +138,32 @@ und das Auskühlen des Raums falsch einschätzen.
 
 ```yaml
 vacations:
-  - 2026-12-20 - 2027-01-03            # Rückkehr am 03.01. um 18:00
-  - 2027-02-01 08:00 - 2027-02-05 17:30
+  - 2026-12-20 - 2027-01-03            # nur Datum: Rückkehr zur vacation_arrival_time
+  - 2027-02-01 08:00 - 2027-02-05 17:30  # mit Uhrzeit: genau dann
+vacation_arrival_time: "18:00"
 vacation_entity: input_boolean.urlaub  # optional: an = Urlaub
 ```
+
+**Rückkehr – das Live-Signal schlägt den Plan:**
+
+1. **GPS:** Kommt jemand schnell näher (≥ 20 km/h über eine Viertelstunde,
+   also Auto/Bahn), gilt dessen berechnete Ankunft – egal ob 1–2 Tage vor oder
+   nach dem geplanten Ende. Langsames Bewegen am Urlaubsort löst nichts aus.
+2. **Geplantes Ende mit Uhrzeit:** genau diese Zeit.
+3. **Nur Datum:** dieser Tag zur `vacation_arrival_time`; an dem Tag verfeinert GPS.
+
+**Ende des Urlaubsmodus:** sobald jemand 10 Minuten zu Hause ist – auch vor dem
+geplanten Ende. Ist nach dem geplanten Ende noch niemand da, bleibt der
+Urlaubsmodus bis zu 3 Tage aktiv. Die Position wird im Urlaub weiter verfolgt,
+nur die Gewohnheiten lernen nicht.
 
 Im Urlaub werden **keine Gewohnheiten gelernt** – Anwesenheitsmuster,
 Warmwasser-Zapfprofil und Raummodelle bleiben auf dem Stand vor dem Urlaub und
 lernen danach normal weiter. Das Hausmodell (Wärmeverlust) und die
 Speicher-Physik lernen weiter, weil sich daran im Urlaub nichts ändert.
-Urlaubsstunden zählen nicht zur Ersparnis-Rechnung. Ist das Ende bekannt
-(Zeitraum), gilt es als Ankunft: Vorheizen und Warmwasser rechtzeitig davor.
-Beim Schalter ist das Ende unbekannt – dann wird erst nach dem Ausschalten
-reagiert.
+Urlaubsstunden zählen nicht zur Ersparnis-Rechnung. Die erwartete Rückkehr
+gilt als Ankunft: Warmwasser und Vorheizen rechtzeitig davor. Beim Schalter
+ohne Zeitraum kennt nur GPS die Rückkehrzeit.
 
 ## Vorheizplan: Warmwasser und Heizen nacheinander
 

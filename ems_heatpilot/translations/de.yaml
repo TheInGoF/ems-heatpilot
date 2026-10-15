@@ -62,6 +62,9 @@ configuration:
   vacations:
     name: Urlaub
     description: "Zeiträume ohne Lernen der Gewohnheiten, z. B. 2026-12-20 - 2027-01-03 oder 2026-12-20 08:00 - 2027-01-03 17:30 (ohne Uhrzeit: Rückkehr 18:00)"
+  vacation_arrival_time:
+    name: Rückkehr-Uhrzeit (nur Datum)
+    description: Gilt, wenn beim Urlaub nur ein Datum steht. Kommt jemand per GPS schnell näher, zählt immer die GPS-Ankunft
   vacation_entity:
     name: Urlaubs-Schalter
     description: "Optional, z. B. input_boolean.urlaub – an = Urlaub"

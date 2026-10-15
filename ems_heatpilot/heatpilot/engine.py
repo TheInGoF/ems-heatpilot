@@ -70,7 +70,8 @@ class Engine:
                 model = RoomModel(room.name, floor=floor)
                 fresh_rooms.add(room.climate)
             self.rooms[room.climate] = model
-        self.vacation = Vacation(cfg.vacations, cfg.vacation_entity)
+        self.vacation = Vacation(cfg.vacations, cfg.vacation_entity, cfg.vacation_arrival_time)
+        self.vacation.returned = set(store.get("vacation_returned", []))
         self.persons: dict[str, PersonLearner] = {}
         for p in found.persons:
             saved = store.get(f"model.person.{p}")
@@ -142,10 +143,18 @@ class Engine:
             on = None if p is None else int(p > 0)
         return on
 
-    def on_vacation(self, ts: float | None = None) -> bool:
+    def _vacation_entity_state(self) -> str | None:
         ent = self.cfg.vacation_entity
-        state = self.states.get(ent, {}).get("state") if ent else None
-        return self.vacation.active(local(time.time() if ts is None else ts), state)
+        return self.states.get(ent, {}).get("state") if ent else None
+
+    def on_vacation(self, ts: float | None = None) -> bool:
+        return self.vacation.active(local(time.time() if ts is None else ts), self._vacation_entity_state())
+
+    def track_vacation_return(self, ts: float, persons: list[tuple]) -> None:
+        """Ist jemand ≥ 10 min zu Hause, ist der Urlaub vorbei – egal was geplant war."""
+        anyone = any(is_home for _, is_home, _ in persons)
+        if self.vacation.note_presence(local(ts), anyone, self._vacation_entity_state()):
+            self.store.put("vacation_returned", sorted(self.vacation.returned))
 
     def heat_enabled(self) -> int | None:
         """Heizfreigabe am Regler: Betriebsart Tag = heizen, Nacht = aus (Absenkmodus Frostschutz)."""
@@ -323,15 +332,15 @@ class Engine:
         ts = now_ts - now_ts % self.cfg.sample_interval_s
         self.update_live(now_ts)
         sample, rooms, persons = self.snapshot()
+        self.track_vacation_return(ts, persons)
         vacation = self.on_vacation(ts)
         sample["vacation"] = int(vacation)
         self.store.add_sample(ts, sample)
         self.store.add_room_samples((ts, *r) for r in rooms)
         self.store.add_person_samples((ts, *p) for p in persons)
         now = local(ts)
-        if not vacation:  # im Urlaub keine Gewohnheiten lernen
-            for p, is_home, dist in persons:
-                self.persons[p].observe(now, bool(is_home), dist)
+        for p, is_home, dist in persons:  # Position immer, Gewohnheiten nicht im Urlaub
+            self.persons[p].observe(now, bool(is_home), dist, learn=not vacation)
         self.dhw_step(ts, sample)
         self.store.commit()
 
@@ -481,7 +490,8 @@ class Engine:
         home = sample.get("home_count")
         arrival = None
         if vacation:
-            home, arrival = 0, self.vacation.end(now)
+            ret = self.vacation.arrival(now, list(self.persons.values()))
+            home, arrival = 0, ret["eta"] if ret else None
         elif home == 0:
             nxt = next_arrival(list(self.persons.values()), now)
             arrival = nxt["eta"] if nxt else None
@@ -579,10 +589,8 @@ class Engine:
 
         persons = [p.eta(now) for p in self.persons.values()]
         vacation = self.on_vacation(now_ts)
-        if vacation:  # Urlaub: Ankunft = Urlaubsende (falls bekannt), Gewohnheiten zählen nicht
-            end = self.vacation.end(now)
-            arrival = {"person": "Urlaub", "eta": end, "source": "urlaub", "home": False,
-                       "dist_km": None, "speed_kmh": None, "confidence": None} if end else None
+        if vacation:  # Rückkehr: schnelle GPS-Annäherung vor geplantem Ende vor Datum
+            arrival = self.vacation.arrival(now, list(self.persons.values()))
         else:
             arrival = next_arrival(list(self.persons.values()), now)
         plan = None
@@ -628,7 +636,9 @@ class Engine:
             "vacation": {
                 "active": vacation,
                 "until": (self.vacation.end(now).isoformat() if vacation and self.vacation.end(now) else None),
-                "ranges": [[s.isoformat(), e.isoformat()] for s, e in self.vacation.ranges],
+                "until_exact": bool(vacation and self.vacation.trip(now) and self.vacation.trip(now).end_exact),
+                "ranges": [[t.start.isoformat(), t.end.isoformat(), t.end_exact] for t in self.vacation.trips],
+                "returned": sorted(self.vacation.returned),
             },
             "limits": {
                 "away_temp": self.cfg.away_temp,
