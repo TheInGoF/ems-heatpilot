@@ -263,7 +263,8 @@ async function load() {
     ` · Wärmebedarf laut Tado-Soll: <b>${s.setpoint_demand === null ? "–" : s.setpoint_demand ? "ja" : "nein"}</b>` +
     (s.demand_pct !== null ? ` · Heizungsanforderung ${fmt(s.demand_pct, 0)} %` : "") +
     ` · Regler: ${s.hc_mode ?? "–"}` +
-    (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "");
+    (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "") +
+    (s.vacation.active ? ` · <span class="badge">Urlaub${s.vacation.until ? " bis " + timeOf(s.vacation.until) : ""} – Gewohnheiten pausiert</span>` : "");
   $("tiles").innerHTML = [
     tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
     tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
@@ -307,7 +308,7 @@ async function load() {
   $("savings-text").textContent = `Was Absenken bei Abwesenheit und nachts gespart hätte, berechnet mit dem gelernten Modell. Über ${fmt(sv.span_days)} Tage: ${fmt(sv.saved_kwh, 0)} kWh von ${fmt(sv.actual_kwh, 0)} kWh (${fmt(sv.saved_pct)} %, ≈ ${fmt(sv.saved_eur, 0)} €). Schätzung – sie wird genauer, je länger das Modell lernt.`;
 
   $("rooms").innerHTML = "<tr><th>Raum</th><th>Ist</th><th>Soll</th><th>Ventil</th><th>Zeitkonstante</th><th>+2 K bei max. Vorlauf</th><th>Vorlauf für 21 °C</th><th>Fehler</th><th>Lernschritte</th></tr>" +
-    s.rooms.map((r) => `<tr><td>${r.room}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
+    s.rooms.map((r) => `<tr><td>${r.room}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
 
   const src = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause" };
   $("persons").innerHTML = "<tr><th>Person</th><th>Status</th><th>Entfernung</th><th>Erwartet</th><th>Quelle</th></tr>" +

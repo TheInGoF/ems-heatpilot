@@ -18,6 +18,7 @@ from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
 from .presence import PersonLearner, haversine_km, next_arrival
 from .store import Store
+from .vacation import Vacation
 
 log = logging.getLogger(__name__)
 
@@ -60,9 +61,16 @@ class Engine:
         self.gas_factor = 1.0 if (found.gas_unit or "").lower() == "kwh" else cfg.gas_kwh_per_m3
         self.house = HouseModel.from_dict(store.get("model.house")) if store.get("model.house") else HouseModel()
         self.rooms: dict[str, RoomModel] = {}
+        fresh_rooms: set[str] = set()
         for room in found.rooms:
             saved = store.get(f"model.room.{room.climate}")
-            self.rooms[room.climate] = RoomModel.from_dict(saved) if saved else RoomModel(room.name)
+            floor = room.climate in cfg.floor_heating_rooms
+            model = RoomModel.from_dict(saved) if saved else None
+            if model is None or model.floor != floor:  # neu oder Fußboden-Einstellung geändert
+                model = RoomModel(room.name, floor=floor)
+                fresh_rooms.add(room.climate)
+            self.rooms[room.climate] = model
+        self.vacation = Vacation(cfg.vacations, cfg.vacation_entity)
         self.persons: dict[str, PersonLearner] = {}
         for p in found.persons:
             saved = store.get(f"model.person.{p}")
@@ -90,6 +98,8 @@ class Engine:
         }
         self._last_room_step: int | None = store.get("last_room_step")
         self._last_hour: int | None = store.get("last_hour")
+        if fresh_rooms and self._last_room_step is not None:
+            self.relearn_rooms(fresh_rooms)
 
     # ------------------------------------------------------------------ Zustände
     def on_state(self, entity_id: str, state: dict | None) -> None:
@@ -131,6 +141,11 @@ class Engine:
             p = num(self._boiler("burner_power"))
             on = None if p is None else int(p > 0)
         return on
+
+    def on_vacation(self, ts: float | None = None) -> bool:
+        ent = self.cfg.vacation_entity
+        state = self.states.get(ent, {}).get("state") if ent else None
+        return self.vacation.active(local(time.time() if ts is None else ts), state)
 
     def heat_enabled(self) -> int | None:
         """Heizfreigabe am Regler: Betriebsart Tag = heizen, Nacht = aus (Absenkmodus Frostschutz)."""
@@ -284,6 +299,7 @@ class Engine:
             "flame": num(self._boiler("flame_current")),
             "demand_pct": num(self._val(self.found.demand_sensor)),
             "dhw_set": num(self._boiler("dhw_seltemp")),
+            "vacation": int(self.on_vacation()),
         }
         rooms = []
         for r in self.found.rooms:
@@ -307,12 +323,15 @@ class Engine:
         ts = now_ts - now_ts % self.cfg.sample_interval_s
         self.update_live(now_ts)
         sample, rooms, persons = self.snapshot()
+        vacation = self.on_vacation(ts)
+        sample["vacation"] = int(vacation)
         self.store.add_sample(ts, sample)
         self.store.add_room_samples((ts, *r) for r in rooms)
         self.store.add_person_samples((ts, *p) for p in persons)
         now = local(ts)
-        for p, is_home, dist in persons:
-            self.persons[p].observe(now, bool(is_home), dist)
+        if not vacation:  # im Urlaub keine Gewohnheiten lernen
+            for p, is_home, dist in persons:
+                self.persons[p].observe(now, bool(is_home), dist)
         self.dhw_step(ts, sample)
         self.store.commit()
 
@@ -334,15 +353,28 @@ class Engine:
         self.save()
 
     # ------------------------------------------------------------------ Lernen
-    def learn_rooms(self, start: int, end: int) -> None:
+    def relearn_rooms(self, climates: set[str]) -> None:
+        """Neue/umgestellte Raummodelle sofort aus der gespeicherten Historie lernen."""
+        first = self.store.query("SELECT MIN(ts) AS t FROM room_samples")[0]["t"]
+        if first is None:
+            return
+        step = int(ROOM_STEP_H * 3600)
+        log.info("Lerne Räume %s aus der gespeicherten Historie neu", sorted(climates))
+        for st in range(first - first % step + step, self._last_room_step, step):
+            self.learn_rooms(st, st + step, only=climates)
+
+    def learn_rooms(self, start: int, end: int, only: set[str] | None = None) -> None:
         sys_rows = {
             r["ts"]: r
             for r in self.store.query(
-                "SELECT ts, flow, heating, burner_on, dhw, t_out FROM samples WHERE ts BETWEEN ? AND ?",
+                "SELECT ts, flow, heating, burner_on, dhw, t_out, vacation FROM samples "
+                "WHERE ts BETWEEN ? AND ?",
                 (start, end),
             )
         }
         for climate, model in self.rooms.items():
+            if only is not None and climate not in only:
+                continue
             rows = self.store.query(
                 "SELECT ts, temp, valve FROM room_samples WHERE room=? AND ts BETWEEN ? AND ? ORDER BY ts",
                 (climate, start, end),
@@ -350,23 +382,30 @@ class Engine:
             rows = [r for r in rows if r["temp"] is not None]
             if len(rows) < 3 or rows[-1]["ts"] - rows[0]["ts"] < 0.8 * ROOM_STEP_H * 3600:
                 continue
-            inputs, outs = [], []
+            inputs, floor_inputs, outs = [], [], []
+            vacation = False
             for r in rows:
                 s = sys_rows.get(r["ts"])
                 if not s or s["flow"] is None or s["t_out"] is None:
                     continue
+                vacation = vacation or bool(s["vacation"])
                 active = s["heating"] if s["heating"] is not None else (s["burner_on"] or 0)
                 if s["dhw"]:
                     active = 0
-                inputs.append(max(s["flow"] - r["temp"], 0) * (r["valve"] or 0) / 100 * (active or 0))
+                warm = max(s["flow"] - r["temp"], 0) * (active or 0)
+                inputs.append(warm * (r["valve"] or 0) / 100)
+                floor_inputs.append(warm)  # Fußboden: kein Ventil, heizt immer mit
                 outs.append(s["t_out"])
             if len(inputs) < 3:
                 continue
             t0, t1 = rows[0]["temp"], rows[-1]["temp"]
             dt_h = (rows[-1]["ts"] - rows[0]["ts"]) / 3600
-            if abs(t1 - t0) > 2.0:  # Fenster offen o. ä. – nicht lernen
-                continue
-            model.learn(t0, t1, sum(inputs) / len(inputs), sum(outs) / len(outs), dt_h)
+            # Fenster offen o. ä. oder Urlaub: Estrich nachführen, aber nicht lernen
+            update = abs(t1 - t0) <= 2.0 and not vacation
+            model.learn(
+                t0, t1, sum(inputs) / len(inputs), sum(outs) / len(outs), dt_h,
+                floor_input=sum(floor_inputs) / len(floor_inputs), update=update,
+            )
 
     def aggregate_hour(self, hour: int, learn: bool = True) -> None:
         rows = self.store.query(
@@ -381,6 +420,7 @@ class Engine:
         t_out = [r["t_out"] for r in rows if r["t_out"] is not None]
         dhw = [r["dhw"] for r in rows if r["dhw"] is not None]
         home = [r["home_count"] for r in rows if r["home_count"] is not None]
+        vac = [r["vacation"] for r in rows if r["vacation"] is not None]
         t_in = self._mean_room_temp(hour, hour + 3600)
         row = (
             hour,
@@ -389,6 +429,7 @@ class Engine:
             gas_kwh,
             sum(dhw) / len(dhw) if dhw else None,
             sum(1 for h in home if h > 0) / len(home) if home else None,
+            sum(vac) / len(vac) if vac else None,
         )
         self.store.add_hourly([row])
         self.store.commit()
@@ -434,10 +475,14 @@ class Engine:
         if sample.get("burner_pow") is not None and nom:
             kw = sample["burner_pow"] / 100 * nom
         now = local(ts)
-        res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw)
+        vacation = bool(sample.get("vacation"))
+        res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
+                            learn_usage=not vacation)
         home = sample.get("home_count")
         arrival = None
-        if home == 0:
+        if vacation:
+            home, arrival = 0, self.vacation.end(now)
+        elif home == 0:
             nxt = next_arrival(list(self.persons.values()), now)
             arrival = nxt["eta"] if nxt else None
         check = guards.check_dhw(self.dhw)
@@ -533,7 +578,13 @@ class Engine:
         }
 
         persons = [p.eta(now) for p in self.persons.values()]
-        arrival = next_arrival(list(self.persons.values()), now)
+        vacation = self.on_vacation(now_ts)
+        if vacation:  # Urlaub: Ankunft = Urlaubsende (falls bekannt), Gewohnheiten zählen nicht
+            end = self.vacation.end(now)
+            arrival = {"person": "Urlaub", "eta": end, "source": "urlaub", "home": False,
+                       "dist_km": None, "speed_kmh": None, "confidence": None} if end else None
+        else:
+            arrival = next_arrival(list(self.persons.values()), now)
         plan = None
         if arrival and arrival["eta"] and t_out is not None and house_check["ok"]:
             room_inputs = []
@@ -573,6 +624,11 @@ class Engine:
             "cycling": cycling,
             "costs": costs,
             "dhw": self.dhw_summary(),
+            "vacation": {
+                "active": vacation,
+                "until": (self.vacation.end(now).isoformat() if vacation and self.vacation.end(now) else None),
+                "ranges": [[s.isoformat(), e.isoformat()] for s, e in self.vacation.ranges],
+            },
             "limits": {
                 "away_temp": self.cfg.away_temp,
                 "night_temp": self.cfg.night_temp,

@@ -29,22 +29,47 @@ ROOM_STEP_H = 0.5
 
 @dataclass
 class RoomModel:
+    """Raummodell. Mit ``floor=True`` zusätzlich Fußbodenheizung ohne Stellventil.
+
+    Fußbodenheizung (z. B. mit fest eingestelltem RTL-Ventil) heizt immer, wenn
+    warmes Heizwasser fließt – unabhängig von Tado – und wirkt über den Estrich
+    stark verzögert. Ihr Eingang wird deshalb mit ``floor_lag_h`` geglättet:
+
+        dT/dt = a * Heizkörper + f * Fußboden(verzögert) + b * (T_außen - T) + c
+    """
+
     room: str
-    rls: RLS = field(
-        default_factory=lambda: RLS(n=3, lam=0.998, delta=1.0, theta=[0.02, 0.05, 0.0])
-    )
+    floor: bool = False
+    floor_lag_h: float = 3.0
+    floor_u: float = 0.0  # geglätteter Fußboden-Eingang (K über Raumtemperatur)
+    rls: RLS | None = None
+
+    def __post_init__(self) -> None:
+        if self.rls is None:
+            theta = [0.02, 0.01, 0.05, 0.0] if self.floor else [0.02, 0.05, 0.0]
+            self.rls = RLS(n=len(theta), lam=0.998, delta=1.0, theta=theta)
 
     @property
     def a(self) -> float:
         return max(self.rls.theta[0], 1e-4)
 
     @property
+    def f(self) -> float:
+        """Wirkung der Fußbodenheizung (0 ohne Fußbodenheizung)."""
+        return max(self.rls.theta[1], 0.0) if self.floor else 0.0
+
+    @property
     def b(self) -> float:
-        return max(self.rls.theta[1], 1e-3)
+        return max(self.rls.theta[2 if self.floor else 1], 1e-3)
 
     @property
     def c(self) -> float:
-        return self.rls.theta[2]
+        return self.rls.theta[3 if self.floor else 2]
+
+    @property
+    def c_eff(self) -> float:
+        """Fremdwärme plus aktuelle (träge) Fußbodenwärme – kurzfristig quasi konstant."""
+        return self.c + self.f * self.floor_u
 
     @property
     def tau_h(self) -> float:
@@ -57,20 +82,29 @@ class RoomModel:
         heat_input: float,
         t_out: float,
         dt_h: float = ROOM_STEP_H,
+        floor_input: float = 0.0,
+        update: bool = True,
     ) -> float:
+        """Lernschritt. ``update=False`` führt nur den Estrich-Speicher nach (z. B. im Urlaub)."""
         t_mean = (t_start + t_end) / 2
-        x = [heat_input * dt_h, (t_out - t_mean) * dt_h, dt_h]
+        if self.floor:
+            self.floor_u += (1 - math.exp(-dt_h / self.floor_lag_h)) * (floor_input - self.floor_u)
+            x = [heat_input * dt_h, self.floor_u * dt_h, (t_out - t_mean) * dt_h, dt_h]
+        else:
+            x = [heat_input * dt_h, (t_out - t_mean) * dt_h, dt_h]
+        if not update:
+            return 0.0
         return self.rls.update(x, t_end - t_start)
 
     def rate(self, t_room: float, flow: float, t_out: float, valve: float = 1.0) -> float:
         """Temperaturänderung in K/h bei gegebener Vorlauftemperatur."""
         u = max(flow - t_room, 0.0) * valve
-        return self.a * u + self.b * (t_out - t_room) + self.c
+        return self.a * u + self.b * (t_out - t_room) + self.c_eff
 
     def equilibrium(self, flow: float, t_out: float, valve: float = 1.0) -> float:
-        """Endtemperatur, die der Raum bei Dauerbetrieb erreichen würde."""
+        """Endtemperatur bei Dauerbetrieb (Fußboden als konstant angenommen – kurzfristig)."""
         a = self.a * valve
-        return (a * flow + self.b * t_out + self.c) / (a + self.b)
+        return (a * flow + self.b * t_out + self.c_eff) / (a + self.b)
 
     def time_to_reach(
         self, t_now: float, target: float, flow: float, t_out: float, valve: float = 1.0
@@ -85,9 +119,9 @@ class RoomModel:
         return -math.log((t_inf - target) / (t_inf - t_now)) / k
 
     def required_flow(self, target: float, t_out: float, valve: float = 1.0) -> float:
-        """Vorlauftemperatur, die die Zieltemperatur gerade hält."""
+        """Vorlauftemperatur, die die Zieltemperatur dauerhaft hält (Fußboden heizt mit)."""
         need = self.b * (target - t_out) - self.c
-        return target + max(need, 0.0) / (self.a * valve)
+        return target + max(need, 0.0) / (self.a * valve + self.f)
 
     def cool_down(self, t_now: float, t_out: float, hours: float) -> float:
         """Raumtemperatur nach ``hours`` Stunden ohne Heizung."""
@@ -97,6 +131,8 @@ class RoomModel:
     def summary(self, t_out: float, max_flow: float) -> dict:
         return {
             "room": self.room,
+            "floor": self.floor,
+            "floor_gain": round(self.f, 4) if self.floor else None,
             "updates": self.rls.updates,
             "rmse_k": self.rls.rmse,
             "tau_h": round(self.tau_h, 1),
@@ -107,11 +143,23 @@ class RoomModel:
         }
 
     def to_dict(self) -> dict:
-        return {"room": self.room, "rls": self.rls.to_dict()}
+        return {
+            "room": self.room,
+            "floor": self.floor,
+            "floor_lag_h": self.floor_lag_h,
+            "floor_u": self.floor_u,
+            "rls": self.rls.to_dict(),
+        }
 
     @classmethod
     def from_dict(cls, d: dict) -> "RoomModel":
-        return cls(room=d["room"], rls=RLS.from_dict(d["rls"]))
+        return cls(
+            room=d["room"],
+            floor=d.get("floor", False),
+            floor_lag_h=d.get("floor_lag_h", 3.0),
+            floor_u=d.get("floor_u", 0.0),
+            rls=RLS.from_dict(d["rls"]),
+        )
 
 
 @dataclass

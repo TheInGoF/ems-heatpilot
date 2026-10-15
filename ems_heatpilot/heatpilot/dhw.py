@@ -94,14 +94,19 @@ class DhwModel:
         t_cur: float | None,
         charging: bool,
         burner_kw: float | None,
+        learn_usage: bool = True,
     ) -> dict:
-        """Ein Abtastschritt. Gibt {'draw_k', 'loss_kwh', 'charge_kwh'} zurück."""
+        """Ein Abtastschritt. Gibt {'draw_k', 'loss_kwh', 'charge_kwh'} zurück.
+
+        ``learn_usage=False`` (Urlaub): Zapfprofil und Reserve bleiben eingefroren,
+        die Speicher-Physik (Auskühlen, Ladekosten) lernt weiter.
+        """
         out = {"draw_k": 0.0, "loss_kwh": 0.0, "charge_kwh": 0.0}
-        self._roll_slot(when)
+        self._roll_slot(when, learn_usage)
         if t_prev is None or t_cur is None or dt_h <= 0 or dt_h > 0.5:
             self._slot_valid = False
             return out
-        self._slot_valid = True
+        self._slot_valid = learn_usage
 
         if charging:
             # Zapfung während/zu Beginn der Ladung (Dusche löst die Ladung ja oft aus):
@@ -154,7 +159,7 @@ class DhwModel:
             self.kwh_per_k[key] = per_k if old is None else old + 0.2 * (per_k - old)
             self.kwh_per_k_n[key] += 1
 
-    def _roll_slot(self, when: datetime) -> None:
+    def _roll_slot(self, when: datetime, learn_usage: bool = True) -> None:
         slot = slot_of(when)
         if self._slot is not None and slot != self._slot and self._slot_valid:
             self.profile[self._slot] += 0.3 * (self._slot_draw - self.profile[self._slot])
@@ -162,7 +167,7 @@ class DhwModel:
             hour = self._slot % 24
             self.daily[hour] += 0.15 * (self._slot_draw - self.daily[hour])
         if slot != self._slot:
-            if self._slot is not None:
+            if self._slot is not None and learn_usage:
                 self.comfort_margin = max(self.comfort_margin - DHW_MARGIN_DECAY / 24, 0.0)
             self._slot, self._slot_draw, self._slot_valid = slot, 0.0, False
 

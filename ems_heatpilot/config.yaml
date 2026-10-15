@@ -1,5 +1,5 @@
 name: EMS HeatPilot
-version: "0.5.0"
+version: "0.6.0"
 slug: ems_heatpilot
 description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
 url: https://github.com/TheInGoF/ems-heatpilot
@@ -38,6 +38,8 @@ options:
   night_temp: 18
   night_start: "22:30"
   night_end: "06:00"
+  floor_heating_rooms: []
+  vacations: []
   overrides: []
 schema:
   mode: list(observe)
@@ -69,5 +71,10 @@ schema:
   night_temp: float(10,24)
   night_start: match(^\d{1,2}:\d{2}$)
   night_end: match(^\d{1,2}:\d{2}$)
+  floor_heating_rooms:
+    - str
+  vacations:
+    - str
+  vacation_entity: str?
   overrides:
     - str

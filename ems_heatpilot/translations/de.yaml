@@ -56,6 +56,15 @@ configuration:
     name: Nacht ab
   night_end:
     name: Nacht bis
+  floor_heating_rooms:
+    name: Räume mit Fußbodenheizung
+    description: "climate-Entitäten von Räumen mit Fußbodenheizung ohne Stellventil (z. B. festes RTL-Ventil); der Heizkörper dort gilt als Boost"
+  vacations:
+    name: Urlaub
+    description: "Zeiträume ohne Lernen der Gewohnheiten, z. B. 2026-12-20 - 2027-01-03 oder 2026-12-20 08:00 - 2027-01-03 17:30 (ohne Uhrzeit: Rückkehr 18:00)"
+  vacation_entity:
+    name: Urlaubs-Schalter
+    description: "Optional, z. B. input_boolean.urlaub – an = Urlaub"
   overrides:
     name: Zuordnungen erzwingen
     description: "Format rolle=entity_id, z. B. flow_temp=sensor.boiler_curflowtemp"

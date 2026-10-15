@@ -45,6 +45,11 @@ class Config:
     night_temp: float = 18.0
     night_start: time = time(22, 30)
     night_end: time = time(6, 0)
+    # Räume mit Fußbodenheizung ohne Stellventil (z. B. festes RTL), climate-Entitäten
+    floor_heating_rooms: list[str] = field(default_factory=list)
+    # Urlaub: ["2026-12-20 - 2027-01-03", "2027-02-01 08:00 - 2027-02-05 17:30"]
+    vacations: list[str] = field(default_factory=list)
+    vacation_entity: str | None = None  # z. B. input_boolean.urlaub
     # "rolle=entity_id", z. B. "flow_temp=sensor.boiler_curflowtemp"
     overrides: dict[str, str] = field(default_factory=dict)
 
@@ -65,7 +70,7 @@ class Config:
                 value = {k.strip(): v.strip() for k, v in value.items()}
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
-        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host"):
+        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host", "vacation_entity"):
             if getattr(cfg, key) == "":
                 setattr(cfg, key, None)
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]

@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS hourly(
     ts INTEGER PRIMARY KEY,
     t_out REAL, t_in REAL, gas_kwh REAL, dhw_frac REAL, home_frac REAL
 );
+
 CREATE TABLE IF NOT EXISTS burner_events(ts INTEGER, state INTEGER);
 CREATE TABLE IF NOT EXISTS snapshots(ts INTEGER, kind TEXT, key TEXT, data TEXT);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
@@ -44,7 +45,10 @@ SAMPLE_COLS = (
     "demand_pct",
     # seit 0.4
     "dhw_set",
+    # seit 0.6
+    "vacation",
 )
+HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac")
 
 
 class Store:
@@ -56,6 +60,10 @@ class Store:
         for col in SAMPLE_COLS:
             if col not in have:
                 self.db.execute(f"ALTER TABLE samples ADD COLUMN {col} REAL")
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(hourly)")}
+        for col in HOURLY_COLS:
+            if col not in have:
+                self.db.execute(f"ALTER TABLE hourly ADD COLUMN {col} REAL")
         self.db.commit()
 
     # --- Schlüssel/Wert ---
@@ -89,8 +97,12 @@ class Store:
         )
 
     def add_hourly(self, rows: Iterable[tuple]) -> None:
+        """Zeilen in der Reihenfolge von HOURLY_COLS; fehlende Werte am Ende = NULL."""
+        cols = ", ".join(HOURLY_COLS)
+        marks = ", ".join("?" * len(HOURLY_COLS))
         self.db.executemany(
-            "INSERT OR REPLACE INTO hourly VALUES(?, ?, ?, ?, ?, ?)", rows
+            f"INSERT OR REPLACE INTO hourly({cols}) VALUES({marks})",
+            (tuple(r) + (None,) * (len(HOURLY_COLS) - len(r)) for r in rows),
         )
 
     def add_burner_event(self, ts: int, state: bool) -> None:

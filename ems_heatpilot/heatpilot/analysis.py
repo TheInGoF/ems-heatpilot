@@ -95,8 +95,8 @@ def estimate_savings(
     daily: dict[str, dict] = {}
     for i, (row, when, occupied, night) in enumerate(rows):
         t_in, t_out = row.get("t_in"), row.get("t_out")
-        if t_in is None or t_out is None:
-            t_sim = None
+        if t_in is None or t_out is None or (row.get("vacation_frac") or 0) > 0:
+            t_sim = None  # Urlaubsstunden zählen nicht zur Ersparnis
             continue
         if t_sim is None:
             t_sim = t_in

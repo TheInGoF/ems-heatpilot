@@ -111,6 +111,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     start_ts = end_ts - days * 86400
     plain = sorted(set(f.boiler.values()) | set(f.thermostat.values()) | set(f.outdoor)
                    | ({f.gas} if f.gas else set())
+                   | ({eng.cfg.vacation_entity} if eng.cfg.vacation_entity else set())
                    | {r.heating_power for r in f.rooms if r.heating_power}
                    | {r.humidity for r in f.rooms if r.humidity})
     with_attrs = [r.climate for r in f.rooms] + f.persons
@@ -149,12 +150,14 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
                 eng.states[ent] = {"state": hit[0], "attributes": hit[1]}
         eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
+        sample["vacation"] = int(eng.on_vacation(ts))
         eng.store.add_sample(ts, sample)
         eng.store.add_room_samples((ts, *r) for r in rooms)
         eng.store.add_person_samples((ts, *p) for p in persons)
         now = local(ts)
-        for p, is_home, dist in persons:
-            eng.persons[p].observe(now, bool(is_home), dist)
+        if not sample["vacation"]:
+            for p, is_home, dist in persons:
+                eng.persons[p].observe(now, bool(is_home), dist)
         eng.dhw_step(ts, sample)
         count += 1
     eng.store.commit()

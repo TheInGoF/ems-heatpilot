@@ -1,6 +1,6 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.5 macht
+## Was das Add-on in Version 0.6 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -117,6 +117,40 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
    Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag.
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
+
+## Fußbodenheizung ohne Stellventil
+
+Für Räume mit Fußbodenheizung, deren Kreis nicht geregelt wird (z. B. festes
+RTL-Ventil), die climate-Entität unter `floor_heating_rooms` eintragen:
+
+```yaml
+floor_heating_rooms:
+  - climate.badezimmer
+```
+
+Das Raummodell bekommt dann einen zweiten Wärmeeingang: Der Fußboden heizt
+immer, wenn warmes Heizwasser fließt – unabhängig von Tado – und wirkt über den
+Estrich verzögert (≈3 h). Der Tado-Heizkörper im Raum wird als Boost gelernt.
+Ohne diese Angabe würde das Modell die Fußbodenwärme als „Fremdwärme“ deuten
+und das Auskühlen des Raums falsch einschätzen.
+
+## Urlaub
+
+```yaml
+vacations:
+  - 2026-12-20 - 2027-01-03            # Rückkehr am 03.01. um 18:00
+  - 2027-02-01 08:00 - 2027-02-05 17:30
+vacation_entity: input_boolean.urlaub  # optional: an = Urlaub
+```
+
+Im Urlaub werden **keine Gewohnheiten gelernt** – Anwesenheitsmuster,
+Warmwasser-Zapfprofil und Raummodelle bleiben auf dem Stand vor dem Urlaub und
+lernen danach normal weiter. Das Hausmodell (Wärmeverlust) und die
+Speicher-Physik lernen weiter, weil sich daran im Urlaub nichts ändert.
+Urlaubsstunden zählen nicht zur Ersparnis-Rechnung. Ist das Ende bekannt
+(Zeitraum), gilt es als Ankunft: Vorheizen und Warmwasser rechtzeitig davor.
+Beim Schalter ist das Ende unbekannt – dann wird erst nach dem Ausschalten
+reagiert.
 
 ## Warmwasser
 
