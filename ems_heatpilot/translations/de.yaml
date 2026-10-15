@@ -1,0 +1,38 @@
+configuration:
+  mode:
+    name: Modus
+    description: "observe = nur beobachten und lernen (Version 0.1)"
+  sample_interval_s:
+    name: Abtastintervall (s)
+  backfill_days:
+    name: Historie übernehmen (Tage)
+    description: Einzelwerte aus dem Recorder beim ersten Start
+  statistics_backfill_days:
+    name: Langzeitstatistik übernehmen (Tage)
+  outdoor_sensors:
+    name: Außenfühler
+    description: Es wird das Minimum verwendet. Leer = Außenfühler der Therme
+  gas_sensor:
+    name: Gaszähler
+  weather_entity:
+    name: Wetter-Entität
+  gas_kwh_per_m3:
+    name: kWh pro m³ Gas
+    description: Brennwert × Zustandszahl laut Gasrechnung
+  gas_price_eur_per_kwh:
+    name: Gaspreis (€/kWh)
+  design_outdoor_temp:
+    name: Auslegungs-Außentemperatur (°C)
+  max_flow_temp:
+    name: Maximale Vorlauftemperatur (°C)
+  away_temp:
+    name: Temperatur bei Abwesenheit (°C)
+  night_temp:
+    name: Nachttemperatur (°C)
+  night_start:
+    name: Nacht ab
+  night_end:
+    name: Nacht bis
+  overrides:
+    name: Zuordnungen erzwingen
+    description: "Format rolle=entity_id, z. B. flow_temp=sensor.boiler_curflowtemp"

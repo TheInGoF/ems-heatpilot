@@ -1,0 +1,50 @@
+name: EMS HeatPilot
+version: "0.1.0"
+slug: ems_heatpilot
+description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
+url: https://github.com/TheInGoF/ems-heatpilot
+arch:
+  - aarch64
+  - amd64
+init: false
+startup: application
+boot: auto
+homeassistant_api: true
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:fire-circle
+panel_title: HeatPilot
+options:
+  mode: observe
+  sample_interval_s: 300
+  backfill_days: 30
+  statistics_backfill_days: 365
+  outdoor_sensors: []
+  gas_kwh_per_m3: 10.3
+  gas_price_eur_per_kwh: 0.12
+  design_outdoor_temp: -12
+  max_flow_temp: 75
+  away_temp: 19
+  night_temp: 18
+  night_start: "22:30"
+  night_end: "06:00"
+  overrides: []
+schema:
+  mode: list(observe)
+  sample_interval_s: int(60,900)
+  backfill_days: int(0,60)
+  statistics_backfill_days: int(0,1095)
+  outdoor_sensors:
+    - str
+  gas_sensor: str?
+  weather_entity: str?
+  gas_kwh_per_m3: float(5,15)
+  gas_price_eur_per_kwh: float(0,1)
+  design_outdoor_temp: float(-25,0)
+  max_flow_temp: int(30,90)
+  away_temp: float(10,24)
+  night_temp: float(10,24)
+  night_start: match(^\d{1,2}:\d{2}$)
+  night_end: match(^\d{1,2}:\d{2}$)
+  overrides:
+    - str

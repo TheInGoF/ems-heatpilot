@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EMS HeatPilot</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f6f4; --surface-1: #fcfcfb; --border: #e3e2de;
+  --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
+  --grid: #ecebe7;
+  --series-1: #2a78d6; --series-2: #eb6834;
+  --good: #008300; --warn: #c98500;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+    --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+    --grid: #262624;
+    --series-1: #3987e5; --series-2: #d95926;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+  --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
+  --grid: #262624;
+  --series-1: #3987e5; --series-2: #d95926;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text-primary);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 20px; margin: 4px 0 2px; }
+h2 { font-size: 15px; margin: 0 0 4px; }
+.sub { color: var(--text-secondary); margin: 0 0 16px; }
+.muted { color: var(--text-muted); font-size: 12px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.tile .label { color: var(--text-secondary); font-size: 12px; }
+.tile .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .unit { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.card p { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; }
+svg { display: block; width: 100%; height: auto; overflow: visible; }
+svg text { fill: var(--text-muted); font-size: 11px; }
+.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-secondary); font-weight: 500; }
+.scroll { overflow-x: auto; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid var(--border); color: var(--text-secondary); }
+#tip { position: fixed; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
+  color: var(--text-primary); padding: 6px 8px; border-radius: 6px; font-size: 12px; display: none; z-index: 10;
+  box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
+details summary { cursor: pointer; color: var(--text-secondary); }
+pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<main>
+  <h1>EMS HeatPilot</h1>
+  <p class="sub" id="status">Lade …</p>
+
+  <div class="tiles" id="tiles"></div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Wärmebedarf des Hauses</h2>
+      <p>Jeder Punkt ist eine Stunde: Gasleistung gegen Temperaturdifferenz innen–außen. Die Linie ist das gelernte Modell.</p>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>Messung (Stunde)</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span></div>
+      <div id="chart-demand"></div>
+    </div>
+    <div class="card">
+      <h2>Lernfortschritt: Wärmeverlust</h2>
+      <p>Wie sich die Schätzung des Wärmeverlusts (W/K) mit jedem Tag verändert. Wird sie flach, hat das Modell das Haus verstanden.</p>
+      <div id="chart-h"></div>
+    </div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Modellfehler</h2>
+      <p>Mittlerer Vorhersagefehler der Gasleistung (kW), immer vor dem Lernen gemessen. Kleiner = besser.</p>
+      <div id="chart-err"></div>
+    </div>
+    <div class="card">
+      <h2>Brennerstarts pro Tag</h2>
+      <p>Viele kurze Starts bedeuten Takten. Ziel: weniger Starts, längere Laufzeiten.</p>
+      <div id="chart-starts"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <h2>Geschätzte Ersparnis pro Tag</h2>
+    <p id="savings-text">Was Absenken bei Abwesenheit und nachts an diesem Tag gespart hätte (kWh Gas), berechnet mit dem gelernten Modell.</p>
+    <div id="chart-savings"></div>
+  </div>
+
+  <div class="card" style="margin-bottom:12px">
+    <h2>Räume</h2>
+    <p>Pro Raum gelernt: Zeitkonstante (wie schnell er auskühlt), Aufheizzeit für +2 K bei maximalem Vorlauf und der Vorlauf, der 21 °C hält.</p>
+    <div class="scroll"><table id="rooms"></table></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <h2>Anwesenheit</h2>
+      <div class="scroll"><table id="persons"></table></div>
+    </div>
+    <div class="card">
+      <h2>Vorheizplan (nur Empfehlung)</h2>
+      <div id="plan"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <details><summary>Gefundene Entitäten</summary><pre id="disc"></pre></details>
+  </div>
+</main>
+<div id="tip"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (v, d = 1) => v === null || v === undefined || Number.isNaN(v) ? "–" : Number(v).toLocaleString("de-DE", { maximumFractionDigits: d, minimumFractionDigits: 0 });
+const tip = $("tip");
+function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (e.clientY + 12) + "px"; }
+function hideTip() { tip.style.display = "none"; }
+const NS = "http://www.w3.org/2000/svg";
+function el(name, attrs, parent) { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
+
+function ticks(min, max, n = 4) {
+  if (min === max) { min -= 1; max += 1; }
+  const step = Math.pow(10, Math.floor(Math.log10((max - min) / n)));
+  const err = (max - min) / n / step;
+  const s = step * (err >= 7 ? 10 : err >= 3 ? 5 : err >= 1.5 ? 2 : 1);
+  const out = []; for (let v = Math.ceil(min / s) * s; v <= max + 1e-9; v += s) out.push(+v.toFixed(6));
+  return out;
+}
+
+function frame(container, xs, ys, opts = {}) {
+  container.innerHTML = "";
+  const W = Math.max(container.clientWidth || 560, 280), H = 220, m = { l: 44, r: 12, t: 10, b: 26 };
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": opts.label || "" }, container);
+  let [x0, x1] = [Math.min(...xs), Math.max(...xs)];
+  let [y0, y1] = [Math.min(opts.yMin ?? Infinity, ...ys), Math.max(...ys)];
+  if (x0 === x1) { x0 -= 1; x1 += 1; }
+  if (y0 === y1) { y1 = y0 + 1; }
+  const yt = ticks(y0, y1); y0 = Math.min(y0, yt[0]); y1 = Math.max(y1, yt[yt.length - 1]);
+  const sx = (v) => m.l + (v - x0) / (x1 - x0) * (W - m.l - m.r);
+  const sy = (v) => H - m.b - (v - y0) / (y1 - y0) * (H - m.t - m.b);
+  yt.forEach((v) => {
+    el("line", { x1: m.l, x2: W - m.r, y1: sy(v), y2: sy(v), stroke: "var(--grid)", "stroke-width": 1 }, svg);
+    el("text", { x: m.l - 6, y: sy(v) + 4, "text-anchor": "end" }, svg).textContent = fmt(v, 2);
+  });
+  const xt = opts.xTicks ? opts.xTicks(x0, x1) : ticks(x0, x1).map((v) => [v, fmt(v)]);
+  xt.forEach(([v, label]) => { el("text", { x: sx(v), y: H - 8, "text-anchor": "middle" }, svg).textContent = label; });
+  return { svg, sx, sy, W, H, m };
+}
+
+function dateTicks(x0, x1) {
+  const n = 5, out = [];
+  for (let i = 0; i <= n; i++) { const v = x0 + (x1 - x0) * i / n; out.push([v, new Date(v * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" })]); }
+  return out;
+}
+
+function empty(container, text) { container.innerHTML = `<p class="muted">${text}</p>`; }
+
+function lineChart(container, pts, unit, label) {
+  if (pts.length < 2) return empty(container, "Noch zu wenige Daten – das Modell speichert einmal pro Tag einen Stand.");
+  const f = frame(container, pts.map((p) => p[0]), pts.map((p) => p[1]), { xTicks: dateTicks, label });
+  const d = pts.map((p, i) => `${i ? "L" : "M"}${f.sx(p[0])},${f.sy(p[1])}`).join("");
+  el("path", { d, fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round" }, f.svg);
+  const cross = el("line", { y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, f.svg);
+  const dot = el("circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.m.l, y: f.m.t, width: f.W - f.m.l - f.m.r, height: f.H - f.m.t - f.m.b, fill: "transparent" }, f.svg);
+  hit.addEventListener("mousemove", (e) => {
+    const r = f.svg.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * f.W;
+    let best = pts[0]; for (const p of pts) if (Math.abs(f.sx(p[0]) - x) < Math.abs(f.sx(best[0]) - x)) best = p;
+    cross.setAttribute("x1", f.sx(best[0])); cross.setAttribute("x2", f.sx(best[0])); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", f.sx(best[0])); dot.setAttribute("cy", f.sy(best[1])); dot.setAttribute("visibility", "visible");
+    showTip(e, `${new Date(best[0] * 1000).toLocaleDateString("de-DE")}<br><b>${fmt(best[1], 2)} ${unit}</b>`);
+  });
+  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+}
+
+function barChart(container, rows, unit, label) {
+  if (!rows.length) return empty(container, "Noch keine Daten.");
+  const xs = rows.map((_, i) => i), ys = rows.map((r) => r[1]);
+  const f = frame(container, [-0.5, rows.length - 0.5], [0, ...ys], {
+    yMin: 0, label,
+    xTicks: () => rows.map((r, i) => [i, r[0]]).filter((_, i) => i % Math.ceil(rows.length / 7) === 0),
+  });
+  const bw = Math.max(Math.min((f.sx(1) - f.sx(0)) - 2, 28), 2);
+  rows.forEach((r, i) => {
+    const y = f.sy(Math.max(r[1], 0)), y0 = f.sy(Math.min(r[1], 0));
+    const h = Math.max(Math.abs(y0 - y), 1);
+    el("rect", { x: f.sx(i) - bw / 2, y: Math.min(y, y0), width: bw, height: h, rx: Math.min(4, bw / 2), fill: "var(--series-1)" }, f.svg);
+    const hit = el("rect", { x: f.sx(i) - (bw / 2 + 1), y: f.m.t, width: bw + 2, height: f.H - f.m.t - f.m.b, fill: "transparent" }, f.svg);
+    hit.addEventListener("mousemove", (e) => showTip(e, `${r[0]}<br><b>${fmt(r[1], 1)} ${unit}</b>${r[2] ? "<br>" + r[2] : ""}`));
+    hit.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function demandChart(container, hourly, house) {
+  const pts = hourly.filter((h) => h.gas_kwh !== null && h.t_in !== null && h.t_out !== null && h.t_out <= 15)
+    .map((h) => [h.t_in - h.t_out, h.gas_kwh, h.ts]);
+  if (pts.length < 5) return empty(container, "Noch zu wenige Stundenwerte mit Gasverbrauch.");
+  const xs = pts.map((p) => p[0]);
+  const f = frame(container, [0, ...xs], [0, ...pts.map((p) => p[1])], { yMin: 0, label: "Gasleistung gegen Temperaturdifferenz" });
+  pts.forEach((p) => {
+    const c = el("circle", { cx: f.sx(p[0]), cy: f.sy(p[1]), r: 3, fill: "var(--series-1)", "fill-opacity": 0.45 }, f.svg);
+    c.addEventListener("mousemove", (e) => showTip(e, `${new Date(p[2] * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}<br>ΔT ${fmt(p[0])} K · <b>${fmt(p[1], 2)} kW</b>`));
+    c.addEventListener("mouseleave", hideTip);
+  });
+  const H = house.heat_loss_w_per_k / 1000, base = house.base_kw, xmax = Math.max(...xs);
+  el("line", { x1: f.sx(0), y1: f.sy(base), x2: f.sx(xmax), y2: f.sy(base + H * xmax), stroke: "var(--series-2)", "stroke-width": 2 }, f.svg);
+  el("text", { x: f.W - f.m.r, y: f.m.t + 4, "text-anchor": "end" }, f.svg).textContent = "x: Innen − Außen (K) · y: Gas (kW)";
+}
+
+function tile(label, value, unit, note) {
+  return `<div class="tile"><div class="label">${label}</div><div class="value">${value}<span class="unit"> ${unit || ""}</span></div>${note ? `<div class="muted">${note}</div>` : ""}</div>`;
+}
+const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–";
+
+async function load() {
+  const s = await (await fetch("api/summary")).json();
+  if (s.starting) { $("status").textContent = "Startet: " + (s.status || "…"); setTimeout(load, 5000); return; }
+  const hist = await (await fetch("api/history?days=60")).json();
+  const h = s.house, c = s.cycling, sv = s.savings;
+  $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt`;
+  $("tiles").innerHTML = [
+    tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
+    tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
+    tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
+    tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", "Zeitkonstante des Auskühlens"),
+    tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø Lauf ${fmt(c.avg_run_min)} min · Ø Pause ${fmt(c.avg_pause_min)} min`),
+    tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Taktsperre ${fmt(s.min_period, 0)} min`),
+    tile("Ersparnis-Schätzung", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `${fmt(sv.span_days)} Tage ausgewertet`),
+    tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `aktuell eingestellt ${fmt(s.flow_current_setpoint, 0)} °C`),
+  ].join("");
+
+  demandChart($("chart-demand"), hist.hourly, h);
+  const hs = hist.snapshots.filter((x) => x.kind === "house");
+  lineChart($("chart-h"), hs.map((x) => [x.ts, x.data.heat_loss_w_per_k]), "W/K", "Wärmeverlust über die Zeit");
+  lineChart($("chart-err"), hs.filter((x) => x.data.rmse_kw !== null).map((x) => [x.ts, x.data.rmse_kw]), "kW", "Modellfehler über die Zeit");
+  barChart($("chart-starts"), hist.cycles.map((d) => [d.day.slice(8, 10) + "." + d.day.slice(5, 7), d.starts, `Ø Lauf ${fmt(d.avg_run_min)} min · ${d.short_runs} Kurzläufer`]), "Starts", "Brennerstarts pro Tag");
+  barChart($("chart-savings"), sv.daily.map((d) => [d.day.slice(8, 10) + "." + d.day.slice(5, 7), d.saved_kwh, `Verbrauch ${fmt(d.actual_kwh)} kWh`]), "kWh", "Geschätzte Ersparnis pro Tag");
+  $("savings-text").textContent = `Was Absenken bei Abwesenheit und nachts gespart hätte, berechnet mit dem gelernten Modell. Über ${fmt(sv.span_days)} Tage: ${fmt(sv.saved_kwh, 0)} kWh von ${fmt(sv.actual_kwh, 0)} kWh (${fmt(sv.saved_pct)} %, ≈ ${fmt(sv.saved_eur, 0)} €). Schätzung – sie wird genauer, je länger das Modell lernt.`;
+
+  $("rooms").innerHTML = "<tr><th>Raum</th><th>Ist</th><th>Soll</th><th>Ventil</th><th>Zeitkonstante</th><th>+2 K bei max. Vorlauf</th><th>Vorlauf für 21 °C</th><th>Fehler</th><th>Lernschritte</th></tr>" +
+    s.rooms.map((r) => `<tr><td>${r.room}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
+
+  const src = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause" };
+  $("persons").innerHTML = "<tr><th>Person</th><th>Status</th><th>Entfernung</th><th>Erwartet</th><th>Quelle</th></tr>" +
+    s.persons.map((p) => `<tr><td>${p.person.replace("person.", "")}</td><td>${p.home ? "zu Hause" : "unterwegs"}</td><td>${fmt(p.dist_km)} km</td><td>${p.home ? "–" : timeOf(p.eta)}</td><td>${src[p.source] || "–"}${p.confidence ? ` (${fmt(p.confidence * 100, 0)} %)` : ""}</td></tr>`).join("");
+
+  const plan = s.plan;
+  if (!s.arrival) $("plan").innerHTML = `<p class="muted">Jemand ist zu Hause oder es ist keine Ankunft absehbar.</p>`;
+  else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – noch kein machbarer Plan (Modell lernt noch).</p>`;
+  else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${src[s.arrival.source] || ""}). Sparsamster Plan: ab <b>${timeOf(plan.best.start)}</b> mit <b>${plan.best.flow} °C</b> Vorlauf, ca. ${fmt(plan.best.duration_h * 60, 0)} min, ≈ ${fmt(plan.best.est_kwh)} kWh.</p>` +
+    `<div class="scroll"><table><tr><th>Vorlauf</th><th>Start</th><th>Dauer</th><th>Gas</th></tr>${plan.options.map((o) => `<tr><td>${o.flow} °C</td><td>${o.too_late ? "zu spät" : timeOf(o.start)}</td><td>${fmt(o.duration_h * 60, 0)} min</td><td>${fmt(o.est_kwh)} kWh</td></tr>`).join("")}</table></div>`;
+
+  $("disc").textContent = JSON.stringify(s.discovered, null, 2);
+}
+load().catch((e) => { $("status").textContent = "Fehler: " + e; });
+setInterval(() => load().catch(() => {}), 300000);
+let resizeTimer; addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => load().catch(() => {}), 300); });
+</script>
+</body>
+</html>
