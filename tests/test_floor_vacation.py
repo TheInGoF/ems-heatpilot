@@ -90,3 +90,53 @@ def test_savings_skip_vacation_hours():
              "home_frac": 0.0, "vacation_frac": 1.0} for h in range(48)]
     res = estimate_savings(rows, house, cfg.away_temp, cfg.night_temp, cfg.is_night)
     assert res.hours == 0 and res.saved_kwh == 0
+
+
+def _bath_like_room():
+    m = RoomModel("Wz")
+    m.rls.theta = [0.05, 0.04, 0.0]  # Heizkörper, Auskühlen, Fremdwärme
+    m.rls.updates = 500
+    return m
+
+
+def test_return_from_vacation_charges_dhw_first_then_heats_never_both():
+    """Rückkehr: Warmwasser 30 -> 55 °C dauert 30 min, Heizen ~1 h – nacheinander planen."""
+    from heatpilot.analysis import PLAN_BUFFER_MIN, preheat_plan
+
+    house = HouseModel()
+    house.rls.theta = [0.2, 3.0, 0.2]
+    now = datetime(2027, 1, 3, 12, 0).astimezone()
+    arrival = now + timedelta(hours=6)
+    dhw = {"hours": 0.5, "from": 30.0, "to": 55.0}
+    plan = preheat_plan([(_bath_like_room(), 17.0, 21.0)], house, arrival, now, 2.0, 75, dhw=dhw)
+    best = plan["best"]
+    steps = best["steps"]
+    assert [s["what"] for s in steps] == ["Warmwasser", "Heizen"]
+    assert steps[0]["end"] == steps[1]["start"]  # direkt nacheinander, nie gleichzeitig
+    assert steps[1]["end"] == arrival  # pünktlich warm
+    lead_h = (arrival - best["start"]).total_seconds() / 3600
+    assert abs(lead_h - (best["duration_h"] + 0.5 + PLAN_BUFFER_MIN / 60)) < 0.01
+    without = preheat_plan([(_bath_like_room(), 17.0, 21.0)], house, arrival, now, 2.0, 75)
+    assert best["start"] < without["best"]["start"]  # mit Warmwasser früher los
+
+
+def test_too_late_starts_now_and_says_how_late():
+    from heatpilot.analysis import preheat_plan
+
+    house = HouseModel()
+    house.rls.theta = [0.2, 3.0, 0.2]
+    now = datetime(2027, 1, 3, 17, 30).astimezone()
+    arrival = now + timedelta(minutes=45)
+    plan = preheat_plan([(_bath_like_room(), 17.0, 21.0)], house, arrival, now, 2.0, 75,
+                        dhw={"hours": 0.5, "from": 30.0, "to": 55.0})
+    best = plan["best"]
+    assert best["start"] == now and best["late_min"] > 0
+    assert best["steps"][0]["what"] == "Warmwasser"
+
+
+def test_dhw_cooling_and_charge_time():
+    m = DhwModel()
+    m.loss.theta = [0.72, -0.04]  # Umgebung 18 °C
+    m.charge_rate_kh = 50.0
+    assert abs(m.cool(55.0, 24) - (18 + 37 * math.exp(-0.04 * 24))) < 0.01
+    assert abs(m.charge_hours(30.0, 55.0) - 0.5) < 1e-9

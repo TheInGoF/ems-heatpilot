@@ -11,6 +11,8 @@ from .models import HouseModel, RoomModel
 # Brennwert-Wirkungsgrad sinkt mit der Vorlauftemperatur (Richtwert ~0,4 %/K
 # über 40 °C). Wird in Phase 2 aus dem Gasverbrauch gelernt.
 EFF_PENALTY_PER_K = 0.004
+# Sicherheitspuffer für den Vorheizplan (Minuten), damit es nicht knapp wird
+PLAN_BUFFER_MIN = 10
 
 
 def cycling_stats(events: list[tuple[int, int]], day_start: int, day_end: int) -> dict:
@@ -116,7 +118,9 @@ def estimate_savings(
             cooled = t_out + (t_sim - t_out) * math.exp(-1.0 / tau)
             t_sim = max(cooled, target)
         elif t_sim < target:
-            rise = (p_max_kw - h * (t_sim - t_out)) / c if c > 0 else 99.0
+            # während Warmwasserladung bekommt der Heizkreis nichts (3-Wege-Ventil)
+            p_heat = p_max_kw * (1.0 - min(row.get("dhw_frac") or 0.0, 1.0))
+            rise = (p_heat - h * (t_sim - t_out)) / c if c > 0 else 99.0
             t_sim = min(target, t_sim + max(rise, 0.0))
         if occupied and not night and t_sim < t_in - 0.5:
             cold += 1
@@ -144,13 +148,22 @@ def preheat_plan(
     t_out: float,
     max_flow: float,
     min_flow: float = 35.0,
+    dhw: dict | None = None,
 ) -> dict | None:
     """Wann mit welcher Vorlauftemperatur starten, damit es bei Ankunft warm ist?
 
     ``rooms``: (Modell, aktuelle Temperatur, Solltemperatur bei Ankunft).
     Für jede Vorlauftemperatur wird die nötige Heizdauer des langsamsten Raums
     berechnet und der Gasbedarf geschätzt; gewählt wird der sparsamste Plan.
+
+    ``dhw``: {"hours", "from", "to"} – Warmwasser muss auch geladen werden. Speicher
+    und Heizkreis teilen sich die Therme (3-Wege-Ventil), also nacheinander:
+    **erst Warmwasser, dann Heizen** – so kühlen die Räume während der Ladung nicht
+    wieder aus, der volle Speicher verliert in der Heizphase nur wenig, und der
+    Brenner läuft beim Umschalten ohne neuen Start durch.
     """
+    dhw_h = (dhw or {}).get("hours", 0.0)
+    buffer_h = PLAN_BUFFER_MIN / 60
     if not rooms:
         return None
     hours_left = max((arrival - now).total_seconds() / 3600, 0.0)
@@ -173,13 +186,15 @@ def preheat_plan(
             heat = house.h_kw_per_k * max(t_in_avg - t_out, 0) * worst
             heat += house.c_kwh_per_k * sum(rises) / len(rises)
             eff = 1.0 + EFF_PENALTY_PER_K * max(flow - 40, 0)
+            total = worst + dhw_h + buffer_h
             options.append(
                 {
                     "flow": flow,
                     "duration_h": round(worst, 2),
-                    "start": arrival - timedelta(hours=worst),
+                    "total_h": round(total, 2),
+                    "start": arrival - timedelta(hours=total),
                     "est_kwh": round(heat * eff, 2),
-                    "too_late": arrival - timedelta(hours=worst) < now,
+                    "too_late": arrival - timedelta(hours=total) < now,
                 }
             )
         flow += 5
@@ -187,7 +202,28 @@ def preheat_plan(
         return {"feasible": False, "options": []}
     in_time = [o for o in options if not o["too_late"]]
     if in_time:
-        best = min(in_time, key=lambda o: (o["est_kwh"], o["flow"]))
+        best = dict(min(in_time, key=lambda o: (o["est_kwh"], o["flow"])))
+        late_min = 0
     else:  # schon zu spät: sofort mit dem schnellsten Plan los
-        best = {**min(options, key=lambda o: o["duration_h"]), "start": now}
+        fastest = min(options, key=lambda o: o["total_h"])
+        late_min = round((now - fastest["start"]).total_seconds() / 60)
+        best = {**fastest, "start": now}
+    best["late_min"] = late_min
+    best["steps"] = _sequence(best["start"], dhw, best["duration_h"], best["flow"], buffer_h,
+                              None if late_min else arrival)
     return {"feasible": True, "best": best, "options": options}
+
+
+def _sequence(start: datetime, dhw: dict | None, heat_h: float, flow: float, buffer_h: float,
+              arrival: datetime | None = None) -> list[dict]:
+    """Zeitablauf: erst Warmwasser laden, direkt danach Räume heizen (nie gleichzeitig)."""
+    steps = []
+    t = start
+    if dhw and dhw.get("hours", 0) > 0:
+        end = t + timedelta(hours=dhw["hours"])
+        steps.append({"what": "Warmwasser", "start": t, "end": end,
+                      "from": dhw.get("from"), "to": dhw.get("to")})
+        t = end
+    end = arrival or t + timedelta(hours=heat_h + buffer_h)  # pünktlich zur Ankunft fertig
+    steps.append({"what": "Heizen", "start": t, "end": end, "flow": flow})
+    return steps

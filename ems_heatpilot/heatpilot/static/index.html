@@ -310,15 +310,20 @@ async function load() {
   $("rooms").innerHTML = "<tr><th>Raum</th><th>Ist</th><th>Soll</th><th>Ventil</th><th>Zeitkonstante</th><th>+2 K bei max. Vorlauf</th><th>Vorlauf für 21 °C</th><th>Fehler</th><th>Lernschritte</th></tr>" +
     s.rooms.map((r) => `<tr><td>${r.room}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
 
-  const src = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause" };
+  const src = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause", urlaub: "Urlaubsende" };
   $("persons").innerHTML = "<tr><th>Person</th><th>Status</th><th>Entfernung</th><th>Erwartet</th><th>Quelle</th></tr>" +
     s.persons.map((p) => `<tr><td>${p.person.replace("person.", "")}</td><td>${p.home ? "zu Hause" : "unterwegs"}</td><td>${fmt(p.dist_km)} km</td><td>${p.home ? "–" : timeOf(p.eta)}</td><td>${src[p.source] || "–"}${p.confidence ? ` (${fmt(p.confidence * 100, 0)} %)` : ""}</td></tr>`).join("");
 
   const plan = s.plan;
   if (!s.arrival) $("plan").innerHTML = `<p class="muted">Jemand ist zu Hause oder es ist keine Ankunft absehbar.</p>`;
   else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – noch kein machbarer Plan (Modell lernt noch).</p>`;
-  else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${src[s.arrival.source] || ""}). Sparsamster Plan: ab <b>${timeOf(plan.best.start)}</b> mit <b>${plan.best.flow} °C</b> Vorlauf, ca. ${fmt(plan.best.duration_h * 60, 0)} min, ≈ ${fmt(plan.best.est_kwh)} kWh.</p>` +
-    `<div class="scroll"><table><tr><th>Vorlauf</th><th>Start</th><th>Dauer</th><th>Gas</th></tr>${plan.options.map((o) => `<tr><td>${o.flow} °C</td><td>${o.too_late ? "zu spät" : timeOf(o.start)}</td><td>${fmt(o.duration_h * 60, 0)} min</td><td>${fmt(o.est_kwh)} kWh</td></tr>`).join("")}</table></div>`;
+  else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${src[s.arrival.source] || s.arrival.source || ""}). Start <b>${timeOf(plan.best.start)}</b>` +
+    (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:13px">` +
+    plan.best.steps.map((st) => st.what === "Warmwasser"
+      ? `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Warmwasser ${fmt(st.from, 0)} → ${fmt(st.to, 0)} °C</li>`
+      : `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Räume heizen, Vorlauf ${st.flow} °C</li>`).join("") +
+    `</ol><p class="muted">Warmwasser und Heizen teilen sich die Therme – nacheinander, erst der Speicher. ≈ ${fmt(plan.best.est_kwh)} kWh fürs Heizen.</p>` +
+    `<div class="scroll"><table><tr><th>Vorlauf</th><th>Start</th><th>Dauer</th><th>Gas</th></tr>${plan.options.map((o) => `<tr><td>${o.flow} °C</td><td>${o.too_late ? "zu spät" : timeOf(o.start)}</td><td>${fmt(o.total_h * 60, 0)} min</td><td>${fmt(o.est_kwh)} kWh</td></tr>`).join("")}</table></div>`;
 
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
 }

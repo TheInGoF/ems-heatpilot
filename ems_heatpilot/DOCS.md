@@ -1,6 +1,6 @@
 # EMS HeatPilot
 
-## Was das Add-on in Version 0.6 macht
+## Was das Add-on in Version 0.7 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -151,6 +151,24 @@ Urlaubsstunden zählen nicht zur Ersparnis-Rechnung. Ist das Ende bekannt
 (Zeitraum), gilt es als Ankunft: Vorheizen und Warmwasser rechtzeitig davor.
 Beim Schalter ist das Ende unbekannt – dann wird erst nach dem Ausschalten
 reagiert.
+
+## Vorheizplan: Warmwasser und Heizen nacheinander
+
+Speicher und Heizkreis teilen sich die Therme (3-Wege-Ventil) – beides
+gleichzeitig geht nicht. Vor einer Ankunft (z. B. Urlaubsende) plant HeatPilot
+deshalb nacheinander und startet um die Summe früher:
+
+1. **Erst Warmwasser** laden (Dauer aus der gelernten Ladegeschwindigkeit,
+   Ausgangstemperatur aus dem gelernten Auskühlen),
+2. **direkt danach die Räume** heizen, fertig zur Ankunft,
+3. plus 10 Minuten Puffer.
+
+Warum diese Reihenfolge: Würde der Speicher zuletzt geladen, kühlten die gerade
+geheizten Räume in dieser Zeit wieder ab. Der volle Speicher verliert in der
+Heizphase dagegen nur 1–2 K, und der Brenner läuft beim Umschalten ohne neuen
+Start durch. Ist es schon zu knapp, startet der Plan sofort und sagt, um wie viele
+Minuten es später fertig wird. Auch die Ersparnis-Rechnung berücksichtigt, dass
+der Heizkreis während Warmwasserladungen keine Leistung bekommt.
 
 ## Warmwasser
 

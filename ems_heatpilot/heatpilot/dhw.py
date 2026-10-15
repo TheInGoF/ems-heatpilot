@@ -19,6 +19,7 @@ schlechtere Kondensieren beim Laden aus warmem Speicher und jeder Brennerstart.
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -61,6 +62,18 @@ class DhwModel:
         """Auskühlen in K/h (positiv) bei Speichertemperatur t."""
         a, b = self.loss.theta
         return max(-(a + b * t), 0.0)
+
+    def cool(self, t: float, hours: float) -> float:
+        """Speichertemperatur nach ``hours`` Stunden ohne Ladung und Zapfung."""
+        a, b = self.loss.theta
+        if b >= -1e-4:
+            return t
+        amb = -a / b
+        return amb + (t - amb) * math.exp(b * hours)
+
+    def charge_hours(self, t_from: float, t_to: float) -> float:
+        """Ladedauer in Stunden (gelernte Ladegeschwindigkeit)."""
+        return max(t_to - t_from, 0.0) / max(self.charge_rate_kh, 5.0)
 
     def kwh_per_kelvin(self, start_temp: float | None = None) -> float | None:
         if start_temp is not None:

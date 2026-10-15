@@ -596,6 +596,7 @@ class Engine:
             plan = analysis.preheat_plan(
                 room_inputs, self.house, arrival["eta"], now,
                 t_out if t_out_arrival is None else t_out_arrival, self.cfg.max_flow_temp,
+                dhw=self.dhw_for_arrival(arrival["eta"], now),
             )
         self.last_plan = plan
 
@@ -660,7 +661,12 @@ class Engine:
             "arrival": None if not arrival else {**arrival, "eta": arrival["eta"].isoformat()},
             "plan": None if not plan else {
                 **plan,
-                "best": None if not plan.get("best") else {**plan["best"], "start": plan["best"]["start"].isoformat()},
+                "best": None if not plan.get("best") else {
+                    **plan["best"],
+                    "start": plan["best"]["start"].isoformat(),
+                    "steps": [{**st, "start": st["start"].isoformat(), "end": st["end"].isoformat()}
+                              for st in plan["best"].get("steps", [])],
+                },
                 "options": [{**o, "start": o["start"].isoformat()} for o in plan.get("options", [])],
             },
             "flow_recommendation": flow_needed,
@@ -708,6 +714,23 @@ class Engine:
             "saved_eur": round((loss - loss_s) * self.cfg.gas_price_eur_per_kwh, 2),
             "cold_draws": int(tot.get("dhw_cold_draws", 0)),
         }
+
+    def dhw_for_arrival(self, arrival: datetime, now: datetime) -> dict | None:
+        """Wie lange muss der Speicher vor der Ankunft laden? (teilt sich die Therme mit dem Heizen)"""
+        t_now = num(self._boiler("dhw_temp"))
+        if t_now is None:
+            return None
+        target = min(self.cfg.dhw_comfort_temp + self.dhw.comfort_margin, self.cfg.dhw_max_temp)
+        hours_to = max((arrival - now).total_seconds() / 3600, 0.0)
+        # bis kurz vor Ankunft kühlt er weiter aus (Ladung ist erst gegen Ende geplant)
+        t_start = self.dhw.cool(t_now, max(hours_to - 2.0, 0.0))
+        if t_start >= target - 1.0:
+            return None
+        if guards.check_dhw(self.dhw)["ok"]:
+            hours = self.dhw.charge_hours(t_start, target)
+        else:  # Modell noch unsicher: vorsichtig mit 40 K/h rechnen
+            hours = max(target - t_start, 0.0) / 40.0
+        return {"hours": round(hours, 2), "from": round(t_start, 1), "to": round(target, 1)}
 
     def counter_days(self, since_day: str) -> dict[str, dict]:
         """Starts und Laufzeit je Tag aus den Zählern der Therme (Differenz Max-Min)."""

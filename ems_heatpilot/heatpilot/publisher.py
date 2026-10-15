@@ -94,7 +94,9 @@ async def publish(ha: HAClient, s: dict) -> None:
         ),
         "sensor.heatpilot_vorheizen_start": _sensor(
             best.get("start"), "Vorheizen ab", icon="mdi:radiator", device_class="timestamp",
-            vorlauf=best.get("flow"), dauer_h=best.get("duration_h"), gas_kwh=best.get("est_kwh"),
+            vorlauf=best.get("flow"), heizdauer_h=best.get("duration_h"), gesamt_h=best.get("total_h"),
+            gas_kwh=best.get("est_kwh"), zu_spaet_min=best.get("late_min"),
+            ablauf=[f'{st["what"]} ab {st["start"]}' for st in best.get("steps", [])],
         ),
     }
     for entity_id, (state, attrs) in sensors.items():
