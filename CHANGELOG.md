@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.20.0
+- **Sonne als Wärmequelle je Raum:** Sonnenstand wird aus Standort und Uhrzeit berechnet, die Bewölkung kommt aus der Wetter-Integration. Jeder Raum lernt selbst, wie stark und aus welcher Richtung (Ost/Süd/West) die Sonne ihn heizt – Räume ohne Sonnenfenster lernen „kaum Sonne“. Neue Spalte „Sonne“ in der Raumtabelle; bestehende Raummodelle werden erweitert, nicht verworfen
+- **Vorlauf gegen Takten:** HeatPilot misst an den eigenen Heizstunden (gleiche Außentemperatur, nur Beharrung, ohne Warmwasser), ob ein höherer Vorlauf weniger Starts und weniger Gas je Grad bringt – oder durch warmen Rücklauf Verschwendung ist. Mit klarem Urteil, Tabelle je Außentemperatur und Versuchsvorschlag, wenn die Daten nicht reichen. Nur Beobachtung
+- Beim Update wird der Lernstand einmal neu berechnet (Sonne in der Historie)
+
 ## 0.19.0
 - Zertifikat: **HeatPilot-Gesamtbewertung** – alles auf einen Nenner: 0–100 Punkte und Klasse A+ bis H aus Gebäude (40 %), Kesselgröße (25 %), Taktverhalten (20 %) und Warmwasser (15 %). Erscheint erst, wenn das Gebäude und mindestens zwei weitere Bereiche bewertet sind. Im PDF, in der Druckansicht und in der Übersicht
 

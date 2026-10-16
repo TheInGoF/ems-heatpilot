@@ -24,7 +24,7 @@ from .web import make_app
 
 log = logging.getLogger("heatpilot")
 
-DATA_VERSION = 5  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5 (0.18): Ladeerkennung, ein Raster
+DATA_VERSION = 6  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladeerkennung · 6 (0.20): Sonne
 
 
 class App:

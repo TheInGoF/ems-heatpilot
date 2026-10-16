@@ -88,6 +88,14 @@ class RLS:
         )
         return raw
 
+    def extend(self, k: int, delta: float = 1.0) -> None:
+        """``k`` neue Parameter (Startwert 0) anhängen – Gelerntes bleibt erhalten."""
+        n = self.n + k
+        self.theta = list(self.theta) + [0.0] * k
+        self.P = [row + [0.0] * k for row in self.P] + [
+            [delta if i == j else 0.0 for j in range(n)] for i in range(self.n, n)]
+        self.n = n
+
     @property
     def rmse(self) -> float | None:
         return None if self.err_sq_ewma is None else math.sqrt(self.err_sq_ewma)

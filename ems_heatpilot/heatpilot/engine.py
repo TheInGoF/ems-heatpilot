@@ -11,7 +11,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from . import advice, analysis, guards, plausibility, schedule
+from . import advice, analysis, flowstudy, guards, plausibility, schedule, solar
 from .config import Config
 from .dhw import SEGMENT_H, DhwModel, DhwShadow, cooling_sample
 from .live import LiveBuffer
@@ -360,6 +360,16 @@ class Engine:
         self._rejected = rejected
         return sample, clean, persons
 
+    def add_solar(self, ts: int, sample: dict) -> None:
+        """Sonneneinstrahlung auf Ost/Süd/West zum Zeitpunkt – aus Standort, Uhrzeit und Bewölkung."""
+        if not self.found.home_zone:
+            return
+        cloud = None
+        if self.found.weather and self.found.weather in self.states:
+            cloud = num(self.states[self.found.weather].get("attributes", {}).get("cloud_coverage"))
+        lat, lon = self.found.home_zone
+        sample["sun_e"], sample["sun_s"], sample["sun_w"] = solar.facade_inputs(ts, lat, lon, cloud)
+
     def infer_dhw(self, ts: int, sample: dict) -> None:
         """Warmwasserladung erkennen, wenn das Ladesignal fehlt oder nie 1 wird.
 
@@ -414,6 +424,7 @@ class Engine:
                                                             for p, h, d in persons])
         self.count_rejected(ts)
         self.infer_dhw(ts, sample)
+        self.add_solar(ts, sample)
         rooms = self.filter_room_spikes(ts, rooms)
         self.track_vacation_return(ts, persons)
         vacation = self.on_vacation(ts)
@@ -478,7 +489,7 @@ class Engine:
         sys_rows = {
             r["ts"]: r
             for r in self.store.query(
-                "SELECT ts, flow, heating, burner_on, dhw, t_out, vacation FROM samples "
+                "SELECT ts, flow, heating, burner_on, dhw, t_out, vacation, sun_e, sun_s, sun_w FROM samples "
                 "WHERE ts BETWEEN ? AND ?",
                 (start, end),
             )
@@ -493,7 +504,7 @@ class Engine:
             rows = [r for r in rows if r["temp"] is not None]
             if len(rows) < 3 or rows[-1]["ts"] - rows[0]["ts"] < 0.8 * ROOM_STEP_H * 3600:
                 continue
-            inputs, floor_inputs, outs = [], [], []
+            inputs, floor_inputs, outs, suns = [], [], [], []
             vacation = False
             for r in rows:
                 s = sys_rows.get(r["ts"])
@@ -507,6 +518,8 @@ class Engine:
                 inputs.append(warm * (r["valve"] or 0) / 100)
                 floor_inputs.append(warm)  # Fußboden: kein Ventil, heizt immer mit
                 outs.append(s["t_out"])
+                if s["sun_s"] is not None:
+                    suns.append((s["sun_e"], s["sun_s"], s["sun_w"]))
             if len(inputs) < 3:
                 continue
             t0, t1 = rows[0]["temp"], rows[-1]["temp"]
@@ -516,6 +529,7 @@ class Engine:
             model.learn(
                 t0, t1, sum(inputs) / len(inputs), sum(outs) / len(outs), dt_h,
                 floor_input=sum(floor_inputs) / len(floor_inputs), update=update,
+                solar=tuple(sum(v[i] for v in suns) / len(suns) for i in range(3)) if suns else None,
             )
 
     def nominal_kw(self) -> float | None:
@@ -622,6 +636,14 @@ class Engine:
         for climate, m in self.rooms.items():
             self.store.add_snapshot(ts, "room", climate, m.summary(t_out or 5.0, self.cfg.max_flow_temp))
         self.store.commit()
+
+    def flow_study(self, max_age_s: int = 3600) -> dict:
+        """Vorlauf gegen Takten (stündlich neu – wertet 90 Tage aus)."""
+        now = time.time()
+        cached = getattr(self, "_flow_study", None)
+        if cached is None or now - cached[0] > max_age_s:
+            self._flow_study = (now, flowstudy.study(self.store))
+        return self._flow_study[1]
 
     def tado_advice(self, max_age_s: int = 900) -> dict:
         """Empfehlungen an Tado (höchstens alle 15 min neu berechnet – wertet 3 Wochen aus)."""
@@ -835,6 +857,7 @@ class Engine:
             },
             "advice": self.tado_advice(),
             "ignored": self.ignored(),
+            "flow_study": self.flow_study(),
             "schedule": {"learned": self.schedule_learned, "effective": self.eff.as_dict(),
                          "learning": self.cfg.learn_schedule},
             "limits": {
