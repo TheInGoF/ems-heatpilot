@@ -26,6 +26,9 @@ def make_app(app) -> web.Application:
     async def index(_req):
         return web.FileResponse(STATIC / "index.html")
 
+    async def icon(_req):
+        return web.FileResponse(STATIC / "icon.svg", headers={"Cache-Control": "max-age=86400"})
+
     async def summary(_req):
         if app.eng is None:
             return web.json_response({"starting": True, "status": app.status})
@@ -125,6 +128,7 @@ def make_app(app) -> web.Application:
         return web.json_response({"ok": True})
 
     web_app.router.add_get("/", index)
+    web_app.router.add_get("/icon.svg", icon)
     web_app.router.add_get("/api/summary", summary)
     web_app.router.add_get("/api/history", history)
     web_app.router.add_get("/api/settings", get_settings)

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>EMS HeatPilot</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
 <style>
 :root {
   color-scheme: light;
@@ -85,7 +86,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
 </head>
 <body>
 <main>
-  <h1>EMS HeatPilot</h1>
+  <h1 style="display:flex;align-items:center;gap:10px"><img src="icon.svg" alt="" width="36" height="36"> EMS HeatPilot</h1>
   <nav class="tabs"><button id="tab-overview" class="active" onclick="showTab('overview')">Übersicht</button><button id="tab-settings" onclick="showTab('settings')">Einstellungen</button><button id="tab-diag" onclick="showTab('diag')">Diagnose</button></nav>
   <div id="setup-banner" class="banner" hidden>Noch nicht eingerichtet – bitte einmal die <a href="#" onclick="showTab('settings');return false">Einstellungen</a> prüfen und speichern. Vorschläge aus der automatischen Erkennung sind schon eingetragen.</div>
   <section id="view-settings" hidden></section>
