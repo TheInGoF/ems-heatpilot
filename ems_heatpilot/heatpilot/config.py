@@ -1,7 +1,8 @@
-"""Einstellungen: Vorgaben ← HA-Add-on-Optionen (options.json) ← Weboberfläche (settings.json).
+"""Einstellungen: Vorgaben ← Weboberfläche (``/data/settings.json``).
 
-Die Weboberfläche ist der normale Weg zum Einrichten. Was dort gespeichert wird,
-liegt in ``/data/settings.json`` und hat Vorrang vor den YAML-Optionen in HA.
+Eingerichtet wird ausschließlich über die HeatPilot-Seite (Reiter Einstellungen);
+das Add-on hat keine YAML-Optionen. Eine ``options.json`` älterer Versionen wird
+noch gelesen, damit dort gesetzte Werte bei einem Update nicht verloren gehen.
 """
 
 from __future__ import annotations

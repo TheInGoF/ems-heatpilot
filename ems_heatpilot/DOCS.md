@@ -7,7 +7,8 @@ Tado und Anwesenheit.
 ## Einrichten
 
 Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
-Reiter **Einstellungen**. Dort ist alles einstellbar – ohne YAML:
+Reiter **Einstellungen**. Eingerichtet wird ausschließlich dort – das Add-on hat
+keine YAML-Optionen:
 
 - **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Token)
 - **Messwerte:** Außenfühler (einer oder mehrere, Minimum zählt), Gaszähler,
@@ -22,8 +23,7 @@ Reiter **Einstellungen**. Dort ist alles einstellbar – ohne YAML:
 Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
 („Vorschläge übernehmen“ setzt sie erneut). **Speichern** prüft alle Eingaben,
 erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
-`/data/settings.json` und haben Vorrang vor den YAML-Optionen des Add-ons, die
-als Rückfall bleiben.
+`/data/settings.json` und bleiben bei Updates erhalten.
 
 ## Diagnose und Fehlersuche
 
@@ -45,7 +45,7 @@ Reiter **Diagnose** auf der HeatPilot-Seite:
   Personen noch Zuhause – nur Entfernungen) und ohne Zugangsdaten. Diese Datei
   kann zur Fehlersuche weitergegeben werden.
 
-## Was das Add-on in Version 0.9 macht
+## Was das Add-on in Version 0.10 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -99,35 +99,13 @@ Reiter **Diagnose** auf der HeatPilot-Seite:
 Hinweis: Diese Sensoren werden vom Add-on gesetzt und sind nach einem
 Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 
-## Optionen
+## Räume
 
-| Option | Bedeutung |
-|---|---|
-| `outdoor_sensors` | ein oder mehrere Außenfühler, es zählt das Minimum. Leer = EMS-ESP-Außenfühler |
-| `rooms` | Räume einzeln festlegen (siehe unten). Leer = alle Tado-Räume automatisch |
-| `gas_sensor` | Gaszähler-Entität (m³ oder kWh). Leer = automatisch suchen, notfalls Energiezähler von EMS-ESP |
-| `weather_entity` | Wetter-Entität für die Vorhersage. Leer = automatisch |
-| `emsesp_host` | IP/Name von EMS-ESP, z. B. `192.168.1.50`: alle Werte direkt lesen. Leer = nur über HA |
-| `gas_calorific_value`, `gas_z_number` | Brennwert und Zustandszahl laut Gasrechnung: kWh = m³ × Brennwert × Zustandszahl |
-| `gas_price_eur_per_kwh`, `gas_base_fee_eur_per_year` | Arbeitspreis und Grundpreis für die Euro-Angaben |
-| `design_outdoor_temp` | Auslegungs-Außentemperatur (Hamburg: −12 °C) |
-| `max_flow_temp` | maximale Vorlauftemperatur |
-| `away_temp`, `night_temp`, `night_start`, `night_end` | Strategie für die Ersparnis-Schätzung |
-| `backfill_days`, `statistics_backfill_days` | wie viel Historie beim ersten Start übernommen wird |
-| `overrides` | Zuordnung erzwingen, z. B. `flow_temp=sensor.boiler_curflowtemp` |
-
-## Räume konfigurieren
-
-```yaml
-rooms:
-  - name: Wohnzimmer
-    climate: climate.wohnzimmer          # Tado-Thermostat (Soll + Ist)
-    heating_power: sensor.wohnzimmer_heating   # optional: Ventil/Heizleistung %
-    temperature: sensor.wohnzimmer_temperature # optional: für die Langzeitstatistik
-    humidity: sensor.wohnzimmer_humidity       # optional
-  - name: Bad
-    climate: climate.bad
-```
+Im Reiter Einstellungen → **Räume** stehen alle Thermostate (climate-Entitäten)
+als Tabelle. Häkchen = Raum wird gelernt. Je Raum optional: eigener Name,
+Ventil-/Heizleistungs-Sensor (%), Temperatursensor (für die Langzeitstatistik)
+und Feuchtesensor. Ohne Angaben schlägt die automatische Erkennung die
+Tado-Räume samt Sensoren vor.
 
 ## Wärmebedarf aus dem Tado-Soll
 
@@ -166,12 +144,7 @@ Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 ## Fußbodenheizung ohne Stellventil
 
 Für Räume mit Fußbodenheizung, deren Kreis nicht geregelt wird (z. B. festes
-RTL-Ventil), die climate-Entität unter `floor_heating_rooms` eintragen:
-
-```yaml
-floor_heating_rooms:
-  - climate.badezimmer
-```
+RTL-Ventil), in Einstellungen → Räume das Häkchen **„Fußboden“** setzen.
 
 Das Raummodell bekommt dann einen zweiten Wärmeeingang: Der Fußboden heizt
 immer, wenn warmes Heizwasser fließt – unabhängig von Tado – und wirkt über den
@@ -181,13 +154,10 @@ und das Auskühlen des Raums falsch einschätzen.
 
 ## Urlaub
 
-```yaml
-vacations:
-  - 2026-12-20 - 2027-01-03            # nur Datum: Rückkehr zur vacation_arrival_time
-  - 2027-02-01 08:00 - 2027-02-05 17:30  # mit Uhrzeit: genau dann
-vacation_arrival_time: "18:00"
-vacation_entity: input_boolean.urlaub  # optional: an = Urlaub
-```
+In Einstellungen → **Urlaub** Zeiträume mit „+ Urlaub“ anlegen: Beginn und Ende
+als Datum, Uhrzeiten optional. Ohne Uhrzeit beim Ende gilt die
+**Standard-Rückkehrzeit** (Vorgabe 18:00). Optional ein **Urlaubs-Schalter**
+(z. B. `input_boolean.urlaub`, an = Urlaub).
 
 **Rückkehr – das Live-Signal schlägt den Plan:**
 
@@ -202,7 +172,7 @@ vacation_entity: input_boolean.urlaub  # optional: an = Urlaub
    schon – dann gilt wieder der Plan. Zickzack und Ausflüge am Urlaubsort lösen
    nichts aus.
 2. **Geplantes Ende mit Uhrzeit:** genau diese Zeit.
-3. **Nur Datum:** dieser Tag zur `vacation_arrival_time`; an dem Tag verfeinert GPS.
+3. **Nur Datum:** dieser Tag zur Standard-Rückkehrzeit; an dem Tag verfeinert GPS.
 
 **Ende des Urlaubsmodus:** sobald jemand 10 Minuten zu Hause ist – auch vor dem
 geplanten Ende. Ist nach dem geplanten Ende noch niemand da, bleibt der
@@ -246,12 +216,12 @@ Gelernt wird aus Speichertemperatur, Ladestatus und Brennerleistung:
 - **Nachladegeschwindigkeit** in K/h
 
 Strategie (läuft im Schatten mit, setzt nichts): Niemand zu Hause und keine
-Ankunft absehbar → `dhw_min_temp`. Zapfung in Kürze erwartet → `dhw_comfort_temp`
+Ankunft absehbar → Minimum. Zapfung in Kürze erwartet → Komfort
 (bei viel Verbrauch so hoch, dass der Speicher danach nicht unter das
 Minimum fällt). Sonst → Minimum. Nachgeladen wird rechtzeitig, weil die
 Ladegeschwindigkeit bekannt ist. Die Ersparnis ist der eingesparte
 Bereitschaftsverlust bei denselben Zapfungen; Zapfungen, bei denen der
-Speicher unter `dhw_comfort_temp` gewesen wäre, werden als „zu kalt“ gezählt.
+Speicher unter der Komforttemperatur gewesen wäre, werden als „zu kalt“ gezählt.
 Die wöchentliche Desinfektion des Reglers bleibt unberührt.
 
 ## Entitätsnamen
