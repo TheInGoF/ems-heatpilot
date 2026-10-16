@@ -9,7 +9,7 @@ from aiohttp import web
 
 from .config import Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
-from . import diagnostics
+from . import certificate, diagnostics
 from .emsesp import EmsEsp
 
 STATIC = Path(__file__).parent / "static"
@@ -123,6 +123,20 @@ def make_app(app) -> web.Application:
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
 
+    async def cert_json(_req):
+        if app.eng is None:
+            return web.json_response({"starting": True})
+        return web.json_response(certificate.collect(app.eng))
+
+    async def cert_pdf(_req):
+        if app.eng is None:
+            return web.Response(status=503, text="Add-on startet noch")
+        from datetime import datetime
+
+        name = f"heatpilot-zertifikat-{datetime.now():%Y%m%d}.pdf"
+        return web.Response(body=certificate.pdf(app.eng), content_type="application/pdf",
+                            headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
     async def reload_history(_req):
         asyncio.create_task(app.reload_history())
         return web.json_response({"ok": True})
@@ -138,4 +152,6 @@ def make_app(app) -> web.Application:
     web_app.router.add_post("/api/reload_history", reload_history)
     web_app.router.add_get("/api/diagnostics", diag)
     web_app.router.add_get("/api/diagnostics/bundle", diag_bundle)
+    web_app.router.add_get("/api/certificate", cert_json)
+    web_app.router.add_get("/api/certificate.pdf", cert_pdf)
     return web_app
