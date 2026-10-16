@@ -255,11 +255,3 @@ Die wöchentliche Desinfektion des Reglers bleibt unberührt.
 EMS-ESP-Entitäten werden in beiden Schreibweisen erkannt: Kurzname
 (`binary_sensor.boiler_burngas`) und langer Name (`binary_sensor.boiler_gas`),
 auch mit Präfix (`number.ems_esp_thermostat_hc1_remotetemp`).
-
-## Privates GitHub-Repo als Add-on-Quelle
-
-Home Assistant kann private Repos nur mit Zugangsdaten in der URL laden:
-`https://<benutzer>:<token>@github.com/TheInGoF/ems-heatpilot`
-(Token mit nur Lese-Rechten auf dieses Repo). Alternativ das Verzeichnis
-`ems_heatpilot` per Samba/SSH nach `/addons/` kopieren → erscheint als
-„Lokales Add-on“.

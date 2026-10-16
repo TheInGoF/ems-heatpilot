@@ -58,7 +58,7 @@ und Anwesenheit über die Home-Assistant-App.
 ## Installation
 
 1. Home Assistant → Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories
-2. URL dieses Repos eintragen (privates Repo: siehe [DOCS.md](ems_heatpilot/DOCS.md))
+2. `https://github.com/TheInGoF/ems-heatpilot` eintragen
 3. „EMS HeatPilot“ installieren und starten
 4. In der Seitenleiste „HeatPilot“ öffnen – der Reiter **Einstellungen** führt
    durch die Einrichtung (Vorschläge sind vorausgefüllt, kein YAML nötig)
