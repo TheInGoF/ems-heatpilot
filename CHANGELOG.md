@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.21.0
+- **Die Woche im Blick** (Übersicht): Wärmekarte Montag bis Sonntag × Stunde für das ganze Haus, nicht nur fürs Warmwasser – umschaltbar: Gas gesamt, Gas fürs Heizen, Gas für Warmwasser, **Gas wetterbereinigt** (W je K innen–außen, damit eine kalte Woche nicht wie ein „teurer Wochentag“ aussieht), **Abweichung vom Hausmodell** (zeigt, welche wiederkehrenden Zeiten das Modell noch nicht erklärt), Brennerstarts, jemand zu Hause, Tado-Soll und Ventile (auch je Raum). Summe bzw. Mittel je Tag, Klartext zu Spitzen, stärkstem Wochentag und Wochenende; Zeitraum 4 Wochen bis 1 Jahr, Urlaub zählt nicht
+- **Anwesenheit im Live-Tab:** je Person die Entfernung im Verlauf (12 h bis 7 Tage, zu Hause hinterlegt), wie HeatPilot die Lage gerade deutet (zu Hause · Heimfahrt erkannt · kommt näher · entfernt sich · steht), erwartete Ankunft mit Quelle, die gelernte Gewohnheit als Wochenraster und eine **Heimkehr-Kontrolle**: was 60, 30 und 15 min vor jeder tatsächlichen Ankunft erwartet wurde und wie weit das daneben lag. Nur Entfernungen, keine Koordinaten
+- Übersicht „Anwesenheit“: Status zeigt die Deutung (z. B. „kommt näher (35 km/h)“) statt nur „unterwegs“
+
 ## 0.20.2
 - Warmwasser „Wann gezapft wird“: Umschalter **Typischer Tag / Woche**. Die Woche zeigt als Wärmekarte die Vorhersage je Wochentag und Stunde, so wie HeatPilot sie zum Planen nutzt, und wie stark der Wochentag schon zählt (wächst mit jeder gelernten Woche, höchstens 70 %)
 

@@ -14,6 +14,7 @@
   --series-1: #2a78d6; --series-2: #eb6834;
   --series-3: #1a9641; --series-4: #8e5bd0; --series-5: #8a8984;
   --band-burner: rgba(235, 104, 52, .13); --band-dhw: rgba(42, 120, 214, .13);
+  --band-home: rgba(26, 150, 65, .14);
   --good: #008300; --warn: #c98500;
 }
 @media (prefers-color-scheme: dark) {
@@ -103,6 +104,8 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   #cert-print .sheet { max-width: none; border-width: 2px; }
 }
 .grid2:not(:has(> .card:not([hidden]))) { display: none; }
+select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); max-width: 100%; }
+#live-persons h3 { font-size: 13px; margin: 10px 0 4px; }
 </style>
 </head>
 <body>
@@ -125,6 +128,14 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     <div class="grid2">
       <div class="card"><h2>Außen & innen</h2><p>Außentemperatur (Minimum der Fühler) und Mittel aller Räume.</p><div class="legend" id="lg-house"></div><div id="ch-house"></div></div>
       <div class="card"><h2>Warmwasser</h2><p>Speichertemperatur und Soll. Blau hinterlegt: Speicher lädt.</p><div class="legend" id="lg-dhw"></div><div id="ch-dhw"></div></div>
+    </div>
+    <div id="pres-box" hidden>
+      <div class="row" style="justify-content:space-between;margin:16px 0 8px"><h2 style="margin:0">Anwesenheit</h2>
+        <div class="row"><span class="muted">Zeitraum</span>
+          <select id="pres-hours" onchange="loadPresence()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
+            <option value="12">12 h</option><option value="24" selected>24 h</option><option value="72">3 Tage</option><option value="168">7 Tage</option></select></div></div>
+      <p class="muted" id="pres-text" style="margin:0 0 8px"></p>
+      <div class="grid2" id="live-persons"></div>
     </div>
     <h2 style="margin:16px 0 8px">Räume</h2>
     <p class="muted" style="margin:0 0 8px">Linie: Raumtemperatur · gestrichelt: Tado-Soll · Fläche: Ventil · grün gepunktet: Luftfeuchte (rechte Skala, %)</p>
@@ -217,6 +228,17 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
 
   <div class="card" id="flowstudy" style="margin-bottom:12px"></div>
 
+  <div class="card" id="week" style="margin-bottom:12px" hidden>
+    <div class="row" style="justify-content:space-between"><h2>Die Woche im Blick</h2>
+      <div class="row">
+        <select id="week-metric" onchange="drawWeek()" class="sel"></select>
+        <select id="week-room" onchange="loadWeek()" class="sel" hidden></select>
+        <select id="week-days" onchange="loadWeek()" class="sel"><option value="28">4 Wochen</option><option value="56" selected>8 Wochen</option><option value="91">13 Wochen</option><option value="365">1 Jahr</option></select></div></div>
+    <p id="week-text">Montag bis Sonntag, je Stunde gemittelt – wann im Haus was passiert. Urlaub zählt nicht, Zählersprünge sind herausgerechnet.</p>
+    <div id="chart-week"></div>
+    <ul id="week-findings" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text-secondary)"></ul>
+  </div>
+
   <div class="card" style="margin-bottom:12px">
     <h2>Geschätzte Ersparnis pro Tag</h2>
     <p id="savings-text">Was Absenken bei Abwesenheit und nachts an diesem Tag gespart hätte (kWh Gas), berechnet mit dem gelernten Modell.</p>
@@ -252,6 +274,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     <div class="card">
       <h2>Anwesenheit</h2>
       <div class="scroll"><table id="persons"></table></div>
+      <p class="muted" style="margin-top:6px">Entfernung im Verlauf, gelernte Gewohnheit und wie gut die Ankunft vorhergesagt wurde: <a href="#" onclick="showTab('live');return false">Live → Anwesenheit</a>.</p>
     </div>
     <div class="card">
       <h2>Vorheizplan (nur Empfehlung)</h2>
@@ -536,6 +559,7 @@ async function loadLive() {
     { name: "Raum", values: r.temp, color: C.flow }, { name: "Soll", values: r.target, color: C.sel, dash: "5 4", width: 1.5, step: true }],
     { unit: "°C", height: 150, right: { name: "Ventil", values: r.valve, color: C.ret },
       rightLines: (r.humidity || []).some((v) => v !== null) ? [{ name: "Luftfeuchte", values: r.humidity, color: C.boiler }] : [], label: r.name }));
+  loadPresence().catch(() => {});
   if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(() => {}), 30000);
 }
 
@@ -621,6 +645,7 @@ async function load() {
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul>`;
   loadCert();
   renderFlowStudy(s.flow_study);
+  loadWeek().catch(() => {});
   const w = s.dhw;
   const kpk = w.kwh_per_k;
   $("dhw-tiles").innerHTML = [
@@ -654,9 +679,9 @@ async function load() {
   $("rooms").innerHTML = "<tr><th>Raum</th><th>Ist</th><th>Soll</th><th>Ventil</th><th>Zeitkonstante</th><th>+2 K bei max. Vorlauf</th><th>Vorlauf für 21 °C</th><th>Sonne</th><th>Fehler</th><th>Lernschritte</th></tr>" +
     s.rooms.map((r) => `<tr><td>${r.room}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${sunText(r.solar_gain, r.updates)}</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
 
-  const src = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause", urlaub: "Urlaubsende", urlaub_datum: "Urlaubsende (nur Datum – GPS verfeinert)" };
+  const src = SRC;
   $("persons").innerHTML = "<tr><th>Person</th><th>Status</th><th>Entfernung</th><th>Erwartet</th><th>Quelle</th></tr>" +
-    s.persons.map((p) => `<tr><td>${p.person.replace("person.", "")}</td><td>${p.home ? "zu Hause" : "unterwegs"}</td><td>${fmt(p.dist_km)} km</td><td>${p.home ? "–" : timeOf(p.eta)}</td><td>${src[p.source] || "–"}${p.confidence ? ` (${fmt(p.confidence * 100, 0)} %)` : ""}</td></tr>`).join("");
+    s.persons.map((p) => `<tr><td>${p.person.replace("person.", "")}</td><td>${p.home ? "zu Hause" : esc(p.status || "unterwegs")}</td><td>${fmt(p.dist_km)} km</td><td>${p.home ? "–" : timeOf(p.eta)}</td><td>${src[p.source] || "–"}${p.confidence ? ` (${fmt(p.confidence * 100, 0)} %)` : ""}</td></tr>`).join("");
 
   const plan = s.plan;
   $("plan").closest(".card").hidden = !s.arrival;
@@ -709,25 +734,133 @@ function drawDhwProfile() {
     note.textContent = "";
     return barChart(box, w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
   }
-  const days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], wk = w.profile_week;
-  const max = Math.max(0.1, ...wk.flat());
-  box.innerHTML = ""; showCard(box);
-  const W = Math.max(box.clientWidth || 520, 280), cellW = (W - 34) / 24, cellH = 20, H = 7 * cellH + 22;
-  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": "Zapfungen je Wochentag und Stunde" }, box);
-  wk.forEach((row, d) => {
-    el("text", { x: 0, y: d * cellH + 14 }, svg).textContent = days[d];
-    row.forEach((v, h) => {
-      const r = el("rect", { x: 30 + h * cellW, y: d * cellH, width: cellW - 1.5, height: cellH - 2, rx: 2,
-        fill: "var(--series-1)", "fill-opacity": v <= 0.02 ? 0.05 : 0.15 + 0.85 * v / max }, svg);
-      r.addEventListener("mousemove", (e) => showTip(e, `${days[d]} ${String(h).padStart(2, "0")}:00<br><b>${fmt(v, 1)} K</b> erwartet`));
-      r.addEventListener("mouseleave", hideTip);
-    });
-  });
-  [0, 6, 12, 18, 23].forEach((h) => { el("text", { x: 30 + h * cellW + cellW / 2, y: H - 4, "text-anchor": "middle" }, svg).textContent = String(h).padStart(2, "0"); });
+  heatmap(box, w.profile_week, { unit: "K", digits: 1, label: "Zapfungen je Wochentag und Stunde", tip: (v) => `<b>${fmt(v, 1)} K</b> erwartet` });
   const avg = w.week_weight.reduce((a, b) => a + b, 0) / 7;
   note.textContent = avg < 0.05
     ? "Noch gilt für jeden Tag das Tagesprofil – der Wochentag zählt mit jeder gelernten Woche mehr (nach etwa 8 Wochen zu 70 %)."
     : `Der Wochentag zählt bereits zu ${fmt(avg * 100, 0)} % (wächst mit jeder Woche, höchstens 70 %), der Rest kommt aus dem Tagesprofil.`;
+}
+// Wochenraster 7 × 24 – für Gas, Starts, Anwesenheit, Zapfungen, Gewohnheiten
+const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+function heatmap(box, grid, o = {}) {
+  box.innerHTML = ""; showCard(box);
+  const vals = grid.flat().filter((v) => v !== null && v !== undefined);
+  if (!vals.length) return empty(box, o.empty || "Noch keine Werte.");
+  const totW = o.totals ? 58 : 0;
+  const W = Math.max(box.clientWidth || 520, 280), cellW = (W - 30 - totW) / 24, cellH = 20, H = 7 * cellH + 22;
+  const lo = o.min ?? Math.min(0, ...vals), hi = Math.max(o.max ?? Math.max(...vals), lo + 1e-6);
+  const amax = Math.max(...vals.map(Math.abs), 1e-6);
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": o.label || "Wochenraster" }, box);
+  grid.forEach((row, d) => {
+    el("text", { x: 0, y: d * cellH + 14 }, svg).textContent = WEEKDAYS[d];
+    row.forEach((v, h) => {
+      const none = v === null || v === undefined;
+      let fill = o.color || "var(--series-1)", op;
+      if (none) { fill = "var(--grid)"; op = 0.6; }
+      else if (o.diverging) { fill = v >= 0 ? "var(--series-2)" : "var(--series-1)"; op = 0.08 + 0.92 * Math.abs(v) / amax; }
+      else op = (v - lo) / (hi - lo) <= 0.02 ? 0.05 : 0.12 + 0.88 * (v - lo) / (hi - lo);
+      const isNow = o.now && o.now[0] === d && o.now[1] === h;
+      const r = el("rect", { x: 30 + h * cellW, y: d * cellH, width: Math.max(cellW - 1.5, 1), height: cellH - 2, rx: 2, fill, "fill-opacity": op,
+        stroke: isNow ? "var(--text-primary)" : "none", "stroke-width": isNow ? 1.5 : 0 }, svg);
+      r.addEventListener("mousemove", (e) => showTip(e, `${WEEKDAYS[d]} ${String(h).padStart(2, "0")}:00${isNow ? " (jetzt)" : ""}<br>` +
+        (none ? "zu wenig Daten" : o.tip ? o.tip(v, d, h) : `<b>${fmt(v, o.digits ?? 1)}</b> ${o.unit || ""}`)));
+      r.addEventListener("mouseleave", hideTip);
+    });
+    if (o.totals && o.totals[d] !== null && o.totals[d] !== undefined)
+      el("text", { x: W - 2, y: d * cellH + 14, "text-anchor": "end" }, svg).textContent = fmt(o.totals[d], o.totalDigits ?? 0) + (o.totalUnit ? " " + o.totalUnit : "");
+  });
+  [0, 6, 12, 18, 23].forEach((h) => { el("text", { x: 30 + h * cellW + cellW / 2, y: H - 4, "text-anchor": "middle" }, svg).textContent = String(h).padStart(2, "0"); });
+  if (o.totals && o.totalsLabel) el("text", { x: W - 2, y: H - 4, "text-anchor": "end" }, svg).textContent = o.totalsLabel;
+}
+const nowCell = () => { const d = new Date(); return [(d.getDay() + 6) % 7, d.getHours()]; };
+
+const WEEK_INFO = {
+  gas: "Mittlerer Gasverbrauch (kW = kWh je Stunde), Heizen und Warmwasser zusammen. Rechts: Summe je Tag.",
+  heat: "Nur Heizen: Gas außerhalb der Warmwasser-Ladezeiten. Rechts: Summe je Tag.",
+  dhw: "Nur Warmwasser: Gas, während der Speicher lädt. Rechts: Summe je Tag.",
+  gas_k: "Heizgas je Kelvin Unterschied innen–außen (W/K, nur Stunden bis 15 °C außen). Das rechnet das Wetter heraus: Ist ein Tag hier höher, braucht das Haus an diesem Tag wirklich mehr – nicht nur, weil die Woche kälter war.",
+  model: "Gemessen minus das, was das Hausmodell erwartet (kW). Das Modell kennt keine Wochentage – wiederkehrende Flecken zeigen, was es noch nicht erklärt. Blau: weniger als erwartet (Kochen, Sonne, viele Leute im Haus), orange: mehr (Lüften, Aufheizen nach der Absenkung).",
+  starts: "Brennerstarts je Stunde im Mittel – wann der Kessel am meisten taktet. Rechts: Starts je Tag.",
+  home: "Anteil der Zeit, in der mindestens eine gewählte Person zu Hause war (gemessen). Die gelernte Gewohnheit je Person steht im Live-Tab unter „Anwesenheit“.",
+  target: "Median-Soll aller Räume aus Tado („aus“ = 5 °C) – so sieht HeatPilot deinen Zeitplan.",
+  valve: "Mittlere Ventilöffnung – wann die Räume Wärme wollen. Ein Raum lässt sich einzeln wählen.",
+};
+let WEEK = null, WEEK_METRIC = "gas";
+async function loadWeek() {
+  const room = $("week-room").value || "";
+  const j = await (await fetch(`api/week?days=${$("week-days").value}` + (room ? `&room=${encodeURIComponent(room)}` : ""))).json();
+  if (j.starting) return;
+  WEEK = j;
+  const keys = Object.keys(j.metrics);
+  $("week").hidden = !keys.length;
+  if (!keys.length) return;
+  if (!keys.includes(WEEK_METRIC)) WEEK_METRIC = keys[0];
+  $("week-metric").innerHTML = keys.map((k) => `<option value="${k}"${k === WEEK_METRIC ? " selected" : ""}>${esc(j.metrics[k].label)}</option>`).join("");
+  $("week-room").innerHTML = `<option value="">alle Räume</option>` + j.rooms.map((r) => `<option value="${esc(r.climate)}"${r.climate === j.room ? " selected" : ""}>${esc(r.name)}</option>`).join("");
+  drawWeek();
+}
+function drawWeek() {
+  if (!WEEK) return;
+  WEEK_METRIC = $("week-metric").value || WEEK_METRIC;
+  const m = WEEK.metrics[WEEK_METRIC]; if (!m) return;
+  $("week-room").hidden = WEEK_METRIC !== "valve";
+  const sum = ["gas", "heat", "dhw", "starts"].includes(WEEK_METRIC);
+  const digits = { gas: 2, heat: 2, dhw: 2, gas_k: 0, model: 2, starts: 1, home: 0, target: 1, valve: 0 }[WEEK_METRIC];
+  const tot = sum ? (WEEK_METRIC === "starts" ? "" : "kWh") : WEEK_METRIC === "model" ? "" : m.unit;
+  $("week-text").textContent = `${WEEK_INFO[WEEK_METRIC] || ""} Zeitraum: ${WEEK.days} Tage, ${WEEK.hours} Stunden.` +
+    (WEEK_METRIC === "model" && !WEEK.house_ok ? " Das Hausmodell ist noch nicht plausibel – die Abweichung ist vorläufig." : "");
+  heatmap($("chart-week"), m.grid, {
+    unit: m.unit, digits, diverging: WEEK_METRIC === "model", now: nowCell(), label: m.label,
+    min: WEEK_METRIC === "target" ? Math.min(...m.grid.flat().filter((v) => v !== null)) : undefined,
+    totals: WEEK_METRIC === "model" ? null : m.per_day, totalDigits: sum ? (WEEK_METRIC === "starts" ? 0 : 1) : digits, totalUnit: tot,
+    totalsLabel: sum ? "je Tag" : "Ø",
+    tip: (v, d, h) => `<b>${WEEK_METRIC === "model" && v > 0 ? "+" : ""}${fmt(v, digits)}</b> ${m.unit} · ${m.n[d][h]} Stunden`,
+  });
+  $("week-findings").innerHTML = (m.findings || []).map((f) => `<li>${esc(f)}</li>`).join("");
+}
+
+// Anwesenheit: wie HeatPilot Entfernung und Heimkehr deutet – zum Nachprüfen
+const SRC = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause", urlaub: "Urlaubsende", urlaub_datum: "Urlaubsende (nur Datum – GPS verfeinert)" };
+const STATE_COL = { zuhause: "var(--good)", heimfahrt: "var(--series-2)", naehert: "var(--warn)", entfernt: "var(--series-1)", steht: "var(--text-muted)", unterwegs: "var(--text-muted)", unbekannt: "var(--text-muted)" };
+const STATE_LABEL = { zuhause: "zu Hause", heimfahrt: "Heimfahrt", naehert: "kommt näher", entfernt: "entfernt sich", steht: "steht", unterwegs: "unterwegs", unbekannt: "unbekannt" };
+async function loadPresence() {
+  const j = await (await fetch("api/presence?hours=" + $("pres-hours").value)).json();
+  if (j.starting) return;
+  $("pres-box").hidden = !j.persons.length;
+  if (!j.persons.length) return;
+  const a = j.arrival;
+  $("pres-text").innerHTML = (j.vacation ? "Urlaub aktiv. " : "") + (j.anyone_home
+    ? "Jemand ist zu Hause – HeatPilot plant gerade keine Ankunft."
+    : a ? `HeatPilot erwartet die nächste Ankunft <b>${timeOf(a.eta)}</b> (${esc(String(a.person || "").replace("person.", ""))}, ${esc(SRC[a.source] || a.source)}${a.confidence ? `, ${fmt(a.confidence * 100, 0)} %` : ""}) – danach richtet sich der Vorheizplan.`
+    : "Niemand zu Hause und keine Ankunft absehbar – HeatPilot rechnet mit Abwesenheit.") +
+    " Entfernungen werden aus Home Assistant berechnet; Koordinaten speichert HeatPilot nicht.";
+  const err = (c) => c ? `${c.error_min > 0 ? "+" : c.error_min < 0 ? "−" : "±"}${Math.abs(c.error_min)}′ <span class="muted">${c.source === "gps" ? "GPS" : c.source === "gewohnheit" ? "Gew." : esc(c.source || "")}</span>` : "–";
+  const dt = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";
+  const dur = (a) => { if (!a.left) return "–"; const m = (new Date(a.ts) - new Date(a.left)) / 60000; return m < 120 ? `${fmt(m, 0)} min` : `${fmt(m / 60, 1)} h`; };
+  $("live-persons").innerHTML = j.persons.map((p, i) => {
+    const st = p.status || {}, q = p.quality || {};
+    const qual = [60, 30, 15].filter((b) => q[b]).map((b) => `${b} min vorher Ø ${q[b].mean_abs_min} min daneben (${fmt(q[b].within_15 * 100, 0)} % innerhalb ±15 min, ${q[b].n}×)`).join(" · ");
+    const rows = (p.arrivals || []).slice(0, 6).map((a) => { const c = Object.fromEntries(a.checks.map((x) => [x.before_min, x]));
+      return `<tr><td>${dt(a.ts)}</td><td>${dur(a)}</td><td>${a.max_km === null ? "–" : fmt(a.max_km) + " km"}</td><td style="white-space:nowrap">${err(c[60])}</td><td style="white-space:nowrap">${err(c[30])}</td><td style="white-space:nowrap">${err(c[15])}</td></tr>`; }).join("");
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(p.name)}</h2>` +
+      `<span class="badge" style="border-color:${STATE_COL[st.state]};color:${STATE_COL[st.state]}">${STATE_LABEL[st.state] || "–"}</span></div>` +
+      `<p style="margin:2px 0 6px">${esc(st.text || "")}${p.dist_km !== null && !p.home ? ` · <b>${fmt(p.dist_km)} km</b> entfernt` : ""}` +
+      `${!p.home && p.eta ? ` · erwartet <b>${timeOf(p.eta)}</b> (${esc(SRC[p.source] || p.source)}${p.confidence ? `, ${fmt(p.confidence * 100, 0)} %` : ""})` : ""}</p>` +
+      `<div class="legend"><span><i style="background:var(--series-1)"></i>Entfernung (km)</span><span><i style="background:var(--band-home)"></i>zu Hause</span></div>` +
+      `<div id="ch-pers-${i}"></div>` +
+      `<h3>Gewohnheit (gelernt)</h3><p class="muted" style="margin:0 0 4px">Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde, wie HeatPilot sie ohne GPS-Annäherung nutzt (ab 50 % gilt „kommt heim“). Rahmen = jetzt.</p><div id="hm-pers-${i}"></div>` +
+      `<h3>Heimkehr-Kontrolle</h3><p class="muted" style="margin:0 0 4px">Was HeatPilot 60, 30 und 15 min vor der tatsächlichen Ankunft erwartet hatte: + zu spät erwartet, − zu früh. Gelerntes Heimfahrt-Tempo ${fmt(p.approach_speed_kmh, 0)} km/h aus ${p.arrivals_learned} Fahrten.${qual ? "<br>" + qual : ""}</p>` +
+      (rows ? `<div class="scroll"><table><tr><th>Angekommen</th><th>weg</th><th>max.</th><th>60 min</th><th>30 min</th><th>15 min</th></tr>${rows}</table></div>` : `<p class="muted">Noch keine Heimkehr seit dem Update aufgezeichnet.</p>`) + `</div>`;
+  }).join("");
+  j.persons.forEach((p, i) => {
+    const s = p.series, box = $("ch-pers-" + i);
+    if (!s.dist_km.some((v) => v !== null))
+      empty(box, s.ts.length ? "Keine Entfernung – diese Person liefert kein GPS (nur zu Hause / unterwegs). Heimkehr dann nur nach Gewohnheit." : "Noch keine Werte in diesem Zeitraum.");
+    else timeChart(box, s.ts, [{ name: "Entfernung", values: s.dist_km, color: "var(--series-1)", unit: "km" }],
+      { yMin: 0, height: 150, bands: [{ name: "zu Hause", values: s.home, color: "var(--band-home)" }], label: "Entfernung " + p.name });
+    heatmap($("hm-pers-" + i), p.habit, { color: "var(--series-3)", min: 0, max: 1, now: nowCell(), label: "Gewohnheit " + p.name,
+      tip: (v) => `<b>${fmt(v * 100, 0)} %</b> zu Hause`, totals: p.habit.map((r) => r.reduce((x, y) => x + y, 0)), totalUnit: "h", totalsLabel: "h/Tag" });
+  });
 }
 function roomCheckText(sv) {
   if (!sv.rooms_checked) return "noch kein Raummodell plausibel – nur das ganze Haus geprüft";
@@ -845,6 +978,7 @@ function showTab(name) {
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
   if (name === "live") loadLive().catch((e) => { $("live-status").textContent = "Fehler: " + e; });
+  if (name === "overview") { drawWeek(); drawDhwProfile(); }  // Raster erst bei sichtbarer Breite richtig
   if (name === "diag") { exportSize(); loadSensors(); }
   if (name === "diag") loadDiag().catch((e) => { $("diag-checks").textContent = "Fehler: " + e; });
 }

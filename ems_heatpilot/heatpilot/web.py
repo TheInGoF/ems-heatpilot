@@ -140,6 +140,19 @@ def make_app(app) -> web.Application:
         hours = min(max(float(req.query.get("hours", "12")), 0.5), 24)
         return web.json_response({"now": live.now(app.eng), **live.series(app.eng, hours)})
 
+    async def week_data(req):
+        if app.eng is None:
+            return web.json_response({"starting": True, "status": app.status})
+        days = min(max(int(req.query.get("days", "56")), 7), 365)
+        room = req.query.get("room") or None
+        return web.json_response(app.eng.week(days, room))
+
+    async def presence_data(req):
+        if app.eng is None:
+            return web.json_response({"starting": True, "status": app.status})
+        hours = min(max(float(req.query.get("hours", "24")), 1), 168)
+        return web.json_response(app.eng.presence(hours))
+
     async def cert_json(_req):
         if app.eng is None:
             return web.json_response({"starting": True})
@@ -207,6 +220,8 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/export/size", export_size)
     web_app.router.add_get("/api/sensors", sensors)
     web_app.router.add_get("/api/live", live_data)
+    web_app.router.add_get("/api/week", week_data)
+    web_app.router.add_get("/api/presence", presence_data)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
     return web_app

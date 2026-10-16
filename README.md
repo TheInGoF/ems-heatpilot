@@ -20,12 +20,13 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 > Home Assistant verbundene Thermostate (z. B. Zigbee, Z-Wave, Matter, Homematic)
 > dazukommen.
 
-## Was es heute kann (0.20, Beobachtungsmodus)
+## Was es heute kann (0.21, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume lernen:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil
 - **Warmwasser lernen:** Bereitschaftsverlust je Temperatur, Ladekosten, wann gezapft wird
-- **Anwesenheit lernen:** Gewohnheiten je Person und Ankunft per GPS-Annäherung, beliebig viele Personen
+- **Anwesenheit lernen:** Gewohnheiten je Person und Ankunft per GPS-Annäherung, beliebig viele Personen – mit Entfernungsverlauf und Kontrolle, wie gut die Ankunft vorhergesagt wurde
+- **Die Woche im Blick:** Gas, Starts, Anwesenheit, Tado-Soll und Ventile je Wochentag und Stunde – auch wetterbereinigt und als Abweichung vom Hausmodell
 - **Schwachstellen messen:** Brennerstarts und Laufzeit je Start, Wartezeit durch Taktsperre,
   Startverzögerung der Automationen, Brenner-Nachlauf ohne Wärmebedarf
 - **Ersparnis ehrlich schätzen:** nur bei gleichem Komfort – geprüft je Raum, mit realistischem Wiederaufheizen über die Heizkörper
@@ -56,7 +57,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.20** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.21** |
 | 2 | Kesselseite: Heizfreigabe ereignisgesteuert, Sammelbetrieb bei Abwesenheit statt vieler Kurzstarts, Nachlauf vermeiden | geplant |
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |
