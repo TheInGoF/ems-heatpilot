@@ -13,7 +13,12 @@ Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
 Reiter **Einstellungen**. Eingerichtet wird ausschließlich dort – das Add-on hat
 keine YAML-Optionen:
 
-- **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Token)
+- **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Passwort/Token).
+  Gelesen werden Kessel und Regler alle 30 s und alle weiteren Geräte, die EMS-ESP
+  kennt (Mischer, Solar, Sensoren …), alle 5 min. Fehlen Werte, die die
+  EMS-ESP-Oberfläche zeigt: In EMS-ESP unter „Customizations“ können Werte für
+  API/MQTT ausgeschlossen sein – die gibt EMS-ESP dann nirgends heraus. Manche Werte
+  meldet der Kessel erst nach dem ersten Brennerstart bzw. der ersten Warmwasserladung.
 - **Messwerte:** Außenfühler (einer oder mehrere, Minimum zählt), Gaszähler,
   Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
   Entitäten in Home Assistant
@@ -135,7 +140,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.14 macht
+## Was das Add-on in Version 0.15 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -226,6 +231,14 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
    der Ankunft. Wo das nicht reicht, verzichtet sie auf die Absenkung. Jede
    Stunde, die trotzdem zu kalt gewesen wäre, und jede zu kalte Zapfung wird
    angezeigt.
+   **Je Raum:** Bei einem großen Kessel ist nicht die Therme die Grenze, sondern
+   die Heizkörper. Deshalb kühlt und heizt jeder Raum mit plausiblem Modell nach
+   seinem eigenen Modell – aufheizen höchstens mit vollem Ventil und maximalem
+   Vorlauf, während Warmwasserladung gar nicht. Vorgeheizt wird so früh, wie der
+   langsamste Raum braucht; käme ein Raum gar nicht mehr hoch, wird dort nicht
+   abgesenkt. Die Übersicht zeigt unter „Leitplanken → Je Raum geprüft“, wie viele
+   Räume geprüft wurden und welcher Raum wie viele Stunden zu kalt gewesen wäre.
+   Fußbodenheizungen und Räume ohne plausibles Modell zählen nur übers ganze Haus.
 2. **Gezählt wird am Gaszähler, fürs ganze Haus** – Verschieben spart nichts.
 3. **Feste Untergrenzen:** Abwesenheits-/Nachttemperatur, Warmwasser-Minimum.
    „Nie heizen“ ist keine erlaubte Strategie.

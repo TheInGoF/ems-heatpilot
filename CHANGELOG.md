@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.15.0
+- Ersparnis-Schätzung prüft den Komfort **je Raum**: jeder Raum kühlt und heizt nach seinem Modell (höchstens volles Ventil und maximaler Vorlauf), vorgeheizt wird so früh, wie der langsamste Raum braucht; käme ein Raum nicht mehr hoch, wird nicht abgesenkt. Übersicht zeigt geprüfte Räume und zu kalte Stunden je Raum
+- EMS-ESP: neben Kessel und Regler werden alle weiteren Geräte gelesen, die EMS-ESP kennt (Mischer, Solar, Sensoren …); Test und Selbsttest zeigen, was ankommt und ob Nennleistung/kleinste Leistung fehlen
+
 ## 0.14.0
 - **Ausreißer werden nicht gelernt:**
   - Gaszähler: Sprünge/Nachträge (mehr Gas, als der Brenner in der Stunde verbrennen konnte, bzw. ein Vielfaches der Vorwoche) und verpasste Zählungen (Brenner lief, Zähler stand) werden nicht gelernt; Nachträge zählen weiter in Verbrauch und Kosten

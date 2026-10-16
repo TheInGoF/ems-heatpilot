@@ -459,7 +459,8 @@ async function load() {
     tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),
     tile("Brenner ohne Bedarf", fmt(c.overrun_min, 0), "min heute", `≈ ${fmt(c.overrun_kwh, 1)} kWh · alle Räume waren am Soll`),
     tile("Gaskosten", fmt(s.costs.eur, 0), s.costs.full_year ? "€ / Jahr" : `€ in ${fmt(s.costs.days, 0)} Tagen`, `${fmt(s.costs.kwh, 0)} kWh inkl. anteiligem Grundpreis` + (s.costs.full_year ? "" : " – noch kein volles Jahr")),
-    tile(sv.reliable ? "Ersparnis-Schätzung Heizen" : "Ersparnis Heizen (Modell lernt noch)", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`),
+    tile(sv.reliable ? "Ersparnis-Schätzung Heizen" : "Ersparnis Heizen (Modell lernt noch)", fmt(sv.saved_pct), "%", sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen` +
+      (sv.rooms_checked ? ` · Komfort je Raum geprüft (${sv.rooms_checked} Räume)` : " · Komfort nur fürs ganze Haus geprüft")),
     tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `Kessel-Soll ${fmt(s.flow_current_setpoint, 0)} °C` + (s.flow_calculated !== null ? ` · Regler ${fmt(s.flow_calculated, 0)} °C` : "")),
   ].join("");
 
@@ -476,7 +477,8 @@ async function load() {
   const status = (name, chk) => `<li><b>${name}:</b> ${chk.ok ? "plausibel – darf empfehlen" : "keine Empfehlung – " + chk.reasons.join("; ")}</li>`;
   $("guards").innerHTML = `<h2>Leitplanken</h2><p>Gespart wird nur bei gleichem Komfort und gemessen am Gaszähler für das ganze Haus. Feste Untergrenzen: Räume ${fmt(s.limits.away_temp)} °C bei Abwesenheit, ${fmt(s.limits.night_temp)} °C nachts, Warmwasser ${fmt(s.limits.dhw_min_temp)} °C. Unplausible oder zu junge Modelle geben keine Empfehlung.</p>` +
     `<ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary)">${status("Hausmodell", g.house)}${status("Warmwasser", g.dhw)}<li><b>Räume:</b> ${g.rooms_ok} von ${g.rooms_total} plausibel</li>` +
-    `<li><b>Komfort-Kontrolle:</b> Heizen ${sv.cold_hours} Stunden zu kalt · Warmwasser ${s.dhw.cold_draws}× zu kalt (Reserve aktuell +${fmt(s.dhw.comfort_margin)} K)</li>` +
+    `<li><b>Komfort-Kontrolle:</b> Heizen ${sv.cold_hours} Stunden zu kalt (Haus) · Warmwasser ${s.dhw.cold_draws}× zu kalt (Reserve aktuell +${fmt(s.dhw.comfort_margin)} K)</li>` +
+    `<li><b>Je Raum geprüft:</b> ${roomCheckText(sv)}</li>` +
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul>`;
   loadCert();
   const w = s.dhw;
@@ -524,6 +526,12 @@ async function load() {
 }
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null;
+function roomCheckText(sv) {
+  if (!sv.rooms_checked) return "noch kein Raummodell plausibel – nur das ganze Haus geprüft";
+  const cold = sv.room_cold.length ? "zu kalt wäre: " + sv.room_cold.map((r) => `${esc(r.name)} ${r.hours} h`).join(", ") : "alle Räume wären rechtzeitig warm gewesen";
+  return `${sv.rooms_checked} von ${sv.rooms_total} Räumen, ${sv.room_hours} Stunden mit Raumdaten – ${cold}` +
+    (sv.lead_by_rooms ? ` · ${sv.lead_by_rooms}× früher vorgeheizt bzw. nicht abgesenkt, weil ein Raum langsam ist` : "");
+}
 function ignoredText(ig) {
   const p = [];
   if (ig.gas_spikes) p.push(`${ig.gas_spikes}× Gaszähler-Sprung (${fmt(ig.gas_spike_kwh, 0)} kWh, nur im Verbrauch gezählt)`);

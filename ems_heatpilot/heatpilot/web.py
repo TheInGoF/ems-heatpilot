@@ -92,15 +92,18 @@ def make_app(app) -> web.Application:
             return web.json_response({"ok": False, "message": "Keine Adresse angegeben"})
         ems = EmsEsp(host)
         try:
-            values = await asyncio.wait_for(ems.read(), timeout=20)
+            values = await asyncio.wait_for(ems.read(), timeout=45)
         except Exception as err:  # noqa: BLE001
             return web.json_response({"ok": False, "message": str(err) or "keine Antwort"})
         finally:
             await ems.close()
         if not values:
             return web.json_response({"ok": False, "message": "Keine Antwort von /api/boiler bzw. /api/thermostat"})
-        counts = {dev: len(v) for dev, v in values.items()}
-        return web.json_response({"ok": True, "message": ", ".join(f"{d}: {n} Werte" for d, n in counts.items())})
+        names = {"boiler": "Kessel", "thermostat": "Regler", "mixer": "Mischer", "solar": "Solar",
+                 "temperaturesensor": "Temperatursensoren", "analogsensor": "Analogsensoren",
+                 "heatpump": "Wärmepumpe", "switch": "Schaltmodul", "custom": "eigene Werte"}
+        return web.json_response({"ok": True, "message": ", ".join(
+            f"{names.get(d, d)}: {len(v)} Werte" for d, v in values.items())})
 
     async def diag(req):
         level = req.query.get("level", "INFO").upper()

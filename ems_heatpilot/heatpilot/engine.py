@@ -712,12 +712,24 @@ class Engine:
 
         hourly = [dict(r) for r in self.store.query("SELECT * FROM hourly ORDER BY ts")]
         nom = num(self._boiler("nom_power"))
+        room_checks = {c: guards.check_room(m) for c, m in self.rooms.items()}
+        check_rooms = {c: m for c, m in self.rooms.items()
+                       if room_checks[c]["ok"] and not m.floor and c not in self.cfg.floor_heating_rooms}
+        room_hourly: dict[int, dict[str, float]] = {}
+        if check_rooms:
+            for r in self.store.query(
+                "SELECT ts - ts % 3600 AS h, room, AVG(temp) AS t FROM room_samples "
+                "WHERE temp IS NOT NULL GROUP BY h, room"
+            ):
+                if r["room"] in check_rooms:
+                    room_hourly.setdefault(r["h"], {})[r["room"]] = r["t"]
         savings = analysis.estimate_savings(
             hourly, self.house, self.eff.away_temp, self.eff.night_temp, self.eff.is_night,
-            p_max_kw=(nom or 18.0) * 0.95,
+            p_max_kw=(nom or 18.0) * 0.95, rooms=check_rooms, room_hourly=room_hourly,
+            max_flow=self.cfg.max_flow_temp,
         )
         house_check = guards.check_house(self.house)
-        room_checks = {c: guards.check_room(m) for c, m in self.rooms.items()}
+        names_by_climate = {r.climate: r.name for r in self.found.rooms}
         gas_total = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in hourly)
         span_days = (hourly[-1]["ts"] - hourly[0]["ts"]) / 86400 if len(hourly) > 1 else 0
         price, fee = self.cfg.gas_price_eur_per_kwh, self.cfg.gas_base_fee_eur_per_year
@@ -804,6 +816,13 @@ class Engine:
             "savings": {
                 "hours": savings.hours,
                 "cold_hours": savings.cold_hours,
+                "rooms_checked": len(check_rooms),
+                "rooms_total": len(self.rooms),
+                "room_hours": savings.room_hours,
+                "room_cold": [{"room": c, "name": names_by_climate.get(c, c), "hours": n}
+                              for c, n in (savings.room_cold or {}).items() if n],
+                "lead_by_rooms": savings.lead_by_rooms,
+                "lead_by_house": savings.lead_by_house,
                 "reliable": house_check["ok"],
                 "actual_kwh": savings.actual_kwh,
                 "saved_kwh": savings.saved_kwh,

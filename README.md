@@ -20,7 +20,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 > Home Assistant verbundene Thermostate (z. B. Zigbee, Z-Wave, Matter, Homematic)
 > dazukommen.
 
-## Was es heute kann (0.14, Beobachtungsmodus)
+## Was es heute kann (0.15, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume lernen:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil
@@ -28,7 +28,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Anwesenheit lernen:** Gewohnheiten je Person und Ankunft per GPS-Annäherung, beliebig viele Personen
 - **Schwachstellen messen:** Brennerstarts und Laufzeit je Start, Wartezeit durch Taktsperre,
   Startverzögerung der Automationen, Brenner-Nachlauf ohne Wärmebedarf
-- **Ersparnis ehrlich schätzen:** nur bei gleichem Komfort, mit realistischem Wiederaufheizen
+- **Ersparnis ehrlich schätzen:** nur bei gleichem Komfort – geprüft je Raum, mit realistischem Wiederaufheizen über die Heizkörper
 - **Empfehlungen für Tado:** wo Tado zu spät oder zu früh heizt – Zeitplan, Frühstart, Geofencing je Raum
 - **Hydraulischer Abgleich mit maschinellem Lernen:** welcher Heizkörper zu wenig oder zu viel Heizwasser bekommt – Voreinstellung am Ventil eine Stufe auf oder zu
 - **Live-Ansicht:** was Kessel, Warmwasser und jeder Raum gerade tun, mit Grafen der letzten Stunden
@@ -54,7 +54,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.14** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.15** |
 | 2 | Kesselseite: Heizfreigabe ereignisgesteuert, Sammelbetrieb bei Abwesenheit statt vieler Kurzstarts, Nachlauf vermeiden | geplant |
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |
