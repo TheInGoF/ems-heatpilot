@@ -23,7 +23,7 @@ class LiveBuffer:
         self.points.append((
             ts,
             {k: sample.get(k) for k in KEYS},
-            {r[0]: (r[1], r[2], r[3]) for r in rooms},
+            {r[0]: (r[1], r[2], r[3], r[4] if len(r) > 4 else None) for r in rooms},
         ))
 
     def since(self, ts: int) -> list[tuple]:
@@ -44,14 +44,14 @@ def series(eng, hours: float = 12, now_ts: int | None = None) -> dict:
     names = {r.climate: r.name for r in eng.found.rooms}
 
     out = {k: [] for k in ("ts",) + KEYS + ("t_in",)}
-    rooms = {c: {"name": n, "ts": [], "temp": [], "target": [], "valve": []} for c, n in names.items()}
+    rooms = {c: {"name": n, "ts": [], "temp": [], "target": [], "valve": [], "humidity": []} for c, n in names.items()}
 
     db_rooms: dict[int, dict] = {}
     for r in eng.store.query(
-        "SELECT ts, room, temp, target, valve FROM room_samples WHERE ts >= ? AND ts < ? ORDER BY ts",
+        "SELECT ts, room, temp, target, valve, humidity FROM room_samples WHERE ts >= ? AND ts < ? ORDER BY ts",
         (start, ring_start),
     ):
-        db_rooms.setdefault(r["ts"], {})[r["room"]] = (r["temp"], r["target"], r["valve"])
+        db_rooms.setdefault(r["ts"], {})[r["room"]] = (r["temp"], r["target"], r["valve"], r["humidity"])
     for r in eng.store.query("SELECT * FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts", (start, ring_start)):
         row = dict(r)
         row.setdefault("pump_on", row.get("heating"))  # in der Datenbank steht die Pumpe als „heating“
@@ -67,11 +67,12 @@ def _append(out: dict, rooms: dict, ts: int, sample: dict, rmap: dict) -> None:
         out[k].append(sample.get(k))
     out["t_in"].append(_mean(v[0] for v in rmap.values()))
     for climate, r in rooms.items():
-        temp, target, valve = rmap.get(climate, (None, None, None))
+        temp, target, valve, hum = (tuple(rmap.get(climate, ())) + (None,) * 4)[:4]
         r["ts"].append(ts)
         r["temp"].append(temp)
         r["target"].append(target)
         r["valve"].append(valve)
+        r["humidity"].append(hum)
 
 
 def now(eng) -> dict:
@@ -92,6 +93,7 @@ def now(eng) -> dict:
         "ts": int(time.time()),
         **{k: sample.get(k) for k in KEYS},
         "t_in": _mean(r[1] for r in rooms),
+        "humidity": _mean(r[4] for r in rooms),
         "power_kw": None if power is None or not nom else round(power / 100 * nom, 1),
         "hc_mode": eng._thermo("hc_mode"),
         "setpoint_demand": eng.setpoint_demand(),

@@ -127,7 +127,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
       <div class="card"><h2>Warmwasser</h2><p>Speichertemperatur und Soll. Blau hinterlegt: Speicher lädt.</p><div class="legend" id="lg-dhw"></div><div id="ch-dhw"></div></div>
     </div>
     <h2 style="margin:16px 0 8px">Räume</h2>
-    <p class="muted" style="margin:0 0 8px">Linie: Raumtemperatur · gestrichelt: Tado-Soll · Fläche: Ventil (rechte Skala, %)</p>
+    <p class="muted" style="margin:0 0 8px">Linie: Raumtemperatur · gestrichelt: Tado-Soll · Fläche: Ventil · grün gepunktet: Luftfeuchte (rechte Skala, %)</p>
     <div class="grid2" id="live-rooms"></div>
   </section>
   <section id="view-settings" hidden></section>
@@ -411,6 +411,11 @@ function timeChart(container, ts, lines, opts = {}) {
     if (open) d += `L${f.sx(ts[ts.length - 1])},${bottom}Z`;
     el("path", { d, fill: r.color, "fill-opacity": 0.18, stroke: "none" }, f.svg);
     [0, 50, 100].forEach((v) => { el("text", { x: f.W - f.m.r + 4, y: sy2(v) + 4 }, f.svg).textContent = v; });
+    for (const l of opts.rightLines || []) {  // weitere Werte auf derselben 0–100-Skala (z. B. Luftfeuchte)
+      let p2 = "", pen = false;
+      l.values.forEach((v, i) => { if (v === null || v === undefined) { pen = false; return; } p2 += `${pen ? "L" : "M"}${f.sx(ts[i])},${sy2(v)}`; pen = true; });
+      el("path", { d: p2, fill: "none", stroke: l.color, "stroke-width": 1.2, "stroke-dasharray": "1 2" }, f.svg);
+    }
   }
   for (const l of lines) {
     let d = "", pen = false;
@@ -428,6 +433,7 @@ function timeChart(container, ts, lines, opts = {}) {
     cross.setAttribute("x1", f.sx(ts[best])); cross.setAttribute("x2", f.sx(ts[best])); cross.setAttribute("visibility", "visible");
     const rows = lines.map((l) => `<span style="color:${l.color}">●</span> ${l.name}: <b>${fmt(l.values[best])}</b> ${l.unit || opts.unit || ""}`);
     if (opts.right) rows.push(`${opts.right.name}: <b>${fmt(opts.right.values[best], 0)}</b> %`);
+    for (const l of opts.rightLines || []) rows.push(`${l.name}: <b>${fmt(l.values[best], 0)}</b> %`);
     for (const b of opts.bands || []) if (b.values[best]) rows.push(b.name);
     showTip(e, `${new Date(ts[best] * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}<br>${rows.join("<br>")}`);
   });
@@ -468,6 +474,13 @@ async function exportSize() {
 }
 document.addEventListener("change", (e) => { if (e.target.id === "export-days") exportSize(); });
 
+function humidityNote(rooms) {
+  const h = rooms.filter((r) => r.humidity !== null && r.humidity !== undefined);
+  if (!h.length) return "";
+  const hi = h.reduce((a, b) => (b.humidity > a.humidity ? b : a)), lo = h.reduce((a, b) => (b.humidity < a.humidity ? b : a));
+  return `${esc(lo.name)} ${fmt(lo.humidity, 0)} % … ${esc(hi.name)} ${fmt(hi.humidity, 0)} %` + (hi.humidity >= 65 ? " · ⚠ lüften" : "");
+}
+
 let liveTimer = null;
 async function loadLive() {
   clearTimeout(liveTimer);
@@ -489,6 +502,7 @@ async function loadLive() {
     tile("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "")),
     tile("Außen", fmt(n.t_out), "°C", ""),
     tile("Innen Ø", fmt(n.t_in), "°C", `${n.rooms.length} Räume`),
+    tile("Luftfeuchte Ø", fmt(n.humidity, 0), "%", humidityNote(n.rooms)),
     tile("Wärmebedarf (Tado)", n.setpoint_demand === null ? "–" : n.setpoint_demand ? "ja" : "nein", "", `Regler: ${esc(n.hc_mode ?? "–")}` + (n.overrun ? " · Brenner läuft ohne Bedarf" : "")),
     tile("Zu Hause", n.home === null ? "–" : fmt(n.home, 0), n.persons ? `von ${n.persons}` : "", ""),
   ].join("");
@@ -514,11 +528,12 @@ async function loadLive() {
   const now = Object.fromEntries(n.rooms.map((r) => [r.climate, r]));
   $("live-rooms").innerHTML = j.rooms.map((r, i) => {
     const c = now[r.climate] || {};
-    return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><span class="muted">${fmt(c.temp)} °C · Soll ${fmt(c.target)} °C · Ventil ${fmt(c.valve, 0)} %</span></div><div id="ch-room-${i}"></div></div>`;
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><span class="muted">${fmt(c.temp)} °C · Soll ${fmt(c.target)} °C · Ventil ${fmt(c.valve, 0)} %${c.humidity !== null && c.humidity !== undefined ? ` · Feuchte ${fmt(c.humidity, 0)} %` : ""}</span></div><div id="ch-room-${i}"></div></div>`;
   }).join("");
   j.rooms.forEach((r, i) => timeChart($("ch-room-" + i), r.ts, [
     { name: "Raum", values: r.temp, color: C.flow }, { name: "Soll", values: r.target, color: C.sel, dash: "5 4", width: 1.5, step: true }],
-    { unit: "°C", height: 150, right: { name: "Ventil", values: r.valve, color: C.ret }, label: r.name }));
+    { unit: "°C", height: 150, right: { name: "Ventil", values: r.valve, color: C.ret },
+      rightLines: (r.humidity || []).some((v) => v !== null) ? [{ name: "Luftfeuchte", values: r.humidity, color: C.boiler }] : [], label: r.name }));
   if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(() => {}), 30000);
 }
 
