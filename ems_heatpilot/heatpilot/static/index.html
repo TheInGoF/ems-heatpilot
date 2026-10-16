@@ -696,6 +696,8 @@ async function certPrint() {
         <div style="flex:1"><h1>Zertifikat</h1><div class="sub">Haus & Heizung – gemessen, nicht geschätzt</div></div>
         <div class="sub" style="text-align:right;font-size:11px">Ausgestellt am<br><b style="color:#0f1f33;font-size:14px">${date(c.created)}</b><br>EMS HeatPilot ${esc(c.version)}</div></div>
       <p class="sub" style="font-size:11px;border-bottom:1.5px solid #eb6834;padding-bottom:6px">Grundlage: Messdaten vom ${date(bs.from)} bis ${date(bs.to)} · ${fmt(bs.heating_hours, 0)} Heizstunden, ${fmt(bs.cold_hours, 0)} davon unter 0 °C · kälteste Stunde ${fmt(bs.coldest)} °C</p>
+      ${c.overall ? `<div style="display:flex;gap:12px;align-items:center;margin:8px 0 4px"><span style="min-width:54px;text-align:center;padding:8px;border-radius:6px;font-weight:800;font-size:26px;background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>
+        <div><b style="color:#1f3a5f;font-size:15px">HeatPilot-Gesamtbewertung</b><div>${c.overall.score} von 100 Punkten</div><div class="sub" style="font-size:11px">${c.overall.parts.map((x) => `${esc(x.area)} ${x.points ?? "–"}`).join(" · ")} (gewichtet 40/25/20/15 %)</div></div></div>` : ""}
       <h3>Gebäude ${pill(v["Gebäude"])}</h3><table>
         ${row("Wärmeverlust", `${fmt(h.h_w_per_k, 0)} W/K`)}${row(`Heizlast am kältesten Tag (${fmt(h.design_temp, 0)} °C)`, `${fmt(h.design_kw)} kW`, "Gasleistung")}
         ${row("Trägheit (Auskühlen)", `${fmt(h.tau_h, 0)} h`)}${h.area_m2 ? row("Wohnfläche", `${fmt(h.area_m2, 0)} m²`) + row("Heizlast je m²", `${fmt(h.spec_w_m2, 0)} W/m²`) : ""}
@@ -754,6 +756,9 @@ async function loadCert() {
     `<button class="btn primary" onclick="certPdf(false)">PDF herunterladen</button></div></div>` +
     `<p class="muted" id="cert-msg"></p>` +
     `<p>Gemessen statt geschätzt – zum Weitergeben, z. B. an Vermieter oder Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
+    (c.overall ? `<div class="row" style="margin:4px 0 8px"><span style="display:inline-block;min-width:44px;text-align:center;padding:4px 8px;border-radius:6px;font-weight:700;font-size:20px;background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>` +
+      `<div><b>Gesamtbewertung ${c.overall.score} von 100 Punkten</b><div class="muted">${c.overall.parts.map((x) => `${esc(x.area)} ${x.points ?? "–"}`).join(" · ")} – gewichtet 40/25/20/15 %</div></div></div>`
+      : `<p class="muted">Gesamtbewertung, sobald das Gebäude und mindestens zwei weitere Bereiche (Kessel, Takten, Warmwasser) bewertet sind.</p>`) +
     (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:13px">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
     (c.preliminary.length ? `<p class="muted" style="margin-top:8px">Noch vorläufig: ${esc(c.preliminary.join("; "))}.</p>` : "");
 }

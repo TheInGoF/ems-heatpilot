@@ -48,6 +48,34 @@ def energy_class(kwh_m2: float | None) -> int | None:
     return len(ENERGY_CLASSES) - 1
 
 
+# Gesamtbewertung: je Bereich 0–100 Punkte (linear zwischen „sehr gut“ und „schlecht“), gewichtet
+OVERALL_WEIGHTS = {"Gebäude": 0.40, "Kesselgröße": 0.25, "Taktverhalten": 0.20, "Warmwasser": 0.15}
+OVERALL_CLASSES = [("A+", 90), ("A", 80), ("B", 70), ("C", 60), ("D", 50), ("E", 40), ("F", 30), ("G", 20), ("H", 0)]
+
+
+def _points(value: float | None, best: float, worst: float) -> float | None:
+    if value is None:
+        return None
+    t = (value - worst) / (best - worst)
+    return round(100 * min(max(t, 0.0), 1.0))
+
+
+def overall(parts: dict[str, float | None]) -> dict | None:
+    """Ein Nenner für alles: gewichtetes Mittel der vorhandenen Bereiche.
+
+    Nur mit Gebäude (größtes Gewicht) und mindestens zwei weiteren Bereichen – sonst wäre
+    die Note eher Zufall als Bewertung.
+    """
+    have = {k: v for k, v in parts.items() if v is not None}
+    if "Gebäude" not in have or len(have) < 3:
+        return None
+    w = sum(OVERALL_WEIGHTS[k] for k in have)
+    score = round(sum(OVERALL_WEIGHTS[k] * v for k, v in have.items()) / w)
+    cls = next(i for i, (_, lo) in enumerate(OVERALL_CLASSES) if score >= lo)
+    return {"score": score, "class": OVERALL_CLASSES[cls][0], "class_index": cls,
+            "parts": [{"area": k, "points": parts[k], "weight": OVERALL_WEIGHTS[k]} for k in OVERALL_WEIGHTS]}
+
+
 def collect(eng, now_ts: int | None = None) -> dict:
     """Alle Zahlen und Urteile fürs Zertifikat."""
     now_ts = now_ts or int(time.time())
@@ -144,7 +172,18 @@ def collect(eng, now_ts: int | None = None) -> dict:
         verdicts.append(("Warmwasser", g, word,
                          f"Warmhalten bei 55 °C kostet {fmt(dhw_loss_w)} W, das sind {fmt(dhw_loss_w * 24 / 1000, 1)} kWh am Tag."))
 
+    # Punkte je Bereich: Gebäude nach Energiekennwert (sonst Heizlast je m²), Kessel nach Verhältnis
+    # Nennleistung/Heizlast, Takten nach Laufzeit je Start, Warmwasser nach Warmhalteverlust
+    building = (_points(kwh_m2, 30, 250) if kwh_m2 is not None else _points(spec, 40, 150))
+    score = overall({
+        "Gebäude": building,
+        "Kesselgröße": _points(ratio, 1.3, 4.0),
+        "Taktverhalten": _points(run_min, 30, 5),
+        "Warmwasser": _points(dhw_loss_w, 40, 200),
+    })
+
     return {
+        "overall": score,
         "created": local(now_ts).isoformat(),
         "version": __version__,
         "preliminary": prelim,
@@ -250,6 +289,19 @@ def render(data: dict) -> bytes:
     y = p.paragraph(L, 124, basis, R - L, 9, color=GREY)
     p.line(L, y - 4, R, y - 4, color=ORANGE, lw=1.2)
     y += 14
+
+    o = data.get("overall")
+    if o:
+        idx = o["class_index"]
+        p.rect(L, y - 6, 54, 44, fill=CLASS_COLORS[idx], radius=6)
+        p.text(L + 27, y + 24, o["class"], 24, bold=True, color="#333333" if idx in (3, 4, 5) else "#ffffff",
+               align="center")
+        p.text(L + 66, y + 8, "HeatPilot-Gesamtbewertung", 12, bold=True, color=NAVY)
+        p.text(L + 66, y + 24, f"{o['score']} von 100 Punkten", 11, color=NAVY_DARK)
+        parts = " · ".join(f"{x['area']} {x['points']}" if x["points"] is not None else f"{x['area']} –"
+                           for x in o["parts"])
+        p.text(L + 66, y + 36, parts + " (gewichtet 40/25/20/15 %)", 8, color=GREY)
+        y += 64
 
     grades = {v["area"]: v for v in data["verdicts"]}
 

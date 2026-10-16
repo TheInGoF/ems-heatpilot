@@ -81,3 +81,17 @@ def test_pdf_survives_nan_values(tmp_path):
     text = b"".join(zlib.decompress(m) for m in re.findall(rb"stream\n(.*?)\nendstream", pdf, re.S))
     commands = re.sub(rb"\((?:\\.|[^\\)])*\)", b"()", text).lower()  # Textinhalte entfernen
     assert b"nan" not in commands and b"inf" not in commands
+
+
+def test_overall_score_brings_everything_to_one_class(tmp_path):
+    data = certificate.collect(year_engine(tmp_path), NOW)
+    o = data["overall"]
+    parts = {x["area"]: x["points"] for x in o["parts"]}
+    assert parts["Gebäude"] is not None and parts["Kesselgröße"] < 30 and parts["Taktverhalten"] < 20
+    # gewichtetes Mittel nur über vorhandene Bereiche (Warmwasser fehlt hier)
+    have = {k: v for k, v in parts.items() if v is not None}
+    w = sum(certificate.OVERALL_WEIGHTS[k] for k in have)
+    assert o["score"] == round(sum(certificate.OVERALL_WEIGHTS[k] * v for k, v in have.items()) / w)
+    assert o["class"] == next(c for c, lo in certificate.OVERALL_CLASSES if o["score"] >= lo)
+    assert certificate.overall({"Gebäude": 80, "Kesselgröße": 50, "Taktverhalten": None, "Warmwasser": None}) is None
+    assert certificate.overall({"Gebäude": None, "Kesselgröße": 50, "Taktverhalten": 60, "Warmwasser": 70}) is None

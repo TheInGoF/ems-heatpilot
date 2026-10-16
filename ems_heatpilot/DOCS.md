@@ -113,6 +113,14 @@ geschätzt:
   solange das Hausmodell unsicher ist, weniger als 500 Heizstunden oder noch kein
   Frost gemessen wurden
 
+**Gesamtbewertung:** Alles auf einen Nenner – je Bereich 0–100 Punkte, linear zwischen
+„sehr gut“ und „schlecht“: Gebäude nach Energiekennwert (30 → 250 kWh/m²a) bzw. ohne
+volles Jahr nach Heizlast je m² (40 → 150 W/m²), Kesselgröße nach Nennleistung/Heizlast
+(1,3- → 4-fach), Takten nach Laufzeit je Heizstart (30 → 5 min), Warmwasser nach
+Warmhalteverlust bei 55 °C (40 → 200 W). Gewichtet 40/25/20/15 % ergibt das die Punkte
+und die HeatPilot-Klasse A+ (ab 90) bis H (unter 20). Sie gibt es erst, wenn das Gebäude
+und mindestens zwei weitere Bereiche bewertet sind. Kein Energieausweis.
+
 Neben dem PDF gibt es eine **Druckansicht**: dasselbe Zertifikat als Seite, über
 „Drucken / als PDF sichern“ erzeugt das Gerät selbst ein PDF. Unter iOS ist das der
 sichere Weg zum Weitergeben (z. B. an WhatsApp): Druckansicht → Drucken → Teilen.
@@ -181,7 +189,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.18 macht
+## Was das Add-on in Version 0.19 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
