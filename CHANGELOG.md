@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.16.0
+- Einstellungen: neuer Bereich **Personen** – wer für die Anwesenheit zählt, mit Hinweis auf Dummies ohne Gerät; automatisch werden nur Personen mit Gerät gewählt
+- Nach geänderter Personenauswahl wird die Anwesenheit in den gespeicherten Daten neu gezählt
+- Behoben: abgewählte Räume und Personen flossen über die gespeicherten Daten weiter in Empfehlungen und das Lernen der Zeiten ein
+
 ## 0.15.0
 - Ersparnis-Schätzung prüft den Komfort **je Raum**: jeder Raum kühlt und heizt nach seinem Modell (höchstens volles Ventil und maximaler Vorlauf), vorgeheizt wird so früh, wie der langsamste Raum braucht; käme ein Raum nicht mehr hoch, wird nicht abgesenkt. Übersicht zeigt geprüfte Räume und zu kalte Stunden je Raum
 - EMS-ESP: neben Kessel und Regler werden alle weiteren Geräte gelesen, die EMS-ESP kennt (Mischer, Solar, Sensoren …); Test und Selbsttest zeigen, was ankommt und ob Nennleistung/kleinste Leistung fehlen

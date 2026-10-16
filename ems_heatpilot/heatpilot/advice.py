@@ -60,17 +60,14 @@ def _round5(minutes: float) -> int:
     return int(min(max(5 * round(minutes / 5), 10), MAX_SHIFT_MIN))
 
 
-def _load(store, since: int):
+def _load(store, since: int, rooms_sel: set[str] | None = None, persons: list[str] | None = None):
     rooms: dict[str, list[tuple]] = defaultdict(list)
     for r in store.query(
         "SELECT ts, room, temp, target, valve FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)
     ):
-        rooms[r["room"]].append((r["ts"], r["temp"], r["target"], r["valve"]))
-    home: dict[int, bool] = {}
-    for r in store.query(
-        "SELECT ts, MAX(home) AS h FROM person_samples WHERE ts >= ? GROUP BY ts", (since,)
-    ):
-        home[r["ts"]] = bool(r["h"])
+        if rooms_sel is None or r["room"] in rooms_sel:  # abgewählte Räume zählen nicht
+            rooms[r["room"]].append((r["ts"], r["temp"], r["target"], r["valve"]))
+    home = store.home_by_ts(since, persons)
     vacation = {r["ts"] for r in store.query(
         "SELECT ts FROM samples WHERE ts >= ? AND vacation = 1", (since,))}
     flow = {r["ts"]: r["flow"] for r in store.query(
@@ -252,7 +249,8 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
     """Empfehlungen je Raum, mit Beleg. ``eng``: Engine (store, rooms, found, cfg)."""
     now_ts = now_ts or int(time.time())
     since = now_ts - WINDOW_DAYS * 86400
-    rooms, home, vacation, flow = _load(eng.store, since)
+    rooms, home, vacation, flow = _load(eng.store, since, {r.climate for r in eng.found.rooms},
+                                        eng.found.persons)
     arrivals = _arrivals(home, vacation)
     names = {r.climate: r.name for r in eng.found.rooms}
     out: list[dict] = []

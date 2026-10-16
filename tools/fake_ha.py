@@ -82,8 +82,13 @@ def simulate():
             else:
                 lat, lon, st = *HOME, "home"
             home[p] = st == "home"
-            rec(p, ts, st, {"latitude": lat, "longitude": lon, "friendly_name": p[7:].title()})
-            states[p] = (st, {"latitude": lat, "longitude": lon, "friendly_name": p[7:].title()})
+            attrs = {"latitude": lat, "longitude": lon, "friendly_name": p[7:].title(),
+                     "device_trackers": [f"device_tracker.phone_{p[7:]}"]}
+            rec(p, ts, st, attrs)
+            states[p] = (st, attrs)
+        # Dummy-Person ohne Gerät, immer "zu Hause" (wie in vielen echten Installationen)
+        rec("person.dummy", ts, "home", {"friendly_name": "Dummy", "device_trackers": []})
+        states["person.dummy"] = ("home", {"friendly_name": "Dummy", "device_trackers": []})
 
         night = hour >= 22.5 or hour < 6
         target = 18.0 if night else 21.0

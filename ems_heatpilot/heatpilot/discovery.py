@@ -187,6 +187,11 @@ def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[di
         d.rooms.append(room)
 
 
+def is_real_person(state: dict) -> bool:
+    """Person mit mindestens einem Gerät (device_tracker) – sonst vermutlich ein Dummy."""
+    return bool(state.get("attributes", {}).get("device_trackers"))
+
+
 def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
     by_id = {s["entity_id"]: s for s in states}
     ids = list(by_id)
@@ -220,7 +225,13 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
     else:
         _discover_tado(d, ids, by_id, registry, reg)
 
-    d.persons = sorted(e for e in ids if e.startswith("person."))
+    all_persons = sorted(e for e in ids if e.startswith("person."))
+    if cfg.persons:
+        d.persons = [p for p in cfg.persons if p in by_id]
+    else:
+        # automatisch: nur Personen mit Gerät (device_tracker) – Dummies ohne Gerät nicht
+        with_device = [p for p in all_persons if is_real_person(by_id.get(p, {}))]
+        d.persons = with_device or all_persons
 
     d.outdoor = [e for e in cfg.outdoor_sensors if e in by_id]
     if not d.outdoor and "boiler_outdoor" in d.boiler:

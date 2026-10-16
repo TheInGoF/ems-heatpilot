@@ -24,6 +24,11 @@ keine YAML-Optionen:
   Entitäten in Home Assistant
 - **Räume:** alle Thermostate als Tabelle – Häkchen, Name, Fußbodenheizung,
   optionale Ventil-/Temperatur-/Feuchtesensoren
+- **Personen:** alle `person.*` mit Häkchen. Automatisch gewählt werden nur Personen
+  mit Gerät (device_tracker); Dummies ohne Gerät sind als „vermutlich Dummy“
+  markiert. Auch Autos, Gäste oder Haustiere mit Tracker hier abwählen. Nach einer
+  Änderung zählt HeatPilot die Anwesenheit in den gespeicherten Daten neu;
+  abgewählte Räume und Personen fließen in keine Auswertung mehr ein.
 - **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub**
 - **Zuordnungen (Experten):** was die Erkennung gefunden hat, mit eigener Korrektur
 - **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“
@@ -140,7 +145,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.15 macht
+## Was das Add-on in Version 0.16 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

@@ -104,6 +104,30 @@ class Store:
             "INSERT OR REPLACE INTO room_samples VALUES(?, ?, ?, ?, ?, ?)", rows
         )
 
+    def home_by_ts(self, since: int, persons: list[str] | None) -> dict[int, bool]:
+        """Ist jemand zu Hause? Nur die gewählten Personen (None = alle gespeicherten)."""
+        sql, params = "SELECT ts, MAX(home) AS h FROM person_samples WHERE ts >= ?", [since]
+        if persons is not None:
+            if not persons:
+                return {}
+            sql += f" AND person IN ({','.join('?' * len(persons))})"
+            params += list(persons)
+        return {r["ts"]: bool(r["h"]) for r in self.db.execute(sql + " GROUP BY ts", params)}
+
+    def recount_home(self, persons: list[str]) -> None:
+        """Nach geänderter Personenauswahl: Anwesenheit in Messwerten und Stundenwerten neu zählen."""
+        marks = ",".join("?" * len(persons)) or "NULL"
+        self.db.execute(
+            f"UPDATE samples SET home_count = (SELECT COALESCE(SUM(home), 0) FROM person_samples p "
+            f"WHERE p.ts = samples.ts AND p.person IN ({marks})) "
+            "WHERE ts IN (SELECT DISTINCT ts FROM person_samples)", list(persons))
+        self.db.execute(
+            "UPDATE hourly SET home_frac = (SELECT AVG(CASE WHEN home_count > 0 THEN 1.0 ELSE 0.0 END) "
+            "FROM samples s WHERE s.ts >= hourly.ts AND s.ts < hourly.ts + 3600 AND s.home_count IS NOT NULL) "
+            "WHERE EXISTS (SELECT 1 FROM samples s WHERE s.ts >= hourly.ts AND s.ts < hourly.ts + 3600 "
+            "AND s.home_count IS NOT NULL)")
+        self.db.commit()
+
     def add_person_samples(self, rows: Iterable[tuple]) -> None:
         self.db.executemany(
             "INSERT OR REPLACE INTO person_samples VALUES(?, ?, ?, ?)", rows

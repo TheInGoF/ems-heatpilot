@@ -592,6 +592,20 @@ function vacRow(v = "") {
   return `<div class="row vac" style="margin-bottom:6px"><input type="date" class="v-sd" value="${m[1] || ""}" style="width:auto"><input type="time" class="v-st" value="${m[2] || ""}" style="width:auto" title="optional"> bis <input type="date" class="v-ed" value="${m[3] || ""}" style="width:auto"><input type="time" class="v-et" value="${m[4] || ""}" style="width:auto" title="optional – leer = Standard-Rückkehrzeit"><button class="btn small" onclick="this.parentNode.remove()">entfernen</button></div>`;
 }
 
+function personRows() {
+  const persons = ENT.filter((e) => e.id.startsWith("person."));
+  if (!persons.length) return `<tr><td colspan="4" class="muted">Keine person.*-Entitäten in Home Assistant gefunden.</td></tr>`;
+  const chosen = new Set((SET.persons || []).length ? SET.persons : (SUG.persons || []));
+  return persons.map((p) => {
+    const dummy = !p.trackers;
+    return `<tr class="person" data-id="${esc(p.id)}">
+      <td><input type="checkbox" class="p-on" ${chosen.has(p.id) ? "checked" : ""}></td>
+      <td>${esc(p.name)}<div class="hint">${esc(p.id)}</div></td>
+      <td>${esc(p.state === "home" ? "zu Hause" : p.state === "not_home" ? "weg" : p.state)}</td>
+      <td>${dummy ? '<span class="muted">kein Gerät – vermutlich Dummy</span>' : `${p.trackers} Gerät${p.trackers > 1 ? "e" : ""}${p.gps ? " · GPS" : " · ohne GPS"}`}</td></tr>`;
+  }).join("");
+}
+
 function roomRows() {
   const climates = ENT.filter((e) => e.id.startsWith("climate."));
   const chosen = Object.fromEntries((SET.rooms || []).map((r) => [r.climate, r]));
@@ -633,6 +647,8 @@ function renderSettings() {
     </div>`) +
     card("Räume", `<p>Häkchen = Raum wird gelernt. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
       <div class="scroll"><table class="form"><tr><th></th><th>Name</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+    card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = Person wird gelernt. Personen ohne Gerät (z. B. Dummies, Gäste, Haustiere, Autos) besser abwählen – sonst gilt das Haus womöglich nie als leer. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit Gerät.</p>
+      <div class="scroll"><table class="form"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`) +
     card("Gas & Kosten", `<div class="form-grid">
       ${field("Brennwert (kWh/m³)", num("f-gas_calorific_value", s.gas_calorific_value), "Laut Gasrechnung, typisch 10,5–11,5")}
       ${field("Zustandszahl", num("f-gas_z_number", s.gas_z_number), "Laut Gasrechnung, typisch 0,93–0,97")}
@@ -693,6 +709,7 @@ function collect() {
                    "dhw_comfort_temp", "dhw_max_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
+  out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
   out.rooms = []; out.floor_heating_rooms = [];
   for (const tr of document.querySelectorAll("tr.room")) {
     if (!tr.querySelector(".r-on").checked) continue;
