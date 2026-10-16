@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.3
+- Zertifikat: Die Seite lädt das PDF erst und prüft es, bevor es gespeichert oder angezeigt wird. Eine Fehlerantwort landet nicht mehr als „leeres PDF“ auf dem Gerät, sondern erscheint als Meldung unter den Knöpfen; Fehler beim Erstellen stehen mit Details im Log. Zusätzlich ein direkter Link als Ausweichweg
+
 ## 0.18.2
 - Oberfläche: Kacheln ohne Wert und Karten ohne Daten (z. B. leere Diagramme, Empfehlungen, Vorheizplan, Personen) werden ausgeblendet und erscheinen von selbst, sobald Daten da sind – auch im Reiter Live
 - Hauswerte (Wärmeverlust, Heizlast, Trägheit) erscheinen erst, wenn das Hausmodell plausibel ist

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from pathlib import Path
 
 from aiohttp import web
@@ -12,6 +13,7 @@ from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
 from . import certificate, diagnostics, live
 from .emsesp import EmsEsp
 
+log = logging.getLogger(__name__)
 STATIC = Path(__file__).parent / "static"
 
 # Domains, aus denen die Oberfläche Entitäten zur Auswahl anbietet
@@ -144,13 +146,19 @@ def make_app(app) -> web.Application:
         return web.json_response(certificate.collect(app.eng))
 
     async def cert_pdf(req):
-        if app.eng is None:
-            return web.Response(status=503, text="Add-on startet noch")
         from datetime import datetime
 
+        if app.eng is None:
+            return web.json_response({"error": f"HeatPilot startet noch ({app.status}) – bitte gleich noch einmal."},
+                                     status=503)
+        try:
+            body = certificate.pdf(app.eng)
+        except Exception as err:  # noqa: BLE001 – Fehler sichtbar machen statt einer kaputten Datei
+            log.exception("Zertifikat konnte nicht erstellt werden")
+            return web.json_response({"error": f"Zertifikat konnte nicht erstellt werden: {err}"}, status=500)
         name = f"heatpilot-zertifikat-{datetime.now():%Y%m%d}.pdf"
         mode = "inline" if req.query.get("inline") else "attachment"
-        return web.Response(body=certificate.pdf(app.eng), content_type="application/pdf",
+        return web.Response(body=body, content_type="application/pdf",
                             headers={"Content-Disposition": f'{mode}; filename="{name}"',
                                      "Cache-Control": "no-store"})
 
