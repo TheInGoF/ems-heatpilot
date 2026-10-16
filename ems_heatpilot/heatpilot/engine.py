@@ -11,7 +11,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from . import analysis, guards
+from . import advice, analysis, guards
 from .config import Config
 from .dhw import DhwModel, DhwShadow
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
@@ -81,6 +81,7 @@ class Engine:
         self.dhw_shadow = DhwShadow()
         self._prev_dhw: tuple[int, float | None] | None = None
         self.dhw_rec: dict | None = None
+        self._advice: tuple[float, list, list] | None = None
         self.forecast: list[dict] = []
         self.last_plan: dict | None = None
         self._last_burner: int | None = None
@@ -476,6 +477,15 @@ class Engine:
             self.store.add_snapshot(ts, "room", climate, m.summary(t_out or 5.0, self.cfg.max_flow_temp))
         self.store.commit()
 
+    def tado_advice(self, max_age_s: int = 900) -> dict:
+        """Empfehlungen an Tado (höchstens alle 15 min neu berechnet – wertet 3 Wochen aus)."""
+        now = time.time()
+        if self._advice is None or now - self._advice[0] > max_age_s:
+            items = advice.build(self)
+            resolved = advice.track(self.store, items)
+            self._advice = (now, items, resolved)
+        return {"items": self._advice[1], "resolved": self._advice[2]}
+
     def note_changes(self, s: dict) -> None:
         """Wichtige Zustandswechsel ins Log schreiben – nachvollziehbar, was das Add-on denkt."""
         plan = (s.get("plan") or {}).get("best") or {}
@@ -665,6 +675,7 @@ class Engine:
                 "ranges": [[t.start.isoformat(), t.end.isoformat(), t.end_exact] for t in self.vacation.trips],
                 "returned": sorted(self.vacation.returned),
             },
+            "advice": self.tado_advice(),
             "limits": {
                 "away_temp": self.cfg.away_temp,
                 "night_temp": self.cfg.night_temp,
