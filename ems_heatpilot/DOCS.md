@@ -137,10 +137,10 @@ Der Reiter **Live** zeigt, was Heizung und Haus gerade tun und in den letzten
 
 - **Anzeigen:** Brenner (an/aus, Leistung, heizt oder lädt Warmwasser, Taktsperre
   mit Restzeit), Vorlauf mit Soll von Kessel und Regler, Rücklauf mit Spreizung,
-  Kessel und Pumpe, Warmwasser, außen, innen Ø, Wärmebedarf laut Tado, wer zu Hause ist
+  Kessel und Pumpe, Warmwasser, außen, innen Ø, Luftfeuchte Ø, Wärmebedarf laut Tado, wer zu Hause ist
 - **Grafen:** Kesseltemperaturen (hinterlegt, wann der Brenner heizt bzw.
   Warmwasser lädt), Brennerleistung und Pumpe, außen/innen, Warmwasser und je
-  Raum Temperatur, Tado-Soll und Ventilöffnung
+  Raum Temperatur, Tado-Soll, Ventilöffnung und Luftfeuchte
 
 Die letzten 12 Stunden hält HeatPilot im Speicher (alle 30 s, mit EMS-ESP direkt
 am genauesten); ältere Abschnitte und die Zeit vor einem Neustart kommen aus der

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.20.1
+- Live: Luftfeuchte je Raum – im Kopf jeder Raumkarte, als gepunktete Linie im Raum-Grafen (rechte Skala) und als Kachel „Luftfeuchte Ø“ mit trockenstem und feuchtestem Raum (ab 65 % Hinweis „lüften“)
+
 ## 0.20.0
 - **Sonne als Wärmequelle je Raum:** Sonnenstand wird aus Standort und Uhrzeit berechnet, die Bewölkung kommt aus der Wetter-Integration. Jeder Raum lernt selbst, wie stark und aus welcher Richtung (Ost/Süd/West) die Sonne ihn heizt – Räume ohne Sonnenfenster lernen „kaum Sonne“. Neue Spalte „Sonne“ in der Raumtabelle; bestehende Raummodelle werden erweitert, nicht verworfen
 - **Vorlauf gegen Takten:** HeatPilot misst an den eigenen Heizstunden (gleiche Außentemperatur, nur Beharrung, ohne Warmwasser), ob ein höherer Vorlauf weniger Starts und weniger Gas je Grad bringt – oder durch warmen Rücklauf Verschwendung ist. Mit klarem Urteil, Tabelle je Außentemperatur und Versuchsvorschlag, wenn die Daten nicht reichen. Nur Beobachtung

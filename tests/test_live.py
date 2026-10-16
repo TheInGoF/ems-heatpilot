@@ -20,7 +20,7 @@ def test_series_merges_database_and_buffer(tmp_path):
     eng.store.commit()
     for i in range(120):  # letzte Stunde alle 30 s im Speicher
         ts = NOW - 3600 + i * 30
-        eng.live.add(ts, {"flow": 60.0, "burner_on": 1}, [("climate.wz", 21.0, 21.0, 10.0, None)])
+        eng.live.add(ts, {"flow": 60.0, "burner_on": 1}, [("climate.wz", 21.0, 21.0, 10.0, 55.0)])
     data = live.series(eng, 12, NOW)
     s = data["series"]
     assert len(s["ts"]) == 11 * 12 + 120  # DB nur bis zum Beginn des Puffers
@@ -29,6 +29,7 @@ def test_series_merges_database_and_buffer(tmp_path):
     assert s["t_in"][0] == 21.0 and s["t_in"][-1] == 21.0  # Mittel Wz 20 / Bad 22, später nur Wz
     wz = next(r for r in data["rooms"] if r["climate"] == "climate.wz")
     assert wz["valve"][-1] == 10.0 and len(wz["ts"]) == len(s["ts"])
+    assert wz["humidity"][-1] == 55.0 and wz["humidity"][0] is None  # Feuchte live, in der DB hier nicht gesetzt
     bad = next(r for r in data["rooms"] if r["climate"] == "climate.bad")
     assert bad["temp"][-1] is None  # im Puffer nicht gemeldet: Lücke statt erfundener Wert
 
