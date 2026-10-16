@@ -78,6 +78,12 @@ class Store:
         )
         self.db.commit()
 
+    def delete_range(self, start: int, end: int) -> None:
+        """Messwerte eines Zeitraums löschen (wird danach aus der HA-Historie neu geschrieben)."""
+        for table in ("samples", "room_samples", "person_samples", "burner_events"):
+            self.db.execute(f"DELETE FROM {table} WHERE ts >= ? AND ts <= ?", (start, end))
+        self.db.commit()
+
     def reset_learning(self, since_day: str) -> None:
         """Gelerntes verwerfen, damit es aus den Rohdaten neu berechnet werden kann.
 

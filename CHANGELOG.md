@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.0
+- **Warmwasserladung ohne Ladesignal erkennen:** Meldet der Kessel „Warmwasser lädt“ nicht (oder nie), erkennt HeatPilot die Ladung am schnellen Anstieg der Speichertemperatur bei laufendem Brenner. Vorher wurden Ladungen als „Auskühlen“ gelernt und Ladekosten nie bestimmt
+- Warmwasser-Auskühlen wird über ruhige 30-min-Abschnitte gelernt statt über einzelne Messschritte – bei 1–2-min-Abtastung und 0,1 K Fühlerauflösung war das zu verrauscht
+- Tado-Räume auf „aus“ zählen beim Lernen der Zeiten als Absenkung (Frostschutz 5 °C) statt als „kein Soll“
+- Auswertungen rechnen mit der Zeit statt mit „12 Messpunkte = 1 Stunde“ – stimmt jetzt bei jedem Abtastintervall
+- Historie neu einlesen ersetzt die gespeicherten Messwerte des Zeitraums (keine zwei Raster nebeneinander, keine doppelten Brennerereignisse)
+- **Diagnose → Alle Sensoren:** Tabelle mit Bereich, Zweck, Sensor/Quelle (HA oder EMS-ESP), Name in HA, aktuellem Wert, Stand und Zustand (ok, fehlt, veraltet, nicht gefunden); filterbar, optional mit allen nicht verwendeten EMS-ESP-Werten
+- Export kompakt: Spaltenformat, gerundet, Messwerte auf 5 min verdichtet (14 Tage ≈ 1–3 MB statt bis zu 18 MB); Größe wird vorab aus den Daten geschätzt
+- Beim Update wird der Lernstand einmal neu berechnet
+
 ## 0.17.2
 - Warmwasser „Wann gezapft wird“: seltene große Zapfungen (z. B. Badewanne alle ein, zwei Wochen) überdecken das übliche Profil nicht mehr – sie zählen nur gedeckelt und stehen als Liste unter der Grafik (letzte 60 Tage). Erst nach ~2 Wochen je Tagesstunde wird etwas als Ausreißer eingestuft
 - Live: eigene Anzeige „Heizungspumpe“ (an/aus und Modulation in %), Pumpe im Brenner-Grafen; Hinweis, wenn der Wert fehlt

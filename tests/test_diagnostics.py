@@ -98,4 +98,20 @@ def test_export_learned_values_without_gps(tmp_path):
     g = data["gelernt"]
     assert {"haus", "warmwasser", "raeume", "zeiten", "personen", "ignoriert"} <= set(g)
     assert "auskuehlen_k_h" in g["warmwasser"] and "climate.wz" in g["raeume"]
-    assert data["anwesenheit"][0]["dist_km"] == 12.3
+    a = data["anwesenheit"]
+    assert a["zeilen"][0][a["spalten"].index("dist_km")] == 12.3
+
+
+def test_sensor_table_lists_roles_rooms_and_unused_ems_values(tmp_path):
+    eng = make_app(tmp_path).eng
+    eng.ems = {"boiler": {"curflowtemp": 45.0, "wwcirc": 0}}
+    eng.states = {"climate.wz": {"state": "heat", "attributes": {"current_temperature": 20.5, "temperature": 21,
+                                                                 "friendly_name": "Wohnzimmer"}}}
+    rows = diagnostics.sensor_table(eng)
+    by = {(r["group"], r["label"]): r for r in rows}
+    flow = by[("Kessel", "Vorlauftemperatur (Ist)")]
+    assert flow["source"] == "EMS-ESP boiler/curflowtemp" and flow["value"] == 45.0 and flow["status"] == "ok"
+    room = by[("Raum Wz", "Thermostat (Ist / Soll)")]
+    assert room["value"] == "20.5 / 21" and room["name"] == "Wohnzimmer"
+    assert by[("EMS-ESP boiler (nicht verwendet)", "wwcirc")]["status"] == "nicht verwendet"
+    assert by[("Gas", "Gaszähler")]["status"] == "fehlt"  # in HA (noch) kein Zustand

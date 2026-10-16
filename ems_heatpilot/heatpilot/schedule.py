@@ -23,7 +23,8 @@ from datetime import datetime, time, timedelta
 
 WINDOW_DAYS = 28
 MIN_NIGHTS = 7
-MIN_AWAY_SAMPLES = 20 * 12    # 20 Stunden à 5 min
+MIN_AWAY_H = 20.0
+OFF_TEMP = 5.0                # Tado „aus“ = Frostschutz
 DROP_K = 1.0
 HOLD_MIN = 60                 # so lange muss die Absenkung mindestens halten
 MAX_SHIFT_H = 3.0
@@ -47,16 +48,21 @@ def _minutes(t: time) -> int:
 
 def house_setpoints(store, since: int, skip: set[str] = frozenset(),
                     only: set[str] | None = None) -> dict[int, float]:
-    """Median-Soll aller Räume je Zeitpunkt (nur wenn mindestens die Hälfte der Räume meldet)."""
+    """Median-Soll aller Räume je Zeitpunkt (nur wenn mindestens die Hälfte der Räume meldet).
+
+    Steht ein Tado-Raum auf „aus“ (kein Soll, aber Raumtemperatur vorhanden), gilt der
+    Frostschutz von Tado (5 °C) – „aus“ ist dann die Absenkung.
+    """
     by_ts: dict[int, list[float]] = defaultdict(list)
     rooms: set[str] = set()
     for r in store.query(
-        "SELECT ts, room, target FROM room_samples WHERE ts >= ? AND target IS NOT NULL", (since,)
+        "SELECT ts, room, target, temp FROM room_samples WHERE ts >= ? AND (target IS NOT NULL OR temp IS NOT NULL)",
+        (since,)
     ):
         if r["room"] in skip or (only is not None and r["room"] not in only):
             continue
         rooms.add(r["room"])
-        by_ts[r["ts"]].append(r["target"])
+        by_ts[r["ts"]].append(r["target"] if r["target"] is not None else OFF_TEMP)
     need = max(1, len(rooms) // 2)
     return {ts: statistics.median(v) for ts, v in by_ts.items() if len(v) >= need}
 
@@ -113,13 +119,17 @@ def learn(store, now_ts: int, skip_rooms: set[str] = frozenset(), rooms: set[str
         night_vals.extend(v for _, m, v in pts if start <= m < end)
 
     away = [v for ts, v in series if not home.get(ts, True) and 8 <= _local(ts).hour < 18]
-    out = {"nights": len(starts), "away_samples": len(away), "window_days": WINDOW_DAYS,
+    ts_all = [ts for ts, _ in series]
+    gaps = [b - a for a, b in zip(ts_all, ts_all[1:]) if 0 < b - a <= 900]
+    step_h = (statistics.median(gaps) if gaps else 300) / 3600
+    away_h = len(away) * step_h
+    out = {"nights": len(starts), "away_hours": round(away_h, 1), "window_days": WINDOW_DAYS,
            "night_start": None, "night_end": None, "night_temp": None, "away_temp": None}
     if starts:
         out["night_start"] = _hhmm(statistics.median(starts))
         out["night_end"] = _hhmm(statistics.median(ends))
         out["night_temp"] = round(statistics.median(night_vals) * 2) / 2
-    if len(away) >= MIN_AWAY_SAMPLES:
+    if away_h >= MIN_AWAY_H:
         out["away_temp"] = round(statistics.median(away) * 2) / 2
     return out
 

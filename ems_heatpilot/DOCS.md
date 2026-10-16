@@ -42,13 +42,21 @@ Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
 erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
 `/data/settings.json` und bleiben bei Updates erhalten.
 
+## Alle Sensoren
+
+Reiter **Diagnose → Alle Sensoren** listet, was HeatPilot liest: Bereich, Zweck,
+Sensor bzw. EMS-ESP-Wert, Name in Home Assistant, aktueller Wert, Stand und
+Zustand (ok, fehlt, veraltet, nicht gefunden). Mit dem Filter findet man schnell
+alles zu einem Raum oder alle fehlenden Werte; optional werden auch die von
+EMS-ESP gelieferten, aber nicht verwendeten Werte gezeigt.
+
 ## Gelernte Werte exportieren
 
 Reiter **Diagnose → Gelernte Werte herunterladen** liefert eine JSON-Datei mit allem,
 was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in
 Klartext mit Gütemaß (Fehler, gekappte und verworfene Punkte, plausibel ja/nein),
 dazu Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage (7, 14 oder
-30). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
+30) – im Spaltenformat und auf 5 min verdichtet (14 Tage etwa 1–3 MB). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
 GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten.
 
 Ob das Warmwasser-Modell passt, zeigt auch die Grafik „Was Warmhalten kostet“:
@@ -169,7 +177,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.17 macht
+## Was das Add-on in Version 0.18 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

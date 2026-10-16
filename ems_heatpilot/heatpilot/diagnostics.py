@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__, guards
-from .discovery import BOILER_ROLES, ROLE_LABELS
+from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
 from .engine import num
 
 LOG_RING_SIZE = 3000
@@ -195,6 +195,9 @@ def self_check(app) -> list[dict]:
     if drops:
         add("info", "Gas", f"Gaszähler ist in 24 h {drops}× gesunken (Neustart/Zurücksetzen?) – diese Stunden werden ignoriert")
 
+    if eng.dhw_inferred and not eng.dhw_flag_seen:
+        add("info", "Warmwasser", "Kein Ladesignal vom Kessel („Warmwasser lädt“) – Ladungen werden aus dem "
+                                  f"Temperaturanstieg des Speichers erkannt ({eng.dhw_inferred} Messpunkte)")
     if eng._rejected:
         add("warn", "Messwerte", "Liefert gerade unmögliche Werte, werden ignoriert: " + ", ".join(sorted(eng._rejected)))
     ig = eng.ignored()
@@ -337,17 +340,44 @@ def explain_models(eng) -> dict:
     }
 
 
+EXPORT_STEP_S = 300  # Messwerte im Export auf 5 min verdichtet – egal welches Abtastintervall
+
+
+def _table(rows: list, step: int | None = EXPORT_STEP_S, key: str | None = None) -> dict:
+    """Spaltenformat: Namen einmal, Werte gerundet; ``step``: je Zeitraster (und ``key``) nur der erste Wert."""
+    rows = [dict(r) for r in rows]
+    if step:
+        seen, kept = set(), []
+        for r in rows:
+            k = (r["ts"] - r["ts"] % step, r.get(key) if key else None)
+            if k not in seen:
+                seen.add(k)
+                kept.append(r)
+        rows = kept
+    cols = list(rows[0]) if rows else []
+    # Spalten ohne einen einzigen Wert weglassen
+    cols = [c for c in cols if any(r.get(c) is not None for r in rows)]
+
+    def val(v):
+        return round(v, 2) if isinstance(v, float) else v
+    return {"spalten": cols, "zeilen": [[val(r.get(c)) for c in cols] for r in rows]}
+
+
 def export(app, days: int = 14) -> dict:
     """Gelernte Werte plus die Daten, aus denen sie gelernt wurden – zum Nachrechnen.
 
-    Ohne GPS-Koordinaten (nur Entfernungen), ohne Zugangsdaten.
+    Ohne GPS-Koordinaten (nur Entfernungen), ohne Zugangsdaten. Tabellen im Spaltenformat
+    und auf 5 min verdichtet, damit die Datei klein bleibt.
     """
     eng = app.eng
     since = int(time.time()) - days * 86400
+    q = eng.store.query
     return {
         "created": datetime.now().astimezone().isoformat(timespec="seconds"),
         "version": __version__,
-        "hinweis": "Gelernte Werte von EMS HeatPilot mit Lerndaten der letzten Tage. Ohne GPS-Koordinaten.",
+        "hinweis": "Gelernte Werte von EMS HeatPilot mit Lerndaten der letzten Tage. Ohne GPS-Koordinaten. "
+                   "Tabellen: 'spalten' + 'zeilen', Messwerte auf 5 min verdichtet.",
+        "tage": days,
         "settings": app.cfg.to_raw(),
         "discovered": eng.found.as_dict(private=False),
         "gelernt": explain_models(eng),
@@ -356,12 +386,95 @@ def export(app, days: int = 14) -> dict:
             "rooms": {c: m.to_dict() for c, m in eng.rooms.items()},
             "dhw": eng.dhw.to_dict(),
         },
-        "lernkurve": _rows(eng, "SELECT ts, kind, key, data FROM snapshots ORDER BY ts"),
-        "stundenwerte": _rows(eng, "SELECT * FROM hourly ORDER BY ts"),
-        "tageswerte": _rows(eng, "SELECT * FROM daily ORDER BY day"),
-        "messwerte": _rows(eng, "SELECT * FROM samples WHERE ts >= ? ORDER BY ts", (since,)),
-        "raeume_messwerte": _rows(eng, "SELECT * FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)),
-        "anwesenheit": _rows(eng, "SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
-                             (since,)),
-        "brenner": _rows(eng, "SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)),
+        "lernkurve": _table(q("SELECT ts, kind, key, data FROM snapshots WHERE kind = 'house' ORDER BY ts"), None),
+        "stundenwerte": _table(q("SELECT * FROM hourly ORDER BY ts"), None),
+        "tageswerte": _table(q("SELECT * FROM daily ORDER BY day"), None),
+        "messwerte": _table(q("SELECT * FROM samples WHERE ts >= ? ORDER BY ts", (since,))),
+        "raeume_messwerte": _table(q("SELECT * FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)), key="room"),
+        "anwesenheit": _table(q("SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
+                                (since,)), 900, key="person"),
+        "brenner": _table(q("SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)), None),
     }
+
+
+def export_estimate(app, days: int) -> int:
+    """Ungefähre Größe des Exports in Bytes (aus der Zahl der Zeilen, ohne ihn zu erzeugen)."""
+    eng = app.eng
+    since = int(time.time()) - days * 86400
+    n = lambda sql, *p: eng.store.query(sql, p)[0]["n"]  # noqa: E731
+    samples = n("SELECT COUNT(DISTINCT ts - ts % 300) AS n FROM samples WHERE ts >= ?", since)
+    rooms = n("SELECT COUNT(DISTINCT (ts - ts % 300) || room) AS n FROM room_samples WHERE ts >= ?", since)
+    persons = n("SELECT COUNT(DISTINCT (ts - ts % 900) || person) AS n FROM person_samples WHERE ts >= ?", since)
+    hourly = n("SELECT COUNT(*) AS n FROM hourly")
+    return 60_000 + samples * 125 + rooms * 55 + persons * 40 + hourly * 50
+
+
+def sensor_table(eng) -> list[dict]:
+    """Alle Sensoren auf einen Blick: wofür, woher, Name in HA, aktueller Wert, Stand, Zustand."""
+    rows: list[dict] = []
+    f = eng.found
+    now = time.time()
+
+    def ha(eid: str | None) -> dict:
+        st = eng.states.get(eid or "")
+        if not st:
+            return {}
+        a = st.get("attributes", {})
+        age = _age_hours(st)
+        return {"name": a.get("friendly_name"), "unit": a.get("unit_of_measurement"),
+                "value": st.get("state"), "age_min": None if age is None else round(age * 60)}
+
+    def add(group, label, source, info, status=None):
+        value = info.get("value")
+        if status is None:
+            status = "fehlt" if value in (None, "unknown", "unavailable") else "ok"
+        rows.append({"group": group, "label": label, "source": source, "name": info.get("name"),
+                     "value": value, "unit": info.get("unit"), "age_min": info.get("age_min"), "status": status})
+
+    used_ems = set()
+    for group, roles, device, found_map in (("Kessel", BOILER_ROLES, "boiler", f.boiler),
+                                            ("Regler", THERMOSTAT_ROLES, "thermostat", f.thermostat)):
+        ems = eng.ems.get(device) or {}
+        for role, keys in roles.items():
+            key = next((k for k in keys if k in ems), None)
+            if key is not None:
+                used_ems.add((device, key))
+                add(group, ROLE_LABELS.get(role, role), f"EMS-ESP {device}/{key}", {"value": ems[key]})
+            elif found_map.get(role):
+                add(group, ROLE_LABELS.get(role, role), found_map[role], ha(found_map[role]))
+            else:
+                add(group, ROLE_LABELS.get(role, role), "–", {}, "nicht gefunden")
+    for e in f.outdoor:
+        add("Außen", "Außentemperatur", e, ha(e))
+    if f.weather:
+        add("Außen", "Wetter (Vorhersage)", f.weather, ha(f.weather))
+    add("Gas", "Gaszähler", f.gas or "–", ha(f.gas) if f.gas else {}, None if f.gas else "nicht gewählt")
+    if f.demand_sensor:
+        add("Gas", "Heizungsanforderung", f.demand_sensor, ha(f.demand_sensor))
+    floor = set(eng.cfg.floor_heating_rooms)
+    for r in f.rooms:
+        g = f"Raum {r.name}" + (" (Fußboden)" if r.climate in floor else "")
+        info = ha(r.climate)
+        st = eng.states.get(r.climate, {})
+        temp = st.get("attributes", {}).get("current_temperature")
+        target = st.get("attributes", {}).get("temperature") if st.get("state") != "off" else "aus"
+        add(g, "Thermostat (Ist / Soll)", r.climate, {**info, "value": f"{temp} / {target}", "unit": "°C"},
+            "fehlt" if temp is None else "ok")
+        for label, eid in (("Ventil / Heizleistung", r.heating_power), ("Temperatursensor", r.temp_sensor),
+                           ("Luftfeuchte", r.humidity)):
+            if eid:
+                add(g, label, eid, ha(eid))
+            else:
+                add(g, label, "–", {}, "nicht gewählt")
+    for p in f.persons:
+        info = ha(p)
+        add("Personen", "Anwesenheit", p, {k: v for k, v in info.items() if k != "unit"})
+    for device, values in eng.ems.items():
+        for key, value in sorted(values.items()):
+            if (device, key) not in used_ems:
+                add(f"EMS-ESP {device} (nicht verwendet)", key, f"EMS-ESP {device}/{key}", {"value": value},
+                    "nicht verwendet")
+    for r in rows:
+        if r["status"] == "ok" and r["age_min"] is not None and r["age_min"] > STALE_HOURS * 60 and r["group"] != "Gas":
+            r["status"] = "veraltet"
+    return rows

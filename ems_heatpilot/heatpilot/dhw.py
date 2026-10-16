@@ -31,6 +31,7 @@ LOW_START_LIMIT = 47.0
 BIG_DRAW_K = 6.0       # ab so viel Abfall in einer Stunde: große Zapfung (z. B. Badewanne)
 BIG_KEEP_DAYS = 60
 BIG_WARMUP_DAYS = 14
+SEGMENT_H = 0.5       # Auskühlen über so lange ruhige Abschnitte lernen
 AFTER_CHARGE_H = 0.5   # so lange nach einer Ladung zieht der Fühler noch nach – nicht als Auskühlen lernen
 MAX_RISE_K = 0.3       # steigt die Temperatur ohne Ladung stärker, wird geheizt (Ladesignal fehlt o. ä.)
 
@@ -64,6 +65,7 @@ class DhwModel:
     _slot_draw: float = 0.0
     _slot_valid: bool = False
     _since_charge_h: float = 99.0  # Stunden seit Ladeende: kurz danach zieht der Fühler noch nach
+    _seg: list | None = None  # ruhiger Abschnitt [Start-T, Stunden, End-T] – Auskühlen über ≥ 30 min lernen
 
     # ------------------------------------------------------------------ Modell
     @property
@@ -166,8 +168,20 @@ class DhwModel:
         if d_t < expected - 1.0:  # deutlich schneller als Auskühlen -> Zapfung
             out["draw_k"] = expected - d_t
             self._slot_draw += out["draw_k"]
+            self._seg = None
         elif cooling_sample(d_t, self._since_charge_h):
-            self.loss.update([1.0, t_prev], d_t / dt_h)
+            # Über einen ruhigen Abschnitt mitteln: einzelne 1–5-min-Schritte sind bei 0,1 K
+            # Fühlerauflösung zu verrauscht
+            if self._seg is None:
+                self._seg = [t_prev, 0.0, t_prev]
+            self._seg[1] += dt_h
+            self._seg[2] = t_cur
+            if self._seg[1] >= SEGMENT_H - 1e-6:
+                t0, hours, t1 = self._seg
+                self.loss.update([1.0, (t0 + t1) / 2], (t1 - t0) / hours)
+                self._seg = [t_cur, 0.0, t_cur]
+        else:
+            self._seg = None
         c = self.kwh_per_kelvin()
         if c is not None:
             out["loss_kwh"] = c * self.cooling_kh(t_prev) * dt_h

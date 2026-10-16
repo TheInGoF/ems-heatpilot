@@ -169,6 +169,17 @@ def make_app(app) -> web.Application:
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
 
+    async def sensors(_req):
+        if app.eng is None:
+            return web.json_response({"starting": True, "status": app.status})
+        return web.json_response({"rows": diagnostics.sensor_table(app.eng)})
+
+    async def export_size(req):
+        if app.eng is None:
+            return web.json_response({"bytes": None})
+        days = min(max(int(req.query.get("days", "14")), 1), 60)
+        return web.json_response({"bytes": diagnostics.export_estimate(app, days)})
+
     async def reload_history(_req):
         asyncio.create_task(app.reload_history())
         return web.json_response({"ok": True})
@@ -185,6 +196,8 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/diagnostics", diag)
     web_app.router.add_get("/api/diagnostics/bundle", diag_bundle)
     web_app.router.add_get("/api/export", export_learned)
+    web_app.router.add_get("/api/export/size", export_size)
+    web_app.router.add_get("/api/sensors", sensors)
     web_app.router.add_get("/api/live", live_data)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
