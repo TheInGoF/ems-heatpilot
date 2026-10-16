@@ -9,7 +9,7 @@ from aiohttp import web
 
 from .config import Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
-from . import certificate, diagnostics
+from . import certificate, diagnostics, live
 from .emsesp import EmsEsp
 
 STATIC = Path(__file__).parent / "static"
@@ -52,6 +52,7 @@ def make_app(app) -> web.Application:
             "discovered": app.eng.found.as_dict(private=False),
             "suggested": await app.suggestions(),
             "roles": roles,
+            "schedule": {"learned": app.eng.schedule_learned, "effective": app.eng.eff.as_dict()},
         })
 
     async def entities(_req):
@@ -123,6 +124,12 @@ def make_app(app) -> web.Application:
             headers={"Content-Disposition": f'attachment; filename="{name}"'},
         )
 
+    async def live_data(req):
+        if app.eng is None:
+            return web.json_response({"starting": True, "status": app.status})
+        hours = min(max(float(req.query.get("hours", "12")), 0.5), 24)
+        return web.json_response({"now": live.now(app.eng), **live.series(app.eng, hours)})
+
     async def cert_json(_req):
         if app.eng is None:
             return web.json_response({"starting": True})
@@ -152,6 +159,7 @@ def make_app(app) -> web.Application:
     web_app.router.add_post("/api/reload_history", reload_history)
     web_app.router.add_get("/api/diagnostics", diag)
     web_app.router.add_get("/api/diagnostics/bundle", diag_bundle)
+    web_app.router.add_get("/api/live", live_data)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
     return web_app

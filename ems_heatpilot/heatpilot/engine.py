@@ -11,9 +11,10 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from . import advice, analysis, guards
+from . import advice, analysis, guards, schedule
 from .config import Config
 from .dhw import DhwModel, DhwShadow
+from .live import LiveBuffer
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
 from .presence import PersonLearner, haversine_km, next_arrival
@@ -79,6 +80,11 @@ class Engine:
         saved = store.get("model.dhw")
         self.dhw = DhwModel.from_dict(saved) if saved else DhwModel()
         self.dhw_shadow = DhwShadow()
+        # Zeiten/Temperaturen: Einstellungen sind Startwerte, gelernt wird aus Tado
+        self.schedule_learned: dict | None = store.get("schedule.learned")
+        self.eff = schedule.effective(cfg, self.schedule_learned)
+        self._schedule_ts = 0.0
+        self.live = LiveBuffer()  # 30-s-Werte der letzten 12 h für den Reiter „Live“
         self._prev_dhw: tuple[int, float | None] | None = None
         self.dhw_rec: dict | None = None
         self._advice: tuple[float, list, list] | None = None
@@ -364,7 +370,25 @@ class Engine:
             self._last_hour += 3600
             if local(self._last_hour).hour == 0:
                 self.take_snapshot(self._last_hour)
+        self.update_schedule(now_ts)
         self.save()
+
+    def record_live(self, now_ts: int | None = None) -> None:
+        sample, rooms, _ = self.snapshot()
+        self.live.add(now_ts or int(time.time()), sample, rooms)
+
+    def update_schedule(self, now_ts: int | None = None, max_age_s: int = 3600) -> None:
+        """Nachtzeiten und Temperaturen aus Tado neu lernen (stündlich)."""
+        now_ts = now_ts or int(time.time())
+        if now_ts - self._schedule_ts < max_age_s:
+            return
+        self._schedule_ts = now_ts
+        learned = schedule.learn(self.store, now_ts, set(self.cfg.floor_heating_rooms))
+        eff = schedule.effective(self.cfg, learned)
+        if eff.as_dict() != self.eff.as_dict():
+            log.info("Zeiten/Temperaturen: %s (gelernt aus %d Nächten)", eff.as_dict(), learned["nights"])
+        self.schedule_learned, self.eff = learned, eff
+        self.store.put("schedule.learned", learned)
 
     # ------------------------------------------------------------------ Lernen
     def relearn_rooms(self, climates: set[str]) -> None:
@@ -602,7 +626,7 @@ class Engine:
         hourly = [dict(r) for r in self.store.query("SELECT * FROM hourly ORDER BY ts")]
         nom = num(self._boiler("nom_power"))
         savings = analysis.estimate_savings(
-            hourly, self.house, self.cfg.away_temp, self.cfg.night_temp, self.cfg.is_night,
+            hourly, self.house, self.eff.away_temp, self.eff.night_temp, self.eff.is_night,
             p_max_kw=(nom or 18.0) * 0.95,
         )
         house_check = guards.check_house(self.house)
@@ -676,9 +700,11 @@ class Engine:
                 "returned": sorted(self.vacation.returned),
             },
             "advice": self.tado_advice(),
+            "schedule": {"learned": self.schedule_learned, "effective": self.eff.as_dict(),
+                         "learning": self.cfg.learn_schedule},
             "limits": {
-                "away_temp": self.cfg.away_temp,
-                "night_temp": self.cfg.night_temp,
+                "away_temp": self.eff.away_temp,
+                "night_temp": self.eff.night_temp,
                 "dhw_min_temp": self.cfg.dhw_min_temp,
             },
             "guards": {

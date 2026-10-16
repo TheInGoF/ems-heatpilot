@@ -170,3 +170,46 @@ def test_low_flow_points_to_heating_curve(tmp_path):
     eng.store.commit()
     text = advice.build(eng, t0 + 7 * 86400)[0]["text"]
     assert "Heizkurve des Reglers" in text and "38 °C" in text and "nur ändern, wenn du sicher bist" in text
+
+
+def balance_engine(tmp_path, weak_valve=100.0, strong_valve=20.0, weak_gain=0.022):
+    """Fünf Räume: drei normal, einer mit zu wenig Heizwasser, einer mit zu viel."""
+    gains = {"climate.a": 0.035, "climate.b": 0.034, "climate.c": 0.036,
+             "climate.schwach": weak_gain, "climate.stark": 0.07}
+    found = Discovered(rooms=[Room(c.split(".")[1].title(), c) for c in gains], persons=["person.a"])
+    eng = Engine(Config(), Store(tmp_path / "h.db"), found)
+    for c, a in gains.items():
+        eng.rooms[c].rls.theta, eng.rooms[c].rls.updates = [a, 0.05, 0.0], 500
+    t0 = int(START.timestamp())
+    valves = {"climate.schwach": weak_valve, "climate.stark": strong_valve}
+    for i in range(5 * 288):
+        ts = t0 + i * STEP
+        eng.store.add_person_samples([(ts, "person.a", 1, 0.0)])
+        eng.store.add_sample(ts, {"flow": 55.0})
+        eng.store.add_room_samples([(ts, c, 21.0, 21.0, valves.get(c, 50.0), None) for c in gains])
+    eng.store.commit()
+    return eng, t0 + 5 * 86400
+
+
+def test_hydraulic_balance_finds_under_and_oversupplied_rooms(tmp_path):
+    eng, now = balance_engine(tmp_path)
+    items = by_kind(advice.build(eng, now))
+    under = items[("climate.schwach", "abgleich")]
+    assert "zu wenig Heizwasser" in under["title"] and "eine Stufe höher" in under["text"]
+    assert "bestimmt den Vorlauf fürs ganze Haus" in under["text"]
+    assert under["evidence"]["nötiger Vorlauf am kältesten Tag (°C)"] > under["evidence"]["Median aller Räume (°C)"] + 8
+    over = items[("climate.stark", "abgleich")]
+    assert "mehr Heizwasser als nötig" in over["title"] and "eine Stufe zurück" in over["text"]
+    assert not any(k == "abgleich" for r, k in items if r in ("climate.a", "climate.b", "climate.c"))
+
+
+def test_no_throttling_without_starved_room(tmp_path):
+    # schwacher Raum, aber Ventil kaum offen: kein Beleg für Wassermangel -> auch nicht drosseln
+    eng, now = balance_engine(tmp_path, weak_valve=30.0)
+    assert not [a for a in advice.build(eng, now) if a["kind"] == "abgleich"]
+
+
+def test_balance_skips_floor_heating_and_too_few_rooms(tmp_path):
+    eng, now = balance_engine(tmp_path)
+    eng.cfg.floor_heating_rooms = ["climate.schwach", "climate.a", "climate.b"]
+    assert not [a for a in advice.build(eng, now) if a["kind"] == "abgleich"]

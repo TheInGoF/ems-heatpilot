@@ -12,6 +12,12 @@ konkrete Änderungen in Tado vor – es stellt selbst nichts ein.
    Abwesenheit?
 3. **Soll nicht erreichbar:** Raum bleibt über Stunden unter Soll, obwohl das
    Ventil voll offen ist.
+4. **Hydraulischer Abgleich:** In einem abgeglichenen Haus brauchen alle Räume
+   etwa denselben Vorlauf für ihre Wunschtemperatur. Aus jedem Raummodell folgt,
+   welchen Vorlauf der Raum am kältesten Tag bräuchte. Braucht einer deutlich mehr
+   als die anderen und steht sein Ventil oft weit offen, bekommt er zu wenig
+   Heizwasser (Voreinstellung eine Stufe auf); braucht einer viel weniger und
+   öffnet nur wenig, nimmt er den anderen Wasser weg (eine Stufe zu).
 
 Leitplanken: erst ab ``MIN_EVENTS`` Beobachtungen (letzte ``WINDOW_DAYS`` Tage,
 ohne Urlaub), kleine Schritte (max. 30 min bzw. ein Reglerschritt), keine
@@ -37,6 +43,9 @@ ARRIVAL_COLD_K = 0.7    # bei Ankunft so viel zu kalt -> Richtung Komfort
 ARRIVAL_WARM_MIN = 60   # so lange vor Ankunft schon warm -> Richtung Eco
 AWAY_GAP_MIN = 120      # vorher so lange niemand da = echte Heimkehr
 MAX_SHIFT_MIN = 30
+BALANCE_MIN_ROOMS = 3   # Abgleich nur im Vergleich mehrerer plausibler Räume
+UNDER_K = 8.0           # so viel mehr Vorlauf als der Median -> unterversorgt
+OVER_K = 10.0           # so viel weniger -> überversorgt
 
 
 def _local(ts: int) -> datetime:
@@ -195,6 +204,50 @@ def unreachable_episodes(series, home, flow) -> list[dict]:
     return eps
 
 
+def valve_stats(series, home) -> dict | None:
+    """Ventilöffnung während der Raum Wärme will (jemand zu Hause, Ventil > 0)."""
+    vals = [v for ts, _, _, v in series if v is not None and v > 0 and home.get(ts, True)]
+    if len(vals) < 12 * 12:  # mindestens 12 Stunden Heizbetrieb
+        return None
+    return {"mean_open": sum(vals) / len(vals), "wide_frac": sum(v >= 90 for v in vals) / len(vals),
+            "hours": len(vals) / 12}
+
+
+def balance(eng, rooms: dict, home: dict) -> dict[str, dict]:
+    """Hydraulischer Abgleich: nötiger Vorlauf je Raum am kältesten Tag im Vergleich."""
+    design = eng.cfg.design_outdoor_temp
+    floor = set(eng.cfg.floor_heating_rooms)
+    data = {}
+    for climate, series in rooms.items():
+        model = eng.rooms.get(climate)
+        if model is None or model.floor or climate in floor or not guards.check_room(model)["ok"]:
+            continue
+        stats = valve_stats(series, home)
+        if stats is None:
+            continue
+        comfort = [t for ts, _, t, _ in series if t is not None and home.get(ts, True)]
+        target = statistics.median(comfort) if comfort else 21.0
+        data[climate] = {**stats, "target": target, "flow": model.required_flow(target, design)}
+    if len(data) < BALANCE_MIN_ROOMS:
+        return {}
+    med = statistics.median(d["flow"] for d in data.values())
+    for d in data.values():
+        d["median"] = med
+        d["diff"] = d["flow"] - med
+        under = d["diff"] >= UNDER_K and (d["wide_frac"] >= 0.15 or d["mean_open"] >= 60)
+        over = -d["diff"] >= OVER_K and d["mean_open"] <= 40
+        d["state"] = "under" if under else "over" if over else "ok"
+    if not any(d["state"] == "under" for d in data.values()):
+        for d in data.values():  # ohne unterversorgten Raum ist ein Drosseln unnötig
+            if d["state"] == "over":
+                d["state"] = "ok"
+    flows = sorted(d["flow"] for d in data.values())
+    for d in data.values():
+        d["system_flow"] = flows[-1]
+        d["without_worst"] = flows[-2] if len(flows) > 1 else flows[-1]
+    return data
+
+
 def build(eng, now_ts: int | None = None) -> list[dict]:
     """Empfehlungen je Raum, mit Beleg. ``eng``: Engine (store, rooms, found, cfg)."""
     now_ts = now_ts or int(time.time())
@@ -207,6 +260,34 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
     def add(room, kind, impact, title, text, evidence):
         out.append({"room": room, "room_name": names.get(room, room), "kind": kind,
                     "impact": impact, "title": title, "text": text, "evidence": evidence})
+
+    bal = balance(eng, rooms, home)
+    design = eng.cfg.design_outdoor_temp
+    for climate, d in bal.items():
+        name = names.get(climate, climate)
+        ev = {"nötiger Vorlauf am kältesten Tag (°C)": round(d["flow"]),
+              "Median aller Räume (°C)": round(d["median"]),
+              "Ventil im Mittel offen (%)": round(d["mean_open"]),
+              "Anteil Heizzeit Ventil über 90 %": round(d["wide_frac"], 2),
+              "Heizstunden ausgewertet": round(d["hours"])}
+        if d["state"] == "under":
+            gain = ""
+            if d["flow"] >= d["system_flow"] - 0.5 and d["system_flow"] - d["without_worst"] >= 3:
+                gain = (f" Er bestimmt den Vorlauf fürs ganze Haus: besser versorgt, reichen am kältesten "
+                        f"Tag ca. {d['without_worst']:.0f} °C statt {d['system_flow']:.0f} °C.")
+            add(climate, "abgleich", "Abgleich", f"{name}: bekommt zu wenig Heizwasser",
+                f"Um {d['target']:.0f} °C bei {design:.0f} °C außen zu halten, braucht der Raum laut Modell "
+                f"{d['flow']:.0f} °C Vorlauf – {d['diff']:.0f} K mehr als die anderen Räume (Median "
+                f"{d['median']:.0f} °C). Das Ventil steht dabei oft weit offen. Wahrscheinlich ist die "
+                f"Voreinstellung (Durchflussbegrenzer am Ventilunterteil) zu weit zu: eine Stufe höher "
+                f"stellen. Vorher prüfen, ob der Heizkörper entlüftet ist und nicht zugestellt ist.{gain} "
+                f"Danach misst HeatPilot 1–2 Wochen neu.", ev)
+        elif d["state"] == "over":
+            add(climate, "abgleich", "Abgleich", f"{name}: bekommt mehr Heizwasser als nötig",
+                f"Der Raum braucht laut Modell nur {d['flow']:.0f} °C Vorlauf – {-d['diff']:.0f} K weniger als "
+                f"die anderen (Median {d['median']:.0f} °C) – und öffnet im Mittel nur {d['mean_open']:.0f} %. "
+                f"Wenn er öffnet, zieht er viel Wasser, das unterversorgten Räumen fehlt. Voreinstellung am "
+                f"Ventilunterteil eine Stufe zurück (kleinere Zahl). Danach misst HeatPilot 1–2 Wochen neu.", ev)
 
     for climate, series in rooms.items():
         name = names.get(climate, climate)
@@ -224,6 +305,9 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
                          f"{eng.cfg.max_flow_temp} °C) – wahrscheinlich liefert die Heizkurve des Reglers zu "
                          f"wenig. Das wäre eine Einstellung am Regler (Heizkurve/Auslegungstemperatur) – nur "
                          f"ändern, wenn du sicher bist. Sonst Heizkörper entlüften und Ventil prüfen.")
+            elif bal.get(climate, {}).get("state") == "under":
+                cause = ("Der Raum bekommt im Vergleich zu wenig Heizwasser – siehe Empfehlung zum "
+                         "hydraulischen Abgleich (Voreinstellung am Ventil).")
             else:
                 cause = "Heizkörper entlüften, Ventil/Thermostat prüfen – oder Soll senken."
             add(climate, "nicht_erreichbar", "Komfort", f"{name}: Soll wird nicht erreicht",
