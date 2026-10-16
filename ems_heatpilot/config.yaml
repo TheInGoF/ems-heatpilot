@@ -1,5 +1,5 @@
 name: EMS HeatPilot
-version: "0.10.1"
+version: "0.10.2"
 slug: ems_heatpilot
 description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
 url: https://github.com/TheInGoF/ems-heatpilot
@@ -12,7 +12,7 @@ boot: auto
 homeassistant_api: true
 ingress: true
 ingress_port: 8099
-panel_icon: mdi:fire-circle
+panel_icon: mdi:fire
 panel_title: HeatPilot
 map:
   - addon_config:rw
