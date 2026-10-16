@@ -4,6 +4,9 @@ Lokale, selbstlernende Heizungsoptimierung für Kessel mit
 [EMS-ESP](https://github.com/emsesp/EMS-ESP32) ([Doku](https://emsesp.org)),
 Tado und Anwesenheit.
 
+> **Beta (0.x): Raumregelung nur mit Tado.** Offene, direkt mit Home Assistant
+> verbundene Thermostate sollen später unterstützt werden.
+
 ## Einrichten
 
 Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
