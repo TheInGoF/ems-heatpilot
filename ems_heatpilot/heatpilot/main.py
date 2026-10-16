@@ -116,13 +116,26 @@ class App:
         save_settings(clean)
         log.info("Einstellungen gespeichert: %s", sorted(clean))
         before = list(self.eng.found.persons) if self.eng else None
+        rooms_before = self._room_inputs()
         await self.build(backfill=False)
+        rooms_after = self._room_inputs()
+        changed = sorted(c for c, v in rooms_after.items() if rooms_before is not None and rooms_before.get(c) != v)
+        if changed:
+            # Sensoren eines Raums geändert oder Raum neu: dessen Werte gibt es bisher nicht in den
+            # gespeicherten Daten – Historie aus Home Assistant neu holen und neu lernen
+            log.info("Räume mit neuen Sensoren/neu gewählt: %s – Historie wird neu eingelesen", ", ".join(changed))
+            asyncio.create_task(self.reload_history())
         if before is not None and sorted(before) != sorted(self.eng.found.persons):
             self.store.recount_home(self.eng.found.persons)
             log.info("Personen geändert (%s) – Anwesenheit in den gespeicherten Daten neu gezählt",
                      ", ".join(self.eng.found.persons) or "keine")
         set_debug(self.cfg.debug_logging)
         return []
+
+    def _room_inputs(self) -> dict[str, tuple] | None:
+        if self.eng is None:
+            return None
+        return {r.climate: (r.heating_power, r.temp_sensor) for r in self.eng.found.rooms}
 
     async def reload_history(self) -> None:
         """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers)."""

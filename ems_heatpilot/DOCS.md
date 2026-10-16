@@ -25,7 +25,8 @@ keine YAML-Optionen:
 - **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
   Fußbodenheizung, optionale Ventil-/Temperatur-/Feuchtesensoren. Automatisch gewählt
   werden nur Tado-Räume; was kein Raum ist (Klimaanlage im Auto, Heizkreis, Warmwasser),
-  bleibt abgewählt bzw. lässt sich abwählen
+  bleibt abgewählt bzw. lässt sich abwählen. Ändern sich die Sensoren eines Raums oder kommt ein Raum
+  hinzu, liest HeatPilot die Historie automatisch neu ein (dauert einige Minuten)
 - **Personen:** alle `person.*` mit Häkchen. Automatisch gewählt werden nur Personen
   mit Home-Assistant-Benutzer und Gerät. Fahrzeuge, die als Person angelegt sind
   (Bild, Abwesenheiten, aber kein Benutzer), sind als „Fahrzeug oder Gerät?“
