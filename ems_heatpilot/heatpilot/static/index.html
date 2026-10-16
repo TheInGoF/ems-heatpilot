@@ -124,12 +124,20 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
       <div class="row"><a class="btn primary" href="api/diagnostics/bundle" download style="text-decoration:none">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div>
     </div>
     <div class="card" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between"><h2>Alle Sensoren</h2>
+        <div class="row"><input id="sensor-filter" placeholder="Filter, z. B. Raum, pump, fehlt" oninput="renderSensors()" style="width:220px">
+          <label class="muted"><input type="checkbox" id="sensor-unused" onchange="renderSensors()"> auch nicht verwendete EMS-ESP-Werte</label>
+          <button class="btn small" onclick="loadSensors()">Aktualisieren</button></div></div>
+      <p>Was HeatPilot liest – wofür, woher, wie es in Home Assistant heißt und was es gerade meldet. Hier sieht man schnell, was fehlt, veraltet ist oder unsinnige Werte liefert und besser abgewählt oder unter „Zuordnungen“ korrigiert wird.</p>
+      <div class="scroll"><table id="sensor-table" style="font-size:12px"></table></div>
+    </div>
+    <div class="card" style="margin-bottom:12px">
       <h2>Gelernte Werte exportieren</h2>
       <p>Alles, was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in Klartext mit Gütemaß, dazu die Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage. Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne GPS-Koordinaten.</p>
       <div class="row"><select id="export-days" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
         <option value="7">7 Tage</option><option value="14" selected>14 Tage</option><option value="30">30 Tage</option></select>
         <a class="btn primary" id="export-btn" href="api/export?days=14" download style="text-decoration:none">Gelernte Werte herunterladen</a>
-        <span class="muted">14 Tage ≈ 2–5 MB</span></div>
+        <span class="muted" id="export-size"></span></div>
     </div>
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2>Log</h2>
@@ -402,7 +410,35 @@ function legend(id, items) {
   $(id).innerHTML = items.map(([name, color, dash]) => `<span><i style="background:${dash ? "transparent" : color};${dash ? `border-top:2px dashed ${color};height:0;vertical-align:3px` : ""}"></i>${name}</span>`).join("");
 }
 
-document.addEventListener("change", (e) => { if (e.target.id === "export-days") $("export-btn").href = "api/export?days=" + e.target.value; });
+let SENSORS = [];
+const STATUS_CSS = { ok: "var(--good)", fehlt: "#e34948", veraltet: "var(--warn)", "nicht gefunden": "var(--text-muted)",
+  "nicht gewählt": "var(--text-muted)", "nicht verwendet": "var(--text-muted)" };
+async function loadSensors() {
+  const j = await (await fetch("api/sensors")).json();
+  SENSORS = j.rows || [];
+  renderSensors();
+}
+function renderSensors() {
+  const q = ($("sensor-filter").value || "").toLowerCase(), unused = $("sensor-unused").checked;
+  const rows = SENSORS.filter((r) => (unused || r.status !== "nicht verwendet") &&
+    (!q || [r.group, r.label, r.source, r.name, r.status, String(r.value)].join(" ").toLowerCase().includes(q)));
+  const age = (m) => m === null || m === undefined ? "" : m < 60 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} d`;
+  $("sensor-table").innerHTML = "<tr><th>Bereich</th><th>Wofür</th><th>Sensor / Quelle</th><th>Name in HA</th><th>Wert</th><th>Stand</th><th>Zustand</th></tr>" +
+    rows.map((r) => `<tr><td>${esc(r.group)}</td><td>${esc(r.label)}</td><td><code>${esc(r.source)}</code></td><td>${esc(r.name ?? "")}</td>` +
+      `<td><b>${esc(r.value ?? "–")}</b> ${esc(r.unit ?? "")}</td><td class="muted">${age(r.age_min)}</td>` +
+      `<td><span class="badge" style="border-color:${STATUS_CSS[r.status]};color:${STATUS_CSS[r.status]}">${esc(r.status)}</span></td></tr>`).join("") +
+    (rows.length ? "" : `<tr><td colspan="7" class="muted">Nichts gefunden.</td></tr>`);
+}
+
+async function exportSize() {
+  const days = $("export-days").value;
+  $("export-btn").href = "api/export?days=" + days;
+  try {
+    const j = await (await fetch("api/export/size?days=" + days)).json();
+    $("export-size").textContent = j.bytes ? `ca. ${fmt(j.bytes / 1e6, 1)} MB` : "";
+  } catch (e) { $("export-size").textContent = ""; }
+}
+document.addEventListener("change", (e) => { if (e.target.id === "export-days") exportSize(); });
 
 let liveTimer = null;
 async function loadLive() {
@@ -623,6 +659,7 @@ function showTab(name) {
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
   if (name === "live") loadLive().catch((e) => { $("live-status").textContent = "Fehler: " + e; });
+  if (name === "diag") { exportSize(); loadSensors(); }
   if (name === "diag") loadDiag().catch((e) => { $("diag-checks").textContent = "Fehler: " + e; });
 }
 
@@ -723,7 +760,7 @@ function renderSettings() {
       ${field("Nachttemperatur (°C)", num("f-night_temp", s.night_temp, "0.5"), "Untergrenze" + learnedHint("night_temp", (v) => fmt(v) + " °C"))}
       ${field("Nacht ab", tim("f-night_start", s.night_start), learnedHint("night_start", (v) => v).replace(/^ · /, ""))}
       ${field("Nacht bis", tim("f-night_end", s.night_end), learnedHint("night_end", (v) => v).replace(/^ · /, ""))}
-      ${field("Weiterlernen", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-learn_schedule" ${s.learn_schedule ? "checked" : ""}> Zeiten und Temperaturen aus Tado lernen</label>`, SCHED && SCHED.learned ? `${SCHED.learned.nights} Nächte erkannt · ${fmt(SCHED.learned.away_samples / 12, 0)} h Abwesenheit` : "noch nichts gelernt")}
+      ${field("Weiterlernen", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-learn_schedule" ${s.learn_schedule ? "checked" : ""}> Zeiten und Temperaturen aus Tado lernen</label>`, SCHED && SCHED.learned ? `${SCHED.learned.nights} Nächte erkannt · ${fmt(SCHED.learned.away_hours ?? (SCHED.learned.away_samples || 0) / 12, 0)} h Abwesenheit` : "noch nichts gelernt")}
       ${field("Maximale Vorlauftemperatur (°C)", num("f-max_flow_temp", s.max_flow_temp, "1"))}
       ${field("Auslegungs-Außentemperatur (°C)", num("f-design_outdoor_temp", s.design_outdoor_temp, "1"), "Für die Normheizlast, z. B. Hamburg −12 °C")}
     </div>`) +

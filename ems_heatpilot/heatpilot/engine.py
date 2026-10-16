@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from . import advice, analysis, guards, plausibility, schedule
 from .config import Config
-from .dhw import DhwModel, DhwShadow, cooling_sample
+from .dhw import SEGMENT_H, DhwModel, DhwShadow, cooling_sample
 from .live import LiveBuffer
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
@@ -22,6 +22,8 @@ from .store import Store
 from .vacation import Vacation
 
 log = logging.getLogger(__name__)
+
+DHW_RISE_KH = 6.0  # so schnell steigt der Speicher nur beim Laden (Auskühlen: < 2 K/h)
 
 ENABLE_DELAY_MAX_MIN = 15
 ON_STATES = {"on", "true", "1", "heat", "heating"}
@@ -86,6 +88,9 @@ class Engine:
         self._schedule_ts = 0.0
         self.live = LiveBuffer()  # 30-s-Werte der letzten 12 h für den Reiter „Live“
         self.room_spikes = plausibility.SpikeFilter()
+        self._dhw_prev: tuple[int, float] | None = None  # (ts, Speichertemperatur) fürs Erkennen von Ladungen
+        self.dhw_inferred = 0      # Messpunkte, in denen die Ladung nur aus dem Temperaturanstieg erkannt wurde
+        self.dhw_flag_seen = False  # kam jemals ein Ladesignal?
         self._rejected: set[str] = set()  # zuletzt verworfene Messwerte (außerhalb der Grenzen)
         self._prev_dhw: tuple[int, float | None] | None = None
         self.dhw_rec: dict | None = None
@@ -355,6 +360,32 @@ class Engine:
         self._rejected = rejected
         return sample, clean, persons
 
+    def infer_dhw(self, ts: int, sample: dict) -> None:
+        """Warmwasserladung erkennen, wenn das Ladesignal fehlt oder nie 1 wird.
+
+        Steigt die Speichertemperatur bei laufendem Brenner um mindestens DHW_RISE_KH,
+        lädt der Kessel den Speicher (3-Wege-Ventil auf Warmwasser). Dann bekommt der
+        Heizkreis in dieser Zeit nichts.
+        """
+        flag, t = sample.get("dhw"), sample.get("dhw_temp")
+        if flag:
+            self.dhw_flag_seen = True
+        prev = self._dhw_prev
+        if t is not None and (prev is None or ts - prev[0] >= 100):
+            self._dhw_prev = (ts, t)
+        if flag or t is None or prev is None or not sample.get("burner_on"):
+            if flag is None and t is not None:
+                sample["dhw"] = 0
+            return
+        dt_h = (ts - prev[0]) / 3600
+        if 0 < dt_h <= 0.25 and t - prev[1] >= 0.5 and (t - prev[1]) / dt_h >= DHW_RISE_KH:
+            sample["dhw"] = 1
+            self.dhw_inferred += 1
+        elif flag is None:
+            sample["dhw"] = 0
+        if sample["dhw"] and self._boiler("heating_pump") is None:
+            sample["heating"] = 0  # Ventil auf Warmwasser: Heizkreis bekommt nichts
+
     def filter_room_spikes(self, ts: int, rooms: list[tuple]) -> list[tuple]:
         """Einzelne Temperatur-Spitzen je Raum verwerfen (vor dem Speichern)."""
         out = []
@@ -382,6 +413,7 @@ class Engine:
                   [(r[0], r[1], r[2], r[3]) for r in rooms], [(p, h, None if d is None else round(d, 1))
                                                             for p, h, d in persons])
         self.count_rejected(ts)
+        self.infer_dhw(ts, sample)
         rooms = self.filter_room_spikes(ts, rooms)
         self.track_vacation_return(ts, persons)
         vacation = self.on_vacation(ts)
@@ -902,19 +934,26 @@ class Engine:
             (now_ts - days * 86400,))
         bins: dict[int, list[float]] = {}
         last_charge = None
+        seg = None  # [Start-ts, Start-T] eines ruhigen Abschnitts – wie beim Lernen über 30 min gemittelt
         for a, b in zip(rows, rows[1:]):
             if a["dhw"]:
                 last_charge = a["ts"]
             dt_h = (b["ts"] - a["ts"]) / 3600
-            if not 0 < dt_h <= 0.5 or a["dhw"] or b["dhw"]:
-                continue
             d_t = b["dhw_temp"] - a["dhw_temp"]
             since = 99.0 if last_charge is None else (b["ts"] - last_charge) / 3600
-            if d_t < -self.dhw.cooling_kh(a["dhw_temp"]) * dt_h - 1.0 or not cooling_sample(d_t, since):
-                continue  # Zapfung, Nachlauf nach der Ladung oder Aufheizen – lernt das Modell auch nicht
-            bins.setdefault(round(a["dhw_temp"]), []).append(-d_t / dt_h)
+            quiet = (0 < dt_h <= 0.5 and not a["dhw"] and not b["dhw"]
+                     and d_t >= -self.dhw.cooling_kh(a["dhw_temp"]) * dt_h - 1.0 and cooling_sample(d_t, since))
+            if not quiet:
+                seg = None  # Zapfung, Ladung, Nachlauf oder Aufheizen – lernt das Modell auch nicht
+                continue
+            if seg is None:
+                seg = [a["ts"], a["dhw_temp"]]
+            hours = (b["ts"] - seg[0]) / 3600
+            if hours >= SEGMENT_H - 1e-6:
+                bins.setdefault(round((seg[1] + b["dhw_temp"]) / 2), []).append((seg[1] - b["dhw_temp"]) / hours)
+                seg = [b["ts"], b["dhw_temp"]]
         return [{"t": t, "kh": round(sum(v) / len(v), 3), "n": len(v)}
-                for t, v in sorted(bins.items()) if len(v) >= 6]
+                for t, v in sorted(bins.items()) if len(v) >= 3]
 
     def dhw_summary(self) -> dict:
         t_now = num(self._boiler("dhw_temp"))

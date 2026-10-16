@@ -137,6 +137,13 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
         t = t2
     log.info("Historie geladen: %d Entitäten", len(series))
 
+    # Was HA liefert, ersetzt die gespeicherten Werte desselben Zeitraums – sonst stünden nach
+    # geändertem Abtastintervall zwei Raster nebeneinander und Brennerereignisse doppelt
+    firsts = [ser[0][0] for ser in series.values() if ser]
+    if firsts:
+        data_start = max(int(min(firsts)), start_ts)
+        eng.store.delete_range(data_start, end_ts)
+
     # Brennerereignisse exakt aus der Historie
     burner = f.boiler.get("burner_on")
     prev = None
@@ -161,6 +168,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
         eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
         eng.count_rejected(ts)
+        eng.infer_dhw(ts, sample)
         rooms = eng.filter_room_spikes(ts, rooms)
         eng.track_vacation_return(ts, persons)
         sample["vacation"] = int(eng.on_vacation(ts))

@@ -194,20 +194,28 @@ def unreachable_episodes(series, home, flow) -> list[dict]:
             worst = max(worst, target - temp)
         else:
             if start and ts - start >= 2 * 3600:
-                fl = [flow.get(t) for t in range(start, ts, 300) if flow.get(t) is not None]
+                fl = [v for t, v in flow.items() if start <= t < ts and v is not None]
                 eps.append({"ts": start, "hours": (ts - start) / 3600, "deficit": worst,
                             "flow_max": max(fl) if fl else None})
             start, worst = None, 0.0
     return eps
 
 
+def sample_hours(ts_list) -> float:
+    """Stunden je Messpunkt aus dem typischen Abstand – unabhängig vom eingestellten Abtastintervall."""
+    ts = sorted(ts_list)
+    gaps = [b - a for a, b in zip(ts, ts[1:]) if 0 < b - a <= 900]
+    return (statistics.median(gaps) if gaps else 300) / 3600
+
+
 def valve_stats(series, home) -> dict | None:
     """Ventilöffnung während der Raum Wärme will (jemand zu Hause, Ventil > 0)."""
     vals = [v for ts, _, _, v in series if v is not None and v > 0 and home.get(ts, True)]
-    if len(vals) < 12 * 12:  # mindestens 12 Stunden Heizbetrieb
+    hours = len(vals) * sample_hours(s[0] for s in series)
+    if hours < 12:  # mindestens 12 Stunden Heizbetrieb
         return None
     return {"mean_open": sum(vals) / len(vals), "wide_frac": sum(v >= 90 for v in vals) / len(vals),
-            "hours": len(vals) / 12}
+            "hours": hours}
 
 
 def balance(eng, rooms: dict, home: dict) -> dict[str, dict]:
@@ -376,7 +384,7 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
                     {**ev_txt, "vor Ankunft warm Median (min)": round(ahead)})
 
         away = away_setpoints(series, home, vacation)
-        if len(away) >= MIN_EVENTS * 12 and not cold:
+        if len(away) * sample_hours(x[0] for x in series) >= MIN_EVENTS and not cold:
             med = statistics.median(away)
             target = eng.cfg.away_temp
             comfort = [s[2] for s in series if s[2] is not None and home.get(s[0])]

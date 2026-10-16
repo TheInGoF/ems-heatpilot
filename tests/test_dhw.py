@@ -93,7 +93,9 @@ def test_rising_temperature_is_not_learned_as_cooling():
         m.step(t0 + timedelta(minutes=60 + 5 * i), 5 / 60, t, t + 1.0, False, None)
         t += 1.0
     assert m.loss.updates == before
-    m.step(t0 + timedelta(minutes=95), 5 / 60, t, t - 0.1, False, None)  # echtes Auskühlen
+    for i in range(6):  # 30 min echtes Auskühlen -> ein Lernschritt über den ganzen Abschnitt
+        m.step(t0 + timedelta(minutes=95 + 5 * i), 5 / 60, t, t - 0.1, False, None)
+        t -= 0.1
     assert m.loss.updates == before + 1
 
 
