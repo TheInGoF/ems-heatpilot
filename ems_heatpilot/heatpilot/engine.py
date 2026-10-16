@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from . import advice, analysis, guards, plausibility, schedule
 from .config import Config
-from .dhw import DhwModel, DhwShadow
+from .dhw import DhwModel, DhwShadow, cooling_sample
 from .live import LiveBuffer
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
 from .models import ROOM_STEP_H, HouseModel, RoomModel
@@ -867,6 +867,28 @@ class Engine:
             "discovered": self.found.as_dict(private=False),
         }
 
+    def house_signature(self, days: int = 365) -> list[dict]:
+        """Tagesmittel: Gasleistung gegen Temperaturdifferenz (Energiesignatur).
+
+        Einzelne Stunden streuen stark (Kessel taktet, Warmwasser lädt) – Tagesmittel zeigen,
+        ob die gelernte Linie passt. Stunden mit Warmwasserladung (bekannt) zählen nicht.
+        """
+        since = int(time.time()) - days * 86400
+        by_day: dict[str, list[tuple[float, float]]] = {}
+        for r in self.store.query(
+            "SELECT ts, t_in, t_out, gas_kwh, dhw_frac FROM hourly WHERE ts >= ? AND gas_kwh IS NOT NULL "
+            "AND t_in IS NOT NULL AND t_out IS NOT NULL", (since,)
+        ):
+            if r["t_out"] > 15 or (r["dhw_frac"] or 0) > 0.1:
+                continue
+            by_day.setdefault(local(r["ts"]).date().isoformat(), []).append((r["t_in"] - r["t_out"], r["gas_kwh"]))
+        out = []
+        for day, vals in sorted(by_day.items()):
+            if len(vals) >= 12:
+                out.append({"day": day, "dt": round(sum(v[0] for v in vals) / len(vals), 2),
+                            "kw": round(sum(v[1] for v in vals) / len(vals), 3), "hours": len(vals)})
+        return out
+
     def dhw_points(self, days: int = 14, now_ts: int | None = None) -> list[dict]:
         """Gemessenes Auskühlen des Speichers (ohne Ladung, ohne Zapfung), je 1 K gemittelt.
 
@@ -877,13 +899,17 @@ class Engine:
             "SELECT ts, dhw_temp, dhw FROM samples WHERE ts >= ? AND dhw_temp IS NOT NULL ORDER BY ts",
             (now_ts - days * 86400,))
         bins: dict[int, list[float]] = {}
+        last_charge = None
         for a, b in zip(rows, rows[1:]):
+            if a["dhw"]:
+                last_charge = a["ts"]
             dt_h = (b["ts"] - a["ts"]) / 3600
             if not 0 < dt_h <= 0.5 or a["dhw"] or b["dhw"]:
                 continue
             d_t = b["dhw_temp"] - a["dhw_temp"]
-            if d_t < -self.dhw.cooling_kh(a["dhw_temp"]) * dt_h - 1.0 or abs(d_t) >= 2.0:
-                continue  # Zapfung bzw. Sprung – lernt das Modell auch nicht
+            since = 99.0 if last_charge is None else (b["ts"] - last_charge) / 3600
+            if d_t < -self.dhw.cooling_kh(a["dhw_temp"]) * dt_h - 1.0 or not cooling_sample(d_t, since):
+                continue  # Zapfung, Nachlauf nach der Ladung oder Aufheizen – lernt das Modell auch nicht
             bins.setdefault(round(a["dhw_temp"]), []).append(-d_t / dt_h)
         return [{"t": t, "kh": round(sum(v) / len(v), 3), "n": len(v)}
                 for t, v in sorted(bins.items()) if len(v) >= 6]

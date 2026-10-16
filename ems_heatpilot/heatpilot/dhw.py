@@ -28,6 +28,13 @@ from .rls import RLS
 
 SLOTS = 7 * 24
 LOW_START_LIMIT = 47.0
+AFTER_CHARGE_H = 0.5   # so lange nach einer Ladung zieht der Fühler noch nach – nicht als Auskühlen lernen
+MAX_RISE_K = 0.3       # steigt die Temperatur ohne Ladung stärker, wird geheizt (Ladesignal fehlt o. ä.)
+
+
+def cooling_sample(d_t: float, since_charge_h: float) -> bool:
+    """Ist dieser Schritt reines Auskühlen? (keine Zapfung geprüft vorher)"""
+    return since_charge_h >= AFTER_CHARGE_H and -2.0 < d_t <= MAX_RISE_K
 
 
 def slot_of(ts: datetime) -> int:
@@ -51,6 +58,7 @@ class DhwModel:
     _slot: int | None = None
     _slot_draw: float = 0.0
     _slot_valid: bool = False
+    _since_charge_h: float = 99.0  # Stunden seit Ladeende: kurz danach zieht der Fühler noch nach
 
     # ------------------------------------------------------------------ Modell
     @property
@@ -145,13 +153,15 @@ class DhwModel:
 
         if self._charge is not None:
             self._finish_charge()
+            self._since_charge_h = 0.0
+        self._since_charge_h += dt_h
 
         d_t = t_cur - t_prev
         expected = -self.cooling_kh(t_prev) * dt_h
         if d_t < expected - 1.0:  # deutlich schneller als Auskühlen -> Zapfung
             out["draw_k"] = expected - d_t
             self._slot_draw += out["draw_k"]
-        elif abs(d_t) < 2.0:
+        elif cooling_sample(d_t, self._since_charge_h):
             self.loss.update([1.0, t_prev], d_t / dt_h)
         c = self.kwh_per_kelvin()
         if c is not None:

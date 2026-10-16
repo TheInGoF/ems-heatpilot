@@ -24,7 +24,7 @@ from .web import make_app
 
 log = logging.getLogger("heatpilot")
 
-DATA_VERSION = 2
+DATA_VERSION = 3  # 3 (0.17.1): Warmwasser lernt kein Aufheizen mehr als Auskühlen
 
 
 class App:
@@ -41,7 +41,7 @@ class App:
         self._lock = asyncio.Lock()
         self._registry: tuple[float, list[dict]] | None = None
         self._reset = False
-        # Datenstand 2 (0.14): Ausreißer-Schutz – älteren Lernstand einmal neu berechnen
+        # neuer Datenstand (Ausreißer-Schutz 0.14, Warmwasser 0.17.1): älteren Lernstand einmal neu berechnen
         if self.store.get("data_version", 0) < DATA_VERSION:
             self._reset = bool(self.store.get("backfill_done"))
             self.store.put("data_version", DATA_VERSION)
