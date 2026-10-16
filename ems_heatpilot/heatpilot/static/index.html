@@ -84,6 +84,8 @@ input[type=checkbox] { width: 16px; height: 16px; }
 table.form td { padding: 4px 6px; vertical-align: middle; }
 table.form input { min-width: 140px; }
 pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--text-secondary); }
+.card[hidden], .tile[hidden] { display: none; }
+.grid2:not(:has(> .card:not([hidden]))) { display: none; }
 </style>
 </head>
 <body>
@@ -262,6 +264,7 @@ function ticks(min, max, n = 4) {
 
 function frame(container, xs, ys, opts = {}) {
   container.innerHTML = "";
+  showCard(container);
   const W = Math.max(container.clientWidth || 560, 280), H = opts.height || 220, m = { l: 44, r: opts.right ? 36 : 12, t: 10, b: 26 };
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": opts.label || "" }, container);
   let [x0, x1] = [Math.min(...xs), Math.max(...xs)];
@@ -286,7 +289,13 @@ function dateTicks(x0, x1) {
   return out;
 }
 
-function empty(container, text) { container.innerHTML = `<p class="muted">${text}</p>`; }
+// Keine Daten: ganze Karte ausblenden statt eines leeren Platzhalters – sie erscheint, sobald Daten da sind
+function empty(container, text) {
+  container.innerHTML = `<p class="muted">${text}</p>`;
+  const card = container.closest(".card");
+  if (card) card.hidden = true;
+}
+function showCard(container) { const card = container.closest(".card"); if (card) card.hidden = false; }
 
 function lineChart(container, pts, unit, label) {
   if (pts.length < 2) return empty(container, "Noch zu wenige Daten – das Modell speichert einmal pro Tag einen Stand.");
@@ -307,7 +316,7 @@ function lineChart(container, pts, unit, label) {
 }
 
 function barChart(container, rows, unit, label) {
-  if (!rows.length) return empty(container, "Noch keine Daten.");
+  if (!rows.length || rows.every((r) => !r[1])) return empty(container, "Noch keine Daten.");
   const xs = rows.map((_, i) => i), ys = rows.map((r) => r[1]);
   const f = frame(container, [-0.5, rows.length - 0.5], [0, ...ys], {
     yMin: 0, label,
@@ -518,6 +527,7 @@ function dhwChart(container, w) {
 }
 
 function tile(label, value, unit, note) {
+  if (value === "–" || value === "" || value === null || value === undefined) return "";
   return `<div class="tile"><div class="label">${label}</div><div class="value">${value}<span class="unit"> ${unit || ""}</span></div>${note ? `<div class="muted">${note}</div>` : ""}</div>`;
 }
 const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–";
@@ -540,10 +550,12 @@ async function load() {
     (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "") +
     (s.vacation.active ? ` · <span class="badge">Urlaub${s.vacation.until ? " bis " + timeOf(s.vacation.until) : ""} – Gewohnheiten pausiert</span>` : "");
   $("tiles").innerHTML = [
-    tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
-    tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
-    tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
-    tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", "Zeitkonstante des Auskühlens"),
+    // Hauswerte erst, wenn das Modell plausibel ist – vorher wären es Zahlen ohne Aussage
+    ...(s.guards.house.ok ? [
+      tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
+      tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
+      tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
+      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", "Zeitkonstante des Auskühlens")] : []),
     tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
     tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
     tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),
@@ -563,6 +575,7 @@ async function load() {
       <div class="muted">${Object.entries(a.evidence).filter(([, v]) => v !== null).map(([k, v]) => `${esc(k)}: ${esc(v)}`).join(" · ")} · seit ${dateOf(a.since)}</div></li>`).join("")}</ul>`
       : `<p class="muted">Keine Empfehlungen – alles passt, oder es liegen noch zu wenige Beobachtungen vor (mind. 4 in 3 Wochen).</p>`) +
     (adv.resolved.length ? `<p class="muted" style="margin-top:8px">Behoben: ${adv.resolved.map((r) => `${esc(r.title)} (${dateOf(r.resolved)})`).join(" · ")}</p>` : "");
+  $("advice").hidden = !adv.items.length && !adv.resolved.length;
   const g = s.guards;
   const status = (name, chk) => `<li><b>${name}:</b> ${chk.ok ? "plausibel – darf empfehlen" : "keine Empfehlung – " + chk.reasons.join("; ")}</li>`;
   $("guards").innerHTML = `<h2>Leitplanken</h2><p>Gespart wird nur bei gleichem Komfort und gemessen am Gaszähler für das ganze Haus. Feste Untergrenzen: Räume ${fmt(s.limits.away_temp)} °C bei Abwesenheit, ${fmt(s.limits.night_temp)} °C nachts, Warmwasser ${fmt(s.limits.dhw_min_temp)} °C. Unplausible oder zu junge Modelle geben keine Empfehlung.</p>` +
@@ -608,7 +621,10 @@ async function load() {
     s.persons.map((p) => `<tr><td>${p.person.replace("person.", "")}</td><td>${p.home ? "zu Hause" : "unterwegs"}</td><td>${fmt(p.dist_km)} km</td><td>${p.home ? "–" : timeOf(p.eta)}</td><td>${src[p.source] || "–"}${p.confidence ? ` (${fmt(p.confidence * 100, 0)} %)` : ""}</td></tr>`).join("");
 
   const plan = s.plan;
-  if (!s.arrival) $("plan").innerHTML = `<p class="muted">Jemand ist zu Hause oder es ist keine Ankunft absehbar.</p>`;
+  $("plan").closest(".card").hidden = !s.arrival;
+  $("persons").closest(".card").hidden = !s.persons.length;
+  $("rooms").closest(".card").hidden = !s.rooms.length;
+  if (!s.arrival) $("plan").innerHTML = "";
   else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – noch kein machbarer Plan (Modell lernt noch).</p>`;
   else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${src[s.arrival.source] || s.arrival.source || ""}). Start <b>${timeOf(plan.best.start)}</b>` +
     (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:13px">` +

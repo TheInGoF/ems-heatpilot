@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.18.2
+- Oberfläche: Kacheln ohne Wert und Karten ohne Daten (z. B. leere Diagramme, Empfehlungen, Vorheizplan, Personen) werden ausgeblendet und erscheinen von selbst, sobald Daten da sind – auch im Reiter Live
+- Hauswerte (Wärmeverlust, Heizlast, Trägheit) erscheinen erst, wenn das Hausmodell plausibel ist
+
 ## 0.18.1
 - Empfehlungen für Tado werten Zeitpläne mit „aus“-Blöcken aus: „aus“ zählt als Absenkung (Frostschutz 5 °C), das Einschalten (z. B. 16:00) als Zeitplanwechsel und das Anheben bei Heimkehr als Geofencing – vorher fehlten genau diese Wechsel. Komfort-Sollwerte werden ohne „aus“-Zeiten bestimmt
 
