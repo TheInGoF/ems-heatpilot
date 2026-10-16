@@ -45,14 +45,15 @@ def _minutes(t: time) -> int:
     return t.hour * 60 + t.minute
 
 
-def house_setpoints(store, since: int, skip: set[str] = frozenset()) -> dict[int, float]:
+def house_setpoints(store, since: int, skip: set[str] = frozenset(),
+                    only: set[str] | None = None) -> dict[int, float]:
     """Median-Soll aller Räume je Zeitpunkt (nur wenn mindestens die Hälfte der Räume meldet)."""
     by_ts: dict[int, list[float]] = defaultdict(list)
     rooms: set[str] = set()
     for r in store.query(
         "SELECT ts, room, target FROM room_samples WHERE ts >= ? AND target IS NOT NULL", (since,)
     ):
-        if r["room"] in skip:
+        if r["room"] in skip or (only is not None and r["room"] not in only):
             continue
         rooms.add(r["room"])
         by_ts[r["ts"]].append(r["target"])
@@ -60,11 +61,11 @@ def house_setpoints(store, since: int, skip: set[str] = frozenset()) -> dict[int
     return {ts: statistics.median(v) for ts, v in by_ts.items() if len(v) >= need}
 
 
-def learn(store, now_ts: int, skip_rooms: set[str] = frozenset()) -> dict:
+def learn(store, now_ts: int, skip_rooms: set[str] = frozenset(), rooms: set[str] | None = None,
+          persons: list[str] | None = None) -> dict:
     since = now_ts - WINDOW_DAYS * 86400
-    sp = house_setpoints(store, since, skip_rooms)
-    home: dict[int, bool] = {r["ts"]: bool(r["h"]) for r in store.query(
-        "SELECT ts, MAX(home) AS h FROM person_samples WHERE ts >= ? GROUP BY ts", (since,))}
+    sp = house_setpoints(store, since, skip_rooms, rooms)
+    home = store.home_by_ts(since, persons)
     vacation = {r["ts"] for r in store.query(
         "SELECT ts FROM samples WHERE ts >= ? AND vacation = 1", (since,))}
     series = sorted((ts, v) for ts, v in sp.items() if ts not in vacation)

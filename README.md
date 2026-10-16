@@ -20,7 +20,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 > Home Assistant verbundene Thermostate (z. B. Zigbee, Z-Wave, Matter, Homematic)
 > dazukommen.
 
-## Was es heute kann (0.15, Beobachtungsmodus)
+## Was es heute kann (0.16, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume lernen:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil
@@ -54,7 +54,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.15** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.16** |
 | 2 | Kesselseite: Heizfreigabe ereignisgesteuert, Sammelbetrieb bei Abwesenheit statt vieler Kurzstarts, Nachlauf vermeiden | geplant |
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |

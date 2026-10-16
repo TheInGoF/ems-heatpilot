@@ -115,7 +115,12 @@ class App:
             return errors
         save_settings(clean)
         log.info("Einstellungen gespeichert: %s", sorted(clean))
+        before = list(self.eng.found.persons) if self.eng else None
         await self.build(backfill=False)
+        if before is not None and sorted(before) != sorted(self.eng.found.persons):
+            self.store.recount_home(self.eng.found.persons)
+            log.info("Personen geändert (%s) – Anwesenheit in den gespeicherten Daten neu gezählt",
+                     ", ".join(self.eng.found.persons) or "keine")
         set_debug(self.cfg.debug_logging)
         return []
 

@@ -27,6 +27,7 @@ FIELDS: dict[str, tuple] = {
     "statistics_backfill_days": ("int", 0, 1095),
     "outdoor_sensors": ("entities",),
     "rooms": ("rooms",),
+    "persons": ("entities",),
     "gas_sensor": ("entity",),
     "demand_sensor": ("entity",),
     "weather_entity": ("entity",),
@@ -152,6 +153,8 @@ class Config:
     outdoor_sensors: list[str] = field(default_factory=list)
     # Räume: [{name, climate, temperature?, heating_power?, humidity?}], leer = Tado automatisch
     rooms: list[dict] = field(default_factory=list)
+    # Personen für die Anwesenheit; leer = automatisch (alle person.* mit Gerät/GPS)
+    persons: list[str] = field(default_factory=list)
     gas_sensor: str | None = None
     # Heizungsanforderung der bestehenden Automation (nur aufzeichnen)
     demand_sensor: str | None = None

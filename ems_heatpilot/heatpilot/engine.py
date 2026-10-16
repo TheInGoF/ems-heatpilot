@@ -421,7 +421,8 @@ class Engine:
         if now_ts - self._schedule_ts < max_age_s:
             return
         self._schedule_ts = now_ts
-        learned = schedule.learn(self.store, now_ts, set(self.cfg.floor_heating_rooms))
+        learned = schedule.learn(self.store, now_ts, set(self.cfg.floor_heating_rooms),
+                                 {r.climate for r in self.found.rooms}, self.found.persons)
         eff = schedule.effective(self.cfg, learned)
         if eff.as_dict() != self.eff.as_dict():
             log.info("Zeiten/Temperaturen: %s (gelernt aus %d Nächten)", eff.as_dict(), learned["nights"])
