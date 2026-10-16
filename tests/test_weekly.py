@@ -91,3 +91,12 @@ def test_habit_hours_shape():
     p = PersonLearner("person.a")
     h = p.habit_hours()
     assert len(h) == 7 and all(len(r) == 24 for r in h) and h[0][0] == 0.5
+
+
+def test_json_clean_drops_nan_and_infinity():
+    import json
+    from heatpilot.web import clean, json_response
+
+    data = {"a": float("nan"), "b": [1.0, float("inf")], "c": datetime(2026, 1, 1, 12, 0)}
+    assert clean(data) == {"a": None, "b": [1.0, None], "c": "2026-01-01T12:00:00"}
+    assert json.loads(json_response(data).text)["b"] == [1.0, None]
