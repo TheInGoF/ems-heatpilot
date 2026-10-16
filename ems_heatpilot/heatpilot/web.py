@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
+import math
+from datetime import date, datetime
 from pathlib import Path
 
 from aiohttp import web
@@ -21,9 +24,41 @@ PICK_DOMAINS = ("sensor", "binary_sensor", "climate", "weather", "input_boolean"
                 "number", "select", "person", "counter")
 
 
+def clean(value):
+    """Für JSON: NaN/unendlich -> null, Zeitpunkte -> ISO-Text (Browser lehnen NaN ab)."""
+    if isinstance(value, float):
+        return value if math.isfinite(value) else None
+    if isinstance(value, dict):
+        return {str(k): clean(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [clean(v) for v in value]
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return value
+
+
+def json_response(data, status: int = 200, **kw) -> web.Response:
+    body = json.dumps(clean(data), ensure_ascii=False, allow_nan=False, default=str)
+    return web.Response(text=body, status=status, content_type="application/json", **kw)
+
+
+@web.middleware
+async def api_errors(request, handler):
+    """Fehler einer Abfrage als JSON mit Ursache – statt einer Fehlerseite, die die Oberfläche nicht lesen kann."""
+    try:
+        return await handler(request)
+    except web.HTTPException:
+        raise
+    except Exception as err:  # noqa: BLE001
+        if "/api/" not in request.path:
+            raise
+        log.exception("Fehler bei %s", request.path)
+        return json_response({"error": f"{type(err).__name__}: {err}", "path": request.path}, status=500)
+
+
 def make_app(app) -> web.Application:
     """``app``: main.App (cfg, eng, status, apply_settings, suggestions, reload_history, ...)."""
-    web_app = web.Application()
+    web_app = web.Application(middlewares=[api_errors])
 
     async def index(_req):
         return web.FileResponse(STATIC / "index.html")
@@ -33,22 +68,22 @@ def make_app(app) -> web.Application:
 
     async def summary(_req):
         if app.eng is None:
-            return web.json_response({"starting": True, "status": app.status})
-        return web.json_response({**app.eng.summary(), "configured": app.configured})
+            return json_response({"starting": True, "status": app.status})
+        return json_response({**app.eng.summary(), "configured": app.configured})
 
     async def history(req):
         if app.eng is None:
-            return web.json_response({"starting": True})
+            return json_response({"starting": True})
         days = int(req.query.get("days", "30"))
-        return web.json_response({**app.eng.history(min(max(days, 1), 400)),
+        return json_response({**app.eng.history(min(max(days, 1), 400)),
                                   "signature": app.eng.house_signature(365)})
 
     async def get_settings(_req):
         if app.eng is None:
-            return web.json_response({"starting": True, "status": app.status})
+            return json_response({"starting": True, "status": app.status})
         roles = [{"role": r, "label": ROLE_LABELS.get(r, r), "group": "Kessel"} for r in BOILER_ROLES]
         roles += [{"role": r, "label": ROLE_LABELS.get(r, r), "group": "Regler"} for r in THERMOSTAT_ROLES]
-        return web.json_response({
+        return json_response({
             "settings": app.cfg.to_raw(),
             "defaults": Config().to_raw(),
             "configured": app.configured,
@@ -61,7 +96,7 @@ def make_app(app) -> web.Application:
     async def entities(_req):
         """Alle wählbaren Entitäten mit Name, Einheit, Klasse und Gerät (für Raum-Vorschläge)."""
         if app.eng is None:
-            return web.json_response([])
+            return json_response([])
         reg = {r["entity_id"]: r for r in await app.registry()}
         out = []
         for eid, st in sorted(app.eng.states.items()):
@@ -81,41 +116,41 @@ def make_app(app) -> web.Application:
                     "user": bool(a.get("user_id"))}
                    if eid.startswith("person.") else {}),
             })
-        return web.json_response(out)
+        return json_response(out)
 
     async def post_settings(req):
         try:
             raw = await req.json()
         except ValueError:
-            return web.json_response({"ok": False, "errors": ["Ungültige Daten"]}, status=400)
+            return json_response({"ok": False, "errors": ["Ungültige Daten"]}, status=400)
         errors = await app.apply_settings(raw)
         if errors:
-            return web.json_response({"ok": False, "errors": errors}, status=400)
-        return web.json_response({"ok": True})
+            return json_response({"ok": False, "errors": errors}, status=400)
+        return json_response({"ok": True})
 
     async def test_emsesp(req):
         host = (await req.json()).get("host", "").strip()
         if not host:
-            return web.json_response({"ok": False, "message": "Keine Adresse angegeben"})
+            return json_response({"ok": False, "message": "Keine Adresse angegeben"})
         ems = EmsEsp(host)
         try:
             values = await asyncio.wait_for(ems.read(), timeout=45)
         except Exception as err:  # noqa: BLE001
-            return web.json_response({"ok": False, "message": str(err) or "keine Antwort"})
+            return json_response({"ok": False, "message": str(err) or "keine Antwort"})
         finally:
             await ems.close()
         if not values:
-            return web.json_response({"ok": False, "message": "Keine Antwort von /api/boiler bzw. /api/thermostat"})
+            return json_response({"ok": False, "message": "Keine Antwort von /api/boiler bzw. /api/thermostat"})
         names = {"boiler": "Kessel", "thermostat": "Regler", "mixer": "Mischer", "solar": "Solar",
                  "temperaturesensor": "Temperatursensoren", "analogsensor": "Analogsensoren",
                  "heatpump": "Wärmepumpe", "switch": "Schaltmodul", "custom": "eigene Werte"}
-        return web.json_response({"ok": True, "message": ", ".join(
+        return json_response({"ok": True, "message": ", ".join(
             f"{names.get(d, d)}: {len(v)} Werte" for d, v in values.items())})
 
     async def diag(req):
         level = req.query.get("level", "INFO").upper()
         n = int(req.query.get("n", "400"))
-        return web.json_response({
+        return json_response({
             "checks": diagnostics.self_check(app),
             "log": diagnostics.RING.tail(min(max(n, 10), diagnostics.LOG_RING_SIZE), level),
             "log_dir": str(diagnostics.log_dir()),
@@ -136,39 +171,39 @@ def make_app(app) -> web.Application:
 
     async def live_data(req):
         if app.eng is None:
-            return web.json_response({"starting": True, "status": app.status})
+            return json_response({"starting": True, "status": app.status})
         hours = min(max(float(req.query.get("hours", "12")), 0.5), 24)
-        return web.json_response({"now": live.now(app.eng), **live.series(app.eng, hours)})
+        return json_response({"now": live.now(app.eng), **live.series(app.eng, hours)})
 
     async def week_data(req):
         if app.eng is None:
-            return web.json_response({"starting": True, "status": app.status})
+            return json_response({"starting": True, "status": app.status})
         days = min(max(int(req.query.get("days", "56")), 7), 365)
         room = req.query.get("room") or None
-        return web.json_response(app.eng.week(days, room))
+        return json_response(app.eng.week(days, room))
 
     async def presence_data(req):
         if app.eng is None:
-            return web.json_response({"starting": True, "status": app.status})
+            return json_response({"starting": True, "status": app.status})
         hours = min(max(float(req.query.get("hours", "24")), 1), 168)
-        return web.json_response(app.eng.presence(hours))
+        return json_response(app.eng.presence(hours))
 
     async def cert_json(_req):
         if app.eng is None:
-            return web.json_response({"starting": True})
-        return web.json_response(certificate.collect(app.eng))
+            return json_response({"starting": True})
+        return json_response(certificate.collect(app.eng))
 
     async def cert_pdf(req):
         from datetime import datetime
 
         if app.eng is None:
-            return web.json_response({"error": f"HeatPilot startet noch ({app.status}) – bitte gleich noch einmal."},
+            return json_response({"error": f"HeatPilot startet noch ({app.status}) – bitte gleich noch einmal."},
                                      status=503)
         try:
             body = certificate.pdf(app.eng)
         except Exception as err:  # noqa: BLE001 – Fehler sichtbar machen statt einer kaputten Datei
             log.exception("Zertifikat konnte nicht erstellt werden")
-            return web.json_response({"error": f"Zertifikat konnte nicht erstellt werden: {err}"}, status=500)
+            return json_response({"error": f"Zertifikat konnte nicht erstellt werden: {err}"}, status=500)
         name = f"heatpilot-zertifikat-{datetime.now():%Y%m%d}.pdf"
         mode = "inline" if req.query.get("inline") else "attachment"
         return web.Response(body=body, content_type="application/pdf",
@@ -192,18 +227,18 @@ def make_app(app) -> web.Application:
 
     async def sensors(_req):
         if app.eng is None:
-            return web.json_response({"starting": True, "status": app.status})
-        return web.json_response({"rows": diagnostics.sensor_table(app.eng)})
+            return json_response({"starting": True, "status": app.status})
+        return json_response({"rows": diagnostics.sensor_table(app.eng)})
 
     async def export_size(req):
         if app.eng is None:
-            return web.json_response({"bytes": None})
+            return json_response({"bytes": None})
         days = min(max(int(req.query.get("days", "14")), 1), 60)
-        return web.json_response({"bytes": diagnostics.export_estimate(app, days)})
+        return json_response({"bytes": diagnostics.export_estimate(app, days)})
 
     async def reload_history(_req):
         asyncio.create_task(app.reload_history())
-        return web.json_response({"ok": True})
+        return json_response({"ok": True})
 
     web_app.router.add_get("/", index)
     web_app.router.add_get("/icon.svg", icon)

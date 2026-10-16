@@ -473,7 +473,7 @@ let SENSORS = [];
 const STATUS_CSS = { ok: "var(--good)", fehlt: "#e34948", veraltet: "var(--warn)", "nicht gefunden": "var(--text-muted)",
   "nicht gewählt": "var(--text-muted)", "nicht verwendet": "var(--text-muted)" };
 async function loadSensors() {
-  const j = await (await fetch("api/sensors")).json();
+  const j = await getJSON("api/sensors");
   SENSORS = j.rows || [];
   renderSensors();
 }
@@ -493,7 +493,7 @@ async function exportSize() {
   const days = $("export-days").value;
   $("export-btn").href = "api/export?days=" + days;
   try {
-    const j = await (await fetch("api/export/size?days=" + days)).json();
+    const j = await getJSON("api/export/size?days=" + days);
     $("export-size").textContent = j.bytes ? `ca. ${fmt(j.bytes / 1e6, 1)} MB` : "";
   } catch (e) { $("export-size").textContent = ""; }
 }
@@ -509,7 +509,7 @@ function humidityNote(rooms) {
 let liveTimer = null;
 async function loadLive() {
   clearTimeout(liveTimer);
-  const j = await (await fetch("api/live?hours=" + $("live-hours").value)).json();
+  const j = await getJSON("api/live?hours=" + $("live-hours").value);
   if (j.starting) { $("live-status").textContent = "Startet: " + (j.status || "…"); liveTimer = setTimeout(loadLive, 5000); return; }
   const n = j.now, s = j.series, ts = s.ts;
   const onOff = (v) => v === null || v === undefined ? "–" : v ? "an" : "aus";
@@ -560,7 +560,7 @@ async function loadLive() {
     { unit: "°C", height: 150, right: { name: "Ventil", values: r.valve, color: C.ret },
       rightLines: (r.humidity || []).some((v) => v !== null) ? [{ name: "Luftfeuchte", values: r.humidity, color: C.boiler }] : [], label: r.name }));
   loadPresence().catch(() => {});
-  if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(() => {}), 30000);
+  if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(liveError), 30000);
 }
 
 // Auskühlen des Speichers: Messpunkte (je 1 K gemittelt) und gelernte Kurve – passt das Modell?
@@ -593,7 +593,7 @@ function tile(label, value, unit, note) {
 const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–";
 
 async function load() {
-  const s = await (await fetch("api/summary")).json();
+  const s = await getJSON("api/summary");
   if (s.starting) {
     $("status").textContent = s.status === "übernehme Historie"
       ? "Liest die Historie aus Home Assistant ein und lernt – einige Minuten. Einstellungen bleiben erhalten."
@@ -601,7 +601,7 @@ async function load() {
     setTimeout(load, 5000); return;
   }
   $("setup-banner").hidden = !!s.configured;
-  const hist = await (await fetch("api/history?days=60")).json();
+  const hist = await getJSON("api/history?days=60");
   const h = s.house, c = s.cycling, sv = s.savings;
   $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
     ` · Wärmebedarf laut Tado-Soll: <b>${s.setpoint_demand === null ? "–" : s.setpoint_demand ? "ja" : "nein"}</b>` +
@@ -788,7 +788,7 @@ const WEEK_INFO = {
 let WEEK = null, WEEK_METRIC = "gas";
 async function loadWeek() {
   const room = $("week-room").value || "";
-  const j = await (await fetch(`api/week?days=${$("week-days").value}` + (room ? `&room=${encodeURIComponent(room)}` : ""))).json();
+  const j = await getJSON(`api/week?days=${$("week-days").value}` + (room ? `&room=${encodeURIComponent(room)}` : ""));
   if (j.starting) return;
   WEEK = j;
   const keys = Object.keys(j.metrics);
@@ -824,7 +824,7 @@ const SRC = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "z
 const STATE_COL = { zuhause: "var(--good)", heimfahrt: "var(--series-2)", naehert: "var(--warn)", entfernt: "var(--series-1)", steht: "var(--text-muted)", unterwegs: "var(--text-muted)", unbekannt: "var(--text-muted)" };
 const STATE_LABEL = { zuhause: "zu Hause", heimfahrt: "Heimfahrt", naehert: "kommt näher", entfernt: "entfernt sich", steht: "steht", unterwegs: "unterwegs", unbekannt: "unbekannt" };
 async function loadPresence() {
-  const j = await (await fetch("api/presence?hours=" + $("pres-hours").value)).json();
+  const j = await getJSON("api/presence?hours=" + $("pres-hours").value);
   if (j.starting) return;
   $("pres-box").hidden = !j.persons.length;
   if (!j.persons.length) return;
@@ -884,7 +884,7 @@ const CLASSES = ["A+", "A", "B", "C", "D", "E", "F", "G", "H"];
 const CLASS_COL = ["#1a9641", "#4dac26", "#7fbc41", "#b8e186", "#ffffbf", "#fee08b", "#fdae61", "#f46d43", "#d73027"];
 const GRADE_COL = { good: "#2e7d32", mid: "#b26a00", bad: "#c62828", none: "#757575" };
 async function certPrint() {
-  const c = await (await fetch("api/certificate", { cache: "no-store" })).json();
+  const c = await getJSON("api/certificate", { cache: "no-store" });
   if (c.starting) { $("cert-msg").textContent = "HeatPilot startet noch – bitte gleich noch einmal."; return; }
   const h = c.house, b = c.boiler, d = c.dhw, k = c.consumption, bs = c.basis;
   const v = Object.fromEntries(c.verdicts.map((x) => [x.area, x]));
@@ -955,7 +955,7 @@ async function certPdf(inline) {
 }
 
 async function loadCert() {
-  const c = await (await fetch("api/certificate")).json();
+  const c = await getJSON("api/certificate");
   if (c.starting) return;
   const items = c.verdicts.map((v) => `<li style="margin:3px 0"><span class="badge" style="border-color:${GRADE_CSS[v.grade]};color:${GRADE_CSS[v.grade]}">${esc(v.area)}: ${esc(v.label)}</span> ${esc(v.text)}</li>`).join("");
   $("cert").innerHTML = `<div class="row" style="justify-content:space-between"><h2>Zertifikat über Haus & Heizung</h2>` +
@@ -969,6 +969,27 @@ async function loadCert() {
     (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:13px">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
     (c.preliminary.length ? `<p class="muted" style="margin-top:8px">Noch vorläufig: ${esc(c.preliminary.join("; "))}.</p>` : "");
 }
+// Antworten des Add-ons lesen – mit verständlicher Meldung statt „string did not match the expected pattern“
+async function readJSON(r) {
+  const text = await r.text();
+  let j;
+  try { j = JSON.parse(text); } catch (e) {
+    if ([502, 503, 504].includes(r.status)) throw new Error(`Add-on antwortet nicht (HTTP ${r.status}) – startet es gerade neu? Versuche es gleich wieder.`);
+    throw new Error(`Unerwartete Antwort (HTTP ${r.status}): ${text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160) || "leer"}`);
+  }
+  if (!r.ok && j && j.error) throw new Error(j.error);
+  return j;
+}
+async function getJSON(url, opts = {}) {
+  let r;
+  try { r = await fetch(url, { cache: "no-store", ...opts }); } catch (e) { throw new Error("Keine Verbindung zum Add-on – " + (e.message || e)); }
+  return readJSON(r);
+}
+function liveError(e) {
+  $("live-status").innerHTML = `<span class="msg-err">Live-Daten nicht lesbar: ${esc(e.message || e)}</span> – neuer Versuch in 15 s. Bleibt es, bitte das Add-on-Protokoll schicken.`;
+  clearTimeout(liveTimer);
+  if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(liveError), 15000);
+}
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 function showTab(name) {
@@ -977,7 +998,7 @@ function showTab(name) {
     $("tab-" + t).classList.toggle("active", t === name);
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
-  if (name === "live") loadLive().catch((e) => { $("live-status").textContent = "Fehler: " + e; });
+  if (name === "live") loadLive().catch(liveError);
   if (name === "overview") { drawWeek(); drawDhwProfile(); }  // Raster erst bei sichtbarer Breite richtig
   if (name === "diag") { exportSize(); loadSensors(); }
   if (name === "diag") loadDiag().catch((e) => { $("diag-checks").textContent = "Fehler: " + e; });
@@ -1151,7 +1172,7 @@ async function saveSettings() {
   const msg = $("save-msg");
   msg.className = ""; msg.textContent = "Speichere …";
   const r = await fetch("api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collect()) });
-  const j = await r.json();
+  const j = await readJSON(r);
   if (!j.ok) { msg.className = "msg-err"; msg.innerHTML = "Nicht gespeichert: " + j.errors.map(esc).join(" · "); return; }
   msg.className = "msg-ok"; msg.textContent = "Gespeichert und übernommen.";
   SET = null; await loadSettings(); load().catch(() => {});
@@ -1174,7 +1195,7 @@ function applySuggestions() {
 async function testEms() {
   $("ems-msg").textContent = "Teste …";
   const r = await fetch("api/test_emsesp", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ host: $("f-emsesp_host").value }) });
-  const j = await r.json();
+  const j = await readJSON(r);
   $("ems-msg").className = j.ok ? "hint msg-ok" : "hint msg-err";
   $("ems-msg").textContent = (j.ok ? "Verbunden – " : "Fehler: ") + j.message;
 }
@@ -1188,7 +1209,7 @@ async function reloadHistory() {
 const LEVEL_ICON = { ok: "✓", info: "ℹ", warn: "!", error: "✕" };
 const LEVEL_TXT = { ok: "OK", info: "Hinweis", warn: "Warnung", error: "Fehler" };
 async function loadDiag() {
-  const j = await (await fetch("api/diagnostics?level=" + $("diag-level").value + "&n=400")).json();
+  const j = await getJSON("api/diagnostics?level=" + $("diag-level").value + "&n=400");
   $("diag-checks").innerHTML = j.checks.map((c) => `<li style="padding:5px 0;border-bottom:1px solid var(--border)"><span class="badge" title="${LEVEL_TXT[c.level]}" style="${c.level === "error" ? "border-color:#e34948;color:#e34948" : c.level === "warn" ? "border-color:var(--warn);color:var(--warn)" : c.level === "ok" ? "border-color:var(--good);color:var(--good)" : ""}">${LEVEL_ICON[c.level]} ${LEVEL_TXT[c.level]}</span> <b>${esc(c.area)}:</b> ${esc(c.message)}</li>`).join("");
   $("diag-logfile").textContent = `Log-Datei: ${j.log_dir}/heatpilot.log` + (j.debug ? " · ausführliches Log an" : "");
   $("diag-log").innerHTML = "<tr><th>Zeit</th><th>Stufe</th><th>Bereich</th><th>Meldung</th></tr>" + j.log.slice().reverse().map((r) =>
@@ -1196,12 +1217,12 @@ async function loadDiag() {
 }
 
 async function loadSettings() {
-  const j = await (await fetch("api/settings")).json();
+  const j = await getJSON("api/settings");
   if (j.starting) {
     $("view-settings").innerHTML = `<div class="banner">HeatPilot ${j.status === "übernehme Historie" ? "liest gerade die Historie aus Home Assistant ein und lernt neu" : "startet"} (${esc(j.status || "…")}) – das dauert einige Minuten. <b>Deine Einstellungen sind gespeichert</b> und erscheinen danach hier wieder.</div>`;
     setTimeout(loadSettings, 5000); return;
   }
-  ENT = await (await fetch("api/entities")).json();
+  ENT = await getJSON("api/entities");
   SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
   renderSettings();
 }

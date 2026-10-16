@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.21.1
+- Live und alle anderen Ansichten: statt „The string did not match the expected pattern“ (Safari/iOS, wenn die Antwort kein gültiges JSON war) steht jetzt die Ursache da – z. B. „Add-on antwortet nicht (HTTP 502) – startet es gerade neu?“ oder der Fehler aus dem Add-on. Live versucht es nach 15 s selbst erneut
+- Add-on: Fehler einer Abfrage kommen als lesbare Meldung zurück und stehen mit Ursache im Protokoll; ungültige Zahlen (NaN, unendlich) werden zu „kein Wert“, statt die ganze Antwort unlesbar zu machen
+
 ## 0.21.0
 - **Die Woche im Blick** (Übersicht): Wärmekarte Montag bis Sonntag × Stunde für das ganze Haus, nicht nur fürs Warmwasser – umschaltbar: Gas gesamt, Gas fürs Heizen, Gas für Warmwasser, **Gas wetterbereinigt** (W je K innen–außen, damit eine kalte Woche nicht wie ein „teurer Wochentag“ aussieht), **Abweichung vom Hausmodell** (zeigt, welche wiederkehrenden Zeiten das Modell noch nicht erklärt), Brennerstarts, jemand zu Hause, Tado-Soll und Ventile (auch je Raum). Summe bzw. Mittel je Tag, Klartext zu Spitzen, stärkstem Wochentag und Wochenende; Zeitraum 4 Wochen bis 1 Jahr, Urlaub zählt nicht
 - **Anwesenheit im Live-Tab:** je Person die Entfernung im Verlauf (12 h bis 7 Tage, zu Hause hinterlegt), wie HeatPilot die Lage gerade deutet (zu Hause · Heimfahrt erkannt · kommt näher · entfernt sich · steht), erwartete Ankunft mit Quelle, die gelernte Gewohnheit als Wochenraster und eine **Heimkehr-Kontrolle**: was 60, 30 und 15 min vor jeder tatsächlichen Ankunft erwartet wurde und wie weit das daneben lag. Nur Entfernungen, keine Koordinaten
