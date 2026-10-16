@@ -74,6 +74,8 @@ def _str(text: str) -> bytes:
 
 
 def _n(v: float) -> str:
+    if not isinstance(v, (int, float)) or not math.isfinite(v):
+        v = 0.0  # NaN/unendlich wären ungültige PDF-Befehle – manche Programme zeigen dann gar nichts
     s = f"{v:.2f}".rstrip("0").rstrip(".")
     return "0" if s == "-0" else s
 

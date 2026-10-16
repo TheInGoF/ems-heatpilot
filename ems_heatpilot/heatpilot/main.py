@@ -24,7 +24,7 @@ from .web import make_app
 
 log = logging.getLogger("heatpilot")
 
-DATA_VERSION = 3  # 3 (0.17.1): Warmwasser lernt kein Aufheizen mehr als Auskühlen
+DATA_VERSION = 4  # 3 (0.17.1): Warmwasser-Auskühlen · 4 (0.17.2): große Zapfungen getrennt
 
 
 class App:

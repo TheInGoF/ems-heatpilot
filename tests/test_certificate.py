@@ -72,3 +72,12 @@ def test_pdf_is_valid_and_contains_no_personal_data(tmp_path):
     text = b"".join(zlib.decompress(m) for m in re.findall(rb"stream\n(.*?)\nendstream", pdf, re.S))
     assert "Zertifikat".encode("cp1252") in text and "Gebäude".encode("cp1252") in text
     assert b"mustermann" not in text.lower() and b"person." not in text
+
+
+def test_pdf_survives_nan_values(tmp_path):
+    eng = year_engine(tmp_path)
+    eng.house.rls.theta = [float("nan"), 2.7, 0.05]  # entgleistes Modell
+    pdf = certificate.pdf(eng, NOW)
+    text = b"".join(zlib.decompress(m) for m in re.findall(rb"stream\n(.*?)\nendstream", pdf, re.S))
+    commands = re.sub(rb"\((?:\\.|[^\\)])*\)", b"()", text).lower()  # Textinhalte entfernen
+    assert b"nan" not in commands and b"inf" not in commands

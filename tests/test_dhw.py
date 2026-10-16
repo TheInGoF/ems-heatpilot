@@ -95,3 +95,28 @@ def test_rising_temperature_is_not_learned_as_cooling():
     assert m.loss.updates == before
     m.step(t0 + timedelta(minutes=95), 5 / 60, t, t - 0.1, False, None)  # echtes Auskühlen
     assert m.loss.updates == before + 1
+
+
+def test_rare_big_draw_does_not_dominate_profile():
+    """Wanne alle zwei Wochen um 18 Uhr: getrennt gemerkt, Profil zeigt das Übliche."""
+    from datetime import datetime, timedelta
+
+    from heatpilot.dhw import DhwModel
+
+    m = DhwModel()
+    m.loss.theta = [0.8, -0.04]
+    start = datetime(2026, 10, 1, 0, 0)
+    t = 55.0
+    for i in range(30 * 12 * 24):
+        now = start + timedelta(minutes=5 * i)
+        drop = 0.0
+        if now.hour == 7 and now.minute == 0:
+            drop = 3.0  # Duschen morgens
+        if now.hour == 18 and now.minute == 0 and now.day in (19, 26):
+            drop = 25.0  # Badewanne
+        new = t - drop - 0.01
+        m.step(now, 5 / 60, t, new, False, None)
+        t = new if new > 40 else 55.0
+    assert len(m.big_draws) == 2 and all(k >= 20 for _, k in m.big_draws)  # Duschen zählen nicht dazu
+    assert m.daily[18] < m.daily[7]  # Profil: Duschen morgens bleibt sichtbar
+    assert m.daily[18] <= 3.0

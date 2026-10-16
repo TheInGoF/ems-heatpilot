@@ -28,6 +28,9 @@ from .rls import RLS
 
 SLOTS = 7 * 24
 LOW_START_LIMIT = 47.0
+BIG_DRAW_K = 6.0       # ab so viel Abfall in einer Stunde: große Zapfung (z. B. Badewanne)
+BIG_KEEP_DAYS = 60
+BIG_WARMUP_DAYS = 14
 AFTER_CHARGE_H = 0.5   # so lange nach einer Ladung zieht der Fühler noch nach – nicht als Auskühlen lernen
 MAX_RISE_K = 0.3       # steigt die Temperatur ohne Ladung stärker, wird geheizt (Ladesignal fehlt o. ä.)
 
@@ -53,6 +56,8 @@ class DhwModel:
     daily: list[float] = field(default_factory=lambda: [0.0] * 24)  # je Tagesstunde, lernt täglich
     # Selbstkorrektur: zusätzliche Reserve nach zu kalten Zapfungen (gedeckelt, baut sich ab)
     comfort_margin: float = 0.0
+    # seltene große Zapfungen (Wanne o. ä.) – getrennt, damit sie das übliche Profil nicht überdecken
+    big_draws: list = field(default_factory=list)
     # laufende Zustände
     _charge: dict | None = None
     _slot: int | None = None
@@ -185,10 +190,21 @@ class DhwModel:
     def _roll_slot(self, when: datetime, learn_usage: bool = True) -> None:
         slot = slot_of(when)
         if self._slot is not None and slot != self._slot and self._slot_valid:
-            self.profile[self._slot] += 0.3 * (self._slot_draw - self.profile[self._slot])
-            self.profile_n[self._slot] += 1
             hour = self._slot % 24
-            self.daily[hour] += 0.15 * (self._slot_draw - self.daily[hour])
+            draw = self._slot_draw
+            # Ausreißer gegen das Übliche dieser Stunde: groß und deutlich über dem Profil –
+            # erst wenn die Stunde ~2 Wochen gelernt ist (vorher ist noch nichts „üblich“)
+            cap = max(3.0, 3 * self.daily[hour] + 1.0)
+            seen = sum(self.profile_n[d * 24 + hour] for d in range(7))
+            if seen >= BIG_WARMUP_DAYS and draw >= BIG_DRAW_K and draw > cap:
+                ended = (when - timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+                self.big_draws.append([ended.isoformat(timespec="minutes"), round(draw, 1)])
+                limit = (when - timedelta(days=BIG_KEEP_DAYS)).isoformat(timespec="minutes")
+                self.big_draws = [b for b in self.big_draws if b[0] >= limit][-50:]
+                draw = cap  # zählt fürs Profil nur gedeckelt
+            self.profile[self._slot] += 0.3 * (draw - self.profile[self._slot])
+            self.profile_n[self._slot] += 1
+            self.daily[hour] += 0.15 * (draw - self.daily[hour])
         if slot != self._slot:
             if self._slot is not None and learn_usage:
                 self.comfort_margin = max(self.comfort_margin - DHW_MARGIN_DECAY / 24, 0.0)
@@ -233,6 +249,7 @@ class DhwModel:
             "charges": self.charges,
             "loss_updates": self.loss.updates,
             "profile_hours": [round(h, 2) for h in hours],
+            "big_draws": self.big_draws,
             "comfort_margin": round(self.comfort_margin, 1),
         }
 
@@ -248,6 +265,7 @@ class DhwModel:
             "profile_n": self.profile_n,
             "daily": self.daily,
             "comfort_margin": self.comfort_margin,
+            "big_draws": self.big_draws,
         }
 
     @classmethod
@@ -262,6 +280,7 @@ class DhwModel:
             profile_n=d["profile_n"],
             daily=d.get("daily", [0.0] * 24),
             comfort_margin=d.get("comfort_margin", 0.0),
+            big_draws=d.get("big_draws", []),
         )
         return m
 
