@@ -89,7 +89,7 @@ async def publish(ha: HAClient, s: dict) -> None:
             zu_kalt=s["dhw"]["cold_draws"],
         ),
         "sensor.heatpilot_tado_empfehlungen": _sensor(
-            len(s.get("advice", {}).get("items", [])), "Empfehlungen für Tado", "Empfehlungen",
+            len(s.get("advice", {}).get("items", [])), "Empfehlungen für Tado und Ventile", "Empfehlungen",
             "mdi:lightbulb-on-outline",
             empfehlungen=[f'{a["title"]}: {a["text"]}' for a in s.get("advice", {}).get("items", [])],
         ),

@@ -16,6 +16,7 @@ from .discovery import discover
 from .emsesp import EmsEsp
 from .engine import Engine
 from .ha_client import HAClient
+from .live import STEP_S as LIVE_STEP_S
 from .publisher import publish
 from .store import Store
 from .web import make_app
@@ -82,6 +83,7 @@ class App:
             self.pending.clear()
             if old is not None:
                 eng.forecast = old.forecast
+                eng.live = old.live
             self.eng = eng
             self._restart_emsesp()
             self.status = "läuft"
@@ -130,9 +132,21 @@ async def main() -> None:
         await runner.cleanup()
 
 
+async def live_loop(app: App) -> None:
+    """Alle 30 s die Live-Werte merken (Reiter „Live“)."""
+    while True:
+        try:
+            if app.eng is not None:
+                app.eng.record_live()
+        except Exception:  # noqa: BLE001
+            log.exception("Live-Werte nicht erfasst")
+        await asyncio.sleep(LIVE_STEP_S)
+
+
 async def run(app: App) -> None:
     await app.ha.start(app.on_state)
     await app.build(backfill=True)
+    app._live_task = asyncio.create_task(live_loop(app))
 
     last_forecast = 0.0
     while True:

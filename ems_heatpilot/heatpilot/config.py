@@ -47,6 +47,7 @@ FIELDS: dict[str, tuple] = {
     "night_temp": ("float", 10, 24),
     "night_start": ("time",),
     "night_end": ("time",),
+    "learn_schedule": ("bool",),
     "floor_heating_rooms": ("entities",),
     "vacations": ("strings",),
     "vacation_entity": ("entity",),
@@ -175,6 +176,8 @@ class Config:
     night_temp: float = 18.0
     night_start: time = time(22, 30)
     night_end: time = time(6, 0)
+    # Nachtzeiten/-temperatur und Abwesenheit aus Tado weiterlernen (Einstellungen = Startwerte)
+    learn_schedule: bool = True
     # Räume mit Fußbodenheizung ohne Stellventil (z. B. festes RTL), climate-Entitäten
     floor_heating_rooms: list[str] = field(default_factory=list)
     # Urlaub: ["2026-12-20 - 2027-01-03", "2027-02-01 08:00 - 2027-02-05 17:30"]

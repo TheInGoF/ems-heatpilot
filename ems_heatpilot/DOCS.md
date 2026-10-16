@@ -76,6 +76,22 @@ Wohnfläche, Nennleistung und kleinste Leistung des Kessels stehen unter
 Zertifikat enthält keine Namen, Adressen oder Standortdaten. Es ist kein
 Energieausweis nach GEG, die Werte sind nicht witterungsbereinigt.
 
+## Live
+
+Der Reiter **Live** zeigt, was Heizung und Haus gerade tun und in den letzten
+3, 6, 12 oder 24 Stunden getan haben; er aktualisiert sich alle 30 Sekunden.
+
+- **Anzeigen:** Brenner (an/aus, Leistung, heizt oder lädt Warmwasser, Taktsperre
+  mit Restzeit), Vorlauf mit Soll von Kessel und Regler, Rücklauf mit Spreizung,
+  Kessel und Pumpe, Warmwasser, außen, innen Ø, Wärmebedarf laut Tado, wer zu Hause ist
+- **Grafen:** Kesseltemperaturen (hinterlegt, wann der Brenner heizt bzw.
+  Warmwasser lädt), Brennerleistung und Pumpe, außen/innen, Warmwasser und je
+  Raum Temperatur, Tado-Soll und Ventilöffnung
+
+Die letzten 12 Stunden hält HeatPilot im Speicher (alle 30 s, mit EMS-ESP direkt
+am genauesten); ältere Abschnitte und die Zeit vor einem Neustart kommen aus der
+Datenbank (alle 5 min).
+
 ## Empfehlungen für Tado
 
 Tado lernt selbst und entscheidet, *wann* ein Raum Wärme zieht. Fängt Tado zu
@@ -90,6 +106,7 @@ hilft nur begrenzt. Deshalb misst HeatPilot je Raum und schlägt im Feld
 | Geofencing bei jeder echten Heimkehr: wie lange vorher hebt Tado das Soll an, wie warm ist der Raum bei Ankunft? | „bei Ankunft zu kalt: Vorheiz-Einstellung einen Schritt Richtung Komfort“ · „lange vor Ankunft warm: Richtung Eco“ |
 | Soll bei Abwesenheit | „Abwesenheitstemperatur senken“ – nur, wenn der Raum laut Modell danach in ≤ 2 h wieder warm ist |
 | Raum über Stunden unter Soll, Ventil voll offen | „Soll senken oder Heizkörper/Ventil prüfen“ (mit Hinweis, ob der Vorlauf am Limit war) |
+| Hydraulischer Abgleich (siehe unten) | „bekommt zu wenig Heizwasser: Voreinstellung eine Stufe höher“ · „bekommt mehr als nötig: eine Stufe zurück“ |
 
 Leitplanken: erst ab 4 Beobachtungen in 3 Wochen, Urlaub zählt nicht, Schritte
 höchstens 30 min bzw. ein Reglerschritt, keine widersprüchlichen Ratschläge
@@ -97,7 +114,28 @@ höchstens 30 min bzw. ein Reglerschritt, keine widersprüchlichen Ratschläge
 Jede Empfehlung zeigt ihren Beleg und seit wann sie besteht; was danach nicht mehr
 auftritt, erscheint 14 Tage lang als „behoben“.
 
-## Was das Add-on in Version 0.11 macht
+### Hydraulischer Abgleich mit gelernten Raummodellen
+
+In einem gut abgeglichenen Haus brauchen alle Räume für ihre Wunschtemperatur
+ungefähr dieselbe Vorlauftemperatur. Jedes Raummodell weiß, wie stark der
+Heizkörper den Raum je Grad Vorlauf erwärmt und wie schnell der Raum auskühlt –
+daraus folgt, welchen Vorlauf der Raum am kältesten Tag bräuchte.
+
+- Braucht ein Raum **mindestens 8 K mehr** als der Median der Räume und steht sein
+  Ventil dabei oft weit offen, bekommt er zu wenig Heizwasser: Voreinstellung
+  (Durchflussbegrenzer am Ventilunterteil) **eine Stufe höher** – vorher entlüften
+  und prüfen, ob der Heizkörper zugestellt ist. Bestimmt dieser Raum den Vorlauf
+  fürs ganze Haus, sagt HeatPilot, wie viel niedriger der Vorlauf danach sein könnte.
+- Braucht ein Raum **mindestens 10 K weniger** und öffnet im Mittel höchstens 40 %,
+  zieht er beim Öffnen viel Wasser, das anderen fehlt: **eine Stufe zurück**. Das
+  wird nur empfohlen, wenn es gleichzeitig einen unterversorgten Raum gibt.
+
+Leitplanken: erst ab 3 Räumen mit plausiblem Modell und je mindestens 12 Stunden
+Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
+misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
+als Mieter vorher kurz mit dem Vermieter absprechen.
+
+## Was das Add-on in Version 0.13 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -123,6 +161,12 @@ auftritt, erscheint 14 Tage lang als „behoben“.
    - *Anwesenheit* (je Person): Wochenraster der Gewohnheiten und
      Heimfahrt-Geschwindigkeit. Annäherung und Ankunftszeit berechnet das
      Add-on selbst aus den GPS-Daten der `person.*`-Entitäten.
+   - *Zeiten und Temperaturen* (stündlich, letzte 4 Wochen ohne Urlaub): wann
+     Tado abends absenkt und morgens wieder hochheizt, Nacht- und
+     Abwesenheits-Soll. Die Werte unter „Komfort & Strategie“ sind nur Startwerte;
+     gelernte Zeiten gelten ab 7 erkannten Nächten (höchstens 3 h vom Startwert
+     entfernt), Temperaturen nie kälter als eingestellt und höchstens 3 K wärmer.
+     Abschaltbar mit „Weiterlernen“.
 4. **Auswerten:** Weboberfläche „HeatPilot“ in der Seitenleiste und Sensoren
    in Home Assistant.
 
