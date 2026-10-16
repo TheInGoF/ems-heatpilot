@@ -27,7 +27,7 @@ class App:
     """Hält Verbindung, Datenbank und die laufende Engine – Einstellungen ohne Neustart übernehmen."""
 
     def __init__(self) -> None:
-        self.status = "verbinde mit Home Assistant"
+        self._status = "verbinde mit Home Assistant"
         self.cfg = Config.load()
         self.ha = HAClient()
         self.store = Store(DATA_DIR / "heatpilot.db")
@@ -36,6 +36,16 @@ class App:
         self._ems_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._registry: tuple[float, list[dict]] | None = None
+
+    @property
+    def status(self) -> str:
+        if self.eng is None and self.ha.last_error and not self.ha.connected.is_set():
+            return f"keine Verbindung zu Home Assistant – {self.ha.last_error}"
+        return self._status
+
+    @status.setter
+    def status(self, value: str) -> None:
+        self._status = value
 
     @property
     def configured(self) -> bool:
@@ -113,6 +123,14 @@ async def main() -> None:
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", 8099).start()
 
+    try:
+        await run(app)
+    finally:
+        await app.ha.close()
+        await runner.cleanup()
+
+
+async def run(app: App) -> None:
     await app.ha.start(app.on_state)
     await app.build(backfill=True)
 
