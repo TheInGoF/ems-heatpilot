@@ -113,6 +113,10 @@ geschätzt:
   solange das Hausmodell unsicher ist, weniger als 500 Heizstunden oder noch kein
   Frost gemessen wurden
 
+Neben dem PDF gibt es eine **Druckansicht**: dasselbe Zertifikat als Seite, über
+„Drucken / als PDF sichern“ erzeugt das Gerät selbst ein PDF. Unter iOS ist das der
+sichere Weg zum Weitergeben (z. B. an WhatsApp): Druckansicht → Drucken → Teilen.
+
 Wohnfläche, Nennleistung und kleinste Leistung des Kessels stehen unter
 **Einstellungen → Haus & Kessel** (0 = unbekannt bzw. Wert von EMS-ESP). Das
 Zertifikat enthält keine Namen, Adressen oder Standortdaten. Es ist kein

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.4
+- Zertifikat: neue **Druckansicht** in derselben Seite (auch in der Home-Assistant-App). Über „Drucken / als PDF sichern“ erzeugt das Gerät selbst ein PDF – z. B. unter iOS zum Weitergeben an WhatsApp, wo die direkt erzeugte Datei beim Teilen leer ankam (die Datei selbst ist laut qpdf-Prüfung fehlerfrei)
+
 ## 0.18.3
 - Zertifikat: Die Seite lädt das PDF erst und prüft es, bevor es gespeichert oder angezeigt wird. Eine Fehlerantwort landet nicht mehr als „leeres PDF“ auf dem Gerät, sondern erscheint als Meldung unter den Knöpfen; Fehler beim Erstellen stehen mit Details im Log. Zusätzlich ein direkter Link als Ausweichweg
 
