@@ -42,3 +42,13 @@ def test_settings_from_ui_override_addon_options(tmp_path):
     raw = cfg.to_raw()
     assert raw["night_start"] == "23:00" and raw["emsesp_host"] == ""
     assert validate(raw)[1] == []  # was die Oberfläche bekommt, kann sie unverändert speichern
+
+
+def test_fresh_install_without_yaml_options(tmp_path):
+    """Add-on ohne YAML-Optionen: HA schreibt {} – alles kommt aus der Oberfläche."""
+    (tmp_path / "options.json").write_text("{}")
+    cfg = Config.load(tmp_path / "options.json")
+    assert cfg.rooms == [] and cfg.gas_sensor is None and cfg.away_temp == 19.0
+    save_settings(validate({"gas_sensor": "sensor.gas", "rooms": [{"climate": "climate.bad"}]})[0], tmp_path)
+    cfg = Config.load(tmp_path / "options.json")
+    assert cfg.gas_sensor == "sensor.gas" and cfg.rooms[0]["climate"] == "climate.bad"

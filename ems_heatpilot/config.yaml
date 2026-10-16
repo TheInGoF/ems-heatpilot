@@ -1,5 +1,5 @@
 name: EMS HeatPilot
-version: "0.9.0"
+version: "0.10.0"
 slug: ems_heatpilot
 description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
 url: https://github.com/TheInGoF/ems-heatpilot
@@ -16,67 +16,7 @@ panel_icon: mdi:fire-circle
 panel_title: HeatPilot
 map:
   - addon_config:rw
-options:
-  mode: observe
-  sample_interval_s: 300
-  backfill_days: 60
-  statistics_backfill_days: 365
-  outdoor_sensors: []
-  rooms: []
-  gas_calorific_value: 11.2
-  gas_z_number: 0.95
-  gas_price_eur_per_kwh: 0.12
-  gas_base_fee_eur_per_year: 150
-  dhw_min_temp: 40
-  dhw_comfort_temp: 50
-  dhw_max_temp: 60
-  design_outdoor_temp: -12
-  max_flow_temp: 75
-  away_temp: 19
-  night_temp: 18
-  night_start: "22:30"
-  night_end: "06:00"
-  floor_heating_rooms: []
-  vacations: []
-  vacation_arrival_time: "18:00"
-  overrides: []
-  debug_logging: false
-schema:
-  mode: list(observe)
-  sample_interval_s: int(60,900)
-  backfill_days: int(0,365)
-  statistics_backfill_days: int(0,1095)
-  outdoor_sensors:
-    - str
-  rooms:
-    - name: str
-      climate: str
-      temperature: str?
-      heating_power: str?
-      humidity: str?
-  gas_sensor: str?
-  demand_sensor: str?
-  weather_entity: str?
-  emsesp_host: str?
-  gas_calorific_value: float(8,13)
-  gas_z_number: float(0.8,1.1)
-  gas_price_eur_per_kwh: float(0,1)
-  gas_base_fee_eur_per_year: float(0,2000)
-  dhw_min_temp: float(30,60)
-  dhw_comfort_temp: float(35,65)
-  dhw_max_temp: float(40,70)
-  design_outdoor_temp: float(-25,0)
-  max_flow_temp: int(30,90)
-  away_temp: float(10,24)
-  night_temp: float(10,24)
-  night_start: match(^\d{1,2}:\d{2}$)
-  night_end: match(^\d{1,2}:\d{2}$)
-  floor_heating_rooms:
-    - str
-  vacations:
-    - str
-  vacation_entity: str?
-  vacation_arrival_time: match(^\d{1,2}:\d{2}$)
-  overrides:
-    - str
-  debug_logging: bool
+# Keine YAML-Optionen: Eingerichtet wird ausschließlich über die HeatPilot-Seite
+# (Reiter „Einstellungen“). Die Werte liegen in /data/settings.json.
+options: {}
+schema: {}
