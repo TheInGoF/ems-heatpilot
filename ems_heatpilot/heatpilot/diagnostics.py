@@ -118,6 +118,11 @@ def self_check(app) -> list[dict]:
         out.append({"level": level, "area": area, "message": message})
 
     eng = app.eng
+    ha = app.ha.info()
+    if not ha["token_present"]:
+        add("error", "Home Assistant", "Kein Schlüssel für Home Assistant (SUPERVISOR_TOKEN fehlt) – Add-on neu starten")
+    elif ha["last_error"].startswith("Anmeldung") and not ha["connected"]:
+        add("error", "Home Assistant", f"{ha['last_error']} – Add-on neu starten; hilft das nicht, Diagnose-Datei weitergeben")
     if eng is None:
         add("info", "Start", f"Add-on startet noch: {app.status}")
         return out
@@ -217,6 +222,7 @@ def bundle(app, hours: int = 48) -> dict:
         "configured": app.configured,
         "settings": app.cfg.to_raw(),
         "self_check": self_check(app),
+        "ha_connection": app.ha.info(),
         "log": RING.tail(LOG_RING_SIZE),
     }
     if eng is None:

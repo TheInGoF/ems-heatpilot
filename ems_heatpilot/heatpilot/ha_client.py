@@ -13,6 +13,7 @@ import itertools
 import logging
 import os
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Awaitable, Callable
 
 import aiohttp
@@ -26,10 +27,48 @@ class HAError(RuntimeError):
     pass
 
 
+class AuthError(HAError):
+    pass
+
+
+# s6-overlay legt die Umgebung des Containers zusätzlich als Dateien ab
+TOKEN_FILES = (
+    "/run/s6/container_environment/SUPERVISOR_TOKEN",
+    "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
+)
+
+AUTH_HINT = (
+    "Bitte das Add-on neu starten. Hilft das nicht, im Reiter „Diagnose“ die "
+    "Diagnose-Datei herunterladen und weitergeben."
+)
+
+
+def find_token(env: dict | None = None, files: tuple[str, ...] = TOKEN_FILES) -> tuple[str, str]:
+    """Schlüssel für Home Assistant suchen: Umgebung, sonst s6-Datei. Gibt (Schlüssel, Quelle)."""
+    env = os.environ if env is None else env
+    for name in ("SUPERVISOR_TOKEN", "HASSIO_TOKEN"):
+        value = (env.get(name) or "").strip()
+        if value:
+            return value, name
+    for path in files:
+        try:
+            value = Path(path).read_text().strip()
+        except OSError:
+            continue
+        if value:
+            return value, path
+    return "", ""
+
+
 class HAClient:
     def __init__(self, base_url: str | None = None, token: str | None = None) -> None:
         self.base_url = base_url or os.environ.get("HA_URL", "http://supervisor/core")
-        self.token = token or os.environ.get("SUPERVISOR_TOKEN", "")
+        if token:
+            self.token, self.token_source = token, "Parameter"
+        else:
+            self.token, self.token_source = find_token()
+        self.last_error = ""
+        self.attempts = 0
         self._session: aiohttp.ClientSession | None = None
         self._ws: aiohttp.ClientWebSocketResponse | None = None
         self._ids = itertools.count(1)
@@ -42,15 +81,41 @@ class HAClient:
     def _headers(self) -> dict:
         return {"Authorization": f"Bearer {self.token}"}
 
+    def info(self) -> dict:
+        """Zustand der Verbindung für Selbsttest und Diagnose – nie den Schlüssel selbst."""
+        return {
+            "url": self.base_url,
+            "connected": self.connected.is_set(),
+            "token_present": bool(self.token),
+            "token_length": len(self.token),
+            "token_source": self.token_source,
+            "attempts": self.attempts,
+            "last_error": self.last_error,
+        }
+
     async def start(self, on_state: StateCallback) -> None:
+        """Verbindung im Hintergrund aufbauen und warten, bis sie steht – ohne Zeitlimit.
+
+        Klappt die Anmeldung nicht, läuft das Add-on (Oberfläche, Diagnose) weiter und
+        versucht es immer wieder; der Grund steht in ``last_error``.
+        """
+        if self.token:
+            log.info("Schlüssel für Home Assistant vorhanden (Quelle %s, %d Zeichen)",
+                     self.token_source, len(self.token))
+        else:
+            log.error("Kein Schlüssel für Home Assistant gefunden (SUPERVISOR_TOKEN fehlt)")
         self._state_cb = on_state
         self._session = aiohttp.ClientSession()
         self._reader = asyncio.create_task(self._run())
-        await asyncio.wait_for(self.connected.wait(), timeout=60)
+        await self.connected.wait()
 
     async def close(self) -> None:
         if self._reader:
             self._reader.cancel()
+            try:
+                await self._reader
+            except (asyncio.CancelledError, Exception):  # noqa: BLE001
+                pass
         if self._ws:
             await self._ws.close()
         if self._session:
@@ -60,11 +125,13 @@ class HAClient:
         ws_url = self.base_url.replace("http", "ws", 1) + "/websocket"
         delay = 2
         while True:
+            self.attempts += 1
             try:
                 async with self._session.ws_connect(ws_url, heartbeat=30, max_msg_size=0) as ws:
                     self._ws = ws
                     await self._auth(ws)
                     delay = 2
+                    self.last_error = ""
                     await self._send_raw(
                         {"type": "subscribe_events", "event_type": "state_changed"}
                     )
@@ -77,8 +144,17 @@ class HAClient:
                             break
             except asyncio.CancelledError:
                 raise
+            except AuthError as err:
+                if not self.last_error.startswith("Anmeldung"):
+                    log.error("%s (Schlüssel vorhanden: %s, %d Zeichen, Quelle: %s). %s",
+                              err, "ja" if self.token else "nein", len(self.token),
+                              self.token_source or "–", AUTH_HINT)
+                else:
+                    log.debug("Anmeldung erneut fehlgeschlagen (Versuch %d)", self.attempts)
+                self.last_error = str(err)
             except Exception as err:  # noqa: BLE001 – Verbindung immer wieder aufbauen
                 log.warning("Verbindung zu Home Assistant verloren: %s", err)
+                self.last_error = f"Verbindung: {err}"
             self.connected.clear()
             for fut in self._pending.values():
                 if not fut.done():
@@ -94,7 +170,7 @@ class HAClient:
         await ws.send_json({"type": "auth", "access_token": self.token})
         msg = await ws.receive_json()
         if msg.get("type") != "auth_ok":
-            raise HAError(f"Anmeldung fehlgeschlagen: {msg}")
+            raise AuthError(f"Anmeldung bei Home Assistant fehlgeschlagen: {msg.get('message') or msg}")
 
     async def _send_raw(self, payload: dict) -> asyncio.Future:
         msg_id = next(self._ids)

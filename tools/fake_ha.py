@@ -10,6 +10,7 @@ Stellt WebSocket- und REST-API so bereit, wie das Add-on sie nutzt.
 from __future__ import annotations
 
 import math
+import os
 import random
 import time
 from datetime import datetime, timezone
@@ -238,7 +239,12 @@ async def ws_handler(request):
     ws = web.WebSocketResponse(max_msg_size=0)
     await ws.prepare(request)
     await ws.send_json({"type": "auth_required"})
-    await ws.receive_json()
+    auth = await ws.receive_json()
+    expected = os.environ.get("FAKE_HA_TOKEN")  # gesetzt: nur dieser Schlüssel gilt
+    if expected and auth.get("access_token") != expected:
+        await ws.send_json({"type": "auth_invalid", "message": "Invalid access"})
+        await ws.close()
+        return ws
     await ws.send_json({"type": "auth_ok"})
     async for msg in ws:
         m = msg.json()

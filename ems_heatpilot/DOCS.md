@@ -45,6 +45,12 @@ Reiter **Diagnose** auf der HeatPilot-Seite:
   Personen noch Zuhause – nur Entfernungen) und ohne Zugangsdaten. Diese Datei
   kann zur Fehlersuche weitergegeben werden.
 
+Kommt keine Verbindung zu Home Assistant zustande (z. B. „Anmeldung bei Home
+Assistant fehlgeschlagen“), läuft die HeatPilot-Seite trotzdem: oben steht der
+Grund, der Selbsttest zeigt ihn als Fehler, und das Add-on versucht es laufend
+weiter. Im Log steht, ob ein Zugangsschlüssel angekommen ist (nur ja/nein und
+Länge, nie der Schlüssel selbst).
+
 ## Empfehlungen für Tado
 
 Tado lernt selbst und entscheidet, *wann* ein Raum Wärme zieht. Fängt Tado zu

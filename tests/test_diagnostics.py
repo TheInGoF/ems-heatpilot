@@ -21,7 +21,9 @@ def make_app(tmp_path, **found_kw):
     connected = asyncio.Event()
     connected.set()
     return SimpleNamespace(eng=eng, cfg=Config(), status="läuft", configured=True,
-                           ha=SimpleNamespace(connected=connected))
+                           ha=SimpleNamespace(connected=connected, info=lambda: {
+                               "connected": connected.is_set(), "token_present": True,
+                               "last_error": ""}))
 
 
 def checks(app):
