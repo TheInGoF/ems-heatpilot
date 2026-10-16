@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from datetime import datetime, timedelta
 
 from aiohttp import web
 
@@ -23,6 +24,8 @@ from .web import make_app
 
 log = logging.getLogger("heatpilot")
 
+DATA_VERSION = 2
+
 
 class App:
     """Hält Verbindung, Datenbank und die laufende Engine – Einstellungen ohne Neustart übernehmen."""
@@ -37,6 +40,11 @@ class App:
         self._ems_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._registry: tuple[float, list[dict]] | None = None
+        self._reset = False
+        # Datenstand 2 (0.14): Ausreißer-Schutz – älteren Lernstand einmal neu berechnen
+        if self.store.get("data_version", 0) < DATA_VERSION:
+            self._reset = bool(self.store.get("backfill_done"))
+            self.store.put("data_version", DATA_VERSION)
 
     @property
     def status(self) -> str:
@@ -70,7 +78,13 @@ class App:
             states = await self.ha.get_states()
             found = discover(states, await self.registry(), self.cfg)
             old = self.eng
-            if old is not None:
+            if self._reset:
+                since = (datetime.now() - timedelta(days=self.cfg.backfill_days + 1)).date().isoformat()
+                self.store.reset_learning(since)
+                self._reset = False
+                backfill = True
+                log.info("Lernstand wird aus den gespeicherten und den HA-Daten neu berechnet")
+            elif old is not None:
                 old.save()  # Lernstand sichern, die neue Engine lädt ihn
             eng = Engine(self.cfg, self.store, found)
             if backfill:
@@ -106,8 +120,8 @@ class App:
         return []
 
     async def reload_history(self) -> None:
-        """Historie neu einlesen (z. B. nach Wahl eines anderen Gaszählers)."""
-        self.store.put("backfill_done", False)
+        """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers)."""
+        self._reset = True
         await self.build(backfill=True)
 
     async def suggestions(self) -> dict:

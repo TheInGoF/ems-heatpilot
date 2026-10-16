@@ -55,8 +55,13 @@ def simulate():
             e["a"] = a
         lst.append(e)
 
+    # FAKE_GAS_SPIKE=m³: Zählerstand 5 Tage vor jetzt von Hand nachgezogen (Reed hat zu wenig gezählt)
+    spike = float(os.environ.get("FAKE_GAS_SPIKE", "0") or 0)
+    spike_ts = now - 5 * 86400
     for ts in range(start, now + 1, STEP):
         dt = datetime.fromtimestamp(ts)
+        if spike and spike_ts <= ts < spike_ts + STEP:
+            gas += spike
         hour = dt.hour + dt.minute / 60
         day = (ts - start) / 86400
         t_out = 6 - day * 0.15 + 4 * math.sin(2 * math.pi * (hour - 9) / 24) + rng.gauss(0, 0.3)

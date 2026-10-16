@@ -188,6 +188,26 @@ def self_check(app) -> list[dict]:
     if drops:
         add("info", "Gas", f"Gaszähler ist in 24 h {drops}× gesunken (Neustart/Zurücksetzen?) – diese Stunden werden ignoriert")
 
+    if eng._rejected:
+        add("warn", "Messwerte", "Liefert gerade unmögliche Werte, werden ignoriert: " + ", ".join(sorted(eng._rejected)))
+    ig = eng.ignored()
+    parts = []
+    if ig["gas_spikes"]:
+        parts.append(f"{ig['gas_spikes']} Gaszähler-Sprung/Nachtrag ({ig['gas_spike_kwh']:.0f} kWh, zählt nur im Verbrauch)")
+    if ig["gas_missed_hours"]:
+        parts.append(f"{ig['gas_missed_hours']} Stunden, in denen der Zähler trotz Brenner nicht zählte")
+    if ig["gas_negative"]:
+        parts.append(f"{ig['gas_negative']} Stunden mit sinkendem Zählerstand")
+    if ig["room_spikes"]:
+        parts.append(f"{ig['room_spikes']} Temperaturspitzen in Räumen")
+    if ig["values"]:
+        parts.append(f"{ig['values']} unmögliche Messwerte")
+    if parts:
+        add("info", "Ausreißer", f"Nicht gelernt (letzte {ig['days']} Tage): " + "; ".join(parts))
+    if ig["learn_rejected"] or ig["learn_clipped"]:
+        add("info", "Ausreißer", f"Lernen: {ig['learn_rejected']} grobe Ausreißer verworfen, "
+                                 f"{ig['learn_clipped']} auffällige Punkte nur begrenzt gezählt (seit Beginn)")
+
     s = eng.summary()
     for name, chk in (("Hausmodell", s["guards"]["house"]), ("Warmwasser-Modell", s["guards"]["dhw"])):
         if not chk["ok"]:

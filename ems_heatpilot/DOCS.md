@@ -135,7 +135,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.13 macht
+## Was das Add-on in Version 0.14 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -236,6 +236,36 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
    Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag.
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
+
+## Ausreißer: was das Modell verwirrt, wird nicht gelernt
+
+Fehler passieren überall – in Tado, in EMS-ESP und in Home Assistant. Drei
+Schichten halten sie vom Lernen fern:
+
+1. **Gaszähler je Stunde**
+   - *Sprung/Nachtrag:* Zeigt eine Stunde mehr Gas, als der Brenner in seiner
+     Laufzeit verbrennen konnte (Laufzeit × Nennleistung + Spielraum) – oder, wo
+     es keine Brennerdaten gibt (Langzeitstatistik), ein Vielfaches der Vorwoche –,
+     wird sie nicht gelernt. Typisch: der Zählerstand wird von Hand nachgezogen,
+     weil der Reed-Kontakt Umdrehungen verpasst hat. Der Nachtrag zählt aber
+     weiter in Verbrauch und Kosten, denn das Gas wurde ja verbrannt.
+   - *Verpasste Zählung:* Brenner lief kräftig, Zähler zählte (fast) nichts →
+     Stunde nicht gelernt.
+   - *Zählerstand sinkt* (Korrektur nach unten, Tausch) → Stunde ignoriert.
+2. **Messwerte:** außerhalb physikalischer Grenzen (z. B. EMS-Platzhalter wie
+   3276,7 °C, Raum unter 0 °C, Ventil über 100 %) → verworfen. Einzelne
+   Temperaturspitzen eines Raums (Sprung um mehr als 4 K und gleich wieder
+   zurück) → verworfen; bleibt der neue Wert, gilt er. Ab drei Außenfühlern wird
+   ein Fühler, der mehr als 8 K unter den anderen liegt, als defekt ignoriert.
+3. **Lernen:** Weicht ein Messpunkt weit mehr als üblich vom Modell ab, zählt er
+   nur begrenzt (über 4-fachem üblichem Fehler gekappt) oder gar nicht (über
+   15-fachem). Ändert sich das Haus wirklich, zieht das Modell trotzdem nach –
+   nur langsamer.
+
+Was ignoriert wurde, steht in der Übersicht unter „Leitplanken“, im Selbsttest
+(Reiter Diagnose) und im Log. Beim Update auf 0.14 wird der Lernstand einmal
+mit diesem Schutz aus den gespeicherten und den Home-Assistant-Daten neu
+berechnet; „Historie neu einlesen“ macht dasselbe auf Knopfdruck.
 
 ## Fußbodenheizung ohne Stellventil
 

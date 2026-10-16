@@ -14,6 +14,7 @@ import logging
 import time
 from datetime import datetime, timedelta, timezone
 
+from . import plausibility
 from .engine import Engine, flag, local
 from .ha_client import HAClient
 from .models import ROOM_STEP_H, HouseModel
@@ -53,6 +54,11 @@ async def backfill_statistics(ha: HAClient, eng: Engine, days: int) -> int:
         gas_change = {
             h: s2 - s1 for (_, s1), (h, s2) in zip(sums, sums[1:]) if s2 >= s1
         }
+    kwh = {h: v * eng.gas_factor for h, v in gas_change.items()}
+    clean, spikes = plausibility.gas_series(kwh, eng.nominal_kw())
+    for hour, value in spikes.items():
+        log.info("Langzeitstatistik %s: Gaszähler-Sprung um %.1f kWh (Nachtrag?) – nicht gelernt",
+                 datetime.fromtimestamp(hour).strftime("%d.%m.%Y %H:00"), value)
     outdoor = [by_hour(e, "mean") for e in f.outdoor]
     rooms = [by_hour(e, "mean") for e in temp_ids]
     rows = []
@@ -64,9 +70,11 @@ async def backfill_statistics(ha: HAClient, eng: Engine, days: int) -> int:
                 hour,
                 min(t_out) if t_out else None,
                 sum(t_in) / len(t_in) if t_in else None,
-                gas_change[hour] * eng.gas_factor,
+                clean[hour],
                 None,
                 None,
+                None,
+                spikes.get(hour),
             )
         )
     eng.store.add_hourly(rows)
@@ -152,6 +160,8 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
             continue  # vor Beginn der Historie: keine leeren Messpunkte anlegen
         eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
+        eng.count_rejected(ts)
+        rooms = eng.filter_room_spikes(ts, rooms)
         eng.track_vacation_return(ts, persons)
         sample["vacation"] = int(eng.on_vacation(ts))
         eng.store.add_sample(ts, sample)
