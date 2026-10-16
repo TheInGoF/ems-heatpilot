@@ -74,7 +74,8 @@ def make_app(app) -> web.Application:
                 "device_id": reg.get(eid, {}).get("device_id"),
                 "platform": reg.get(eid, {}).get("platform"),
                 # Personen: nur ob Gerät/GPS da ist – nie Koordinaten
-                **({"trackers": len(a.get("device_trackers") or []), "gps": "latitude" in a}
+                **({"trackers": len(a.get("device_trackers") or []), "gps": "latitude" in a,
+                    "user": bool(a.get("user_id"))}
                    if eid.startswith("person.") else {}),
             })
         return web.json_response(out)

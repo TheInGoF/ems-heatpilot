@@ -597,12 +597,13 @@ function personRows() {
   if (!persons.length) return `<tr><td colspan="4" class="muted">Keine person.*-Entitäten in Home Assistant gefunden.</td></tr>`;
   const chosen = new Set((SET.persons || []).length ? SET.persons : (SUG.persons || []));
   return persons.map((p) => {
-    const dummy = !p.trackers;
+    const dummy = !p.trackers, device = p.trackers && !p.user;
     return `<tr class="person" data-id="${esc(p.id)}">
       <td><input type="checkbox" class="p-on" ${chosen.has(p.id) ? "checked" : ""}></td>
       <td>${esc(p.name)}<div class="hint">${esc(p.id)}</div></td>
       <td>${esc(p.state === "home" ? "zu Hause" : p.state === "not_home" ? "weg" : p.state)}</td>
-      <td>${dummy ? '<span class="muted">kein Gerät – vermutlich Dummy</span>' : `${p.trackers} Gerät${p.trackers > 1 ? "e" : ""}${p.gps ? " · GPS" : " · ohne GPS"}`}</td></tr>`;
+      <td>${dummy ? '<span class="muted">kein Gerät – vermutlich Dummy</span>' : `${p.trackers} Gerät${p.trackers > 1 ? "e" : ""}${p.gps ? " · GPS" : " · ohne GPS"}` +
+        (device ? '<div class="hint">kein HA-Benutzer – Fahrzeug oder Gerät?</div>' : "")}</td></tr>`;
   }).join("");
 }
 
@@ -617,6 +618,7 @@ function roomRows() {
     return `<tr class="room" data-climate="${esc(c.id)}">
       <td><input type="checkbox" class="r-on" ${on ? "checked" : ""}></td>
       <td><input class="r-name" value="${esc(r.name || g.name || c.name)}"><div class="hint">${esc(c.id)}</div></td>
+      <td>${esc(c.platform || "–")}${c.platform && c.platform !== "tado" ? '<div class="hint">kein Tado – wirklich ein Raum?</div>' : ""}</td>
       <td style="text-align:center"><input type="checkbox" class="r-floor" ${(SET.floor_heating_rooms || []).includes(c.id) ? "checked" : ""}></td>
       <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || "")}" placeholder="Ventil % (optional)"></td>
       <td><input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || "")}" placeholder="Temperatur (optional)"></td>
@@ -645,9 +647,9 @@ function renderSettings() {
       ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Für die Vorhersage beim Vorheizen.")}
       ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
     </div>`) +
-    card("Räume", `<p>Häkchen = Raum wird gelernt. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
-      <div class="scroll"><table class="form"><tr><th></th><th>Name</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
-    card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = Person wird gelernt. Personen ohne Gerät (z. B. Dummies, Gäste, Haustiere, Autos) besser abwählen – sonst gilt das Haus womöglich nie als leer. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit Gerät.</p>
+    card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
+      <div class="scroll"><table class="form"><tr><th></th><th>Name</th><th>Quelle</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+    card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus z. B. als leer, wenn nur das Auto weg ist. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit HA-Benutzer und Gerät.</p>
       <div class="scroll"><table class="form"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`) +
     card("Gas & Kosten", `<div class="form-grid">
       ${field("Brennwert (kWh/m³)", num("f-gas_calorific_value", s.gas_calorific_value), "Laut Gasrechnung, typisch 10,5–11,5")}

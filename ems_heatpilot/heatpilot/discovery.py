@@ -187,9 +187,13 @@ def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[di
         d.rooms.append(room)
 
 
-def is_real_person(state: dict) -> bool:
-    """Person mit mindestens einem Gerät (device_tracker) – sonst vermutlich ein Dummy."""
-    return bool(state.get("attributes", {}).get("device_trackers"))
+def person_kind(state: dict) -> str:
+    """``person``: HA-Benutzer mit Gerät · ``device``: Gerät, aber kein HA-Benutzer (z. B. Fahrzeug,
+    das als Person angelegt ist, weil es ein Bild und Abwesenheiten hat) · ``dummy``: ohne Gerät."""
+    a = state.get("attributes", {})
+    if not a.get("device_trackers"):
+        return "dummy"
+    return "person" if a.get("user_id") else "device"
 
 
 def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
@@ -229,9 +233,11 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
     if cfg.persons:
         d.persons = [p for p in cfg.persons if p in by_id]
     else:
-        # automatisch: nur Personen mit Gerät (device_tracker) – Dummies ohne Gerät nicht
-        with_device = [p for p in all_persons if is_real_person(by_id.get(p, {}))]
-        d.persons = with_device or all_persons
+        # automatisch: echte Menschen = HA-Benutzer mit Gerät; Fahrzeuge (Gerät ohne Benutzer)
+        # und Dummies nicht. Gibt es keine Benutzer-Zuordnung, alle mit Gerät.
+        kinds = {p: person_kind(by_id.get(p, {})) for p in all_persons}
+        d.persons = ([p for p in all_persons if kinds[p] == "person"]
+                     or [p for p in all_persons if kinds[p] != "dummy"] or all_persons)
 
     d.outdoor = [e for e in cfg.outdoor_sensors if e in by_id]
     if not d.outdoor and "boiler_outdoor" in d.boiler:
