@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.20.2
+- Warmwasser „Wann gezapft wird“: Umschalter **Typischer Tag / Woche**. Die Woche zeigt als Wärmekarte die Vorhersage je Wochentag und Stunde, so wie HeatPilot sie zum Planen nutzt, und wie stark der Wochentag schon zählt (wächst mit jeder gelernten Woche, höchstens 70 %)
+
 ## 0.20.1
 - Live: Luftfeuchte je Raum – im Kopf jeder Raumkarte, als gepunktete Linie im Raum-Grafen (rechte Skala) und als Kachel „Luftfeuchte Ø“ mit trockenstem und feuchtestem Raum (ab 65 % Hinweis „lüften“)
 

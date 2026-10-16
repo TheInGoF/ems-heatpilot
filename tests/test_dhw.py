@@ -122,3 +122,23 @@ def test_rare_big_draw_does_not_dominate_profile():
     assert len(m.big_draws) == 2 and all(k >= 20 for _, k in m.big_draws)  # Duschen zählen nicht dazu
     assert m.daily[18] < m.daily[7]  # Profil: Duschen morgens bleibt sichtbar
     assert m.daily[18] <= 3.0
+
+
+def test_weekday_profile_blends_in_over_weeks():
+    """Sonntags wird morgens gebadet, werktags nicht: nach einigen Wochen sieht die Vorhersage das."""
+    from datetime import datetime, timedelta
+
+    from heatpilot.dhw import DhwModel
+
+    m = DhwModel()
+    m.loss.theta = [0.8, -0.04]
+    t, start = 55.0, datetime(2026, 9, 7, 0, 0)  # Montag
+    for i in range(8 * 7 * 24 * 12):
+        now = start + timedelta(minutes=5 * i)
+        drop = 4.0 if now.weekday() == 6 and now.hour == 9 and now.minute == 0 else 0.0
+        new = t - drop - 0.01
+        m.step(now, 5 / 60, t, new, False, None)
+        t = new if new > 40 else 55.0
+    s = m.summary(50.0)
+    assert s["profile_week"][6][9] > 2 * s["profile_week"][2][9]  # Sonntag 9 Uhr ≫ Mittwoch 9 Uhr
+    assert 0.5 <= s["week_weight"][6] <= 0.7

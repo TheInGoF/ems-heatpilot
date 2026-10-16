@@ -227,9 +227,11 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   <div class="tiles" id="dhw-tiles"></div>
   <div class="grid2">
     <div class="card">
-      <h2>Wann gezapft wird</h2>
-      <p>Üblicher Temperaturabfall des Speichers durch Zapfungen je Tagesstunde (K). Hier sollte Warmwasser bereitstehen – sonst reicht das Minimum. Seltene große Zapfungen (Wanne) zählen nur gedeckelt und stehen darunter.</p>
+      <div class="row" style="justify-content:space-between"><h2>Wann gezapft wird</h2>
+        <div class="row" id="dhw-mode"><button class="btn small primary" data-m="day" onclick="setDhwMode('day')">Typischer Tag</button><button class="btn small" data-m="week" onclick="setDhwMode('week')">Woche</button></div></div>
+      <p>Üblicher Temperaturabfall des Speichers durch Zapfungen (K) – hier sollte Warmwasser bereitstehen, sonst reicht das Minimum. „Woche“: die Vorhersage je Wochentag und Stunde, wie HeatPilot sie zum Planen nutzt. Seltene große Zapfungen (Wanne) zählen nur gedeckelt und stehen darunter.</p>
       <div id="chart-dhw-profile"></div>
+      <p class="muted" id="dhw-week-note" style="margin-top:4px"></p>
       <p class="muted" id="dhw-big" style="margin-top:6px"></p>
     </div>
     <div class="card">
@@ -628,7 +630,8 @@ async function load() {
     tile("Ladekosten", fmt(kpk.kalt ?? kpk.warm, 3), "kWh/K", `Start unter 47 °C: ${fmt(kpk.kalt, 3)} (${w.kwh_per_k_n.kalt}×) · darüber: ${fmt(kpk.warm, 3)} (${w.kwh_per_k_n.warm}×)`),
     tile("Ersparnis-Schätzung", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
   ].join("");
-  barChart($("chart-dhw-profile"), w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
+  LAST_DHW = w;
+  drawDhwProfile();
   const big = w.big_draws || [];
   $("dhw-big").innerHTML = big.length
     ? `<b>Große Zapfungen</b> (z. B. Badewanne, letzte 60 Tage, nicht im Profil): ` + big.slice(-8).reverse().map(([t, k]) =>
@@ -695,6 +698,36 @@ function renderFlowStudy(fs) {
   box.innerHTML = `<h2>Vorlauf: bringt mehr etwas – oder ist es Verschwendung?</h2>` +
     `<p>Mehr Vorlauf lässt die Heizkörper mehr abnehmen – der Kessel läuft länger und startet seltener. Dafür steigt der Rücklauf, und über 55 °C kondensiert der Kessel kaum noch. HeatPilot vergleicht dazu deine Heizstunden der letzten ${fs.window_days} Tage bei gleicher Außentemperatur (nur Stunden ohne Aufheizen und ohne Warmwasser). Nur Beobachtung – es wird nichts verstellt.</p>` +
     `<p style="border-left:3px solid ${kindCol[fs.verdict.kind]};padding-left:8px;color:var(--text-primary)">${esc(fs.verdict.text)}</p>` + tables;
+}
+let DHW_MODE = "day", LAST_DHW = null;
+function setDhwMode(m) { DHW_MODE = m; drawDhwProfile(); }
+function drawDhwProfile() {
+  const w = LAST_DHW; if (!w) return;
+  document.querySelectorAll("#dhw-mode button").forEach((b) => b.classList.toggle("primary", b.dataset.m === DHW_MODE));
+  const box = $("chart-dhw-profile"), note = $("dhw-week-note");
+  if (DHW_MODE === "day" || !w.profile_week) {
+    note.textContent = "";
+    return barChart(box, w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
+  }
+  const days = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"], wk = w.profile_week;
+  const max = Math.max(0.1, ...wk.flat());
+  box.innerHTML = ""; showCard(box);
+  const W = Math.max(box.clientWidth || 520, 280), cellW = (W - 34) / 24, cellH = 20, H = 7 * cellH + 22;
+  const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": "Zapfungen je Wochentag und Stunde" }, box);
+  wk.forEach((row, d) => {
+    el("text", { x: 0, y: d * cellH + 14 }, svg).textContent = days[d];
+    row.forEach((v, h) => {
+      const r = el("rect", { x: 30 + h * cellW, y: d * cellH, width: cellW - 1.5, height: cellH - 2, rx: 2,
+        fill: "var(--series-1)", "fill-opacity": v <= 0.02 ? 0.05 : 0.15 + 0.85 * v / max }, svg);
+      r.addEventListener("mousemove", (e) => showTip(e, `${days[d]} ${String(h).padStart(2, "0")}:00<br><b>${fmt(v, 1)} K</b> erwartet`));
+      r.addEventListener("mouseleave", hideTip);
+    });
+  });
+  [0, 6, 12, 18, 23].forEach((h) => { el("text", { x: 30 + h * cellW + cellW / 2, y: H - 4, "text-anchor": "middle" }, svg).textContent = String(h).padStart(2, "0"); });
+  const avg = w.week_weight.reduce((a, b) => a + b, 0) / 7;
+  note.textContent = avg < 0.05
+    ? "Noch gilt für jeden Tag das Tagesprofil – der Wochentag zählt mit jeder gelernten Woche mehr (nach etwa 8 Wochen zu 70 %)."
+    : `Der Wochentag zählt bereits zu ${fmt(avg * 100, 0)} % (wächst mit jeder Woche, höchstens 70 %), der Rest kommt aus dem Tagesprofil.`;
 }
 function roomCheckText(sv) {
   if (!sv.rooms_checked) return "noch kein Raummodell plausibel – nur das ganze Haus geprüft";
