@@ -122,7 +122,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
                    | ({eng.cfg.vacation_entity} if eng.cfg.vacation_entity else set())
                    | {r.heating_power for r in f.rooms if r.heating_power}
                    | {r.humidity for r in f.rooms if r.humidity})
-    with_attrs = [r.climate for r in f.rooms] + f.persons
+    with_attrs = [r.climate for r in f.rooms] + f.persons + ([f.weather] if f.weather else [])  # Bewölkung
     series: dict[str, list] = {e: [] for e in plain + with_attrs}
     t = start_ts
     while t < end_ts:
@@ -169,6 +169,7 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
         sample, rooms, persons = eng.snapshot()
         eng.count_rejected(ts)
         eng.infer_dhw(ts, sample)
+        eng.add_solar(ts, sample)
         rooms = eng.filter_room_spikes(ts, rooms)
         eng.track_vacation_return(ts, persons)
         sample["vacation"] = int(eng.on_vacation(ts))

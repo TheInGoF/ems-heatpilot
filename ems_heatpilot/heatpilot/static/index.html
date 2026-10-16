@@ -215,6 +215,8 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     </div>
   </div>
 
+  <div class="card" id="flowstudy" style="margin-bottom:12px"></div>
+
   <div class="card" style="margin-bottom:12px">
     <h2>Geschätzte Ersparnis pro Tag</h2>
     <p id="savings-text">Was Absenken bei Abwesenheit und nachts an diesem Tag gespart hätte (kWh Gas), berechnet mit dem gelernten Modell.</p>
@@ -240,7 +242,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
 
   <div class="card" style="margin-bottom:12px">
     <h2>Räume</h2>
-    <p>Pro Raum gelernt: Zeitkonstante (wie schnell er auskühlt), Aufheizzeit für +2 K bei maximalem Vorlauf und der Vorlauf, der 21 °C hält.</p>
+    <p>Pro Raum gelernt: Zeitkonstante (wie schnell er auskühlt), Aufheizzeit für +2 K bei maximalem Vorlauf, der Vorlauf, der 21 °C hält, und wie stark die Sonne den Raum aus welcher Richtung heizt (K/h bei voller Sonne – Räume ohne Sonnenfenster lernen „kaum Sonne“).</p>
     <div class="scroll"><table id="rooms"></table></div>
   </div>
 
@@ -601,6 +603,7 @@ async function load() {
     `<li><b>Je Raum geprüft:</b> ${roomCheckText(sv)}</li>` +
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul>`;
   loadCert();
+  renderFlowStudy(s.flow_study);
   const w = s.dhw;
   const kpk = w.kwh_per_k;
   $("dhw-tiles").innerHTML = [
@@ -630,8 +633,8 @@ async function load() {
   barChart($("chart-savings"), sv.daily.map((d) => [d.day.slice(8, 10) + "." + d.day.slice(5, 7), d.saved_kwh, `Verbrauch ${fmt(d.actual_kwh)} kWh`]), "kWh", "Geschätzte Ersparnis pro Tag");
   $("savings-text").textContent = `Was Absenken bei Abwesenheit und nachts gespart hätte, berechnet mit dem gelernten Modell. Über ${fmt(sv.span_days)} Tage: ${fmt(sv.saved_kwh, 0)} kWh von ${fmt(sv.actual_kwh, 0)} kWh (${fmt(sv.saved_pct)} %, ≈ ${fmt(sv.saved_eur, 0)} €). Schätzung – sie wird genauer, je länger das Modell lernt.`;
 
-  $("rooms").innerHTML = "<tr><th>Raum</th><th>Ist</th><th>Soll</th><th>Ventil</th><th>Zeitkonstante</th><th>+2 K bei max. Vorlauf</th><th>Vorlauf für 21 °C</th><th>Fehler</th><th>Lernschritte</th></tr>" +
-    s.rooms.map((r) => `<tr><td>${r.room}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
+  $("rooms").innerHTML = "<tr><th>Raum</th><th>Ist</th><th>Soll</th><th>Ventil</th><th>Zeitkonstante</th><th>+2 K bei max. Vorlauf</th><th>Vorlauf für 21 °C</th><th>Sonne</th><th>Fehler</th><th>Lernschritte</th></tr>" +
+    s.rooms.map((r) => `<tr><td>${r.room}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td><td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${fmt(r.flow_to_hold_21, 0)} °C</td><td>${sunText(r.solar_gain, r.updates)}</td><td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`).join("");
 
   const src = { gps: "GPS – nähert sich", gewohnheit: "Gewohnheit", zuhause: "zu Hause", urlaub: "Urlaubsende", urlaub_datum: "Urlaubsende (nur Datum – GPS verfeinert)" };
   $("persons").innerHTML = "<tr><th>Person</th><th>Status</th><th>Entfernung</th><th>Erwartet</th><th>Quelle</th></tr>" +
@@ -655,6 +658,29 @@ async function load() {
 }
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null;
+function sunText(g, updates) {
+  if (!g || updates < 96) return '<span class="muted">lernt noch</span>';
+  const names = ["Ost", "Süd", "West"], best = g.indexOf(Math.max(...g));
+  if (g[best] < 0.05) return '<span class="muted">kaum Sonne</span>';
+  return names.map((n, i) => g[i] >= 0.05 ? `${n} ${fmt(g[i], 1)}` : "").filter(Boolean).join(" · ") + ' <span class="muted">K/h</span>';
+}
+// Vorlauf gegen Takten: gemessen, nicht angenommen
+function renderFlowStudy(fs) {
+  const box = $("flowstudy");
+  if (!fs || !fs.hours) { box.hidden = true; return; }
+  box.hidden = false;
+  const kindCol = { lohnt: "var(--good)", verschwendung: "#e34948", unklar: "var(--warn)", zu_wenig: "var(--text-muted)" };
+  const tables = fs.bands.map((b) => {
+    const ok = b.cells.filter((c) => c.enough), base = ok.length ? ok[0].gas_per_kh : null;
+    return `<h3 style="font-size:13px;margin:10px 0 4px">Außen ${esc(b.band)}</h3><div class="scroll"><table><tr><th>Vorlauf</th><th>Stunden</th><th>Starts/h</th><th>Laufzeit je Start</th><th>Rücklauf</th><th>Gas je K·h</th></tr>` +
+      b.cells.map((c) => `<tr style="${c.enough ? "" : "color:var(--text-muted)"}"><td>${esc(c.flow)} °C</td><td>${c.hours}${c.enough ? "" : " (zu wenig)"}</td><td>${fmt(c.starts_per_h, 1)}</td>` +
+        `<td>${c.run_per_start_min === null ? "–" : fmt(c.run_per_start_min, 0) + " min"}</td><td>${c.ret === null ? "–" : fmt(c.ret, 0) + " °C" + (c.ret > 55 ? " ⚠" : "")}</td>` +
+        `<td>${fmt(c.gas_per_kh * 1000, 0)} Wh${base && c.enough && c !== ok[0] ? ` (${c.gas_per_kh / base - 1 >= 0 ? "+" : ""}${fmt((c.gas_per_kh / base - 1) * 100, 0)} %)` : ""}</td></tr>`).join("") + "</table></div>";
+  }).join("");
+  box.innerHTML = `<h2>Vorlauf: bringt mehr etwas – oder ist es Verschwendung?</h2>` +
+    `<p>Mehr Vorlauf lässt die Heizkörper mehr abnehmen – der Kessel läuft länger und startet seltener. Dafür steigt der Rücklauf, und über 55 °C kondensiert der Kessel kaum noch. HeatPilot vergleicht dazu deine Heizstunden der letzten ${fs.window_days} Tage bei gleicher Außentemperatur (nur Stunden ohne Aufheizen und ohne Warmwasser). Nur Beobachtung – es wird nichts verstellt.</p>` +
+    `<p style="border-left:3px solid ${kindCol[fs.verdict.kind]};padding-left:8px;color:var(--text-primary)">${esc(fs.verdict.text)}</p>` + tables;
+}
 function roomCheckText(sv) {
   if (!sv.rooms_checked) return "noch kein Raummodell plausibel – nur das ganze Haus geprüft";
   const cold = sv.room_cold.length ? "zu kalt wäre: " + sv.room_cold.map((r) => `${esc(r.name)} ${r.hours} h`).join(", ") : "alle Räume wären rechtzeitig warm gewesen";

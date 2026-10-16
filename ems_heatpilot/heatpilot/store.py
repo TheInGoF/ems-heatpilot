@@ -47,6 +47,8 @@ SAMPLE_COLS = (
     "dhw_set",
     # seit 0.6
     "vacation",
+    # seit 0.20: Sonne auf Ost-, Süd-, Westfassade (0…1)
+    "sun_e", "sun_s", "sun_w",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh")

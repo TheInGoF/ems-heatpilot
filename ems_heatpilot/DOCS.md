@@ -189,7 +189,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.19 macht
+## Was das Add-on in Version 0.20 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
@@ -298,6 +298,34 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
    Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag.
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
+
+## Sonne als Wärmequelle
+
+Die Sonne heizt Räume mit Süd-, Ost- oder Westfenstern kostenlos. HeatPilot berechnet
+den Sonnenstand aus dem Standort des Zuhauses und der Uhrzeit (ohne Sensor, auch
+rückwirkend) und nimmt die Bewölkung aus der Wetter-Integration (`cloud_coverage`,
+sonst „halbe Sonne“). Daraus entstehen drei Werte – Einstrahlung auf Ost-, Süd- und
+Westfenster –, und jedes Raummodell lernt selbst, wie viel davon bei ihm ankommt. Die
+Raumtabelle zeigt das als „Sonne“, z. B. „Süd 0,8 K/h bei voller Sonne“; ein Nordraum
+lernt „kaum Sonne“. Für Vorheizpläne rechnet HeatPilot vorsichtig ohne Sonne.
+
+## Vorlauf gegen Takten
+
+Ein zu großer Kessel taktet, weil die Heizkörper seine kleinste Leistung nicht abnehmen.
+Mehr Raumtemperatur ändert daran nichts – nur ein höherer Vorlauf erhöht, was die
+Heizkörper abgeben. Dafür steigt der Rücklauf, und über ~55 °C kondensiert ein
+Brennwertkessel kaum noch. Die Karte **„Vorlauf: bringt mehr etwas – oder ist es
+Verschwendung?“** misst das an den eigenen Heizstunden der letzten 90 Tage:
+
+- verglichen werden nur Stunden mit ähnlicher Außentemperatur (unter 0, 0–5, 5–10, 10–15 °C),
+- nur Beharrungsstunden (innen höchstens 0,3 K Änderung) und ohne Warmwasserladung,
+- je 5-K-Vorlaufstufe: Starts pro Stunde, Laufzeit je Start, Rücklauf und Gas je
+  Kelvin-Stunde (Gas geteilt durch innen − außen), je Stufe mindestens 20 Stunden.
+
+Urteil: „lohnt sich“, „Verschwendung“ (mit Hinweis, wenn der Rücklauf über 55 °C liegt),
+„kein klarer Unterschied“ oder „zu wenig Vielfalt“ – dann mit Vorschlag für einen
+Versuch, den du selbst machst (Heizkurve am Regler für ein, zwei Wochen etwa +5 K, nur
+wenn du sicher bist). HeatPilot verstellt dabei nichts.
 
 ## Ausreißer: was das Modell verwirrt, wird nicht gelernt
 

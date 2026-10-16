@@ -7,7 +7,8 @@ Raummodell (pro Tado-Raum), gelernt alle 30 Minuten:
     Heizleistung = max(T_vorlauf - T_raum, 0) * Ventilöffnung * Heizbetrieb
     a  wie stark der Heizkörper den Raum erwärmt   [1/h]
     b  wie schnell der Raum auskühlt (1/b = Zeitkonstante in h)
-    c  Fremdwärme (Sonne, Personen, Nachbarräume) [K/h]
+    c  Fremdwärme (Personen, Nachbarräume) [K/h]
+    + g_Ost/Süd/West * Einstrahlung: Sonnenwärme durch die Fenster je Himmelsrichtung
 
 Hausmodell, gelernt jede Stunde aus dem Gasverbrauch:
 
@@ -47,7 +48,19 @@ class RoomModel:
     def __post_init__(self) -> None:
         if self.rls is None:
             theta = [0.02, 0.01, 0.05, 0.0] if self.floor else [0.02, 0.05, 0.0]
-            self.rls = RLS(n=len(theta), lam=0.998, delta=1.0, theta=theta, min_sigma=0.03)
+            self.rls = RLS(n=len(theta) + 3, lam=0.998, delta=1.0, theta=theta + [0.0, 0.0, 0.0], min_sigma=0.03)
+        elif self.rls.n == self._base_n:
+            self.rls.extend(3)  # Modell von vor 0.20: Sonnen-Parameter ergänzen
+
+    @property
+    def _base_n(self) -> int:
+        return 4 if self.floor else 3
+
+    @property
+    def solar(self) -> tuple[float, float, float]:
+        """Sonnenwärme Ost/Süd/West in K/h bei voller Sonne (nie negativ)."""
+        th = self.rls.theta[self._base_n:self._base_n + 3]
+        return tuple(round(max(v, 0.0), 3) for v in th) if len(th) == 3 else (0.0, 0.0, 0.0)
 
     @property
     def a(self) -> float:
@@ -84,6 +97,7 @@ class RoomModel:
         dt_h: float = ROOM_STEP_H,
         floor_input: float = 0.0,
         update: bool = True,
+        solar: tuple[float, float, float] | None = None,
     ) -> float:
         """Lernschritt. ``update=False`` führt nur den Estrich-Speicher nach (z. B. im Urlaub)."""
         t_mean = (t_start + t_end) / 2
@@ -92,6 +106,7 @@ class RoomModel:
             x = [heat_input * dt_h, self.floor_u * dt_h, (t_out - t_mean) * dt_h, dt_h]
         else:
             x = [heat_input * dt_h, (t_out - t_mean) * dt_h, dt_h]
+        x += [v * dt_h for v in (solar or (0.0, 0.0, 0.0))]
         if not update:
             return 0.0
         return self.rls.update(x, t_end - t_start)
@@ -138,6 +153,7 @@ class RoomModel:
             "tau_h": round(self.tau_h, 1),
             "heat_gain": round(self.a, 4),
             "free_gain_k_h": round(self.c, 3),
+            "solar_gain": self.solar,
             "hours_plus_2k_max_flow": self.time_to_reach(19.0, 21.0, max_flow, t_out),
             "flow_to_hold_21": round(self.required_flow(21.0, t_out), 1),
         }
