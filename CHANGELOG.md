@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.10.1
+- Logo: Flamme aus Knoten – `icon.png` und `logo.png` für Home Assistant, Symbol im Kopf der HeatPilot-Seite und als Browser-Symbol, Vorlage als SVG unter `assets/`
+
 ## 0.10.0
 - Einrichtung ausschließlich über die Weboberfläche: keine YAML-Optionen mehr im Add-on (Reiter „Konfiguration“ entfällt); Werte aus `options.json` älterer Versionen werden weiter übernommen
 - Doku ohne YAML-Beispiele, beschreibt die Oberfläche

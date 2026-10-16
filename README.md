@@ -1,3 +1,5 @@
+<p align="center"><img src="ems_heatpilot/logo.png" alt="HeatPilot" width="250"></p>
+
 # EMS HeatPilot
 
 **Ein Programm, das eine bestehende Gas- oder Ölheizung besser macht.**
