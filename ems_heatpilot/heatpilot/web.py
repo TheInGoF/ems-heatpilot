@@ -151,6 +151,21 @@ def make_app(app) -> web.Application:
         return web.Response(body=certificate.pdf(app.eng), content_type="application/pdf",
                             headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
+    async def export_learned(req):
+        import json
+        from datetime import datetime
+
+        if app.eng is None:
+            return web.Response(status=503, text="Add-on startet noch")
+        days = min(max(int(req.query.get("days", "14")), 1), 60)
+        data = diagnostics.export(app, days)
+        name = f"heatpilot-gelernt-{datetime.now():%Y%m%d-%H%M}.json"
+        return web.Response(
+            body=json.dumps(data, ensure_ascii=False, default=str, separators=(",", ":")).encode(),
+            content_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
+
     async def reload_history(_req):
         asyncio.create_task(app.reload_history())
         return web.json_response({"ok": True})
@@ -166,6 +181,7 @@ def make_app(app) -> web.Application:
     web_app.router.add_post("/api/reload_history", reload_history)
     web_app.router.add_get("/api/diagnostics", diag)
     web_app.router.add_get("/api/diagnostics/bundle", diag_bundle)
+    web_app.router.add_get("/api/export", export_learned)
     web_app.router.add_get("/api/live", live_data)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)

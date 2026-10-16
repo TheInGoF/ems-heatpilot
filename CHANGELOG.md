@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.17.0
+- **Gelernte Werte exportieren** (Reiter Diagnose): alle Modelle in Klartext mit Gütemaß (Fehler, gekappte/verworfene Punkte, plausibel ja/nein), Lernkurve, alle Stundenwerte und die Messwerte der letzten 7/14/30 Tage – zum Nachrechnen, ob ein Modell etwas falsch verstanden hat; ohne GPS-Koordinaten
+- Warmwasser „Was Warmhalten kostet“: zeigt jetzt die gemessenen Auskühl-Werte (Punkte, letzte 14 Tage) gegen das gelernte Modell (Linie) – sichtbar, ob das Modell passt. Bisher zeigte die Grafik 0 W, solange die Ladekosten noch nicht gelernt waren
+
 ## 0.16.3
 - Einstellungen werden zusätzlich als `heatpilot-einstellungen.json` im Add-on-Konfigurationsordner gesichert (`/addon_configs/<slug>/`, per Samba erreichbar) und automatisch zurückgeholt, falls sie in `/data` fehlen
 - Während HeatPilot nach einem Update die Historie neu einliest, zeigen Übersicht und Einstellungen das klar an („Deine Einstellungen sind gespeichert“) statt nur „Startet“

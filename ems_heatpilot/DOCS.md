@@ -42,6 +42,18 @@ Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
 erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
 `/data/settings.json` und bleiben bei Updates erhalten.
 
+## Gelernte Werte exportieren
+
+Reiter **Diagnose → Gelernte Werte herunterladen** liefert eine JSON-Datei mit allem,
+was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in
+Klartext mit Gütemaß (Fehler, gekappte und verworfene Punkte, plausibel ja/nein),
+dazu Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage (7, 14 oder
+30). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
+GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten.
+
+Ob das Warmwasser-Modell passt, zeigt auch die Grafik „Was Warmhalten kostet“:
+Punkte sind das gemessene Auskühlen (je 1 K gemittelt), die Linie das Modell.
+
 ## Einstellungen sichern
 
 Die Einstellungen liegen in `/data/settings.json` und bleiben bei Updates erhalten.
@@ -157,7 +169,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.16 macht
+## Was das Add-on in Version 0.17 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

@@ -20,7 +20,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__
+from . import __version__, guards
 from .discovery import BOILER_ROLES, ROLE_LABELS
 from .engine import num
 
@@ -285,3 +285,83 @@ def bundle(app, hours: int = 48) -> dict:
     data["kv"] = {r["key"]: r["value"] for r in _rows(eng, "SELECT key, value FROM kv")
                   if not r["key"].startswith("model.")}
     return data
+
+
+def explain_models(eng) -> dict:
+    """Gelernte Werte in Klartext – was das Modell glaubt, mit Einheit und Gütemaß."""
+    def rls(m):
+        return {"lernschritte": m.updates, "fehler_rmse": m.rmse, "gekappt": m.clipped, "verworfen": m.rejected,
+                "parameter": m.theta}
+
+    h = eng.house
+    d = eng.dhw
+    rooms = {}
+    for c, m in eng.rooms.items():
+        rooms[c] = {
+            "fussboden": m.floor,
+            "zeitkonstante_h": round(m.tau_h, 1),
+            "heizwirkung_k_h_je_k": round(m.a, 5),
+            "fussboden_wirkung": round(m.f, 5) if m.floor else None,
+            "fremdwaerme_k_h": round(m.c, 3),
+            "vorlauf_fuer_21_bei_0_grad": round(m.required_flow(21.0, 0.0), 1),
+            "plausibel": guards.check_room(m),
+            "rls": rls(m.rls),
+        }
+    return {
+        "haus": {
+            "waermeverlust_w_je_k": round(h.h_kw_per_k * 1000, 1),
+            "speicher_kwh_je_k": round(h.c_kwh_per_k, 2),
+            "grundlast_kw": round(h.base_kw, 3),
+            "traegheit_h": None if h.tau_h is None else round(h.tau_h, 1),
+            "plausibel": guards.check_house(h),
+            "rls": rls(h.rls),
+        },
+        "warmwasser": {
+            "umgebung_c": round(d.ambient, 1),
+            "auskuehlen_k_h": {t: round(d.cooling_kh(t), 3) for t in (40, 45, 50, 55, 60)},
+            "ladekosten_kwh_je_k": d.kwh_per_k,
+            "ladekosten_messungen": d.kwh_per_k_n,
+            "nachladen_k_h": round(d.charge_rate_kh, 1),
+            "ladungen": d.charges,
+            "reserve_k": round(d.comfort_margin, 2),
+            "zapfprofil_k_je_stunde": [round(v, 2) for v in d.daily],
+            "plausibel": guards.check_dhw(d),
+            "rls_auskuehlen": rls(d.loss),
+            "messpunkte_auskuehlen": eng.dhw_points(),
+        },
+        "raeume": rooms,
+        "zeiten": {"gelernt": eng.schedule_learned, "verwendet": eng.eff.as_dict()},
+        "personen": {p: {"gewohnheiten_woche": l.week, "heimfahrt_kmh": l.approach_speed_kmh,
+                         "ankuenfte_gelernt": l.arrivals_learned} for p, l in eng.persons.items()},
+        "ignoriert": eng.ignored(days=30),
+    }
+
+
+def export(app, days: int = 14) -> dict:
+    """Gelernte Werte plus die Daten, aus denen sie gelernt wurden – zum Nachrechnen.
+
+    Ohne GPS-Koordinaten (nur Entfernungen), ohne Zugangsdaten.
+    """
+    eng = app.eng
+    since = int(time.time()) - days * 86400
+    return {
+        "created": datetime.now().astimezone().isoformat(timespec="seconds"),
+        "version": __version__,
+        "hinweis": "Gelernte Werte von EMS HeatPilot mit Lerndaten der letzten Tage. Ohne GPS-Koordinaten.",
+        "settings": app.cfg.to_raw(),
+        "discovered": eng.found.as_dict(private=False),
+        "gelernt": explain_models(eng),
+        "modelle_roh": {
+            "house": eng.house.to_dict(),
+            "rooms": {c: m.to_dict() for c, m in eng.rooms.items()},
+            "dhw": eng.dhw.to_dict(),
+        },
+        "lernkurve": _rows(eng, "SELECT ts, kind, key, data FROM snapshots ORDER BY ts"),
+        "stundenwerte": _rows(eng, "SELECT * FROM hourly ORDER BY ts"),
+        "tageswerte": _rows(eng, "SELECT * FROM daily ORDER BY day"),
+        "messwerte": _rows(eng, "SELECT * FROM samples WHERE ts >= ? ORDER BY ts", (since,)),
+        "raeume_messwerte": _rows(eng, "SELECT * FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)),
+        "anwesenheit": _rows(eng, "SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
+                             (since,)),
+        "brenner": _rows(eng, "SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)),
+    }

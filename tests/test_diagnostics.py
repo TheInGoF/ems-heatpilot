@@ -83,3 +83,19 @@ def test_bundle_has_everything_but_no_gps(tmp_path):
         assert key in data
     assert data["entity_states"]["person.a"]["attributes"] == {"friendly_name": "A"}
     assert data["samples"] and data["person_samples"][0]["dist_km"] > 30  # Entfernung bleibt
+
+
+def test_export_learned_values_without_gps(tmp_path):
+    import json
+
+    eng = make_app(tmp_path).eng
+    eng.store.add_person_samples([(1_790_000_000, "person.a", 0, 12.3)])
+    eng.store.commit()
+    app = SimpleNamespace(eng=eng, cfg=Config())
+    data = diagnostics.export(app, days=10000)
+    text = json.dumps(data, default=str)
+    assert "latitude" not in text and "53.55" not in text  # Zuhause-Koordinaten nie im Export
+    g = data["gelernt"]
+    assert {"haus", "warmwasser", "raeume", "zeiten", "personen", "ignoriert"} <= set(g)
+    assert "auskuehlen_k_h" in g["warmwasser"] and "climate.wz" in g["raeume"]
+    assert data["anwesenheit"][0]["dist_km"] == 12.3

@@ -123,6 +123,14 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
       <p>Enthält Log, Selbsttest, Einstellungen, erkannte Entitäten, gelernte Modelle und die Messwerte der letzten 48 Stunden – ohne GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten. Diese Datei kannst du zur Fehlersuche weitergeben.</p>
       <div class="row"><a class="btn primary" href="api/diagnostics/bundle" download style="text-decoration:none">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div>
     </div>
+    <div class="card" style="margin-bottom:12px">
+      <h2>Gelernte Werte exportieren</h2>
+      <p>Alles, was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in Klartext mit Gütemaß, dazu die Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage. Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne GPS-Koordinaten.</p>
+      <div class="row"><select id="export-days" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
+        <option value="7">7 Tage</option><option value="14" selected>14 Tage</option><option value="30">30 Tage</option></select>
+        <a class="btn primary" id="export-btn" href="api/export?days=14" download style="text-decoration:none">Gelernte Werte herunterladen</a>
+        <span class="muted">14 Tage ≈ 2–5 MB</span></div>
+    </div>
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2>Log</h2>
         <div class="row"><select id="diag-level" onchange="loadDiag()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
@@ -195,7 +203,8 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     </div>
     <div class="card">
       <h2>Was Warmhalten kostet</h2>
-      <p>Gelernter Bereitschaftsverlust des Speichers als Gasleistung (W) je Speichertemperatur. Jedes Grad weniger spart dauerhaft.</p>
+      <p>Wie schnell der Speicher ohne Ladung und Zapfung auskühlt (K/h): Punkte = gemessen (letzte 14 Tage, je 1 K gemittelt, größer = mehr Messungen), Linie = gelerntes Modell. Liegen die Punkte nahe der Linie, hat HeatPilot das Warmhalten verstanden. Gas-Watt im Tooltip, sobald die Ladekosten gelernt sind.</p>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>Messung</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span></div>
       <div id="chart-dhw-loss"></div>
     </div>
   </div>
@@ -382,6 +391,8 @@ function legend(id, items) {
   $(id).innerHTML = items.map(([name, color, dash]) => `<span><i style="background:${dash ? "transparent" : color};${dash ? `border-top:2px dashed ${color};height:0;vertical-align:3px` : ""}"></i>${name}</span>`).join("");
 }
 
+document.addEventListener("change", (e) => { if (e.target.id === "export-days") $("export-btn").href = "api/export?days=" + e.target.value; });
+
 let liveTimer = null;
 async function loadLive() {
   clearTimeout(liveTimer);
@@ -430,6 +441,24 @@ async function loadLive() {
     { name: "Raum", values: r.temp, color: C.flow }, { name: "Soll", values: r.target, color: C.sel, dash: "5 4", width: 1.5, step: true }],
     { unit: "°C", height: 150, right: { name: "Ventil", values: r.valve, color: C.ret }, label: r.name }));
   if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(() => {}), 30000);
+}
+
+// Auskühlen des Speichers: Messpunkte (je 1 K gemittelt) und gelernte Kurve – passt das Modell?
+function dhwChart(container, w) {
+  const pts = w.points || [], curve = Object.entries(w.curve_kh).map(([t, v]) => [Number(t), v]);
+  if (!pts.length && !w.loss_updates) return empty(container, "Noch keine ruhigen Phasen gemessen (ohne Ladung und Zapfung).");
+  const xs = [...pts.map((p) => p.t), ...curve.map((c) => c[0])], ys = [0, ...pts.map((p) => p.kh), ...curve.map((c) => c[1])];
+  const f = frame(container, xs, ys, { yMin: 0, label: "Auskühlen des Speichers" });
+  const kpk = w.kwh_per_k_avg, watts = (kh) => kpk ? ` ≈ ${fmt(kh * kpk * 1000, 0)} W Gas` : "";
+  const d = curve.map((c, i) => `${i ? "L" : "M"}${f.sx(c[0])},${f.sy(c[1])}`).join("");
+  el("path", { d, fill: "none", stroke: "var(--series-2)", "stroke-width": 2 }, f.svg);
+  const rmax = Math.max(...pts.map((p) => p.n), 1);
+  pts.forEach((p) => {
+    const c = el("circle", { cx: f.sx(p.t), cy: f.sy(p.kh), r: 2.5 + 4 * Math.sqrt(p.n / rmax), fill: "var(--series-1)", "fill-opacity": 0.5 }, f.svg);
+    c.addEventListener("mousemove", (e) => showTip(e, `${p.t} °C: gemessen <b>${fmt(p.kh, 2)} K/h</b>${watts(p.kh)}<br>Modell ${fmt(w.curve_kh[p.t] ?? null, 2)} K/h · ${p.n} Messungen`));
+    c.addEventListener("mouseleave", hideTip);
+  });
+  el("text", { x: f.m.l + 6, y: f.m.t + 4, "text-anchor": "start" }, f.svg).textContent = "x: Speicher (°C) · y: Auskühlen (K/h)";
 }
 
 function tile(label, value, unit, note) {
@@ -496,7 +525,7 @@ async function load() {
     tile("Ersparnis-Schätzung", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
   ].join("");
   barChart($("chart-dhw-profile"), w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
-  barChart($("chart-dhw-loss"), Object.entries(w.loss_w_at).map(([t, v]) => [t + " °C", v ?? 0, ""]), "W", "Bereitschaftsverlust je Speichertemperatur");
+  dhwChart($("chart-dhw-loss"), w);
 
   demandChart($("chart-demand"), hist.hourly, h);
   const hs = hist.snapshots.filter((x) => x.kind === "house");
