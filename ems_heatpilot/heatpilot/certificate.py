@@ -216,7 +216,19 @@ def _date(iso: str | None) -> str:
     return "–" if not iso else datetime.fromisoformat(iso).strftime("%d.%m.%Y")
 
 
+def _finite(obj):
+    """Nicht-endliche Zahlen (NaN aus einem entgleisten Modell) als „unbekannt“ behandeln."""
+    if isinstance(obj, float) and not math.isfinite(obj):
+        return None
+    if isinstance(obj, dict):
+        return {k: _finite(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_finite(v) for v in obj]
+    return obj
+
+
 def render(data: dict) -> bytes:
+    data = _finite(data)
     p = Page()
     W = p.w
     L, R = 56, W - 56

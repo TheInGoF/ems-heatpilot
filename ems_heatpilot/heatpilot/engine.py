@@ -318,6 +318,8 @@ class Engine:
             "demand_pct": num(self._val(self.found.demand_sensor)),
             "dhw_set": num(self._boiler("dhw_seltemp")),
             "vacation": int(self.on_vacation()),
+            # nur für die Live-Ansicht (nicht in der Datenbank): läuft die Heizungspumpe?
+            "pump_on": flag(self._boiler("heating_pump")),
         }
         rooms = []
         for r in self.found.rooms:

@@ -143,14 +143,16 @@ def make_app(app) -> web.Application:
             return web.json_response({"starting": True})
         return web.json_response(certificate.collect(app.eng))
 
-    async def cert_pdf(_req):
+    async def cert_pdf(req):
         if app.eng is None:
             return web.Response(status=503, text="Add-on startet noch")
         from datetime import datetime
 
         name = f"heatpilot-zertifikat-{datetime.now():%Y%m%d}.pdf"
+        mode = "inline" if req.query.get("inline") else "attachment"
         return web.Response(body=certificate.pdf(app.eng), content_type="application/pdf",
-                            headers={"Content-Disposition": f'attachment; filename="{name}"'})
+                            headers={"Content-Disposition": f'{mode}; filename="{name}"',
+                                     "Cache-Control": "no-store"})
 
     async def export_learned(req):
         import json

@@ -199,8 +199,9 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   <div class="grid2">
     <div class="card">
       <h2>Wann gezapft wird</h2>
-      <p>Gelernter Temperaturabfall des Speichers durch Zapfungen je Tagesstunde (K). Hier sollte Warmwasser bereitstehen – sonst reicht das Minimum.</p>
+      <p>Üblicher Temperaturabfall des Speichers durch Zapfungen je Tagesstunde (K). Hier sollte Warmwasser bereitstehen – sonst reicht das Minimum. Seltene große Zapfungen (Wanne) zählen nur gedeckelt und stehen darunter.</p>
       <div id="chart-dhw-profile"></div>
+      <p class="muted" id="dhw-big" style="margin-top:6px"></p>
     </div>
     <div class="card">
       <h2>Was Warmhalten kostet</h2>
@@ -417,7 +418,10 @@ async function loadLive() {
     tile("Brenner", onOff(n.burner_on), n.burner_on && n.burner_pow !== null ? `· ${fmt(n.burner_pow, 0)} %` : "", burnerNote + (n.power_kw !== null && n.burner_on ? ` · ca. ${fmt(n.power_kw)} kW` : "")),
     tile("Vorlauf", fmt(n.flow), "°C", `Soll Kessel ${fmt(n.sel_flow, 0)} °C · Regler ${fmt(n.calc_flow, 0)} °C`),
     tile("Rücklauf", fmt(n.ret), "°C", n.flow !== null && n.ret !== null ? `Spreizung ${fmt(n.flow - n.ret)} K` : ""),
-    tile("Kessel", fmt(n.boiler_temp), "°C", `Pumpe ${fmt(n.pump_mod, 0)} %`),
+    tile("Heizungspumpe", n.pump_on === null || n.pump_on === undefined ? (n.pump_mod !== null ? (n.pump_mod > 0 ? "an" : "aus") : "–") : n.pump_on ? "an" : "aus",
+      n.pump_mod !== null ? `· ${fmt(n.pump_mod, 0)} %` : "",
+      n.pump_on === null && n.pump_mod === null ? "Wert fehlt – unter Einstellungen → Zuordnungen „Heizungspumpe“/„Pumpenmodulation“ prüfen" : "Drehzahl (Modulation) in %"),
+    tile("Kessel", fmt(n.boiler_temp), "°C", "Kesseltemperatur"),
     tile("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "")),
     tile("Außen", fmt(n.t_out), "°C", ""),
     tile("Innen Ø", fmt(n.t_in), "°C", `${n.rooms.length} Räume`),
@@ -433,10 +437,11 @@ async function loadLive() {
     { name: "Soll Kessel", values: s.sel_flow, color: C.sel, dash: "5 4", width: 1.5 },
     { name: "Soll Regler", values: s.calc_flow, color: C.calc, dash: "2 3", width: 1.5 },
     { name: "Kessel", values: s.boiler_temp, color: C.boiler, width: 1.5 }], { unit: "°C", bands, label: "Kesseltemperaturen" });
-  legend("lg-burner", [["Brennerleistung", C.flow], ["Pumpe", C.ret]]);
+  legend("lg-burner", [["Brennerleistung", C.flow], ["Pumpe (Modulation)", C.ret]]);
   timeChart($("ch-burner"), ts, [
     { name: "Brennerleistung", values: s.burner_pow.map((v, i) => v ?? (s.burner_on[i] === null ? null : s.burner_on[i] * 100)), color: C.flow, unit: "%", step: true },
-    { name: "Pumpe", values: s.pump_mod, color: C.ret, width: 1.5, unit: "%" }], { yMin: 0, yMax: 100, bands: [bands[1]], label: "Brenner" });
+    { name: "Pumpe", values: s.pump_mod.map((v, i) => v ?? (s.pump_on[i] === null ? null : s.pump_on[i] * 100)), color: C.ret, width: 1.5, unit: "%", step: true }],
+    { yMin: 0, yMax: 100, bands: [bands[1]], label: "Brenner" });
   legend("lg-house", [["Außen", C.ret], ["Innen Ø", C.flow]]);
   timeChart($("ch-house"), ts, [{ name: "Außen", values: s.t_out, color: C.ret }, { name: "Innen Ø", values: s.t_in, color: C.flow }], { unit: "°C", label: "Außen und innen" });
   legend("lg-dhw", [["Speicher", C.flow], ["Soll", C.sel, 1]]);
@@ -540,6 +545,12 @@ async function load() {
     tile("Ersparnis-Schätzung", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
   ].join("");
   barChart($("chart-dhw-profile"), w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
+  const big = w.big_draws || [];
+  $("dhw-big").innerHTML = big.length
+    ? `<b>Große Zapfungen</b> (z. B. Badewanne, letzte 60 Tage, nicht im Profil): ` + big.slice(-8).reverse().map(([t, k]) =>
+        `${new Date(t).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} (${fmt(k, 0)} K)`).join(" · ") +
+      (big.length > 8 ? ` · insgesamt ${big.length}×` : "")
+    : "Keine großen Zapfungen in den letzten 60 Tagen.";
   dhwChart($("chart-dhw-loss"), w);
 
   demandChart($("chart-demand"), hist, h);
@@ -597,7 +608,8 @@ async function loadCert() {
   if (c.starting) return;
   const items = c.verdicts.map((v) => `<li style="margin:3px 0"><span class="badge" style="border-color:${GRADE_CSS[v.grade]};color:${GRADE_CSS[v.grade]}">${esc(v.area)}: ${esc(v.label)}</span> ${esc(v.text)}</li>`).join("");
   $("cert").innerHTML = `<div class="row" style="justify-content:space-between"><h2>Zertifikat über Haus & Heizung</h2>` +
-    `<a class="btn primary" href="api/certificate.pdf" download style="text-decoration:none">PDF herunterladen</a></div>` +
+    `<div class="row"><a class="btn" href="api/certificate.pdf?inline=1" target="_blank" rel="noopener" style="text-decoration:none">Anzeigen</a>` +
+    `<a class="btn primary" href="api/certificate.pdf" download style="text-decoration:none">PDF herunterladen</a></div></div>` +
     `<p>Gemessen statt geschätzt – zum Weitergeben, z. B. an Vermieter oder Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
     (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:13px">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
     (c.preliminary.length ? `<p class="muted" style="margin-top:8px">Noch vorläufig: ${esc(c.preliminary.join("; "))}.</p>` : "");
