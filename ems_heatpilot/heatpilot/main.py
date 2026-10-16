@@ -11,6 +11,7 @@ from aiohttp import web
 from . import __version__
 from .backfill import run_backfill
 from .config import DATA_DIR, SETTINGS_NAME, Config, save_settings, validate
+from .diagnostics import set_debug, setup_logging
 from .discovery import discover
 from .emsesp import EmsEsp
 from .engine import Engine
@@ -89,6 +90,7 @@ class App:
         save_settings(clean)
         log.info("Einstellungen gespeichert: %s", sorted(clean))
         await self.build(backfill=False)
+        set_debug(self.cfg.debug_logging)
         return []
 
     async def reload_history(self) -> None:
@@ -99,13 +101,13 @@ class App:
     async def suggestions(self) -> dict:
         """Was die automatische Erkennung ohne eigene Vorgaben finden würde."""
         found = discover(await self.ha.get_states(), await self.registry(), Config.from_raw({}))
-        return found.as_dict()
+        return found.as_dict(private=False)
 
 
 async def main() -> None:
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    log_file = setup_logging(Config.load().debug_logging)
     app = App()
-    log.info("EMS HeatPilot %s startet (Modus: %s)", __version__, app.cfg.mode)
+    log.info("EMS HeatPilot %s startet (Modus: %s, Log: %s)", __version__, app.cfg.mode, log_file)
 
     runner = web.AppRunner(make_app(app))
     await runner.setup()
@@ -124,8 +126,12 @@ async def main() -> None:
         except Exception as err:  # noqa: BLE001
             log.warning("Wettervorhersage nicht verfügbar: %s", err)
         try:
+            started = time.monotonic()
             eng.tick()
-            await publish(app.ha, eng.summary())
+            summary = eng.summary()
+            eng.note_changes(summary)
+            await publish(app.ha, summary)
+            log.debug("Takt fertig in %.2f s", time.monotonic() - started)
         except Exception:  # noqa: BLE001
             log.exception("Fehler im Takt")
         interval = app.cfg.sample_interval_s

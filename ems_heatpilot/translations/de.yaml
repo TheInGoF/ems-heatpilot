@@ -68,6 +68,9 @@ configuration:
   vacation_entity:
     name: Urlaubs-Schalter
     description: "Optional, z. B. input_boolean.urlaub – an = Urlaub"
+  debug_logging:
+    name: Ausführliches Log
+    description: Jeder Takt wird protokolliert – für die Fehlersuche
   overrides:
     name: Zuordnungen erzwingen
     description: "Format rolle=entity_id, z. B. flow_temp=sensor.boiler_curflowtemp"

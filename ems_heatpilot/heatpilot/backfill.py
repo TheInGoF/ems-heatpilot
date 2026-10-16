@@ -148,6 +148,8 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
             hit = cur[ent].at(ts)
             if hit:
                 eng.states[ent] = {"state": hit[0], "attributes": hit[1]}
+        if not eng.states:
+            continue  # vor Beginn der Historie: keine leeren Messpunkte anlegen
         eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
         eng.track_vacation_return(ts, persons)

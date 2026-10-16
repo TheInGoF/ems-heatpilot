@@ -126,7 +126,8 @@ class Discovered:
             ids.append(self.demand_sensor)
         return sorted(set(ids))
 
-    def as_dict(self) -> dict:
+    def as_dict(self, private: bool = True) -> dict:
+        """``private=False``: ohne Standort (für Log und Diagnose-Datei)."""
         return {
             "boiler": self.boiler,
             "thermostat": self.thermostat,
@@ -137,7 +138,7 @@ class Discovered:
             "gas": self.gas,
             "gas_unit": self.gas_unit,
             "demand_sensor": self.demand_sensor,
-            "home_zone": self.home_zone,
+            "home_zone": self.home_zone if private else (self.home_zone is not None),
         }
 
 
@@ -268,5 +269,5 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
         elif role == "weather":
             d.weather = entity
 
-    log.info("Gefunden: %s", d.as_dict())
+    log.info("Gefunden: %s", d.as_dict(private=False))
     return d

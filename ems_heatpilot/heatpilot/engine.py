@@ -332,6 +332,10 @@ class Engine:
         ts = now_ts - now_ts % self.cfg.sample_interval_s
         self.update_live(now_ts)
         sample, rooms, persons = self.snapshot()
+        log.debug("Messwerte %s: %s | Räume %s | Personen %s", local(ts).strftime("%H:%M"),
+                  {k: v for k, v in sample.items() if v is not None},
+                  [(r[0], r[1], r[2], r[3]) for r in rooms], [(p, h, None if d is None else round(d, 1))
+                                                            for p, h, d in persons])
         self.track_vacation_return(ts, persons)
         vacation = self.on_vacation(ts)
         sample["vacation"] = int(vacation)
@@ -471,6 +475,27 @@ class Engine:
         for climate, m in self.rooms.items():
             self.store.add_snapshot(ts, "room", climate, m.summary(t_out or 5.0, self.cfg.max_flow_temp))
         self.store.commit()
+
+    def note_changes(self, s: dict) -> None:
+        """Wichtige Zustandswechsel ins Log schreiben – nachvollziehbar, was das Add-on denkt."""
+        plan = (s.get("plan") or {}).get("best") or {}
+        current = {
+            "Hausmodell plausibel": s["guards"]["house"]["ok"],
+            "Warmwasser-Modell plausibel": s["guards"]["dhw"]["ok"],
+            "plausible Räume": s["guards"]["rooms_ok"],
+            "Urlaub": s["vacation"]["active"],
+            "Ankunft-Quelle": (s.get("arrival") or {}).get("source"),
+            "Vorheizen ab": (plan.get("start") or "")[:16] or None,
+            "Warmwasser-Empfehlung": (s["dhw"].get("recommendation") or {}).get("target"),
+            "Heizfreigabe": s.get("hc_mode"),
+            "Bedarf laut Tado-Soll": s.get("setpoint_demand"),
+        }
+        prev = getattr(self, "_noted", None)
+        if prev is not None:
+            for key, value in current.items():
+                if prev.get(key) != value:
+                    log.info("Änderung: %s %s → %s", key, prev.get(key), value)
+        self._noted = current
 
     def dhw_step(self, ts: int, sample: dict) -> None:
         """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
@@ -694,7 +719,7 @@ class Engine:
             "demand_pct": num(self._val(self.found.demand_sensor)),
             "setpoint_demand": self._demand,
             "emsesp": bool(self.ems),
-            "discovered": self.found.as_dict(),
+            "discovered": self.found.as_dict(private=False),
         }
 
     def dhw_summary(self) -> dict:

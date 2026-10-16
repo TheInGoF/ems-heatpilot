@@ -9,6 +9,7 @@ from aiohttp import web
 
 from .config import Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
+from . import diagnostics
 from .emsesp import EmsEsp
 
 STATIC = Path(__file__).parent / "static"
@@ -45,7 +46,7 @@ def make_app(app) -> web.Application:
             "settings": app.cfg.to_raw(),
             "defaults": Config().to_raw(),
             "configured": app.configured,
-            "discovered": app.eng.found.as_dict(),
+            "discovered": app.eng.found.as_dict(private=False),
             "suggested": await app.suggestions(),
             "roles": roles,
         })
@@ -97,6 +98,28 @@ def make_app(app) -> web.Application:
         counts = {dev: len(v) for dev, v in values.items()}
         return web.json_response({"ok": True, "message": ", ".join(f"{d}: {n} Werte" for d, n in counts.items())})
 
+    async def diag(req):
+        level = req.query.get("level", "INFO").upper()
+        n = int(req.query.get("n", "400"))
+        return web.json_response({
+            "checks": diagnostics.self_check(app),
+            "log": diagnostics.RING.tail(min(max(n, 10), diagnostics.LOG_RING_SIZE), level),
+            "log_dir": str(diagnostics.log_dir()),
+            "debug": app.cfg.debug_logging,
+        })
+
+    async def diag_bundle(_req):
+        import json
+        from datetime import datetime
+
+        data = diagnostics.bundle(app)  # im Hauptthread: SQLite-Verbindung ist threadgebunden
+        name = f"heatpilot-diagnose-{datetime.now():%Y%m%d-%H%M}.json"
+        return web.Response(
+            body=json.dumps(data, ensure_ascii=False, default=str, indent=1).encode(),
+            content_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{name}"'},
+        )
+
     async def reload_history(_req):
         asyncio.create_task(app.reload_history())
         return web.json_response({"ok": True})
@@ -109,4 +132,6 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/entities", entities)
     web_app.router.add_post("/api/test_emsesp", test_emsesp)
     web_app.router.add_post("/api/reload_history", reload_history)
+    web_app.router.add_get("/api/diagnostics", diag)
+    web_app.router.add_get("/api/diagnostics/bundle", diag_bundle)
     return web_app

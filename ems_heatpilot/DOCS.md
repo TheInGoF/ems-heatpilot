@@ -21,7 +21,27 @@ erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen i
 `/data/settings.json` und haben Vorrang vor den YAML-Optionen des Add-ons, die
 als Rückfall bleiben.
 
-## Was das Add-on in Version 0.8 macht
+## Diagnose und Fehlersuche
+
+Reiter **Diagnose** auf der HeatPilot-Seite:
+
+- **Selbsttest** – laufend: fehlende oder veraltete Sensoren, unmögliche Werte
+  (Vorlauf, Raum, Speicher), Gaszähler zählt nicht obwohl der Brenner lief,
+  Aufzeichnungslücken, EMS-ESP nicht erreichbar, Programmfehler der letzten 24 h,
+  Modelle ohne Empfehlung (mit Grund).
+- **Log** – alle Meldungen mit Zeit und Fehlerdetails, filterbar. Wichtige
+  Zustandswechsel (Leitplanken, Urlaub, Ankunft, Vorheizplan, Heizfreigabe,
+  Warmwasser-Empfehlung) werden protokolliert. „Ausführliches Log“ (Einstellungen →
+  Erweitert) schreibt zusätzlich jeden Takt mit allen Messwerten.
+- **Log-Datei** – rotierend (5 × 2 MB) unter `/addon_configs/<slug>/logs/heatpilot.log`,
+  erreichbar über Samba oder den File-Editor.
+- **Diagnose-Datei herunterladen** – Log, Selbsttest, Einstellungen, erkannte
+  Entitäten und deren Zustände, gelernte Modelle, Datenbank-Übersicht und die
+  Messwerte der letzten 48 Stunden als JSON. **Ohne GPS-Koordinaten** (weder
+  Personen noch Zuhause – nur Entfernungen) und ohne Zugangsdaten. Diese Datei
+  kann zur Fehlersuche weitergegeben werden.
+
+## Was das Add-on in Version 0.9 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

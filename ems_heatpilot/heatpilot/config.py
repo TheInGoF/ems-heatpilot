@@ -48,6 +48,7 @@ FIELDS: dict[str, tuple] = {
     "vacation_entity": ("entity",),
     "vacation_arrival_time": ("time",),
     "overrides": ("overrides",),
+    "debug_logging": ("bool",),
 }
 
 
@@ -75,6 +76,8 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                 clean[key] = v
             elif kind == "str":
                 clean[key] = str(value or "").strip()
+            elif kind == "bool":
+                clean[key] = value is True or str(value).lower() in ("true", "1", "on", "ja")
             elif kind == "entity":
                 v = str(value or "").strip()
                 if v and not _ENTITY.match(v):
@@ -172,6 +175,7 @@ class Config:
     vacation_arrival_time: time = time(18, 0)  # Rückkehr, wenn nur ein Datum angegeben ist
     # "rolle=entity_id", z. B. "flow_temp=sensor.boiler_curflowtemp"
     overrides: dict[str, str] = field(default_factory=dict)
+    debug_logging: bool = False  # ausführliches Log (jeder Takt) für die Fehlersuche
 
     @classmethod
     def load(cls, path: Path | None = None, settings_path: Path | None = None) -> "Config":
