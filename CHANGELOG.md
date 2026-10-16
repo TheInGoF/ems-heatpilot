@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.3
+- Einstellungen werden zusätzlich als `heatpilot-einstellungen.json` im Add-on-Konfigurationsordner gesichert (`/addon_configs/<slug>/`, per Samba erreichbar) und automatisch zurückgeholt, falls sie in `/data` fehlen
+- Während HeatPilot nach einem Update die Historie neu einliest, zeigen Übersicht und Einstellungen das klar an („Deine Einstellungen sind gespeichert“) statt nur „Startet“
+
 ## 0.16.2
 - Tado-Räume: Heizleistung/Ventil wird auch bei deutschen (oder anderen) Entitätsnamen erkannt, z. B. `sensor.kuche_heizleistung` – über den Übersetzungsschlüssel der Tado-Integration, den Namen oder als einziger %-Sensor am Thermostat
 - Werden die Sensoren eines Raums geändert oder ein Raum neu gewählt, liest HeatPilot die Historie automatisch neu ein und lernt neu – sonst fehlten diesem Raum die Werte der Vergangenheit

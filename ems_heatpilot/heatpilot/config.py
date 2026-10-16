@@ -16,6 +16,9 @@ from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("HEATPILOT_DATA", "/data"))
 SETTINGS_NAME = "settings.json"
+# Sicherungskopie im Add-on-Konfigurationsordner (/addon_configs/<slug>/, per Samba erreichbar)
+BACKUP_DIR = Path(os.environ.get("HEATPILOT_BACKUP_DIR", "/config"))
+BACKUP_NAME = "heatpilot-einstellungen.json"
 
 _ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
 _TIME = re.compile(r"^(\d{1,2}):(\d{2})$")
@@ -248,7 +251,35 @@ def save_settings(clean: dict, data_dir: Path | None = None) -> Path:
     path = (data_dir or DATA_DIR) / SETTINGS_NAME
     current = json.loads(path.read_text()) if path.exists() else {}
     current.update(clean)
+    text = json.dumps(current, ensure_ascii=False, indent=2)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(current, ensure_ascii=False, indent=2))
+    tmp.write_text(text)
     tmp.replace(path)
+    backup(text)
     return path
+
+
+def backup(text: str, backup_dir: Path | None = None) -> None:
+    """Kopie der Einstellungen außerhalb von /data – falls /data einmal verloren geht."""
+    folder = backup_dir or BACKUP_DIR
+    try:
+        if folder.exists() and os.access(folder, os.W_OK):
+            tmp = folder / (BACKUP_NAME + ".tmp")
+            tmp.write_text(text)
+            tmp.replace(folder / BACKUP_NAME)
+    except OSError:
+        pass
+
+
+def restore_settings(data_dir: Path | None = None, backup_dir: Path | None = None) -> bool:
+    """Fehlt /data/settings.json, aber es gibt eine Sicherung: zurückholen. Gibt True bei Erfolg."""
+    path = (data_dir or DATA_DIR) / SETTINGS_NAME
+    src = (backup_dir or BACKUP_DIR) / BACKUP_NAME
+    if path.exists() or not src.exists():
+        return False
+    try:
+        json.loads(src.read_text())
+        path.write_text(src.read_text())
+        return True
+    except (OSError, ValueError):
+        return False

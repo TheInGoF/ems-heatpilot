@@ -42,6 +42,14 @@ Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
 erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
 `/data/settings.json` und bleiben bei Updates erhalten.
 
+## Einstellungen sichern
+
+Die Einstellungen liegen in `/data/settings.json` und bleiben bei Updates erhalten.
+Zusätzlich legt HeatPilot bei jedem Speichern eine Kopie als
+`heatpilot-einstellungen.json` im Add-on-Konfigurationsordner an
+(`/addon_configs/<slug>/`, per Samba oder File-Editor erreichbar). Fehlen die
+Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
+
 ## Diagnose und Fehlersuche
 
 Reiter **Diagnose** auf der HeatPilot-Seite:
