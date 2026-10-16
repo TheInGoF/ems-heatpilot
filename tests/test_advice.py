@@ -213,3 +213,24 @@ def test_balance_skips_floor_heating_and_too_few_rooms(tmp_path):
     eng, now = balance_engine(tmp_path)
     eng.cfg.floor_heating_rooms = ["climate.schwach", "climate.a", "climate.b"]
     assert not [a for a in advice.build(eng, now) if a["kind"] == "abgleich"]
+
+
+def test_schedule_with_off_blocks_is_evaluated(tmp_path):
+    """Tado-Zeitplan „aus“ bis 16:00, dann 21 °C – Raum erst ~1 h später warm: Frühstart-Empfehlung."""
+    found = Discovered(rooms=[Room("Wz", "climate.wz")], persons=["person.a"])
+    eng = Engine(Config(), Store(tmp_path / "o.db"), found)
+    t0 = int(START.timestamp())
+    for i in range(DAYS * 288):
+        ts = t0 + i * STEP
+        d = datetime.fromtimestamp(ts)
+        m = d.hour * 60 + d.minute
+        on = 16 * 60 <= m < 22 * 60
+        temp = min(18.0 + max(m - 960, 0) * 0.05, 21.0) if on else 18.0
+        eng.store.add_person_samples([(ts, "person.a", 1, 0.0)])
+        eng.store.add_sample(ts, {"flow": 60.0})
+        # „aus“: kein Soll (None), Ventil zu
+        eng.store.add_room_samples([(ts, "climate.wz", temp, 21.0 if on else None, 100.0 if on and temp < 21 else 0.0, None)])
+    eng.store.commit()
+    items = by_kind(advice.build(eng, t0 + DAYS * 86400))
+    late = [a for (r, k), a in items.items() if r == "climate.wz" and k in ("frühstart", "zeitplan")]
+    assert late and "16:00" in late[0]["title"] and late[0]["evidence"]["Verspätung Median (min)"] >= 40

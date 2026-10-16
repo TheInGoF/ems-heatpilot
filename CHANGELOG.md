@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.18.1
+- Empfehlungen für Tado werten Zeitpläne mit „aus“-Blöcken aus: „aus“ zählt als Absenkung (Frostschutz 5 °C), das Einschalten (z. B. 16:00) als Zeitplanwechsel und das Anheben bei Heimkehr als Geofencing – vorher fehlten genau diese Wechsel. Komfort-Sollwerte werden ohne „aus“-Zeiten bestimmt
+
 ## 0.18.0
 - **Warmwasserladung ohne Ladesignal erkennen:** Meldet der Kessel „Warmwasser lädt“ nicht (oder nie), erkennt HeatPilot die Ladung am schnellen Anstieg der Speichertemperatur bei laufendem Brenner. Vorher wurden Ladungen als „Auskühlen“ gelernt und Ladekosten nie bestimmt
 - Warmwasser-Auskühlen wird über ruhige 30-min-Abschnitte gelernt statt über einzelne Messschritte – bei 1–2-min-Abtastung und 0,1 K Fühlerauflösung war das zu verrauscht

@@ -32,6 +32,7 @@ from collections import defaultdict
 from datetime import datetime
 
 from . import guards
+from .schedule import OFF_TEMP
 
 WINDOW_DAYS = 21
 MIN_EVENTS = 4
@@ -66,7 +67,9 @@ def _load(store, since: int, rooms_sel: set[str] | None = None, persons: list[st
         "SELECT ts, room, temp, target, valve FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)
     ):
         if rooms_sel is None or r["room"] in rooms_sel:  # abgewählte Räume zählen nicht
-            rooms[r["room"]].append((r["ts"], r["temp"], r["target"], r["valve"]))
+            # Tado „aus“ (Zeitplanblock oder Geofencing): kein Soll, aber Raumtemperatur -> Frostschutz
+            target = r["target"] if r["target"] is not None or r["temp"] is None else OFF_TEMP
+            rooms[r["room"]].append((r["ts"], r["temp"], target, r["valve"]))
     home = store.home_by_ts(since, persons)
     vacation = {r["ts"] for r in store.query(
         "SELECT ts FROM samples WHERE ts >= ? AND vacation = 1", (since,))}
@@ -230,7 +233,7 @@ def balance(eng, rooms: dict, home: dict) -> dict[str, dict]:
         stats = valve_stats(series, home)
         if stats is None:
             continue
-        comfort = [t for ts, _, t, _ in series if t is not None and home.get(ts, True)]
+        comfort = [t for ts, _, t, _ in series if t is not None and t > OFF_TEMP + 5 and home.get(ts, True)]
         target = statistics.median(comfort) if comfort else 21.0
         data[climate] = {**stats, "target": target, "flow": model.required_flow(target, design)}
     if len(data) < BALANCE_MIN_ROOMS:
@@ -387,7 +390,7 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
         if len(away) * sample_hours(x[0] for x in series) >= MIN_EVENTS and not cold:
             med = statistics.median(away)
             target = eng.cfg.away_temp
-            comfort = [s[2] for s in series if s[2] is not None and home.get(s[0])]
+            comfort = [s[2] for s in series if s[2] is not None and s[2] > OFF_TEMP + 5 and home.get(s[0])]
             comfort_t = statistics.median(comfort) if comfort else med
             model = eng.rooms.get(climate)
             t_back = None
