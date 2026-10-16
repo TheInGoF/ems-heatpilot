@@ -655,13 +655,41 @@ function ignoredText(ig) {
     ` · Lernen seit Beginn: ${ig.learn_rejected} verworfen, ${ig.learn_clipped} begrenzt`;
 }
 const GRADE_CSS = { good: "var(--good)", mid: "var(--warn)", bad: "#e34948", none: "var(--text-secondary)" };
+// PDF erst prüfen, dann speichern – eine Fehlermeldung landet so nie als „leeres PDF“ auf dem Gerät
+async function certPdf(inline) {
+  const msg = $("cert-msg");
+  msg.textContent = "Erstelle Zertifikat …";
+  let r;
+  try { r = await fetch("api/certificate.pdf" + (inline ? "?inline=1" : ""), { cache: "no-store" }); }
+  catch (e) { msg.textContent = "Keine Verbindung zum Add-on: " + e; return; }
+  const type = r.headers.get("content-type") || "";
+  if (!r.ok || !type.includes("pdf")) {
+    let text = `Fehler ${r.status}`;
+    try { const j = await r.json(); text = j.error || text; } catch (e) { try { text += ": " + (await r.text()).slice(0, 200); } catch (e2) {} }
+    msg.textContent = text + " – Details im Reiter Diagnose → Log.";
+    return;
+  }
+  const blob = await r.blob();
+  if (blob.size < 1000) { msg.textContent = `Unerwartet kleine Datei (${blob.size} Byte) – bitte Diagnose-Datei schicken.`; return; }
+  const url = URL.createObjectURL(blob);
+  if (inline) { window.open(url, "_blank"); }
+  else {
+    const a = document.createElement("a");
+    a.href = url; a.download = `heatpilot-zertifikat-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+  msg.innerHTML = `Zertifikat erstellt (${fmt(blob.size / 1024, 1)} kB). Klappt das Speichern auf diesem Gerät nicht: <a href="api/certificate.pdf" download>direkter Link</a>.`;
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+
 async function loadCert() {
   const c = await (await fetch("api/certificate")).json();
   if (c.starting) return;
   const items = c.verdicts.map((v) => `<li style="margin:3px 0"><span class="badge" style="border-color:${GRADE_CSS[v.grade]};color:${GRADE_CSS[v.grade]}">${esc(v.area)}: ${esc(v.label)}</span> ${esc(v.text)}</li>`).join("");
   $("cert").innerHTML = `<div class="row" style="justify-content:space-between"><h2>Zertifikat über Haus & Heizung</h2>` +
-    `<div class="row"><a class="btn" href="api/certificate.pdf?inline=1" target="_blank" rel="noopener" style="text-decoration:none">Anzeigen</a>` +
-    `<a class="btn primary" href="api/certificate.pdf" download style="text-decoration:none">PDF herunterladen</a></div></div>` +
+    `<div class="row"><button class="btn" onclick="certPdf(true)">Anzeigen</button>` +
+    `<button class="btn primary" onclick="certPdf(false)">PDF herunterladen</button></div></div>` +
+    `<p class="muted" id="cert-msg"></p>` +
     `<p>Gemessen statt geschätzt – zum Weitergeben, z. B. an Vermieter oder Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
     (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:13px">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
     (c.preliminary.length ? `<p class="muted" style="margin-top:8px">Noch vorläufig: ${esc(c.preliminary.join("; "))}.</p>` : "");
