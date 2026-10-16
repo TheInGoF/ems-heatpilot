@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.19.0
+- Zertifikat: **HeatPilot-Gesamtbewertung** – alles auf einen Nenner: 0–100 Punkte und Klasse A+ bis H aus Gebäude (40 %), Kesselgröße (25 %), Taktverhalten (20 %) und Warmwasser (15 %). Erscheint erst, wenn das Gebäude und mindestens zwei weitere Bereiche bewertet sind. Im PDF, in der Druckansicht und in der Übersicht
+
 ## 0.18.4
 - Zertifikat: neue **Druckansicht** in derselben Seite (auch in der Home-Assistant-App). Über „Drucken / als PDF sichern“ erzeugt das Gerät selbst ein PDF – z. B. unter iOS zum Weitergeben an WhatsApp, wo die direkt erzeugte Datei beim Teilen leer ankam (die Datei selbst ist laut qpdf-Prüfung fehlerfrei)
 
