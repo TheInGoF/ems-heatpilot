@@ -83,12 +83,14 @@ def simulate():
                 lat, lon, st = *HOME, "home"
             home[p] = st == "home"
             attrs = {"latitude": lat, "longitude": lon, "friendly_name": p[7:].title(),
-                     "device_trackers": [f"device_tracker.phone_{p[7:]}"]}
+                     "device_trackers": [f"device_tracker.phone_{p[7:]}"], "user_id": f"user_{p[7:]}"}
             rec(p, ts, st, attrs)
             states[p] = (st, attrs)
-        # Dummy-Person ohne Gerät, immer "zu Hause" (wie in vielen echten Installationen)
-        rec("person.dummy", ts, "home", {"friendly_name": "Dummy", "device_trackers": []})
-        states["person.dummy"] = ("home", {"friendly_name": "Dummy", "device_trackers": []})
+        # Fahrzeug als Person angelegt (Bild, Abwesenheiten), aber ohne HA-Benutzer
+        car = ("not_home" if 9 <= hour < 18 else "home",
+               {"friendly_name": "Auto", "device_trackers": ["device_tracker.auto"], "entity_picture": "/auto.png"})
+        rec("person.auto", ts, *car)
+        states["person.auto"] = car
 
         night = hour >= 22.5 or hour < 6
         target = 18.0 if night else 21.0

@@ -7,15 +7,25 @@ from heatpilot.store import Store
 
 def states():
     return [
-        {"entity_id": "person.ingo", "state": "home", "attributes": {"device_trackers": ["device_tracker.phone"]}},
-        {"entity_id": "person.maria", "state": "not_home", "attributes": {"device_trackers": ["device_tracker.p2"]}},
+        {"entity_id": "person.ingo", "state": "home",
+         "attributes": {"device_trackers": ["device_tracker.phone"], "user_id": "u1"}},
+        {"entity_id": "person.maria", "state": "not_home",
+         "attributes": {"device_trackers": ["device_tracker.p2"], "user_id": "u2"}},
+        # Fahrzeug als Person (Bild, Abwesenheiten), aber kein HA-Benutzer
+        {"entity_id": "person.id7", "state": "not_home",
+         "attributes": {"device_trackers": ["device_tracker.id7"], "entity_picture": "/x.png"}},
         {"entity_id": "person.dummy", "state": "home", "attributes": {"device_trackers": []}},
         {"entity_id": "person.auto", "state": "unknown", "attributes": {}},
     ]
 
 
-def test_dummies_are_not_chosen_automatically():
+def test_dummies_and_vehicles_are_not_chosen_automatically():
     assert discover(states(), [], Config()).persons == ["person.ingo", "person.maria"]
+
+
+def test_without_user_link_all_with_device_count():
+    no_users = [{**s, "attributes": {k: v for k, v in s["attributes"].items() if k != "user_id"}} for s in states()]
+    assert discover(no_users, [], Config()).persons == ["person.id7", "person.ingo", "person.maria"]
 
 
 def test_chosen_persons_win_and_unknown_ids_are_dropped():

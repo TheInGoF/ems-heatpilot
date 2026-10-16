@@ -22,11 +22,14 @@ keine YAML-Optionen:
 - **Messwerte:** Außenfühler (einer oder mehrere, Minimum zählt), Gaszähler,
   Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
   Entitäten in Home Assistant
-- **Räume:** alle Thermostate als Tabelle – Häkchen, Name, Fußbodenheizung,
-  optionale Ventil-/Temperatur-/Feuchtesensoren
+- **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
+  Fußbodenheizung, optionale Ventil-/Temperatur-/Feuchtesensoren. Automatisch gewählt
+  werden nur Tado-Räume; was kein Raum ist (Klimaanlage im Auto, Heizkreis, Warmwasser),
+  bleibt abgewählt bzw. lässt sich abwählen
 - **Personen:** alle `person.*` mit Häkchen. Automatisch gewählt werden nur Personen
-  mit Gerät (device_tracker); Dummies ohne Gerät sind als „vermutlich Dummy“
-  markiert. Auch Autos, Gäste oder Haustiere mit Tracker hier abwählen. Nach einer
+  mit Home-Assistant-Benutzer und Gerät. Fahrzeuge, die als Person angelegt sind
+  (Bild, Abwesenheiten, aber kein Benutzer), sind als „Fahrzeug oder Gerät?“
+  markiert und nicht gewählt; Dummies ohne Gerät ebenso. Abwählen geht jederzeit. Nach einer
   Änderung zählt HeatPilot die Anwesenheit in den gespeicherten Daten neu;
   abgewählte Räume und Personen fließen in keine Auswertung mehr ein.
 - **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub**
