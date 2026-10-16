@@ -85,6 +85,23 @@ table.form td { padding: 4px 6px; vertical-align: middle; }
 table.form input { min-width: 140px; }
 pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--text-secondary); }
 .card[hidden], .tile[hidden] { display: none; }
+#cert-print { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); overflow: auto; padding: 16px; }
+#cert-print .sheet { background: #fff; color: #10233a; max-width: 760px; margin: 0 auto; padding: 28px 30px; border: 3px solid #1f3a5f;
+  outline: 1px solid #eb6834; outline-offset: -9px; border-radius: 4px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+#cert-print .sheet h1 { font-size: 30px; margin: 0; color: #0f1f33; } #cert-print .sheet h3 { margin: 16px 0 6px; color: #1f3a5f; font-size: 16px; }
+#cert-print .sheet table { font-size: 13px; } #cert-print .sheet td { border-bottom: 1px solid #eee; padding: 4px 6px; color: #222; }
+#cert-print .sheet .sub { color: #5f6b7a; } #cert-print .pill { display: inline-block; color: #fff; border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
+#cert-print .scale { display: flex; gap: 2px; margin: 6px 0 2px; } #cert-print .scale span { flex: 1; text-align: center; font-weight: 700; font-size: 11px; border-radius: 3px; padding: 2px 0; color: #333; }
+#cert-print .verdict { background: #fff4ea; border-radius: 8px; padding: 10px 14px; margin-top: 14px; }
+#cert-print .stamp { float: right; width: 92px; height: 92px; border: 3px solid; border-radius: 50%; text-align: center; transform: rotate(-12deg);
+  display: flex; flex-direction: column; justify-content: center; font-weight: 800; font-size: 13px; margin: 0 0 8px 12px; }
+#cert-print .bar { height: 12px; border-radius: 2px; display: inline-block; vertical-align: middle; }
+@media print {
+  body > *:not(#cert-print) { display: none !important; }
+  #cert-print { position: static; background: none; padding: 0; overflow: visible; }
+  #cert-print .noprint { display: none !important; }
+  #cert-print .sheet { max-width: none; border-width: 2px; }
+}
 .grid2:not(:has(> .card:not([hidden]))) { display: none; }
 </style>
 </head>
@@ -655,6 +672,52 @@ function ignoredText(ig) {
     ` · Lernen seit Beginn: ${ig.learn_rejected} verworfen, ${ig.learn_clipped} begrenzt`;
 }
 const GRADE_CSS = { good: "var(--good)", mid: "var(--warn)", bad: "#e34948", none: "var(--text-secondary)" };
+// Druckansicht: dasselbe Zertifikat als Seite – über „Drucken“ erzeugt das Gerät selbst ein PDF
+const CLASSES = ["A+", "A", "B", "C", "D", "E", "F", "G", "H"];
+const CLASS_COL = ["#1a9641", "#4dac26", "#7fbc41", "#b8e186", "#ffffbf", "#fee08b", "#fdae61", "#f46d43", "#d73027"];
+const GRADE_COL = { good: "#2e7d32", mid: "#b26a00", bad: "#c62828", none: "#757575" };
+async function certPrint() {
+  const c = await (await fetch("api/certificate", { cache: "no-store" })).json();
+  if (c.starting) { $("cert-msg").textContent = "HeatPilot startet noch – bitte gleich noch einmal."; return; }
+  const h = c.house, b = c.boiler, d = c.dhw, k = c.consumption, bs = c.basis;
+  const v = Object.fromEntries(c.verdicts.map((x) => [x.area, x]));
+  const pill = (x) => x ? `<span class="pill" style="background:${GRADE_COL[x.grade]}">${esc(x.label)}</span>` : "";
+  const row = (l, val, note = "") => `<tr><td>${l}</td><td><b>${val}</b> <span class="sub" style="font-size:11px">${note}</span></td></tr>`;
+  const date = (iso) => iso ? new Date(iso).toLocaleDateString("de-DE") : "–";
+  const prelim = c.preliminary.length > 0, sc = prelim ? "#c62828" : "#2e7d32";
+  const bars = [["Heizlast am kältesten Tag", h.design_kw, "#eb6834"], ["Kleinste Kesselleistung", b.min_kw, "#8a9bb0"], ["Nennleistung", b.nominal_kw, "#1f3a5f"]];
+  const top = Math.max(...bars.map((x) => x[1] || 0));
+  let box = $("cert-print");
+  if (!box) { box = document.createElement("div"); box.id = "cert-print"; document.body.appendChild(box); }
+  box.innerHTML = `<div class="noprint" style="max-width:760px;margin:0 auto 10px;display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn primary" onclick="window.print()">Drucken / als PDF sichern</button><button class="btn" onclick="this.closest('#cert-print').remove()">Schließen</button></div>
+    <div class="sheet">
+      <div style="display:flex;gap:14px;align-items:center"><img src="icon.svg" width="58" height="58" alt="">
+        <div style="flex:1"><h1>Zertifikat</h1><div class="sub">Haus & Heizung – gemessen, nicht geschätzt</div></div>
+        <div class="sub" style="text-align:right;font-size:11px">Ausgestellt am<br><b style="color:#0f1f33;font-size:14px">${date(c.created)}</b><br>EMS HeatPilot ${esc(c.version)}</div></div>
+      <p class="sub" style="font-size:11px;border-bottom:1.5px solid #eb6834;padding-bottom:6px">Grundlage: Messdaten vom ${date(bs.from)} bis ${date(bs.to)} · ${fmt(bs.heating_hours, 0)} Heizstunden, ${fmt(bs.cold_hours, 0)} davon unter 0 °C · kälteste Stunde ${fmt(bs.coldest)} °C</p>
+      <h3>Gebäude ${pill(v["Gebäude"])}</h3><table>
+        ${row("Wärmeverlust", `${fmt(h.h_w_per_k, 0)} W/K`)}${row(`Heizlast am kältesten Tag (${fmt(h.design_temp, 0)} °C)`, `${fmt(h.design_kw)} kW`, "Gasleistung")}
+        ${row("Trägheit (Auskühlen)", `${fmt(h.tau_h, 0)} h`)}${h.area_m2 ? row("Wohnfläche", `${fmt(h.area_m2, 0)} m²`) + row("Heizlast je m²", `${fmt(h.spec_w_m2, 0)} W/m²`) : ""}
+        ${row("Energiekennwert", h.kwh_m2 !== null ? `${fmt(h.kwh_m2, 0)} kWh/(m²·a)` : "–", h.kwh_m2 !== null ? "" : "nach 12 Monaten Messung")}</table>
+      <div class="scale">${CLASSES.map((n, i) => `<span style="background:${h.class_index !== null ? CLASS_COL[i] : "#e3e6ea"};${h.class_index === i ? "outline:2px solid #0f1f33" : ""}">${n}</span>`).join("")}</div>
+      <h3>Heizkessel ${pill(v["Kesselgröße"])}</h3><table>
+        ${row("Nennleistung", b.nominal_kw ? `${fmt(b.nominal_kw, 0)} kW` : "–")}${row("Kleinste Leistung", b.min_kw ? `${fmt(b.min_kw)} kW` : "–", b.min_pct ? `${fmt(b.min_pct, 0)} % der Nennleistung` : "")}
+        ${row("Nennleistung im Verhältnis zur Heizlast", b.ratio ? `${fmt(b.ratio)}-fach` : "–", "ideal: 1,0 bis 1,5")}
+        ${row("Heizstunden unter der kleinsten Leistung", b.below_min_pct !== null ? `${b.below_min_pct} %` : "–", "dann muss der Kessel takten")}
+        ${row("Heizstarts pro Tag", fmt(b.starts_per_day, 0), "Mittel der letzten 30 Tage")}${row("Laufzeit je Heizstart", b.run_per_start_min ? `${fmt(b.run_per_start_min, 0)} min` : "–", v["Taktverhalten"] ? "Takten: " + esc(v["Taktverhalten"].label) : "")}</table>
+      ${top ? `<div style="margin-top:8px">${bars.map(([l, x, col]) => `<div style="font-size:12px;margin:3px 0"><span style="display:inline-block;width:190px">${l}</span>${x ? `<span class="bar" style="width:${Math.max(x / top * 380, 2)}px;background:${col}"></span> <b>${fmt(x)} kW</b>` : "–"}</div>`).join("")}</div>` : ""}
+      <h3>Warmwasser & Verbrauch ${pill(v["Warmwasser"])}</h3><table>
+        ${row("Warmhalten des Speichers bei 55 °C", d.loss_w_55 ? `${fmt(d.loss_w_55, 0)} W` : "–")}
+        ${row(k.full_year ? "Gasverbrauch letzte 12 Monate" : `Gasverbrauch (${fmt(k.days, 0)} Tage)`, `${fmt(k.kwh, 0)} kWh`, "Heizung und Warmwasser")}
+        ${row("Gaskosten pro Jahr", k.eur !== null ? `${fmt(k.eur, 0)} €` : "–", k.eur !== null ? "inkl. Grundpreis" : "nach 12 Monaten Messung")}</table>
+      <div class="verdict"><div class="stamp" style="color:${sc};border-color:${sc}"><span style="font-size:10px">HeatPilot</span>${prelim ? "VORLÄUFIG" : "GEMESSEN"}<span style="font-size:10px">${esc(c.created.slice(0, 4))}</span></div>
+        <b style="color:#1f3a5f;font-size:16px">Urteil</b><ul style="margin:6px 0 0;padding-left:18px">${(c.verdicts.length ? c.verdicts.map((x) => `<li>${esc(x.text)}</li>`) : ["<li>Für ein Urteil fehlen noch Messdaten.</li>"]).join("")}</ul><div style="clear:both"></div></div>
+      ${prelim ? `<p style="color:#c62828;font-size:11px">Vorläufig, weil: ${esc(c.preliminary.join("; "))}.</p>` : ""}
+      <p class="sub" style="font-size:10px;margin-top:14px">Automatisch erstellt aus den Messdaten von EMS HeatPilot. Ohne Gewähr. Kein Energieausweis nach GEG; Werte nicht witterungsbereinigt. Leistungen und Verbrauch sind Gas (einschließlich Kesselwirkungsgrad). Enthält keine Namen, Adressen oder Standortdaten.</p>
+    </div>`;
+}
+
 // PDF erst prüfen, dann speichern – eine Fehlermeldung landet so nie als „leeres PDF“ auf dem Gerät
 async function certPdf(inline) {
   const msg = $("cert-msg");
@@ -687,7 +750,7 @@ async function loadCert() {
   if (c.starting) return;
   const items = c.verdicts.map((v) => `<li style="margin:3px 0"><span class="badge" style="border-color:${GRADE_CSS[v.grade]};color:${GRADE_CSS[v.grade]}">${esc(v.area)}: ${esc(v.label)}</span> ${esc(v.text)}</li>`).join("");
   $("cert").innerHTML = `<div class="row" style="justify-content:space-between"><h2>Zertifikat über Haus & Heizung</h2>` +
-    `<div class="row"><button class="btn" onclick="certPdf(true)">Anzeigen</button>` +
+    `<div class="row"><button class="btn" onclick="certPrint()">Druckansicht</button><button class="btn" onclick="certPdf(true)">Anzeigen</button>` +
     `<button class="btn primary" onclick="certPdf(false)">PDF herunterladen</button></div></div>` +
     `<p class="muted" id="cert-msg"></p>` +
     `<p>Gemessen statt geschätzt – zum Weitergeben, z. B. an Vermieter oder Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
