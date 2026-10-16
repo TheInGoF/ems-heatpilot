@@ -53,6 +53,11 @@ class SavingsResult:
     saved_pct: float | None
     daily: list[dict]
     cold_hours: int = 0
+    # Prüfung je Raum (nur Stunden mit Raumdaten und Räume mit plausiblem Modell)
+    room_hours: int = 0
+    room_cold: dict | None = None
+    lead_by_rooms: int = 0     # Absenkungen, die wegen eines langsamen Raums früher endeten
+    lead_by_house: int = 0
 
 
 def estimate_savings(
@@ -62,6 +67,9 @@ def estimate_savings(
     night_temp: float,
     is_night,
     p_max_kw: float = 18.0,
+    rooms: dict[str, RoomModel] | None = None,
+    room_hourly: dict[int, dict[str, float]] | None = None,
+    max_flow: float = 75.0,
 ) -> SavingsResult:
     """Was hätte die Strategie (Absenken bei Abwesenheit/nachts) gespart – bei gleichem Komfort?
 
@@ -73,6 +81,10 @@ def estimate_savings(
       Ankunft starten (Vorlauf aus dem gelernten Modell).
     * Jede Stunde mit Anwesenheit, in der es trotzdem mehr als 0,5 K kälter
       gewesen wäre, zählt als ``cold_hours`` – Ersparnis ohne Komfort zählt nicht.
+    * **Je Raum** (wo Raumdaten und ein plausibles Raummodell vorliegen): Jeder Raum
+      kühlt und heizt nach seinem eigenen Modell – aufheizen höchstens mit vollem
+      Ventil und maximalem Vorlauf. Das Vorheizen startet so früh, wie der
+      langsamste Raum braucht; was trotzdem zu kalt wäre, zählt je Raum.
     """
     h = house.h_kw_per_k
     c = house.c_kwh_per_k
@@ -91,6 +103,38 @@ def estimate_savings(
             return 24
         return min(int(math.ceil((t_to - t_from) * c / net)), 24)
 
+    rooms = rooms or {}
+    room_hourly = room_hourly or {}
+    r_sim: dict[str, float | None] = {r: None for r in rooms}
+    room_cold = {r: 0 for r in rooms}
+    room_hours = by_rooms = by_house = 0
+
+    def room_lead(t_out: float, actual: dict[str, float], dhw: float, floor_t: float) -> int:
+        """Stunden, die der langsamste Raum nach dieser Absenk-Stunde zum Aufheizen bräuchte."""
+        lead = 0
+        for r, model in rooms.items():
+            t_now, want = r_sim.get(r), actual.get(r)
+            if t_now is None or want is None:
+                continue
+            t_after = max(model.cool_down(t_now, t_out, 1.0), min(floor_t, t_now))
+            if t_after >= want - 0.05:
+                continue
+            hrs = model.time_to_reach(t_after, want, max_flow, t_out)
+            if hrs is None:
+                return 24  # schafft es nie: dann lieber gar nicht absenken
+            lead = max(lead, int(math.ceil(hrs / max(1.0 - dhw, 0.3))))
+        return min(lead, 24)
+
+    def step_room(model: RoomModel, t: float, target: float, t_out: float, heat_h: float) -> float:
+        if t > target:
+            return max(model.cool_down(t, t_out, 1.0), target)
+        if t < target:
+            for _ in range(6):  # 10-min-Schritte, Heizen nur außerhalb der Warmwasserladung
+                t += (model.rate(t, max_flow, t_out) * heat_h + model.rate(t, t, t_out) * (1 - heat_h)) / 6
+                if t >= target:
+                    return target
+        return t
+
     t_sim: float | None = None
     saved = actual = 0.0
     hours = cold = 0
@@ -107,13 +151,43 @@ def estimate_savings(
             target = min(t_in, night_temp)
         elif not occupied:
             target = min(t_in, away_temp)
+        ra = room_hourly.get(row["ts"], {})
+        for r in rooms:
+            if ra.get(r) is None:
+                r_sim[r] = None
+            elif r_sim[r] is None:
+                r_sim[r] = ra[r]
+        dhw = min(row.get("dhw_frac") or 0.0, 1.0)
         if target < t_in:
             # rechtzeitig vorheizen: Komfort wird in den nächsten L Stunden gebraucht?
-            lead = lead_hours(t_sim, t_in, t_out)
-            for _, _, occ_j, night_j in rows[i + 1 : i + 1 + lead]:
+            lead_h = lead_hours(t_sim, t_in, t_out)
+            lead_r = room_lead(t_out, ra, dhw, night_temp if night else away_temp)
+            if lead_r >= 24:
+                target = t_in  # ein Raum käme nicht mehr hoch: hier nicht absenken
+                by_rooms += 1
+            for j, (_, _, occ_j, night_j) in enumerate(rows[i + 1 : i + 1 + max(lead_h, lead_r)]):
+                if target >= t_in:
+                    break
                 if occ_j and not night_j:
                     target = t_in
+                    if j >= lead_h:
+                        by_rooms += 1
+                    else:
+                        by_house += 1
                     break
+        setback = target < t_in
+        checked = False
+        for r, model in rooms.items():
+            if r_sim[r] is None:
+                continue
+            want = ra[r]
+            r_target = min(want, night_temp if night else away_temp) if setback else want
+            r_sim[r] = step_room(model, r_sim[r], r_target, t_out, 1.0 - dhw)
+            if occupied and not night:
+                checked = True
+                if r_sim[r] < want - 0.5:
+                    room_cold[r] += 1
+        room_hours += checked
         if t_sim > target:
             cooled = t_out + (t_sim - t_out) * math.exp(-1.0 / tau)
             t_sim = max(cooled, target)
@@ -137,7 +211,8 @@ def estimate_savings(
         d["actual_kwh"] = round(d["actual_kwh"], 2)
         d["saved_kwh"] = round(d["saved_kwh"], 2)
     pct = round(100 * saved / actual, 1) if actual > 1 else None
-    return SavingsResult(hours, round(actual, 1), round(saved, 1), pct, list(daily.values()), cold)
+    return SavingsResult(hours, round(actual, 1), round(saved, 1), pct, list(daily.values()), cold,
+                         room_hours, {r: n for r, n in room_cold.items()} if rooms else None, by_rooms, by_house)
 
 
 def preheat_plan(

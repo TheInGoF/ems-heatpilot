@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from . import __version__
+from .discovery import BOILER_ROLES, ROLE_LABELS
 from .engine import num
 
 LOG_RING_SIZE = 3000
@@ -145,6 +146,12 @@ def self_check(app) -> list[dict]:
         add("error", "Außentemperatur", "Weder Außenfühler noch Wetter gefunden")
     if app.cfg.emsesp_host and not eng.ems:
         add("warn", "EMS-ESP", f"Keine Daten von {app.cfg.emsesp_host} – Adresse prüfen (Einstellungen → Testen)")
+    elif eng.ems:
+        add("ok", "EMS-ESP", "Direkt gelesen: " + ", ".join(f"{d} {len(v)} Werte" for d, v in eng.ems.items()))
+        for role in ("nom_power", "min_power"):
+            if not any(k in eng.ems.get("boiler", {}) for k in BOILER_ROLES.get(role, ())):
+                add("info", "EMS-ESP", f"{ROLE_LABELS.get(role, role)} liefert EMS-ESP nicht – fürs Zertifikat "
+                                       "unter Einstellungen → Haus & Kessel eintragen")
 
     critical = [f.gas, *f.outdoor, f.boiler.get("flow_temp"), *(r.climate for r in f.rooms)]
     for eid in filter(None, critical):
