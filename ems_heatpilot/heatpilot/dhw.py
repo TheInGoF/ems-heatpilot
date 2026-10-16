@@ -105,9 +105,15 @@ class DhwModel:
 
     def slot_draw(self, when: datetime) -> float:
         """Erwarteter Abfall (K) in dieser Stunde: Tagesprofil, mit genug Wochen das Wochenprofil."""
-        slot = slot_of(when)
-        weekly_weight = min(self.profile_n[slot] / 8, 0.7)  # nach ~8 Wochen 70 % Wochentag
-        return (1 - weekly_weight) * self.daily[when.hour] + weekly_weight * self.profile[slot]
+        return self.slot_draw_at(when.weekday(), when.hour)
+
+    def weekly_weight(self, weekday: int, hour: int) -> float:
+        """Wie stark der Wochentag zählt: wächst mit jeder gelernten Woche, höchstens 70 %."""
+        return min(self.profile_n[weekday * 24 + hour] / 8, 0.7)
+
+    def slot_draw_at(self, weekday: int, hour: int) -> float:
+        w = self.weekly_weight(weekday, hour)
+        return (1 - w) * self.daily[hour] + w * self.profile[weekday * 24 + hour]
 
     def expected_draw(self, now: datetime, hours: float) -> float:
         """Erwarteter Temperaturabfall durch Zapfungen in den nächsten Stunden (K)."""
@@ -263,6 +269,9 @@ class DhwModel:
             "charges": self.charges,
             "loss_updates": self.loss.updates,
             "profile_hours": [round(h, 2) for h in hours],
+            # Vorhersage je Wochentag (Mo=0) und Stunde, so wie HeatPilot sie zum Planen nutzt
+            "profile_week": [[round(self.slot_draw_at(d, h), 2) for h in range(24)] for d in range(7)],
+            "week_weight": [round(sum(self.weekly_weight(d, h) for h in range(24)) / 24, 2) for d in range(7)],
             "big_draws": self.big_draws,
             "comfort_margin": round(self.comfort_margin, 1),
         }
