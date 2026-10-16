@@ -27,6 +27,13 @@ JITTER_KM = 0.5          # GPS-Schwankung, die nicht als "weiter weg" zählt
 REVERSAL_KM = 3.0        # danach wieder so viel weiter weg = Kehrtwende, Abbruch
 STALL_MIN = 45           # so lange ohne Fortschritt (Rast) = Abbruch
 MAX_GAP_MIN = 20         # größere Lücken in den GPS-Daten unterbrechen die Serie
+MOVE_KMH = 3.0           # darunter gilt man als „steht“ (GPS-Schwankung)
+
+# Kontrolle der Vorhersage: was wurde so lange vor der tatsächlichen Ankunft erwartet?
+CHECK_BEFORE_MIN = (60, 30, 15)
+MIN_AWAY_MIN = 30        # kürzere Abwesenheit (GPS-Flattern, Mülltonne) zählt nicht als Heimkehr
+KEEP_ARRIVALS = 30
+PRED_EVERY_S = 300       # Vorhersage höchstens alle 5 min festhalten
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -55,6 +62,11 @@ class PersonLearner:
     _approach_start: tuple[datetime, float] | None = None
     _last_slot_learned: int | None = None
     _return: dict | None = None  # bestätigte Heimfahrt
+    # Prüfung der eigenen Vorhersage: (Zeitpunkt, erwartete Ankunft, Quelle) solange unterwegs
+    _preds: deque = field(default_factory=lambda: deque(maxlen=400))
+    _left_at: datetime | None = None
+    _max_dist: float | None = None
+    arrivals: list = field(default_factory=list)
 
     def observe(self, ts: datetime, home: bool, dist_km: float | None, learn: bool = True) -> None:
         """Position verfolgen; ``learn=False`` (Urlaub): Gewohnheiten nicht anpassen."""
@@ -74,6 +86,13 @@ class PersonLearner:
         if not home and speed is not None and speed < -3:
             self._approach_start = None
 
+        if home and self.home is False:
+            self._log_arrival(ts)
+        if home is False and self.home is not False:
+            self._left_at = ts if self.home is True else None  # Start unbekannt nach Neustart
+            self._max_dist = None
+            self._preds.clear()
+
         if home and self.home is False and self._approach_start is not None:
             start_ts, start_dist = self._approach_start
             hours = (ts - start_ts).total_seconds() / 3600
@@ -87,6 +106,73 @@ class PersonLearner:
             self._return = None
             self.track.clear()
         self.home = home
+        if not home:
+            if dist_km is not None:
+                self._max_dist = dist_km if self._max_dist is None else max(self._max_dist, dist_km)
+            last = self._preds[-1][0] if self._preds else None
+            e = self.eta(ts) if last is None or (ts - last).total_seconds() >= PRED_EVERY_S else {"eta": None}
+            if e["eta"] is not None:
+                self._preds.append((ts, e["eta"], e["source"]))
+
+    def _log_arrival(self, ts: datetime) -> None:
+        """Heimkehr festhalten – mit dem, was HeatPilot 60/30/15 min vorher erwartet hatte."""
+        if self._left_at is not None and (ts - self._left_at).total_seconds() < MIN_AWAY_MIN * 60:
+            return
+        checks = []
+        for before in CHECK_BEFORE_MIN:
+            at = ts - timedelta(minutes=before)
+            cands = [p for p in self._preds if at - timedelta(minutes=20) <= p[0] <= at]
+            if cands:
+                t, eta, source = cands[-1]
+                checks.append({"before_min": before, "eta": eta.isoformat(), "source": source,
+                               "error_min": round((eta - ts).total_seconds() / 60)})
+        self.arrivals.append({
+            "ts": ts.isoformat(),
+            "left": self._left_at.isoformat() if self._left_at else None,
+            "max_km": None if self._max_dist is None else round(self._max_dist, 1),
+            "checks": checks,
+        })
+        del self.arrivals[:-KEEP_ARRIVALS]
+        self._preds.clear()
+
+    def status(self, now: datetime) -> dict:
+        """Wie HeatPilot die Lage gerade deutet – zum Nachprüfen in der Oberfläche."""
+        if self.home:
+            return {"state": "zuhause", "text": "zu Hause"}
+        if self.home is None:
+            return {"state": "unbekannt", "text": "noch kein Wert"}
+        ret = self.steady_return(now)
+        if ret:
+            return {"state": "heimfahrt", "since": ret["since"].isoformat(), "eta": ret["eta"].isoformat(),
+                    "speed_kmh": ret["speed_kmh"],
+                    "text": f"Heimfahrt erkannt seit {ret['since']:%H:%M} – im Schnitt {ret['speed_kmh']:.0f} km/h näher"}
+        speed = self.approach_speed_now(now)
+        if self.dist_km is None:
+            return {"state": "unterwegs", "text": "unterwegs – keine Entfernung (kein GPS)"}
+        if speed is None:
+            return {"state": "unterwegs", "text": "unterwegs – zu wenige Messpunkte für eine Richtung"}
+        if speed > MOVE_KMH:
+            return {"state": "naehert", "speed_kmh": round(speed, 1),
+                    "text": f"kommt näher ({speed:.0f} km/h) – noch keine sichere Heimfahrt"}
+        if speed < -MOVE_KMH:
+            return {"state": "entfernt", "speed_kmh": round(speed, 1), "text": f"entfernt sich ({-speed:.0f} km/h)"}
+        return {"state": "steht", "speed_kmh": round(speed, 1), "text": "steht / bleibt in der Gegend"}
+
+    def habit_hours(self) -> list[list[float]]:
+        """Gelernte Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde (7 × 24, 0…1)."""
+        per_h = SLOTS_PER_DAY // 24
+        return [[round(sum(self.week[d * SLOTS_PER_DAY + h * per_h + i] for i in range(per_h)) / per_h, 3)
+                 for h in range(24)] for d in range(7)]
+
+    def arrival_quality(self) -> dict:
+        """Mittlerer Fehler der Vorhersage je Vorlauf (Minuten, positiv = zu spät erwartet)."""
+        out = {}
+        for before in CHECK_BEFORE_MIN:
+            errs = [c["error_min"] for a in self.arrivals for c in a["checks"] if c["before_min"] == before]
+            if errs:
+                out[before] = {"n": len(errs), "mean_abs_min": round(sum(abs(e) for e in errs) / len(errs)),
+                               "within_15": round(sum(1 for e in errs if abs(e) <= 15) / len(errs), 2)}
+        return out
 
     def steady_return(self, now: datetime) -> dict | None:
         """Sichere Heimfahrt erkennen: ununterbrochen näher, schnell genug, weit genug.
@@ -194,6 +280,7 @@ class PersonLearner:
             "week": self.week,
             "approach_speed_kmh": self.approach_speed_kmh,
             "arrivals_learned": self.arrivals_learned,
+            "arrivals": self.arrivals,
         }
 
     @classmethod
@@ -203,6 +290,7 @@ class PersonLearner:
             week=d["week"],
             approach_speed_kmh=d.get("approach_speed_kmh", 35.0),
             arrivals_learned=d.get("arrivals_learned", 0),
+            arrivals=list(d.get("arrivals", []))[-KEEP_ARRIVALS:],
         )
 
 

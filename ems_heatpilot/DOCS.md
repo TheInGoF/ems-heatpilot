@@ -146,6 +146,42 @@ Die letzten 12 Stunden hält HeatPilot im Speicher (alle 30 s, mit EMS-ESP direk
 am genauesten); ältere Abschnitte und die Zeit vor einem Neustart kommen aus der
 Datenbank (alle 5 min).
 
+### Anwesenheit – deutet HeatPilot es richtig?
+
+Unter den Grafen steht je gewählter Person:
+
+- **Deutung jetzt:** zu Hause · *Heimfahrt erkannt* (lückenlos näher, mind. 30 min,
+  15 km und 20 km/h – erst dann zählt eine Urlaubsrückkehr) · *kommt näher* ·
+  *entfernt sich* · *steht* (bleibt in der Gegend, z. B. Arbeit) – mit Entfernung und
+  erwarteter Ankunft samt Quelle (GPS-Annäherung oder Gewohnheit).
+- **Entfernung im Verlauf** (12 h bis 7 Tage, grün hinterlegt: zu Hause).
+- **Gewohnheit (gelernt):** Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde.
+  Ohne GPS-Annäherung gilt das erste Feld ab 50 % als erwartete Ankunft.
+- **Heimkehr-Kontrolle:** bei jeder Ankunft (nach mind. 30 min Abwesenheit) hält
+  HeatPilot fest, was es 60, 30 und 15 min vorher erwartet hatte. „+5′“ heißt 5 min zu
+  spät erwartet, „−5′“ zu früh. Darüber der mittlere Fehler und wie oft er innerhalb
+  von ±15 min lag. Die Kontrolle beginnt mit dem Update auf 0.21 (bzw. mit der
+  Datenübernahme beim Neulernen).
+
+Gespeichert werden nur Entfernungen zum Zuhause, nie Koordinaten.
+
+## Die Woche im Blick
+
+In der Übersicht zeigt eine Wärmekarte Montag bis Sonntag × Stunde, was im Haus
+üblicherweise passiert – gemittelt über 4 Wochen bis 1 Jahr, ohne Urlaub, Zählersprünge
+herausgerechnet. Rechts die Summe (Gas, Starts) bzw. das Mittel je Tag, darunter in
+Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
+
+| Ansicht | Was sie zeigt |
+| --- | --- |
+| Gas gesamt / Heizen / Warmwasser | Verbrauch in kW (= kWh je Stunde); Warmwasser = Gas, während der Speicher lädt |
+| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K) – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
+| Abweichung vom Hausmodell | gemessen minus erwartet. Das Hausmodell kennt keine Wochentage; feste Muster (Kochen, Lüften, Aufheizen nach der Absenkung) sieht man hier |
+| Brennerstarts | wann der Kessel am meisten taktet |
+| Jemand zu Hause | gemessener Anteil der Zeit |
+| Tado-Soll | Median aller Räume („aus“ = 5 °C) – so sieht HeatPilot den Zeitplan |
+| Ventile | mittlere Öffnung, auch je Raum |
+
 ## Empfehlungen für Tado
 
 Tado lernt selbst und entscheidet, *wann* ein Raum Wärme zieht. Fängt Tado zu
@@ -189,7 +225,7 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.20 macht
+## Was das Add-on in Version 0.21 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

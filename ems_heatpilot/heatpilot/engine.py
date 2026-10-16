@@ -11,7 +11,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from . import advice, analysis, flowstudy, guards, plausibility, schedule, solar
+from . import advice, analysis, flowstudy, guards, plausibility, schedule, solar, weekly
 from .config import Config
 from .dhw import SEGMENT_H, DhwModel, DhwShadow, cooling_sample
 from .live import LiveBuffer
@@ -645,6 +645,59 @@ class Engine:
             self._flow_study = (now, flowstudy.study(self.store))
         return self._flow_study[1]
 
+    def week(self, days: int = weekly.WINDOW_DAYS, room: str | None = None, max_age_s: int = 600) -> dict:
+        """Wochenraster Mo–So × Stunde (alle 10 min neu)."""
+        now = time.time()
+        cache = self.__dict__.setdefault("_week", {})
+        key = (days, room)
+        if key not in cache or now - cache[key][0] > max_age_s:
+            rooms = [r.climate for r in self.found.rooms]
+            data = weekly.collect(self.store, int(now), days, self.house, rooms, room)
+            data["rooms"] = [{"climate": r.climate, "name": r.name} for r in self.found.rooms]
+            data["room"] = room
+            data["house_ok"] = guards.check_house(self.house)["ok"]
+            if len(cache) > 8:
+                cache.clear()
+            cache[key] = (now, data)
+        return cache[key][1]
+
+    def presence(self, hours: float = 24) -> dict:
+        """Wie HeatPilot Anwesenheit und Heimkehr deutet – je Person, nur Entfernungen."""
+        now_ts = int(time.time())
+        now = local(now_ts)
+        since = now_ts - int(hours * 3600)
+        rows: dict[str, dict] = {p: {"ts": [], "dist_km": [], "home": []} for p in self.persons}
+        for r in self.store.query("SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
+                                  (since,)):
+            if r["person"] in rows:
+                d = rows[r["person"]]
+                d["ts"].append(r["ts"])
+                d["dist_km"].append(None if r["dist_km"] is None else round(r["dist_km"], 2))
+                d["home"].append(r["home"])
+        out = []
+        for p, learner in self.persons.items():
+            e = learner.eta(now)
+            out.append({
+                "person": p, "name": (self.states.get(p) or {}).get("attributes", {}).get("friendly_name")
+                or p.replace("person.", ""),
+                "home": learner.home, "dist_km": e["dist_km"], "speed_kmh": e["speed_kmh"],
+                "eta": e["eta"].isoformat() if e["eta"] else None, "source": e["source"],
+                "confidence": e["confidence"], "status": learner.status(now),
+                "approach_speed_kmh": round(learner.approach_speed_kmh, 1),
+                "arrivals_learned": learner.arrivals_learned,
+                "habit": learner.habit_hours(), "arrivals": learner.arrivals[-10:][::-1],
+                "quality": learner.arrival_quality(), "series": rows[p],
+            })
+        if self.on_vacation(now_ts):
+            arrival = self.vacation.arrival(now, list(self.persons.values()))
+        else:
+            arrival = next_arrival(list(self.persons.values()), now)
+        return {"now": now.isoformat(), "hours": hours, "persons": out,
+                "anyone_home": any(p.home for p in self.persons.values()),
+                "vacation": self.on_vacation(now_ts),
+                "arrival": None if not arrival else {k: (v.isoformat() if isinstance(v, datetime) else v)
+                                                      for k, v in arrival.items()}}
+
     def tado_advice(self, max_age_s: int = 900) -> dict:
         """Empfehlungen an Tado (höchstens alle 15 min neu berechnet – wertet 3 Wochen aus)."""
         now = time.time()
@@ -802,7 +855,7 @@ class Engine:
             "full_year": year_span >= 360,
         }
 
-        persons = [p.eta(now) for p in self.persons.values()]
+        persons = [{**p.eta(now), "status": p.status(now)["text"]} for p in self.persons.values()]
         vacation = self.on_vacation(now_ts)
         if vacation:  # Rückkehr: schnelle GPS-Annäherung vor geplantem Ende vor Datum
             arrival = self.vacation.arrival(now, list(self.persons.values()))
