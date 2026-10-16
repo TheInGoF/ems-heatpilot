@@ -439,7 +439,12 @@ const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "
 
 async function load() {
   const s = await (await fetch("api/summary")).json();
-  if (s.starting) { $("status").textContent = "Startet: " + (s.status || "…"); setTimeout(load, 5000); return; }
+  if (s.starting) {
+    $("status").textContent = s.status === "übernehme Historie"
+      ? "Liest die Historie aus Home Assistant ein und lernt – einige Minuten. Einstellungen bleiben erhalten."
+      : "Startet: " + (s.status || "…");
+    setTimeout(load, 5000); return;
+  }
   $("setup-banner").hidden = !!s.configured;
   const hist = await (await fetch("api/history?days=60")).json();
   const h = s.house, c = s.cycling, sv = s.savings;
@@ -779,7 +784,10 @@ async function loadDiag() {
 
 async function loadSettings() {
   const j = await (await fetch("api/settings")).json();
-  if (j.starting) { $("view-settings").textContent = "Startet: " + (j.status || "…"); setTimeout(loadSettings, 5000); return; }
+  if (j.starting) {
+    $("view-settings").innerHTML = `<div class="banner">HeatPilot ${j.status === "übernehme Historie" ? "liest gerade die Historie aus Home Assistant ein und lernt neu" : "startet"} (${esc(j.status || "…")}) – das dauert einige Minuten. <b>Deine Einstellungen sind gespeichert</b> und erscheinen danach hier wieder.</div>`;
+    setTimeout(loadSettings, 5000); return;
+  }
   ENT = await (await fetch("api/entities")).json();
   SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
   renderSettings();

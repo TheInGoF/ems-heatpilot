@@ -52,3 +52,22 @@ def test_fresh_install_without_yaml_options(tmp_path):
     save_settings(validate({"gas_sensor": "sensor.gas", "rooms": [{"climate": "climate.bad"}]})[0], tmp_path)
     cfg = Config.load(tmp_path / "options.json")
     assert cfg.gas_sensor == "sensor.gas" and cfg.rooms[0]["climate"] == "climate.bad"
+
+
+def test_settings_backup_and_restore(tmp_path):
+    from heatpilot.config import BACKUP_NAME, restore_settings, save_settings
+
+    data, backup_dir = tmp_path / "data", tmp_path / "config"
+    data.mkdir(); backup_dir.mkdir()
+    import heatpilot.config as c
+    old = c.BACKUP_DIR
+    c.BACKUP_DIR = backup_dir
+    try:
+        save_settings({"living_area_m2": 85.0}, data_dir=data)
+    finally:
+        c.BACKUP_DIR = old
+    assert (backup_dir / BACKUP_NAME).exists()
+    (data / "settings.json").unlink()  # /data verloren, z. B. nach Neuinstallation
+    assert restore_settings(data, backup_dir)
+    assert '"living_area_m2": 85.0' in (data / "settings.json").read_text()
+    assert not restore_settings(data, backup_dir)  # vorhanden: nichts überschreiben

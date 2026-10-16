@@ -11,7 +11,7 @@ from aiohttp import web
 
 from . import __version__
 from .backfill import run_backfill
-from .config import DATA_DIR, SETTINGS_NAME, Config, save_settings, validate
+from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
 from .diagnostics import set_debug, setup_logging
 from .discovery import discover
 from .emsesp import EmsEsp
@@ -149,9 +149,14 @@ class App:
 
 
 async def main() -> None:
+    restored = restore_settings()
     log_file = setup_logging(Config.load().debug_logging)
     app = App()
     log.info("EMS HeatPilot %s startet (Modus: %s, Log: %s)", __version__, app.cfg.mode, log_file)
+    if restored:
+        log.warning("Einstellungen fehlten in /data – aus der Sicherung im Add-on-Konfigurationsordner zurückgeholt")
+    elif (DATA_DIR / SETTINGS_NAME).exists():
+        backup((DATA_DIR / SETTINGS_NAME).read_text())  # Sicherung auch für ältere Installationen anlegen
 
     runner = web.AppRunner(make_app(app))
     await runner.setup()
