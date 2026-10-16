@@ -47,7 +47,7 @@ class RoomModel:
     def __post_init__(self) -> None:
         if self.rls is None:
             theta = [0.02, 0.01, 0.05, 0.0] if self.floor else [0.02, 0.05, 0.0]
-            self.rls = RLS(n=len(theta), lam=0.998, delta=1.0, theta=theta)
+            self.rls = RLS(n=len(theta), lam=0.998, delta=1.0, theta=theta, min_sigma=0.03)
 
     @property
     def a(self) -> float:
@@ -165,7 +165,7 @@ class RoomModel:
 @dataclass
 class HouseModel:
     rls: RLS = field(
-        default_factory=lambda: RLS(n=3, lam=0.999, delta=10.0, theta=[0.2, 2.0, 0.3])
+        default_factory=lambda: RLS(n=3, lam=0.999, delta=10.0, theta=[0.2, 2.0, 0.3], min_sigma=0.2)
     )
     # nur in der Heizperiode lernen, sonst verzerrt der Sommer das Bild
     max_learn_outdoor: float = 15.0

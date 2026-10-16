@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.14.0
+- **Ausreißer werden nicht gelernt:**
+  - Gaszähler: Sprünge/Nachträge (mehr Gas, als der Brenner in der Stunde verbrennen konnte, bzw. ein Vielfaches der Vorwoche) und verpasste Zählungen (Brenner lief, Zähler stand) werden nicht gelernt; Nachträge zählen weiter in Verbrauch und Kosten
+  - Messwerte außerhalb physikalischer Grenzen (z. B. EMS-Platzhalter 3276,7) und einzelne Temperaturspitzen werden verworfen; defekter Außenfühler (ab drei Fühlern) wird ignoriert
+  - Lernen: stark abweichende Punkte zählen nur begrenzt, grobe Ausreißer gar nicht
+  - Übersicht, Selbsttest und Log zeigen, was ignoriert wurde
+- Behoben: Der Gasverbrauch je Stunde ließ die letzten 5 Minuten jeder Stunde weg (rund 8 % zu wenig) – Hausmodell und Heizlast waren dadurch etwas zu niedrig
+- Beim Update wird der Lernstand einmal mit dem neuen Schutz neu berechnet; „Historie neu einlesen“ lernt jetzt ebenfalls vollständig neu
+
 ## 0.13.0
 - Neuer Reiter **Live**: Anzeigen und Grafen für Kessel, Brenner, Warmwasser, außen/innen und jeden Raum (3–24 h, aktualisiert alle 30 s)
 - **Hydraulischer Abgleich:** Empfehlung je Raum aus den gelernten Raummodellen und der Ventilöffnung – Voreinstellung eine Stufe auf (zu wenig Heizwasser) oder zu (zu viel)

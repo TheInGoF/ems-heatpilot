@@ -11,7 +11,7 @@ import logging
 import time
 from datetime import datetime, timedelta
 
-from . import advice, analysis, guards, schedule
+from . import advice, analysis, guards, plausibility, schedule
 from .config import Config
 from .dhw import DhwModel, DhwShadow
 from .live import LiveBuffer
@@ -85,6 +85,8 @@ class Engine:
         self.eff = schedule.effective(cfg, self.schedule_learned)
         self._schedule_ts = 0.0
         self.live = LiveBuffer()  # 30-s-Werte der letzten 12 h für den Reiter „Live“
+        self.room_spikes = plausibility.SpikeFilter()
+        self._rejected: set[str] = set()  # zuletzt verworfene Messwerte (außerhalb der Grenzen)
         self._prev_dhw: tuple[int, float | None] | None = None
         self.dhw_rec: dict | None = None
         self._advice: tuple[float, list, list] | None = None
@@ -261,8 +263,8 @@ class Engine:
         self._live_ts = now
 
     def outdoor_now(self) -> float | None:
-        vals = [num(self._val(e)) for e in self.found.outdoor]
-        vals = [v for v in vals if v is not None]
+        vals = [plausibility.in_range("t_out", num(self._val(e))) for e in self.found.outdoor]
+        vals = plausibility.robust_outdoor([v for v in vals if v is not None])
         if vals:
             return min(vals)  # wie bisher: Minimum der Außenfühler
         if self.found.weather and self.found.weather in self.states:
@@ -331,7 +333,41 @@ class Engine:
                 hum = num(a.get("current_humidity"))
             target = num(a.get("temperature")) if st.get("state") != "off" else None
             rooms.append((r.climate, num(a.get("current_temperature")), target, valve, hum))
-        return sample, rooms, persons
+        return self._check_ranges(sample, rooms, persons)
+
+    def _check_ranges(self, sample: dict, rooms: list[tuple], persons: list[tuple]):
+        """Werte außerhalb physikalischer Grenzen verwerfen (z. B. EMS-Platzhalter 3276,7)."""
+        rejected = set()
+        for key, value in sample.items():
+            if key in plausibility.RANGES and value is not None:
+                sample[key] = plausibility.in_range(key, value)
+                if sample[key] is None:
+                    rejected.add(key)
+        clean = []
+        for climate, temp, target, valve, hum in rooms:
+            row = (climate, plausibility.in_range("room_temp", temp), plausibility.in_range("room_target", target),
+                   plausibility.in_range("valve", valve), plausibility.in_range("humidity", hum))
+            if (temp is not None and row[1] is None) or (valve is not None and row[3] is None):
+                rejected.add(f"{climate}")
+            clean.append(row)
+        self._rejected = rejected
+        return sample, clean, persons
+
+    def filter_room_spikes(self, ts: int, rooms: list[tuple]) -> list[tuple]:
+        """Einzelne Temperatur-Spitzen je Raum verwerfen (vor dem Speichern)."""
+        out = []
+        for climate, temp, target, valve, hum in rooms:
+            kept = self.room_spikes(climate, ts, temp)
+            if temp is not None and kept is None:
+                self.store.add_daily(local(ts).date().isoformat(), "ignored_room_spike", 1)
+                log.info("Raum %s: Temperatursprung auf %.1f °C ignoriert (Einzelspitze)", climate, temp)
+            out.append((climate, kept, target, valve, hum))
+        return out
+
+    def count_rejected(self, ts: int) -> None:
+        if self._rejected:
+            self.store.add_daily(local(ts).date().isoformat(), "ignored_values", len(self._rejected))
+            log.debug("Unplausible Werte verworfen: %s", sorted(self._rejected))
 
     # ------------------------------------------------------------------ Takt
     def tick(self, now_ts: int | None = None) -> None:
@@ -343,6 +379,8 @@ class Engine:
                   {k: v for k, v in sample.items() if v is not None},
                   [(r[0], r[1], r[2], r[3]) for r in rooms], [(p, h, None if d is None else round(d, 1))
                                                             for p, h, d in persons])
+        self.count_rejected(ts)
+        rooms = self.filter_room_spikes(ts, rooms)
         self.track_vacation_return(ts, persons)
         vacation = self.on_vacation(ts)
         sample["vacation"] = int(vacation)
@@ -445,16 +483,43 @@ class Engine:
                 floor_input=sum(floor_inputs) / len(floor_inputs), update=update,
             )
 
+    def nominal_kw(self) -> float | None:
+        return self.cfg.boiler_nominal_kw or num(self._boiler("nom_power"))
+
     def aggregate_hour(self, hour: int, learn: bool = True) -> None:
         rows = self.store.query(
             "SELECT * FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts", (hour, hour + 3600)
         )
         if len(rows) < 2:
             return
-        gas = [r["gas"] for r in rows if r["gas"] is not None]
-        gas_kwh = None
-        if len(gas) >= 2 and gas[-1] >= gas[0]:
-            gas_kwh = (gas[-1] - gas[0]) * self.gas_factor
+        # Gas bis zum ersten Wert der nächsten Stunde – sonst fehlen die letzten 5 min jeder Stunde
+        gas_rows = self.store.query(
+            "SELECT ts, gas FROM samples WHERE ts >= ? AND ts <= ? AND gas IS NOT NULL ORDER BY ts",
+            (hour, hour + 3600),
+        )
+        gas = [r["gas"] for r in gas_rows]
+        raw_kwh = None
+        if len(gas) >= 2:
+            raw_kwh = (gas[-1] - gas[0]) * self.gas_factor
+        recent = [r["gas_kwh"] for r in self.store.query(
+            "SELECT gas_kwh FROM hourly WHERE ts >= ? AND ts < ? AND gas_kwh IS NOT NULL", (hour - 7 * 86400, hour))]
+        day = local(hour).date().isoformat()
+        gas_kwh, spike = None, None
+        if raw_kwh is not None and raw_kwh < 0:
+            self.store.add_daily(day, "ignored_gas_negative", 1)
+            log.info("Gaszähler %s: Stand gesunken (%.1f kWh) – Stunde nicht gelernt", local(hour).strftime("%d.%m. %H:00"), raw_kwh)
+        elif raw_kwh is not None:
+            status, gas_kwh = plausibility.gas_hour(raw_kwh, rows, self.nominal_kw(), recent)
+            if status == "spike":
+                spike = raw_kwh
+                self.store.add_daily(day, "ignored_gas_spike", 1)
+                self.store.add_daily(day, "gas_spike_kwh", raw_kwh)
+                log.info("Gaszähler %s: Sprung um %.1f kWh (Nachtrag?) – nicht gelernt, zählt nur im Verbrauch",
+                         local(hour).strftime("%d.%m. %H:00"), raw_kwh)
+            elif status == "missed":
+                self.store.add_daily(day, "ignored_gas_missed", 1)
+                log.info("Gaszähler %s: Brenner lief, Zähler zählte nur %.2f kWh – Stunde nicht gelernt",
+                         local(hour).strftime("%d.%m. %H:00"), raw_kwh)
         t_out = [r["t_out"] for r in rows if r["t_out"] is not None]
         dhw = [r["dhw"] for r in rows if r["dhw"] is not None]
         home = [r["home_count"] for r in rows if r["home_count"] is not None]
@@ -468,11 +533,33 @@ class Engine:
             sum(dhw) / len(dhw) if dhw else None,
             sum(1 for h in home if h > 0) / len(home) if home else None,
             sum(vac) / len(vac) if vac else None,
+            spike,
         )
         self.store.add_hourly([row])
         self.store.commit()
         if learn:
             self.learn_house_hour(hour)
+
+    def ignored(self, days: int = 7) -> dict:
+        """Was in den letzten Tagen nicht gelernt wurde – für Selbsttest und Übersicht."""
+        since = local(time.time() - days * 86400).date().isoformat()
+        tot: dict[str, float] = {}
+        for vals in self.store.daily(since).values():
+            for k, v in vals.items():
+                if k.startswith("ignored_") or k == "gas_spike_kwh":
+                    tot[k] = tot.get(k, 0) + v
+        models = [self.house.rls, self.dhw.loss, *(m.rls for m in self.rooms.values())]
+        return {
+            "days": days,
+            "gas_spikes": int(tot.get("ignored_gas_spike", 0)),
+            "gas_spike_kwh": round(tot.get("gas_spike_kwh", 0.0), 1),
+            "gas_missed_hours": int(tot.get("ignored_gas_missed", 0)),
+            "gas_negative": int(tot.get("ignored_gas_negative", 0)),
+            "room_spikes": int(tot.get("ignored_room_spike", 0)),
+            "values": int(tot.get("ignored_values", 0)),
+            "learn_clipped": sum(m.clipped for m in models),
+            "learn_rejected": sum(m.rejected for m in models),
+        }
 
     def _mean_room_temp(self, start: int, end: int) -> float | None:
         r = self.store.query(
@@ -631,11 +718,11 @@ class Engine:
         )
         house_check = guards.check_house(self.house)
         room_checks = {c: guards.check_room(m) for c, m in self.rooms.items()}
-        gas_total = sum(h["gas_kwh"] or 0 for h in hourly)
+        gas_total = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in hourly)
         span_days = (hourly[-1]["ts"] - hourly[0]["ts"]) / 86400 if len(hourly) > 1 else 0
         price, fee = self.cfg.gas_price_eur_per_kwh, self.cfg.gas_base_fee_eur_per_year
         last_year = [h for h in hourly if h["ts"] >= now_ts - 365 * 86400]
-        year_kwh = sum(h["gas_kwh"] or 0 for h in last_year)
+        year_kwh = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in last_year)
         year_span = (now_ts - last_year[0]["ts"]) / 86400 if last_year else 0
         costs = {
             "kwh": round(year_kwh, 0),
@@ -700,6 +787,7 @@ class Engine:
                 "returned": sorted(self.vacation.returned),
             },
             "advice": self.tado_advice(),
+            "ignored": self.ignored(),
             "schedule": {"learned": self.schedule_learned, "effective": self.eff.as_dict(),
                          "learning": self.cfg.learn_schedule},
             "limits": {

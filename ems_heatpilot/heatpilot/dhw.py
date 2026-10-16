@@ -36,7 +36,7 @@ def slot_of(ts: datetime) -> int:
 
 @dataclass
 class DhwModel:
-    loss: RLS = field(default_factory=lambda: RLS(n=2, lam=0.999, delta=1.0, theta=[0.8, -0.04]))
+    loss: RLS = field(default_factory=lambda: RLS(n=2, lam=0.999, delta=1.0, theta=[0.8, -0.04], min_sigma=0.05))
     charge_rate_kh: float = 20.0
     charges: int = 0
     kwh_per_k: dict = field(default_factory=lambda: {"kalt": None, "warm": None})

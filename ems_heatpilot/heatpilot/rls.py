@@ -4,6 +4,11 @@ Das ist der Lernkern: Jede neue Messung verschiebt die Parameter ein Stück,
 alte Messungen verlieren mit dem Faktor ``lam`` exponentiell an Gewicht.
 Damit passt sich das Modell laufend an (Jahreszeit, Sonne, neue Fenster ...).
 Bewusst ohne numpy, die Matrizen sind winzig (3-4 Parameter).
+
+Robust gegen Ausreißer: Nach der Einlernphase (``warmup``) wird ein Fehler über
+``gate`` × üblichem Fehler gekappt – der Punkt zählt nur begrenzt – und über
+``hard`` × üblichem Fehler gar nicht gelernt. Ändert sich das Haus wirklich,
+zieht das Modell über gekappte Schritte trotzdem nach, nur langsamer.
 """
 
 from __future__ import annotations
@@ -22,6 +27,13 @@ class RLS:
     updates: int = 0
     # gleitender Fehler der Vorhersage *vor* dem Update (ehrliches Gütemaß)
     err_sq_ewma: float | None = None
+    # Ausreißer-Schutz
+    gate: float = 4.0
+    hard: float = 15.0
+    min_sigma: float = 0.0
+    warmup: int = 50
+    clipped: int = 0
+    rejected: int = 0
 
     def __post_init__(self) -> None:
         if not self.theta:
@@ -43,7 +55,19 @@ class RLS:
         if denom <= 1e-12 or not math.isfinite(denom):
             return 0.0
         k = [v / denom for v in Px]
-        err = y - self.predict(x)
+        raw = y - self.predict(x)
+        if not math.isfinite(raw):
+            self.rejected += 1
+            return 0.0
+        err = raw
+        sigma = max(self.rmse or 0.0, self.min_sigma)
+        if self.updates >= self.warmup and sigma > 0:
+            if abs(raw) > self.hard * sigma:
+                self.rejected += 1  # grober Fehler (z. B. Zählernachtrag): gar nicht lernen
+                return raw
+            if abs(raw) > self.gate * sigma:
+                self.clipped += 1
+                err = math.copysign(self.gate * sigma, raw)
         self.theta = [self.theta[i] + k[i] * err for i in range(n)]
         xP = [sum(x[i] * self.P[i][j] for i in range(n)) for j in range(n)]
         self.P = [
@@ -62,7 +86,7 @@ class RLS:
             if self.err_sq_ewma is None
             else (1 - a) * self.err_sq_ewma + a * err * err
         )
-        return err
+        return raw
 
     @property
     def rmse(self) -> float | None:
@@ -76,6 +100,9 @@ class RLS:
             "P": self.P,
             "updates": self.updates,
             "err_sq_ewma": self.err_sq_ewma,
+            "min_sigma": self.min_sigma,
+            "clipped": self.clipped,
+            "rejected": self.rejected,
         }
 
     @classmethod
@@ -87,4 +114,7 @@ class RLS:
             P=d["P"],
             updates=d.get("updates", 0),
             err_sq_ewma=d.get("err_sq_ewma"),
+            min_sigma=d.get("min_sigma", 0.0),
+            clipped=d.get("clipped", 0),
+            rejected=d.get("rejected", 0),
         )

@@ -48,7 +48,8 @@ SAMPLE_COLS = (
     # seit 0.6
     "vacation",
 )
-HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac")
+# gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
+HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh")
 
 
 class Store:
@@ -75,6 +76,18 @@ class Store:
         self.db.execute(
             "INSERT OR REPLACE INTO kv(key, value) VALUES(?, ?)", (key, json.dumps(value))
         )
+        self.db.commit()
+
+    def reset_learning(self, since_day: str) -> None:
+        """Gelerntes verwerfen, damit es aus den Rohdaten neu berechnet werden kann.
+
+        Bleibt: Messwerte, Einstellungen, Empfehlungs-Verlauf. Tageszähler ab ``since_day``
+        werden beim Neueinlesen der Historie neu gebildet und hier gelöscht (sonst doppelt).
+        """
+        self.db.execute("DELETE FROM kv WHERE key LIKE 'model.%' OR key IN "
+                        "('last_room_step', 'last_hour', 'schedule.learned', 'backfill_done')")
+        self.db.execute("DELETE FROM daily WHERE day >= ?", (since_day,))
+        self.db.execute("DELETE FROM snapshots")
         self.db.commit()
 
     # --- Messwerte ---

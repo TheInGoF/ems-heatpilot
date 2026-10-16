@@ -67,7 +67,7 @@ def collect(eng, now_ts: int | None = None) -> dict:
     year = [h for h in hourly if h["ts"] >= now_ts - 365 * 86400]
     year_days = (now_ts - year[0]["ts"]) / 86400 if year else 0.0
     full_year = year_days >= FULL_YEAR_DAYS
-    year_kwh = sum(h["gas_kwh"] or 0 for h in year)
+    year_kwh = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in year)
     kwh_m2 = year_kwh / area if full_year and area else None
 
     nom = cfg.boiler_nominal_kw or num(eng._boiler("nom_power"))
