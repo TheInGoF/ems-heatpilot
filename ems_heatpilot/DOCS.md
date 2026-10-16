@@ -1,5 +1,9 @@
 # EMS HeatPilot
 
+Lokale, selbstlernende Heizungsoptimierung für Kessel mit
+[EMS-ESP](https://github.com/emsesp/EMS-ESP32) ([Doku](https://emsesp.org)),
+Tado und Anwesenheit.
+
 ## Einrichten
 
 Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
