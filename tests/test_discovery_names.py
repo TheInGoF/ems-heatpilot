@@ -45,3 +45,8 @@ def test_only_percent_sensor_besides_humidity():
 def test_english_name_still_works():
     st, reg = tado_room("wz", "sensor.wz_heating", {"unit_of_measurement": "%"})
     assert room_of(st, reg).heating_power == "sensor.wz_heating"
+
+
+def test_flur_heizung():
+    st, reg = tado_room("flur", "sensor.flur_heizung", {"unit_of_measurement": "%", "friendly_name": "Flur Heizung"})
+    assert room_of(st, reg).heating_power == "sensor.flur_heizung"
