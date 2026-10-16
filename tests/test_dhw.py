@@ -70,3 +70,28 @@ def test_dhw_strategy_saves_standby_loss_without_cold_showers():
     _, loss_real, loss_strat, cold = simulate()
     assert loss_strat < loss_real
     assert cold == 0
+
+
+def test_rising_temperature_is_not_learned_as_cooling():
+    """Nach dem Laden zieht der Fühler nach, ohne Ladesignal wird geheizt – beides kein Auskühlen."""
+    from datetime import datetime, timedelta
+
+    from heatpilot.dhw import DhwModel
+
+    m = DhwModel()
+    t0 = datetime(2026, 11, 2, 6, 0)
+    temps = [45.0, 50.0, 55.0]  # Ladung
+    for i in range(1, len(temps)):
+        m.step(t0 + timedelta(minutes=5 * i), 5 / 60, temps[i - 1], temps[i], True, 15.0)
+    before = m.loss.updates
+    t = 55.0
+    for i in range(6):  # 30 min nach Ladeende: Fühler steigt noch 0,4 K je 5 min
+        m.step(t0 + timedelta(minutes=20 + 5 * i), 5 / 60, t, t + 0.4, False, None)
+        t += 0.4
+    assert m.loss.updates == before
+    for i in range(6):  # ohne Ladesignal 1 K je 5 min wärmer (Signal fehlt): nicht lernen
+        m.step(t0 + timedelta(minutes=60 + 5 * i), 5 / 60, t, t + 1.0, False, None)
+        t += 1.0
+    assert m.loss.updates == before
+    m.step(t0 + timedelta(minutes=95), 5 / 60, t, t - 0.1, False, None)  # echtes Auskühlen
+    assert m.loss.updates == before + 1

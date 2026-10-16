@@ -149,9 +149,10 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
 
   <div class="grid2">
     <div class="card">
-      <h2>Wärmebedarf des Hauses</h2>
-      <p>Jeder Punkt ist eine Stunde: Gasleistung gegen Temperaturdifferenz innen–außen. Die Linie ist das gelernte Modell.</p>
-      <div class="legend"><span><i style="background:var(--series-1)"></i>Messung (Stunde)</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span></div>
+      <div class="row" style="justify-content:space-between"><h2>Wärmebedarf des Hauses</h2>
+        <div class="row" id="demand-mode"><button class="btn small primary" data-m="days" onclick="setDemandMode('days')">Tage</button><button class="btn small" data-m="hours" onclick="setDemandMode('hours')">Stunden</button></div></div>
+      <p>Gasleistung gegen Temperaturdifferenz innen–außen, die Linie ist das gelernte Modell. „Tage“: Tagesmittel der letzten 12 Monate (Energiesignatur) – daran sieht man, ob das Modell passt. Einzelne Stunden streuen stark, weil der Kessel taktet (mal 15 min an, mal gar nicht). Stunden mit Warmwasserladung zählen nicht.</p>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>Messung</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span><span>x: Innen − Außen (K) · y: Gas (kW)</span></div>
       <div id="chart-demand"></div>
     </div>
     <div class="card">
@@ -204,7 +205,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
     <div class="card">
       <h2>Was Warmhalten kostet</h2>
       <p>Wie schnell der Speicher ohne Ladung und Zapfung auskühlt (K/h): Punkte = gemessen (letzte 14 Tage, je 1 K gemittelt, größer = mehr Messungen), Linie = gelerntes Modell. Liegen die Punkte nahe der Linie, hat HeatPilot das Warmhalten verstanden. Gas-Watt im Tooltip, sobald die Ladekosten gelernt sind.</p>
-      <div class="legend"><span><i style="background:var(--series-1)"></i>Messung</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span></div>
+      <div class="legend"><span><i style="background:var(--series-1)"></i>Messung</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span><span>x: Speicher (°C) · y: Auskühlen (K/h)</span></div>
       <div id="chart-dhw-loss"></div>
     </div>
   </div>
@@ -314,20 +315,29 @@ function barChart(container, rows, unit, label) {
   });
 }
 
-function demandChart(container, hourly, house) {
-  const pts = hourly.filter((h) => h.gas_kwh !== null && h.t_in !== null && h.t_out !== null && h.t_out <= 15)
-    .map((h) => [h.t_in - h.t_out, h.gas_kwh, h.ts]);
-  if (pts.length < 5) return empty(container, "Noch zu wenige Stundenwerte mit Gasverbrauch.");
+let DEMAND_MODE = "days";
+function setDemandMode(m) { DEMAND_MODE = m; if (LAST_HIST) demandChart($("chart-demand"), LAST_HIST, LAST_HOUSE); }
+let LAST_HIST = null, LAST_HOUSE = null;
+// Tagesmittel (Energiesignatur) oder einzelne Stunden: Gasleistung gegen Innen − Außen, Linie = Modell
+function demandChart(container, hist, house) {
+  LAST_HIST = hist; LAST_HOUSE = house;
+  document.querySelectorAll("#demand-mode button").forEach((b) => b.classList.toggle("primary", b.dataset.m === DEMAND_MODE));
+  const days = DEMAND_MODE === "days";
+  const pts = days
+    ? (hist.signature || []).map((d) => [d.dt, d.kw, d.day, d.hours])
+    : hist.hourly.filter((h) => h.gas_kwh !== null && h.t_in !== null && h.t_out !== null && h.t_out <= 15 && (h.dhw_frac ?? 0) <= 0.1)
+        .map((h) => [h.t_in - h.t_out, h.gas_kwh, h.ts, 1]);
+  if (pts.length < 5) return empty(container, days ? "Noch zu wenige Heiztage (mind. 12 Stunden je Tag)." : "Noch zu wenige Stundenwerte mit Gasverbrauch.");
   const xs = pts.map((p) => p[0]);
   const f = frame(container, [0, ...xs], [0, ...pts.map((p) => p[1])], { yMin: 0, label: "Gasleistung gegen Temperaturdifferenz" });
   pts.forEach((p) => {
-    const c = el("circle", { cx: f.sx(p[0]), cy: f.sy(p[1]), r: 3, fill: "var(--series-1)", "fill-opacity": 0.45 }, f.svg);
-    c.addEventListener("mousemove", (e) => showTip(e, `${new Date(p[2] * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}<br>ΔT ${fmt(p[0])} K · <b>${fmt(p[1], 2)} kW</b>`));
+    const c = el("circle", { cx: f.sx(p[0]), cy: f.sy(p[1]), r: days ? 3.5 : 2.5, fill: "var(--series-1)", "fill-opacity": days ? 0.65 : 0.35 }, f.svg);
+    const when = days ? new Date(p[2]).toLocaleDateString("de-DE") + ` (${p[3]} h)` : new Date(p[2] * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
+    c.addEventListener("mousemove", (e) => showTip(e, `${when}<br>ΔT ${fmt(p[0])} K · <b>${fmt(p[1], 2)} kW</b> · Modell ${fmt(house.base_kw + house.heat_loss_w_per_k / 1000 * p[0], 2)} kW`));
     c.addEventListener("mouseleave", hideTip);
   });
   const H = house.heat_loss_w_per_k / 1000, base = house.base_kw, xmax = Math.max(...xs);
   el("line", { x1: f.sx(0), y1: f.sy(base), x2: f.sx(xmax), y2: f.sy(base + H * xmax), stroke: "var(--series-2)", "stroke-width": 2 }, f.svg);
-  el("text", { x: f.W - f.m.r, y: f.m.t + 4, "text-anchor": "end" }, f.svg).textContent = "x: Innen − Außen (K) · y: Gas (kW)";
 }
 
 function timeTicks(x0, x1) {
@@ -445,10 +455,16 @@ async function loadLive() {
 
 // Auskühlen des Speichers: Messpunkte (je 1 K gemittelt) und gelernte Kurve – passt das Modell?
 function dhwChart(container, w) {
-  const pts = w.points || [], curve = Object.entries(w.curve_kh).map(([t, v]) => [Number(t), v]);
-  if (!pts.length && !w.loss_updates) return empty(container, "Noch keine ruhigen Phasen gemessen (ohne Ladung und Zapfung).");
+  const all = (w.points || []).filter((p) => p.kh >= 0);
+  if (!all.length && !w.loss_updates) return empty(container, "Noch keine ruhigen Phasen gemessen (ohne Ladung und Zapfung).");
+  // Skala nach dem Großteil der Messungen – einzelne Ausreißer-Bins quetschen sonst alles zusammen
+  const med = all.length ? [...all.map((p) => p.kh)].sort((a, b) => a - b)[Math.floor(all.length / 2)] : 1;
+  const pts = all.filter((p) => p.kh <= Math.max(4 * med, 0.5)), hidden = all.length - pts.length;
+  const t0 = pts.length ? Math.min(...pts.map((p) => p.t)) - 3 : 35, t1 = pts.length ? Math.max(...pts.map((p) => p.t)) + 3 : 65;
+  const curve = Object.entries(w.curve_kh).map(([t, v]) => [Number(t), v]).filter((c) => c[0] >= t0 && c[0] <= t1);
   const xs = [...pts.map((p) => p.t), ...curve.map((c) => c[0])], ys = [0, ...pts.map((p) => p.kh), ...curve.map((c) => c[1])];
   const f = frame(container, xs, ys, { yMin: 0, label: "Auskühlen des Speichers" });
+  if (hidden) el("text", { x: f.W - f.m.r, y: f.H - f.m.b - 6, "text-anchor": "end" }, f.svg).textContent = `${hidden} Ausreißer-Punkt${hidden > 1 ? "e" : ""} nicht gezeigt`;
   const kpk = w.kwh_per_k_avg, watts = (kh) => kpk ? ` ≈ ${fmt(kh * kpk * 1000, 0)} W Gas` : "";
   const d = curve.map((c, i) => `${i ? "L" : "M"}${f.sx(c[0])},${f.sy(c[1])}`).join("");
   el("path", { d, fill: "none", stroke: "var(--series-2)", "stroke-width": 2 }, f.svg);
@@ -458,7 +474,6 @@ function dhwChart(container, w) {
     c.addEventListener("mousemove", (e) => showTip(e, `${p.t} °C: gemessen <b>${fmt(p.kh, 2)} K/h</b>${watts(p.kh)}<br>Modell ${fmt(w.curve_kh[p.t] ?? null, 2)} K/h · ${p.n} Messungen`));
     c.addEventListener("mouseleave", hideTip);
   });
-  el("text", { x: f.m.l + 6, y: f.m.t + 4, "text-anchor": "start" }, f.svg).textContent = "x: Speicher (°C) · y: Auskühlen (K/h)";
 }
 
 function tile(label, value, unit, note) {
@@ -527,7 +542,7 @@ async function load() {
   barChart($("chart-dhw-profile"), w.profile_hours.map((v, i) => [String(i).padStart(2, "0"), v, ""]), "K", "Zapfprofil je Tagesstunde");
   dhwChart($("chart-dhw-loss"), w);
 
-  demandChart($("chart-demand"), hist.hourly, h);
+  demandChart($("chart-demand"), hist, h);
   const hs = hist.snapshots.filter((x) => x.kind === "house");
   lineChart($("chart-h"), hs.map((x) => [x.ts, x.data.heat_loss_w_per_k]), "W/K", "Wärmeverlust über die Zeit");
   lineChart($("chart-err"), hs.filter((x) => x.data.rmse_kw !== null).map((x) => [x.ts, x.data.rmse_kw]), "kW", "Modellfehler über die Zeit");

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.17.1
+- Behoben: Das Warmwasser-Modell lernte steigende Speichertemperatur ohne Ladesignal (Fühler zieht nach der Ladung nach, Ladesignal fehlt) als „negatives Auskühlen“ – das verbog die Kurve und erzeugte Ausreißer. Jetzt nur echtes Auskühlen, erst 30 min nach Ladeende
+- Grafik „Wärmebedarf des Hauses“: standardmäßig Tagesmittel der letzten 12 Monate (Energiesignatur), umschaltbar auf Stunden; einzelne Stunden streuen stark, weil der Kessel taktet. Stunden mit Warmwasserladung zählen nicht
+- Grafik „Was Warmhalten kostet“: Skala nach dem Großteil der Messungen, einzelne Ausreißer-Punkte quetschen die Linie nicht mehr an den Rand (werden gezählt); Linie nur im gemessenen Bereich
+- Beim Update wird der Lernstand einmal neu berechnet, damit das falsch gelernte Warmwasser-Modell verschwindet
+
 ## 0.17.0
 - **Gelernte Werte exportieren** (Reiter Diagnose): alle Modelle in Klartext mit Gütemaß (Fehler, gekappte/verworfene Punkte, plausibel ja/nein), Lernkurve, alle Stundenwerte und die Messwerte der letzten 7/14/30 Tage – zum Nachrechnen, ob ein Modell etwas falsch verstanden hat; ohne GPS-Koordinaten
 - Warmwasser „Was Warmhalten kostet“: zeigt jetzt die gemessenen Auskühl-Werte (Punkte, letzte 14 Tage) gegen das gelernte Modell (Linie) – sichtbar, ob das Modell passt. Bisher zeigte die Grafik 0 W, solange die Ladekosten noch nicht gelernt waren

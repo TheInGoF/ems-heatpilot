@@ -38,7 +38,8 @@ def make_app(app) -> web.Application:
         if app.eng is None:
             return web.json_response({"starting": True})
         days = int(req.query.get("days", "30"))
-        return web.json_response(app.eng.history(min(max(days, 1), 400)))
+        return web.json_response({**app.eng.history(min(max(days, 1), 400)),
+                                  "signature": app.eng.house_signature(365)})
 
     async def get_settings(_req):
         if app.eng is None:
