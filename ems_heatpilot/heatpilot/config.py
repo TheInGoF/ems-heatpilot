@@ -39,6 +39,9 @@ FIELDS: dict[str, tuple] = {
     "dhw_comfort_temp": ("float", 35, 65),
     "dhw_max_temp": ("float", 40, 70),
     "design_outdoor_temp": ("float", -25, 0),
+    "living_area_m2": ("float", 0, 2000),
+    "boiler_nominal_kw": ("float", 0, 100),
+    "boiler_min_power_pct": ("float", 0, 100),
     "max_flow_temp": ("int", 30, 90),
     "away_temp": ("float", 10, 24),
     "night_temp": ("float", 10, 24),
@@ -163,6 +166,10 @@ class Config:
     dhw_comfort_temp: float = 50.0
     dhw_max_temp: float = 60.0
     design_outdoor_temp: float = -12.0
+    # fürs Zertifikat; 0 = unbekannt bzw. aus EMS-ESP (nompower, burnminpower)
+    living_area_m2: float = 0.0
+    boiler_nominal_kw: float = 0.0
+    boiler_min_power_pct: float = 0.0
     max_flow_temp: int = 75
     away_temp: float = 19.0
     night_temp: float = 18.0

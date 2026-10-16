@@ -115,6 +115,7 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   <div class="tiles" id="tiles"></div>
   <div class="card" id="advice" style="margin-bottom:12px"></div>
   <div class="card" id="guards" style="margin-bottom:12px"></div>
+  <div class="card" id="cert" style="margin-bottom:12px"></div>
 
   <div class="grid2">
     <div class="card">
@@ -343,6 +344,7 @@ async function load() {
   $("guards").innerHTML = `<h2>Leitplanken</h2><p>Gespart wird nur bei gleichem Komfort und gemessen am Gaszähler für das ganze Haus. Feste Untergrenzen: Räume ${fmt(s.limits.away_temp)} °C bei Abwesenheit, ${fmt(s.limits.night_temp)} °C nachts, Warmwasser ${fmt(s.limits.dhw_min_temp)} °C. Unplausible oder zu junge Modelle geben keine Empfehlung.</p>` +
     `<ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary)">${status("Hausmodell", g.house)}${status("Warmwasser", g.dhw)}<li><b>Räume:</b> ${g.rooms_ok} von ${g.rooms_total} plausibel</li>` +
     `<li><b>Komfort-Kontrolle:</b> Heizen ${sv.cold_hours} Stunden zu kalt · Warmwasser ${s.dhw.cold_draws}× zu kalt (Reserve aktuell +${fmt(s.dhw.comfort_margin)} K)</li></ul>`;
+  loadCert();
   const w = s.dhw;
   const kpk = w.kwh_per_k;
   $("dhw-tiles").innerHTML = [
@@ -388,6 +390,17 @@ async function load() {
 }
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null;
+const GRADE_CSS = { good: "var(--good)", mid: "var(--warn)", bad: "#e34948", none: "var(--text-secondary)" };
+async function loadCert() {
+  const c = await (await fetch("api/certificate")).json();
+  if (c.starting) return;
+  const items = c.verdicts.map((v) => `<li style="margin:3px 0"><span class="badge" style="border-color:${GRADE_CSS[v.grade]};color:${GRADE_CSS[v.grade]}">${esc(v.area)}: ${esc(v.label)}</span> ${esc(v.text)}</li>`).join("");
+  $("cert").innerHTML = `<div class="row" style="justify-content:space-between"><h2>Zertifikat über Haus & Heizung</h2>` +
+    `<a class="btn primary" href="api/certificate.pdf" download style="text-decoration:none">PDF herunterladen</a></div>` +
+    `<p>Gemessen statt geschätzt – zum Weitergeben, z. B. an Vermieter oder Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
+    (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:13px">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
+    (c.preliminary.length ? `<p class="muted" style="margin-top:8px">Noch vorläufig: ${esc(c.preliminary.join("; "))}.</p>` : "");
+}
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 function showTab(name) {
@@ -474,6 +487,11 @@ function renderSettings() {
       ${field("Maximale Vorlauftemperatur (°C)", num("f-max_flow_temp", s.max_flow_temp, "1"))}
       ${field("Auslegungs-Außentemperatur (°C)", num("f-design_outdoor_temp", s.design_outdoor_temp, "1"), "Für die Normheizlast, z. B. Hamburg −12 °C")}
     </div>`) +
+    card("Haus & Kessel", `<p>Für das Zertifikat. 0 = unbekannt bzw. Wert von EMS-ESP.</p><div class="form-grid">
+      ${field("Wohnfläche (m²)", num("f-living_area_m2", s.living_area_m2, "1"), "Beheizte Fläche – für Heizlast je m² und Energieklasse")}
+      ${field("Nennleistung Kessel (kW)", num("f-boiler_nominal_kw", s.boiler_nominal_kw, "0.1"), "Typenschild, z. B. 18")}
+      ${field("Kleinste Leistung (%)", num("f-boiler_min_power_pct", s.boiler_min_power_pct, "1"), "Untere Modulationsgrenze, z. B. 30")}
+    </div>`) +
     card("Warmwasser", `<div class="form-grid">
       ${field("Minimum (°C)", num("f-dhw_min_temp", s.dhw_min_temp, "1"), "Darunter nie, z. B. wenn niemand zu Hause ist")}
       ${field("Komfort (°C)", num("f-dhw_comfort_temp", s.dhw_comfort_temp, "1"), "Mindestens zu Beginn einer Nutzung")}
@@ -511,7 +529,7 @@ function collect() {
                    "night_start", "night_end", "vacation_arrival_time"]) out[k] = v("f-" + k);
   for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
                    "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp",
-                   "dhw_comfort_temp", "dhw_max_temp", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
+                   "dhw_comfort_temp", "dhw_max_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
   out.debug_logging = $("f-debug_logging").checked;
   out.rooms = []; out.floor_heating_rooms = [];
   for (const tr of document.querySelectorAll("tr.room")) {

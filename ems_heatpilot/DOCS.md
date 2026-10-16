@@ -54,6 +54,28 @@ Grund, der Selbsttest zeigt ihn als Fehler, und das Add-on versucht es laufend
 weiter. Im Log steht, ob ein Zugangsschlüssel angekommen ist (nur ja/nein und
 Länge, nie der Schlüssel selbst).
 
+## Zertifikat über Haus & Heizung
+
+In der Übersicht gibt es ein **Zertifikat als PDF** zum Herunterladen und
+Weitergeben, z. B. an Vermieter oder Heizungsbauer. Es zeigt, gemessen statt
+geschätzt:
+
+- **Gebäude:** Wärmeverlust, Heizlast am kältesten Tag, Trägheit; mit Wohnfläche
+  auch Heizlast je m² und nach 12 Monaten eine Energieklasse (A+ bis H, Skala wie
+  im Energieausweis)
+- **Heizkessel:** Nennleistung und kleinste Leistung gegen die Heizlast, Anteil der
+  Heizstunden unter der kleinsten Leistung (dort muss der Kessel takten),
+  Heizstarts pro Tag und Laufzeit je Start
+- **Warmwasser & Verbrauch:** Warmhalteverlust des Speichers, Gasverbrauch und -kosten
+- **Urteil** in Klartext und ein Stempel: „GEMESSEN“ oder „VORLÄUFIG“ (mit Grund),
+  solange das Hausmodell unsicher ist, weniger als 500 Heizstunden oder noch kein
+  Frost gemessen wurden
+
+Wohnfläche, Nennleistung und kleinste Leistung des Kessels stehen unter
+**Einstellungen → Haus & Kessel** (0 = unbekannt bzw. Wert von EMS-ESP). Das
+Zertifikat enthält keine Namen, Adressen oder Standortdaten. Es ist kein
+Energieausweis nach GEG, die Werte sind nicht witterungsbereinigt.
+
 ## Empfehlungen für Tado
 
 Tado lernt selbst und entscheidet, *wann* ein Raum Wärme zieht. Fängt Tado zu
