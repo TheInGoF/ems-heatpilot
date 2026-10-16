@@ -45,7 +45,28 @@ Reiter **Diagnose** auf der HeatPilot-Seite:
   Personen noch Zuhause – nur Entfernungen) und ohne Zugangsdaten. Diese Datei
   kann zur Fehlersuche weitergegeben werden.
 
-## Was das Add-on in Version 0.10 macht
+## Empfehlungen für Tado
+
+Tado lernt selbst und entscheidet, *wann* ein Raum Wärme zieht. Fängt Tado zu
+spät an, kann HeatPilot das über den Kessel nicht retten – ein höherer Vorlauf
+hilft nur begrenzt. Deshalb misst HeatPilot je Raum und schlägt im Feld
+**„Empfehlungen für Tado“** (und `sensor.heatpilot_tado_empfehlungen`) konkrete
+Änderungen vor. Eingestellt wird in der Tado-App – HeatPilot ändert nichts selbst.
+
+| Was gemessen wird | Mögliche Empfehlung |
+|---|---|
+| Zeitplanblock: wie lange nach dem Soll-Anstieg ist der Raum warm? Öffnet das Ventil schon vorher (Frühstart je Raum erkannt)? | „Frühstart für den Raum einschalten“ · „Frühstart aktiv, reicht nicht: Block X min vorziehen“ · „unnötig früh warm: Block später / Frühstart aus“ |
+| Geofencing bei jeder echten Heimkehr: wie lange vorher hebt Tado das Soll an, wie warm ist der Raum bei Ankunft? | „bei Ankunft zu kalt: Vorheiz-Einstellung einen Schritt Richtung Komfort“ · „lange vor Ankunft warm: Richtung Eco“ |
+| Soll bei Abwesenheit | „Abwesenheitstemperatur senken“ – nur, wenn der Raum laut Modell danach in ≤ 2 h wieder warm ist |
+| Raum über Stunden unter Soll, Ventil voll offen | „Soll senken oder Heizkörper/Ventil prüfen“ (mit Hinweis, ob der Vorlauf am Limit war) |
+
+Leitplanken: erst ab 4 Beobachtungen in 3 Wochen, Urlaub zählt nicht, Schritte
+höchstens 30 min bzw. ein Reglerschritt, keine widersprüchlichen Ratschläge
+(z. B. nicht „Abwesenheit senken“, wenn der Raum bei Ankunft ohnehin zu kalt ist).
+Jede Empfehlung zeigt ihren Beleg und seit wann sie besteht; was danach nicht mehr
+auftritt, erscheint 14 Tage lang als „behoben“.
+
+## Was das Add-on in Version 0.11 macht
 
 **Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.

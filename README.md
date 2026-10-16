@@ -15,7 +15,7 @@ HeatPilot ist ein Home-Assistant-Add-on für Kessel mit **EMS-Bus** (Buderus,
 Bosch, Junkers, Sieger u. a.) über **[EMS-ESP](https://github.com/emsesp/EMS-ESP32)**,
 mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
-## Was es heute kann (0.10, Beobachtungsmodus)
+## Was es heute kann (0.11, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume lernen:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil
@@ -24,6 +24,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Schwachstellen messen:** Brennerstarts und Laufzeit je Start, Wartezeit durch Taktsperre,
   Startverzögerung der Automationen, Brenner-Nachlauf ohne Wärmebedarf
 - **Ersparnis ehrlich schätzen:** nur bei gleichem Komfort, mit realistischem Wiederaufheizen
+- **Empfehlungen für Tado:** wo Tado zu spät oder zu früh heizt – Zeitplan, Frühstart, Geofencing je Raum
 - **Urlaubsmodus:** Gewohnheiten pausieren, nichts wird umgelernt
 - **Einrichtung komplett in der Oberfläche** – keine YAML-Optionen, Vorschläge vorausgefüllt
 - Oberfläche in der HA-Seitenleiste und Sensoren `sensor.heatpilot_*` für eigene Dashboards
@@ -43,7 +44,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.10** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.11** |
 | 2 | Kesselseite: Heizfreigabe ereignisgesteuert, Sammelbetrieb bei Abwesenheit statt vieler Kurzstarts, Nachlauf vermeiden | geplant |
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |
