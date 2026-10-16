@@ -10,8 +10,8 @@ wie *dieses* Haus und *diese* Heizung sich verhalten, und zeigt (und später
 nutzt), wo Energie verloren geht – ohne Komfort zu opfern und ohne Cloud.
 
 HeatPilot ist ein Home-Assistant-Add-on für Kessel mit **EMS-Bus** (Buderus,
-Bosch, Junkers, Sieger u. a.) über **EMS-ESP**, mit Raumregelung über **Tado**
-und Anwesenheit über die Home-Assistant-App.
+Bosch, Junkers, Sieger u. a.) über **[EMS-ESP](https://github.com/emsesp/EMS-ESP32)**,
+mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
 ## Was es heute kann (0.8, Beobachtungsmodus)
 
@@ -50,7 +50,8 @@ und Anwesenheit über die Home-Assistant-App.
 ## Voraussetzungen
 
 - Home Assistant OS oder Supervised (für Add-ons), z. B. auf einem Raspberry Pi 5
-- EMS-ESP am Kessel (empfohlen ≥ 3.7), in HA eingebunden; optional direkter Zugriff per IP
+- [EMS-ESP](https://github.com/emsesp/EMS-ESP32) am Kessel (empfohlen ≥ 3.7, [Doku](https://emsesp.org)),
+  in HA eingebunden; optional direkter Zugriff per IP
 - Tado-Integration in HA
 - Gaszähler in HA (z. B. Reed-Kontakt am EMS-ESP-Zähleingang), sonst Schätzung aus EMS-ESP
 - Außentemperatur (Fühler oder Wetter-Integration)
@@ -83,3 +84,9 @@ siehe [LICENSE](LICENSE). Da die LGPL auf der GNU GPL v3 aufbaut, liegt deren
 Text als [COPYING](COPYING) bei.
 
 `SPDX-License-Identifier: LGPL-3.0-or-later`
+
+---
+
+[![Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/lordvonbaum)
+
+> Spenden sind freiwillig und unterstützen ausschließlich das Projekt. Sie haben keinen Einfluss auf die Priorisierung von Fehlern, Funktionswünschen oder Support.
