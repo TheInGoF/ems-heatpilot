@@ -15,6 +15,11 @@ HeatPilot ist ein Home-Assistant-Add-on für Kessel mit **EMS-Bus** (Buderus,
 Bosch, Junkers, Sieger u. a.) über **[EMS-ESP](https://github.com/emsesp/EMS-ESP32)**,
 mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
+> **Beta (0.x): Raumregelung nur mit Tado.** Solange HeatPilot in Version 0.x ist,
+> wird ausschließlich Tado unterstützt. Später sollen auch offene, direkt mit
+> Home Assistant verbundene Thermostate (z. B. Zigbee, Z-Wave, Matter, Homematic)
+> dazukommen.
+
 ## Was es heute kann (0.11, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
@@ -49,13 +54,14 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |
 | 5 | Wirkungsgrad je Vorlauftemperatur aus dem Gasverbrauch lernen | geplant |
+| 6 | Offene, direkt mit Home Assistant verbundene Thermostate statt nur Tado | geplant |
 
 ## Voraussetzungen
 
 - Home Assistant OS oder Supervised (für Add-ons), z. B. auf einem Raspberry Pi 5
 - [EMS-ESP](https://github.com/emsesp/EMS-ESP32) am Kessel (empfohlen ≥ 3.7, [Doku](https://emsesp.org)),
   in HA eingebunden; optional direkter Zugriff per IP
-- Tado-Integration in HA
+- Tado-Integration in HA (in der Beta 0.x die einzige unterstützte Raumregelung)
 - Gaszähler in HA (z. B. Reed-Kontakt am EMS-ESP-Zähleingang), sonst Schätzung aus EMS-ESP
 - Außentemperatur (Fühler oder Wetter-Integration)
 
