@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.16.2
+- Tado-Räume: Heizleistung/Ventil wird auch bei deutschen (oder anderen) Entitätsnamen erkannt, z. B. `sensor.kuche_heizleistung` – über den Übersetzungsschlüssel der Tado-Integration, den Namen oder als einziger %-Sensor am Thermostat
+- Werden die Sensoren eines Raums geändert oder ein Raum neu gewählt, liest HeatPilot die Historie automatisch neu ein und lernt neu – sonst fehlten diesem Raum die Werte der Vergangenheit
+
 ## 0.16.1
 - Personen: Fahrzeuge (oder Geräte), die als Person angelegt sind, werden erkannt – Gerät, aber kein Home-Assistant-Benutzer – und nicht automatisch gewählt; Hinweis in der Tabelle
 - Räume: Spalte „Quelle“ (Integration) mit Hinweis bei Nicht-Tado-Einträgen, damit sich Klimaanlagen von Fahrzeugen oder Heizkreise leicht abwählen lassen

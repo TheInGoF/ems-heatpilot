@@ -155,6 +155,21 @@ def _find_boiler(entity_ids: list[str], keys: tuple[str, ...], device: str = "bo
     return None
 
 
+# Heizleistung/Ventilöffnung eines Tado-Raums – Entitätsnamen hängen von der Sprache ab,
+# in der die Integration eingerichtet wurde (z. B. sensor.kuche_heizleistung)
+HEATING_WORDS = ("heating", "heizleistung", "heizung", "heizen", "ventil", "valve", "verwarming", "chauffage")
+
+
+def _is_heating_sensor(entity_id: str, attrs: dict, reg_entry: dict) -> bool:
+    # sprachunabhängig: Übersetzungsschlüssel bzw. eindeutige ID der Tado-Integration
+    if reg_entry.get("translation_key") == "heating" or str(reg_entry.get("unique_id", "")).endswith(" heating"):
+        return True
+    if attrs.get("unit_of_measurement") != "%":
+        return entity_id.endswith("_heating")
+    name = (entity_id + " " + str(attrs.get("friendly_name", ""))).lower()
+    return any(w in name for w in HEATING_WORDS) and "feucht" not in name and "humid" not in name
+
+
 def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[dict], reg: dict) -> None:
     """Tado-Räume: climate-Entitäten der Tado-Integration, Zusatzsensoren über das Gerät."""
     tado_climates = [
@@ -176,14 +191,19 @@ def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[di
         ]
         name = by_id[climate]["attributes"].get("friendly_name", climate)
         room = Room(name=name, climate=climate)
+        percent = []
         for s in siblings:
             attrs = by_id.get(s, {}).get("attributes", {})
-            if s.endswith("_heating") or (attrs.get("unit_of_measurement") == "%" and "heating" in s):
+            if _is_heating_sensor(s, attrs, reg.get(s, {})):
                 room.heating_power = s
             elif attrs.get("device_class") == "humidity":
                 room.humidity = s
             elif attrs.get("device_class") == "temperature":
                 room.temp_sensor = s
+            elif attrs.get("unit_of_measurement") == "%" and attrs.get("device_class") in (None, "power_factor"):
+                percent.append(s)
+        if room.heating_power is None and len(percent) == 1:
+            room.heating_power = percent[0]  # einziger %-Sensor am Thermostat (außer Feuchte) = Heizleistung
         d.rooms.append(room)
 
 
