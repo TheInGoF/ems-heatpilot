@@ -867,6 +867,27 @@ class Engine:
             "discovered": self.found.as_dict(private=False),
         }
 
+    def dhw_points(self, days: int = 14, now_ts: int | None = None) -> list[dict]:
+        """Gemessenes Auskühlen des Speichers (ohne Ladung, ohne Zapfung), je 1 K gemittelt.
+
+        Dieselbe Auswahl wie beim Lernen – so lässt sich prüfen, ob die gelernte Kurve passt.
+        """
+        now_ts = now_ts or int(time.time())
+        rows = self.store.query(
+            "SELECT ts, dhw_temp, dhw FROM samples WHERE ts >= ? AND dhw_temp IS NOT NULL ORDER BY ts",
+            (now_ts - days * 86400,))
+        bins: dict[int, list[float]] = {}
+        for a, b in zip(rows, rows[1:]):
+            dt_h = (b["ts"] - a["ts"]) / 3600
+            if not 0 < dt_h <= 0.5 or a["dhw"] or b["dhw"]:
+                continue
+            d_t = b["dhw_temp"] - a["dhw_temp"]
+            if d_t < -self.dhw.cooling_kh(a["dhw_temp"]) * dt_h - 1.0 or abs(d_t) >= 2.0:
+                continue  # Zapfung bzw. Sprung – lernt das Modell auch nicht
+            bins.setdefault(round(a["dhw_temp"]), []).append(-d_t / dt_h)
+        return [{"t": t, "kh": round(sum(v) / len(v), 3), "n": len(v)}
+                for t, v in sorted(bins.items()) if len(v) >= 6]
+
     def dhw_summary(self) -> dict:
         t_now = num(self._boiler("dhw_temp"))
         rows = self.store.query(
@@ -893,6 +914,10 @@ class Engine:
             "saved_pct": round(100 * (loss - loss_s) / charge, 1) if charge > 1 else None,
             "saved_eur": round((loss - loss_s) * self.cfg.gas_price_eur_per_kwh, 2),
             "cold_draws": int(tot.get("dhw_cold_draws", 0)),
+            "points": self.dhw_points(),
+            "curve_kh": {t: round(self.dhw.cooling_kh(t), 3) for t in range(30, 71)},
+            "model_ok": guards.check_dhw(self.dhw)["ok"],
+            "kwh_per_k_avg": None if self.dhw.kwh_per_kelvin() is None else round(self.dhw.kwh_per_kelvin(), 3),
         }
 
     def dhw_for_arrival(self, arrival: datetime, now: datetime) -> dict | None:
