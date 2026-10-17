@@ -43,6 +43,7 @@ GAS_SLACK_KWH = 1.0
 GAS_MISSED_MIN_KWH = 2.0    # ab so viel erwartetem Gas fällt eine fehlende Zählung auf
 GAS_MISSED_SHARE = 0.2
 DEFAULT_NOMINAL_KW = 30.0   # Nennleistung unbekannt: großzügig annehmen
+GAS_SERIES_MIN_SHARE = 0.6  # ohne Brennerdaten: erst ab 60 % der Nennleistung in einer Stunde ein Sprung
 
 
 def in_range(key: str, value: float | None) -> float | None:
@@ -92,6 +93,8 @@ def gas_hour(gas_kwh: float | None, rows: list, nominal_kw: float | None,
     """
     if gas_kwh is None:
         return "none", None
+    if gas_kwh < 0:
+        return "negative", None  # Zählerstand gesunken (Tausch, Korrektur) – nicht lernen, nicht zählen
     nom = nominal_kw or DEFAULT_NOMINAL_KW
     burner = [r for r in rows if r["burner_on"] is not None]
     if len(burner) >= 6:
@@ -112,7 +115,8 @@ def gas_hour(gas_kwh: float | None, rows: list, nominal_kw: float | None,
     ref = [v for v in (recent or []) if v is not None]
     if len(ref) >= 48:
         p95 = sorted(ref)[int(0.95 * (len(ref) - 1))]
-        if gas_kwh > max(3 * p95, p95 + 6.0, 4.0):
+        # Untergrenze nach Nennleistung: Legionellen- und Aufheizstunden nach ruhigen Tagen sind echt
+        if gas_kwh > max(3 * p95, p95 + 6.0, 4.0, GAS_SERIES_MIN_SHARE * nom):
             return "spike", None
     return "ok", gas_kwh
 

@@ -67,7 +67,8 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
     v: dict[str, dict] = {k: defaultdict(list) for k in METRICS}
 
     hourly = {r["ts"]: r for r in store.query(
-        "SELECT ts, t_out, t_in, gas_kwh, dhw_frac, home_frac, vacation_frac FROM hourly WHERE ts >= ? ORDER BY ts",
+        "SELECT ts, t_out, t_in, gas_kwh, dhw_frac, dhw_energy_frac, home_frac, vacation_frac FROM hourly "
+        "WHERE ts >= ? ORDER BY ts",
         (since,))}
     vacation = {ts for ts, r in hourly.items() if (r["vacation_frac"] or 0) > 0.5}
     for ts, r in hourly.items():
@@ -79,8 +80,13 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         gas = r["gas_kwh"]
         if gas is None:
             continue
-        frac = min(max(r["dhw_frac"] or 0.0, 0.0), 1.0)
         v["gas"][c].append(gas)
+        # Warmwasser-Anteil nach Energie (Brennerleistung), ältere Stunden nach Zeit; ohne Angabe
+        # (Langzeitstatistik) lässt sich Heizen/Warmwasser nicht trennen
+        frac = r["dhw_energy_frac"] if r["dhw_energy_frac"] is not None else r["dhw_frac"]
+        if frac is None:
+            continue
+        frac = min(max(frac, 0.0), 1.0)
         v["heat"][c].append(gas * (1 - frac))
         v["dhw"][c].append(gas * frac)
         if r["t_in"] is None or r["t_out"] is None:
@@ -88,9 +94,11 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         dt = r["t_in"] - r["t_out"]
         if dt >= 3 and r["t_out"] <= 15:
             v["gas_k"][c].append(gas * (1 - frac) * 1000 / dt)
-        before = hourly.get(ts - 3600)
-        if house is not None and r["t_out"] <= house.max_learn_outdoor and before and before["t_in"] is not None:
-            expected = (house.h_kw_per_k * dt + house.c_kwh_per_k * (r["t_in"] - before["t_in"]) + house.base_kw)
+        before, after = hourly.get(ts - 3600), hourly.get(ts + 3600)
+        if (house is not None and r["t_out"] <= house.max_learn_outdoor and before and after
+                and before["t_in"] is not None and after["t_in"] is not None):
+            d_in = (after["t_in"] - before["t_in"]) / 2  # wie beim Lernen: mittige Ableitung
+            expected = house.h_kw_per_k * dt + house.c_kwh_per_k * d_in + house.offset_kw
             v["model"][c].append(gas * (1 - frac) - max(expected, 0.0))
 
     starts: dict[int, int] = defaultdict(int)

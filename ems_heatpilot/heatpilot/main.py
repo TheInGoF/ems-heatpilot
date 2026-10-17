@@ -25,7 +25,8 @@ from .web import make_app
 
 log = logging.getLogger("heatpilot")
 
-DATA_VERSION = 6  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladeerkennung · 6 (0.20): Sonne
+DATA_VERSION = 7  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladeerkennung · 6 (0.20): Sonne
+#                   7 (0.26): Hausmodell mit Fremdwärme, Auskühlzeit, mittiger Ableitung, Heizperiode
 
 
 class App:

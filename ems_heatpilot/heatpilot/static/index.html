@@ -473,6 +473,8 @@ let LAST_HIST = null, LAST_HOUSE = null;
 // Tagesmittel (Energiesignatur) oder einzelne Stunden: Gasleistung gegen Innen − Außen, Linie = Modell
 function demandChart(container, hist, house) {
   LAST_HIST = hist; LAST_HOUSE = house;
+  const offset = house.offset_kw ?? house.base_kw;
+  const model = (dt) => Math.max(offset + house.heat_loss_w_per_k / 1000 * dt, 0);
   document.querySelectorAll("#demand-mode button").forEach((b) => b.classList.toggle("primary", b.dataset.m === DEMAND_MODE));
   const days = DEMAND_MODE === "days";
   const pts = days
@@ -485,11 +487,13 @@ function demandChart(container, hist, house) {
   pts.forEach((p) => {
     const c = el("circle", { cx: f.sx(p[0]), cy: f.sy(p[1]), r: days ? 3.5 : 2.5, fill: "var(--series-1)", "fill-opacity": days ? 0.65 : 0.35 }, f.svg);
     const when = days ? new Date(p[2]).toLocaleDateString("de-DE") + ` (${p[3]} h)` : new Date(p[2] * 1000).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" });
-    c.addEventListener("mousemove", (e) => showTip(e, `${when}<br>ΔT ${fmt(p[0])} K · <b>${fmt(p[1], 2)} kW</b> · Modell ${fmt(house.base_kw + house.heat_loss_w_per_k / 1000 * p[0], 2)} kW`));
+    c.addEventListener("mousemove", (e) => showTip(e, `${when}<br>ΔT ${fmt(p[0])} K · <b>${fmt(p[1], 2)} kW</b> · Modell ${fmt(model(p[0]), 2)} kW`));
     c.addEventListener("mouseleave", hideTip);
   });
-  const H = house.heat_loss_w_per_k / 1000, base = house.base_kw, xmax = Math.max(...xs);
-  el("line", { x1: f.sx(0), y1: f.sy(base), x2: f.sx(xmax), y2: f.sy(base + H * xmax), stroke: "var(--series-2)", "stroke-width": 2 }, f.svg);
+  // Modell: Wärmeverlust minus Fremdwärme – unterhalb der Heizgrenze braucht das Haus kein Gas
+  const xmax = Math.max(...xs), x0 = Math.max(0, Math.min(house.heating_limit_k ?? 0, xmax));
+  el("polyline", { points: `${f.sx(0)},${f.sy(model(0))} ${f.sx(x0)},${f.sy(model(x0))} ${f.sx(xmax)},${f.sy(model(xmax))}`,
+    fill: "none", stroke: "var(--series-2)", "stroke-width": 2 }, f.svg);
 }
 
 function timeTicks(x0, x1) {
@@ -880,7 +884,8 @@ async function load() {
       tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
       tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
       tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
-      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", "Zeitkonstante des Auskühlens")] : []),
+      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", h.tau_source === "abkuehlung" ? `gemessen in ${h.cool_updates} gasfreien Nachtstunden` : "vorläufig aus der Gasbilanz – misst noch gasfreie Nächte"),
+      h.free_heat_kw > 0.05 ? tile("Fremdwärme", fmt(h.free_heat_kw, 1), "kW", `Sonne, Personen, Geräte – bei 20 °C innen heizt das Haus erst unter ${fmt(20 - h.heating_limit_k, 0)} °C außen`) : ""] : []),
     tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
     tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
     tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),

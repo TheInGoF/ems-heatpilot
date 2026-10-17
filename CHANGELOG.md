@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.26.0
+Korrekturen am Hausmodell aus der Prüfung eines echten Exports (jeder Punkt gegengeprüft):
+- **Fremdwärme statt gekappter Grundlast:** Sonne, Personen und Geräte decken einen Teil der Verluste – der gelernte Achsabschnitt ist negativ und wurde bisher auf 0 gesetzt. Heizlast, „Heizlast jetzt“, Zertifikat, Wochenansicht „Abweichung vom Hausmodell“ und die Linie im Wärmebedarf-Grafen lagen dadurch rund 0,8 kW zu hoch. Neue Kachel „Fremdwärme“ mit Heizgrenze
+- **Trägheit gemessen:** ein eigenes Modell lernt in gasfreien Nächten, wie schnell das Haus auskühlt. Vorher kam die Trägheit aus der Gasbilanz (Speicher/Wärmeverlust) und war 3- bis 4-mal zu kurz – die Ersparnis-Schätzung hat damit das Auskühlen bei Abwesenheit überschätzt
+- **Warmwasser raus aus dem Hausmodell:** jede Stunde mit Ladung bleibt draußen (vorher erst ab 30 % der Stunde – eine typische 15-min-Ladung mit voller Leistung zählte als Heizen)
+- **Wochenansicht:** Gas fürs Warmwasser nach Brennerleistung statt nach Zeitanteil aufgeteilt (war rund 3× zu niedrig)
+- **Mittige Ableitung:** die Temperaturänderung passt jetzt zeitlich zum Gas der Stunde (vorher eine halbe Stunde versetzt)
+- **Heizperiode** über das 24-h-Mittel außen: warme Sommertage mit kühlen Nächten werden nicht mehr gelernt
+- Langzeitstatistik: Legionellen- und Aufheizstunden nach ruhigen Tagen galten als Zählersprung, gesunkene Zählerstände wurden mitgezählt
+- Beim Update wird der Lernstand einmal neu berechnet. Mit den geprüften Daten: Modellfehler 0,83 → 0,55 kW
+
 ## 0.25.4
 - **Empfehlungen:** „unnötig früh warm“ kam auch, wenn der Raum einfach noch warm war und Tado das Ventil gar nicht geöffnet hatte (der Zeitplanblock ist nur ein Soll, es floss keine Wärme). Jetzt zählt das nur noch, wenn Tado vor dem Block mit offenem Ventil vorgeheizt hat. Räume, die ohnehin warm sind, bekommen weder Spar- noch Komfort-Hinweise zum Zeitplan. Die alten Hinweise werden zurückgezogen, nicht als „behoben“ gemeldet
 - Zertifikat: die Fußzeile lag auf dem Rahmen – sie steht jetzt innerhalb; reicht der Platz nicht, wird der Inhalt enger gesetzt

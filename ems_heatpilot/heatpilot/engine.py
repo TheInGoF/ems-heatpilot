@@ -26,6 +26,9 @@ log = logging.getLogger(__name__)
 DHW_RISE_KH = 6.0  # so schnell steigt der Speicher nur beim Laden (Auskühlen: < 2 K/h)
 
 ENABLE_DELAY_MAX_MIN = 15
+HEAT_SEASON_24H = 15.0          # darüber (24-h-Mittel außen) lernt das Hausmodell nicht
+GAS_FREE_KWH = 0.05             # Stunde gilt als gasfrei (Auskühlen lernen)
+NIGHT_HOURS = (22, 23, 0, 1, 2, 3, 4, 5)  # ohne Sonne
 ON_STATES = {"on", "true", "1", "heat", "heating",
              "an", "ein", "ja", "wahr", "aktiv"}  # EMS-ESP mit deutscher Sprache: „an“/„aus“
 STALE_S = 12 * 3600
@@ -594,6 +597,16 @@ class Engine:
         home = [r["home_count"] for r in rows if r["home_count"] is not None]
         vac = [r["vacation"] for r in rows if r["vacation"] is not None]
         t_in = self._mean_room_temp(hour, hour + 3600)
+        # Anteil des Gases fürs Warmwasser: nach Brennerleistung gewichtet (eine 15-min-Ladung mit
+        # voller Leistung ist mehr als ein Viertel der Stunde, wenn der Kessel sonst taktet)
+        pw_all = pw_dhw = 0.0
+        for r in rows:
+            if r["burner_on"]:
+                pw = r["burner_pow"] if r["burner_pow"] is not None else 100.0
+                pw_all += pw
+                if r["dhw"]:
+                    pw_dhw += pw
+        dhw_energy = (pw_dhw / pw_all) if pw_all > 0 and dhw else (0.0 if dhw else None)
         row = (
             hour,
             sum(t_out) / len(t_out) if t_out else None,
@@ -603,6 +616,7 @@ class Engine:
             sum(1 for h in home if h > 0) / len(home) if home else None,
             sum(vac) / len(vac) if vac else None,
             spike,
+            dhw_energy,
         )
         self.store.add_hourly([row])
         self.store.commit()
@@ -638,14 +652,31 @@ class Engine:
         return r[0]["t"] if r and r[0]["t"] is not None else None
 
     def learn_house_hour(self, hour: int) -> None:
-        rows = self.store.query("SELECT * FROM hourly WHERE ts IN (?, ?)", (hour - 3600, hour))
+        """Lernt die Stunde *vor* ``hour`` – mit beiden Nachbarn für eine mittige Ableitung.
+
+        Gas der Stunde h passt zur Temperaturänderung über h (Mitte h−1 bis Mitte h+1),
+        nicht zur Differenz der Stundenmittel h und h−1 (die läge eine halbe Stunde früher).
+        """
+        h = hour - 3600
+        rows = self.store.query("SELECT * FROM hourly WHERE ts IN (?, ?, ?)", (h - 3600, h, hour))
         by = {r["ts"]: r for r in rows}
-        cur, prev = by.get(hour), by.get(hour - 3600)
+        prev, cur, nxt = by.get(h - 3600), by.get(h), by.get(hour)
         if not cur or cur["gas_kwh"] is None or cur["t_in"] is None or cur["t_out"] is None:
             return
-        if cur["dhw_frac"] is not None and cur["dhw_frac"] > 0.3:
-            return  # Warmwasserladung verfälscht die Heizbilanz
-        d_in = cur["t_in"] - prev["t_in"] if prev and prev["t_in"] is not None else 0.0
+        if not prev or not nxt or prev["t_in"] is None or nxt["t_in"] is None:
+            return
+        d_in = (nxt["t_in"] - prev["t_in"]) / 2
+        # Heizperiode: das gleitende 24-h-Mittel draußen, nicht die einzelne kühle Sommernacht
+        r24 = self.store.query("SELECT AVG(t_out) AS t, COUNT(*) AS n FROM hourly "
+                               "WHERE ts > ? AND ts <= ? AND t_out IS NOT NULL", (h - 86400, h))
+        if not r24 or r24[0]["n"] < 12 or r24[0]["t"] > HEAT_SEASON_24H:
+            return
+        dhw = cur["dhw_frac"]
+        gas_free = all(r["gas_kwh"] is not None and r["gas_kwh"] <= GAS_FREE_KWH for r in (prev, cur, nxt))
+        if gas_free and not dhw and local(h).hour in NIGHT_HOURS:
+            self.house.learn_cooling(cur["t_in"], cur["t_out"], d_in)
+        if dhw is not None and dhw > 0:
+            return  # Warmwasserladung verfälscht die Heizbilanz (auch eine kurze verschiebt kWh)
         self.house.learn(cur["gas_kwh"], cur["t_in"], cur["t_out"], d_in)
 
     def take_snapshot(self, ts: int) -> None:
