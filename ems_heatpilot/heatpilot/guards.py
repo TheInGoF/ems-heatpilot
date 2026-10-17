@@ -23,9 +23,10 @@ from __future__ import annotations
 LIMITS = {
     "house_h_w_per_k": (20.0, 1500.0),       # Wärmeverlust Einfamilienhaus
     "house_tau_h": (2.0, 300.0),             # Trägheit
-    # Grundlast (Warmwasser-Mittel, Bereitschaft): erklärt das Modell den Verbrauch
-    # überwiegend damit, hat es das Haus nicht verstanden
-    "house_base_kw": (0.0, 1.0),
+    # Achsabschnitt der Gasbilanz: negativ = Fremdwärme (Sonne, Personen, Geräte), positiv =
+    # Grundlast (Warmwasser-Mittel, Bereitschaft). Erklärt das Modell den Verbrauch überwiegend
+    # damit, hat es das Haus nicht verstanden
+    "house_offset_kw": (-2.0, 1.0),
     "house_min_updates": 72,                 # mind. 3 Tage Heizbetrieb gelernt
     "room_tau_h": (2.0, 300.0),
     "room_heat_gain": (1e-4, 1.0),
@@ -55,7 +56,7 @@ def check_house(house) -> dict:
         reasons.append(f"erst {house.rls.updates} Stunden gelernt")
     _within("house_h_w_per_k", house.h_kw_per_k * 1000, reasons, "Wärmeverlust W/K")
     _within("house_tau_h", house.tau_h, reasons, "Trägheit h")
-    _within("house_base_kw", house.base_kw, reasons, "Grundlast kW")
+    _within("house_offset_kw", house.offset_kw, reasons, "Grundlast/Fremdwärme kW")
     return {"ok": not reasons, "reasons": reasons}
 
 

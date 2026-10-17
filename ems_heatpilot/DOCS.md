@@ -286,8 +286,11 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
 3. **Lernen (maschinelles Lernen, online):** Die Modelle passen sich mit
    jeder Messung an, ältere Daten verlieren langsam an Gewicht. So folgt das
    Modell Jahreszeiten und Änderungen am Haus.
-   - *Hausmodell* (stündlich): Wärmeverlust in W/K, Wärmespeicher, Trägheit,
-     Heizlast jetzt und bei Auslegungstemperatur.
+   - *Hausmodell* (stündlich): Wärmeverlust in W/K, Wärmespeicher, **Fremdwärme**
+     (Sonne, Personen, Geräte – darunter liegt die Heizgrenze), Heizlast jetzt und bei
+     Auslegungstemperatur. Gelernt wird nur in der Heizperiode (24-h-Mittel außen bis
+     15 °C) und nur aus Stunden ohne Warmwasserladung. Die **Trägheit** misst ein eigenes
+     Modell in gasfreien Nächten (wie schnell das Haus ohne Heizung auskühlt).
    - *Raummodell* (je Tado-Raum, halbstündlich): wie schnell der Raum bei
      welcher Vorlauftemperatur warm wird und wie schnell er auskühlt.
    - *Anwesenheit* (je Person): Wochenraster der Gewohnheiten und

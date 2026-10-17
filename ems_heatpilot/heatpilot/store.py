@@ -53,7 +53,9 @@ SAMPLE_COLS = (
     "dhw_starts", "dhw_special", "syspress",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
-HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh")
+HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",
+               # seit 0.26: Anteil des Gases fürs Warmwasser (nach Brennerleistung, nicht nach Zeit)
+               "dhw_energy_frac")
 
 
 class Store:

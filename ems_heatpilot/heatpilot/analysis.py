@@ -89,6 +89,7 @@ def estimate_savings(
     h = house.h_kw_per_k
     c = house.c_kwh_per_k
     tau = house.tau_h or 30.0
+    excess = house.cool_excess_k  # ohne Heizung bleibt das Haus so viel wärmer als außen (Fremdwärme)
     rows = []
     for row in hourly:
         when = datetime.fromtimestamp(row["ts"]).astimezone()
@@ -189,7 +190,8 @@ def estimate_savings(
                     room_cold[r] += 1
         room_hours += checked
         if t_sim > target:
-            cooled = t_out + (t_sim - t_out) * math.exp(-1.0 / tau)
+            t_eq = t_out + excess
+            cooled = t_eq + (t_sim - t_eq) * math.exp(-1.0 / tau)
             t_sim = max(cooled, target)
         elif t_sim < target:
             # während Warmwasserladung bekommt der Heizkreis nichts (3-Wege-Ventil)

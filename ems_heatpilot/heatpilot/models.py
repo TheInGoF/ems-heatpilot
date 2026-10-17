@@ -178,10 +178,26 @@ class RoomModel:
         )
 
 
+COOL_MIN_UPDATES = 30   # so viele gasfreie Nachtstunden, bevor die gemessene Auskühlzeit gilt
+
+
 @dataclass
 class HouseModel:
+    """Gasbilanz des Hauses: Gas = H·(innen − außen) + C·dT_innen/dt + Achsabschnitt.
+
+    Der Achsabschnitt darf negativ sein: Fremdwärme (Sonne, Personen, Geräte) deckt einen
+    Teil der Verluste, unterhalb der Heizgrenze braucht das Haus kein Gas. Positiv wäre er
+    eine Grundlast. Die Trägheit kommt aus einem eigenen Auskühl-Modell (gasfreie Nächte):
+    C/H aus der Bilanz beschreibt den Speicher der Heizkörper und Raumluft, nicht wie
+    langsam die Wände auskühlen.
+    """
+
     rls: RLS = field(
         default_factory=lambda: RLS(n=3, lam=0.999, delta=10.0, theta=[0.2, 2.0, 0.3], min_sigma=0.2)
+    )
+    # Auskühlen ohne Heizung: dT/h = −k·(innen − außen) + g  →  τ = 1/k, Fremdwärme-Übertemperatur g/k
+    cool: RLS = field(
+        default_factory=lambda: RLS(n=2, lam=0.999, delta=1.0, theta=[0.03, 0.0], min_sigma=0.03)
     )
     # nur in der Heizperiode lernen, sonst verzerrt der Sommer das Bild
     max_learn_outdoor: float = 15.0
@@ -195,23 +211,66 @@ class HouseModel:
         return max(self.rls.theta[1], 0.0)
 
     @property
-    def base_kw(self) -> float:
-        return max(self.rls.theta[2], 0.0)
+    def offset_kw(self) -> float:
+        """Achsabschnitt der Gasbilanz (negativ = Fremdwärme, positiv = Grundlast)."""
+        return self.rls.theta[2]
 
     @property
-    def tau_h(self) -> float | None:
+    def base_kw(self) -> float:
+        return max(self.offset_kw, 0.0)
+
+    @property
+    def free_heat_kw(self) -> float:
+        return max(-self.offset_kw, 0.0)
+
+    @property
+    def heating_limit_k(self) -> float | None:
+        """Ab so viel Kelvin innen–außen braucht das Haus Gas (Heizgrenze)."""
+        if self.h_kw_per_k <= 1e-3:
+            return None
+        return -self.offset_kw / self.h_kw_per_k
+
+    @property
+    def tau_cool_h(self) -> float | None:
+        k = self.cool.theta[0]
+        if self.cool.updates < COOL_MIN_UPDATES or k <= 1e-3:
+            return None
+        return 1.0 / k
+
+    @property
+    def cool_excess_k(self) -> float:
+        """Wie viel wärmer als außen das Haus ohne Heizung bliebe (Fremdwärme), höchstens 10 K."""
+        k = self.cool.theta[0]
+        if self.tau_cool_h is None:
+            h = self.h_kw_per_k
+            return min(self.free_heat_kw / h, 10.0) if h > 1e-3 else 0.0
+        return min(max(self.cool.theta[1] / k, 0.0), 10.0)
+
+    @property
+    def tau_balance_h(self) -> float | None:
         if self.h_kw_per_k <= 1e-3:
             return None
         return self.c_kwh_per_k / self.h_kw_per_k
+
+    @property
+    def tau_h(self) -> float | None:
+        """Trägheit (Auskühlen): gemessen in gasfreien Nächten, sonst aus der Gasbilanz."""
+        return self.tau_cool_h if self.tau_cool_h is not None else self.tau_balance_h
 
     def learn(self, gas_kw: float, t_in: float, t_out: float, dt_in_per_h: float) -> float | None:
         if t_out > self.max_learn_outdoor or gas_kw < 0:
             return None
         return self.rls.update([t_in - t_out, dt_in_per_h, 1.0], gas_kw)
 
+    def learn_cooling(self, t_in: float, t_out: float, dt_in_per_h: float) -> float | None:
+        """Eine gasfreie Stunde: wie schnell kühlt das Haus bei diesem Unterschied aus?"""
+        if t_out > self.max_learn_outdoor or t_in - t_out < 3 or abs(dt_in_per_h) > 1.0:
+            return None
+        return self.cool.update([-(t_in - t_out), 1.0], dt_in_per_h)
+
     def demand_kw(self, t_in: float, t_out: float) -> float:
-        """Benötigte Gasleistung, um t_in bei t_out zu halten."""
-        return max(self.h_kw_per_k * (t_in - t_out), 0.0) + self.base_kw
+        """Benötigte Gasleistung, um t_in bei t_out zu halten (Fremdwärme abgezogen)."""
+        return max(self.h_kw_per_k * (t_in - t_out) + self.offset_kw, 0.0)
 
     def summary(self, design_outdoor: float, t_out_now: float | None, t_in_now: float | None) -> dict:
         now = None
@@ -223,14 +282,22 @@ class HouseModel:
             "heat_loss_w_per_k": round(self.h_kw_per_k * 1000, 0),
             "storage_kwh_per_k": round(self.c_kwh_per_k, 2),
             "base_kw": round(self.base_kw, 2),
+            "offset_kw": round(self.offset_kw, 2),
+            "free_heat_kw": round(self.free_heat_kw, 2),
+            "heating_limit_k": None if self.heating_limit_k is None else round(self.heating_limit_k, 1),
             "tau_h": None if self.tau_h is None else round(self.tau_h, 1),
+            "tau_source": "abkuehlung" if self.tau_cool_h is not None else "bilanz",
+            "cool_updates": self.cool.updates,
             "design_load_kw": round(self.demand_kw(20.0, design_outdoor), 2),
             "demand_now_kw": now,
         }
 
     def to_dict(self) -> dict:
-        return {"rls": self.rls.to_dict()}
+        return {"rls": self.rls.to_dict(), "cool": self.cool.to_dict()}
 
     @classmethod
     def from_dict(cls, d: dict) -> "HouseModel":
-        return cls(rls=RLS.from_dict(d["rls"]))
+        m = cls(rls=RLS.from_dict(d["rls"]))
+        if d.get("cool"):
+            m.cool = RLS.from_dict(d["cool"])
+        return m
