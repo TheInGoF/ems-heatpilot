@@ -291,6 +291,7 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
      Auslegungstemperatur. Gelernt wird nur in der Heizperiode (24-h-Mittel außen bis
      15 °C) und nur aus Stunden ohne Warmwasserladung. Die **Trägheit** misst ein eigenes
      Modell in gasfreien Nächten (wie schnell das Haus ohne Heizung auskühlt).
+     Ausführlich mit Formeln: [docs/hausmodell.md](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/hausmodell.md)
    - *Raummodell* (je Tado-Raum, halbstündlich): wie schnell der Raum bei
      welcher Vorlauftemperatur warm wird und wie schnell er auskühlt.
    - *Anwesenheit* (je Person): Wochenraster der Gewohnheiten und
