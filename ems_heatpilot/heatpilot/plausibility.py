@@ -30,7 +30,7 @@ RANGES: dict[str, tuple[float, float]] = {
     "boiler_temp": (-10.0, 110.0), "calc_flow": (0.0, 110.0), "hc_seltemp": (0.0, 40.0),
     "dhw_temp": (0.0, 95.0), "dhw_set": (0.0, 95.0), "remote_temp": (0.0, 40.0),
     "burner_pow": (0.0, 100.0), "pump_mod": (0.0, 100.0), "flame": (0.0, 200.0),
-    "demand_pct": (0.0, 100.0), "min_period": (0.0, 240.0),
+    "demand_pct": (0.0, 100.0), "min_period": (0.0, 240.0), "syspress": (0.0, 6.0),
     "room_temp": (0.0, 40.0), "room_target": (4.0, 30.0), "valve": (0.0, 100.0), "humidity": (0.0, 100.0),
 }
 

@@ -59,12 +59,15 @@ class DhwModel:
     comfort_margin: float = 0.0
     # seltene große Zapfungen (Wanne o. ä.) – getrennt, damit sie das übliche Profil nicht überdecken
     big_draws: list = field(default_factory=list)
+    # Legionellenschaltung/Einmalladung: geladen, aber nicht gelernt
+    special_charges: int = 0
     # laufende Zustände
     _charge: dict | None = None
     _slot: int | None = None
     _slot_draw: float = 0.0
     _slot_valid: bool = False
     _since_charge_h: float = 99.0  # Stunden seit Ladeende: kurz danach zieht der Fühler noch nach
+    _slot_special: bool = False  # in dieser Stunde lief eine Sonderladung – Zapfprofil nicht lernen
     _seg: list | None = None  # ruhiger Abschnitt [Start-T, Stunden, End-T] – Auskühlen über ≥ 30 min lernen
 
     # ------------------------------------------------------------------ Modell
@@ -119,6 +122,16 @@ class DhwModel:
         """Erwarteter Temperaturabfall durch Zapfungen in den nächsten Stunden (K)."""
         return sum(self.slot_draw(now + timedelta(hours=h)) for h in range(int(hours) + 1))
 
+    def next_charge(self, now: datetime, t_now: float, trigger: float, max_h: float = 48) -> datetime | None:
+        """Wann der Kessel wieder nachlädt: Auskühlen plus erwartete Zapfungen bis zur Einschaltgrenze."""
+        t, step = t_now, 0.25
+        for i in range(1, int(max_h / step) + 1):
+            when = now + timedelta(hours=i * step)
+            t -= (self.cooling_kh(t) + self.slot_draw(when)) * step
+            if t <= trigger:
+                return when
+        return None
+
     # ------------------------------------------------------------------ Lernen
     def step(
         self,
@@ -129,11 +142,14 @@ class DhwModel:
         charging: bool,
         burner_kw: float | None,
         learn_usage: bool = True,
+        special: bool = False,
     ) -> dict:
         """Ein Abtastschritt. Gibt {'draw_k', 'loss_kwh', 'charge_kwh'} zurück.
 
         ``learn_usage=False`` (Urlaub): Zapfprofil und Reserve bleiben eingefroren,
         die Speicher-Physik (Auskühlen, Ladekosten) lernt weiter.
+        ``special`` (Legionellenschaltung, Einmalladung): Ladung läuft mit, aber weder
+        Ladekosten noch Zapfprofil dieser Stunde werden gelernt.
         """
         out = {"draw_k": 0.0, "loss_kwh": 0.0, "charge_kwh": 0.0}
         self._roll_slot(when, learn_usage)
@@ -141,6 +157,8 @@ class DhwModel:
             self._slot_valid = False
             return out
         self._slot_valid = learn_usage
+        if special:
+            self._slot_special = True
 
         if charging:
             # Zapfung während/zu Beginn der Ladung (Dusche löst die Ladung ja oft aus):
@@ -153,10 +171,11 @@ class DhwModel:
                 self._slot_draw += out["draw_k"]
             if self._charge is None:
                 # Starttemperatur = nach der Zapfung, vor der ersten Ladewärme
-                self._charge = {"start": t_prev - out["draw_k"], "max": t_cur, "kwh": 0.0, "h": 0.0}
+                self._charge = {"start": t_prev - out["draw_k"], "max": t_cur, "kwh": 0.0, "h": 0.0, "special": False}
             elif out["draw_k"]:
                 self._charge["start"] -= out["draw_k"]  # gezapfte Wärme muss zusätzlich geladen werden
             c = self._charge
+            c["special"] = c.get("special") or special
             c["max"] = max(c["max"], t_cur)
             c["h"] += dt_h
             if burner_kw is not None:
@@ -198,6 +217,9 @@ class DhwModel:
         rise = c["max"] - c["start"]
         if rise < 2.0 or c["h"] <= 0:
             return
+        if c.get("special"):
+            self.special_charges += 1
+            return
         self.charges += 1
         self.charge_rate_kh += 0.2 * (rise / c["h"] - self.charge_rate_kh)
         if c["kwh"] > 0:
@@ -209,7 +231,7 @@ class DhwModel:
 
     def _roll_slot(self, when: datetime, learn_usage: bool = True) -> None:
         slot = slot_of(when)
-        if self._slot is not None and slot != self._slot and self._slot_valid:
+        if self._slot is not None and slot != self._slot and self._slot_valid and not self._slot_special:
             hour = self._slot % 24
             draw = self._slot_draw
             # Ausreißer gegen das Übliche dieser Stunde: groß und deutlich über dem Profil –
@@ -228,7 +250,7 @@ class DhwModel:
         if slot != self._slot:
             if self._slot is not None and learn_usage:
                 self.comfort_margin = max(self.comfort_margin - DHW_MARGIN_DECAY / 24, 0.0)
-            self._slot, self._slot_draw, self._slot_valid = slot, 0.0, False
+            self._slot, self._slot_draw, self._slot_valid, self._slot_special = slot, 0.0, False, False
 
     def note_cold_draw(self) -> None:
         self.comfort_margin = min(self.comfort_margin + DHW_MARGIN_STEP, DHW_MARGIN_MAX)
@@ -274,6 +296,7 @@ class DhwModel:
             "week_weight": [round(sum(self.weekly_weight(d, h) for h in range(24)) / 24, 2) for d in range(7)],
             "big_draws": self.big_draws,
             "comfort_margin": round(self.comfort_margin, 1),
+            "special_charges": self.special_charges,
         }
 
     # ------------------------------------------------------------------ Speichern
@@ -289,6 +312,7 @@ class DhwModel:
             "daily": self.daily,
             "comfort_margin": self.comfort_margin,
             "big_draws": self.big_draws,
+            "special_charges": self.special_charges,
         }
 
     @classmethod
@@ -304,6 +328,7 @@ class DhwModel:
             daily=d.get("daily", [0.0] * 24),
             comfort_margin=d.get("comfort_margin", 0.0),
             big_draws=d.get("big_draws", []),
+            special_charges=d.get("special_charges", 0),
         )
         return m
 

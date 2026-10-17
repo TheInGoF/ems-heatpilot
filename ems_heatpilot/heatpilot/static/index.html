@@ -629,6 +629,10 @@ function humidityNote(rooms) {
 }
 
 let liveTimer = null;
+// Häufige Servicecodes von Buderus/Sieger-Kesseln (EMS)
+const SERVICE_CODES = { "-H": "heizt", "=H": "lädt Warmwasser", "0H": "bereit, kein Wärmebedarf", "0Y": "Kessel wärmer als Soll – wartet",
+  "0A": "Taktsperre (Antipendelzeit läuft)", "0C": "Brennerstart", "0L": "Brennerstart – Gasventil öffnet", "0U": "Startphase", "0P": "wartet auf Gebläse",
+  "0E": "wartet – zu wenig Wärmeabnahme", "2P": "Vorlauf steigt zu schnell" };
 async function loadLive() {
   clearTimeout(liveTimer);
   const j = await getJSON("api/live?hours=" + $("live-hours").value);
@@ -644,7 +648,10 @@ async function loadLive() {
     tile("Rücklauf", fmt(n.ret), "°C", n.flow !== null && n.ret !== null ? `Spreizung ${fmt(n.flow - n.ret)} K` : ""),
     tile("Heizungspumpe", n.pump_on === null || n.pump_on === undefined ? (n.pump_mod !== null ? (n.pump_mod > 0 ? "an" : "aus") : "–") : n.pump_on ? "an" : "aus",
       n.pump_mod !== null ? `· ${fmt(n.pump_mod, 0)} %` : "",
-      n.pump_on === null && n.pump_mod === null ? "Wert fehlt – unter Einstellungen → Zuordnungen „Heizungspumpe“/„Pumpenmodulation“ prüfen" : "Drehzahl (Modulation) in %"),
+      n.pump_on === null && n.pump_mod === null ? "Wert fehlt – unter Einstellungen → Zuordnungen „Heizungspumpe“/„Pumpenmodulation“ prüfen"
+        : "Drehzahl (Modulation) in %" + (n.pump_delay ? ` · läuft ${fmt(n.pump_delay, 0)} min nach` : "")),
+    tile("Kesselstatus", n.service_code ? esc(n.service_code) : "–", "", SERVICE_CODES[n.service_code] || "Servicecode des Kessels"),
+    tile("Anlagendruck", fmt(n.syspress, 1), "bar", n.syspress === null || n.syspress === undefined ? "" : n.syspress < 1 ? "⚠ niedrig – nachfüllen lassen" : n.syspress > 2.5 ? "⚠ hoch" : "in Ordnung (1,0–2,5 bar)"),
     tile("Kessel", fmt(n.boiler_temp), "°C", "Kesseltemperatur"),
     tile("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "")),
     tile("Außen", fmt(n.t_out), "°C", ""),
@@ -912,6 +919,10 @@ async function load() {
     tile("Bereitschaftsverlust", fmt(w.loss_w_now, 0), "W", `bei 45 °C ${fmt(w.loss_w_at[45], 0)} W · bei 55 °C ${fmt(w.loss_w_at[55], 0)} W`),
     tile("Ladekosten", fmt(kpk.kalt ?? kpk.warm, 3), "kWh/K", `Start unter 47 °C: ${fmt(kpk.kalt, 3)} (${w.kwh_per_k_n.kalt}×) · darüber: ${fmt(kpk.warm, 3)} (${w.kwh_per_k_n.warm}×)`),
     tile("Ersparnis-Schätzung", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
+    w.next_charge ? tile("Nächste Ladung", w.next_charge.now ? "jetzt" : w.next_charge.eta ? timeOf(w.next_charge.eta) : "> 2 Tage", "",
+      `Kessel lädt ab ${fmt(w.next_charge.trigger, 0)} °C nach (Soll − Hysterese)` + (w.next_charge.hours ? ` · in ≈ ${fmt(w.next_charge.hours, 1)} h` : "")) : "",
+    w.disinfect ? tile("Legionellenschaltung", esc(w.disinfect.day ?? "–"), w.disinfect.hour !== null ? `${w.disinfect.hour}:00` : "",
+      `Wird nicht gelernt · bisher ${w.disinfect.special_charges} Sonderladungen ausgeklammert`) : "",
   ].join("");
   LAST_DHW = w;
   drawDhwProfile();
@@ -980,7 +991,10 @@ function renderFlowStudy(fs) {
   }).join("");
   box.innerHTML = `<h2>Vorlauf: bringt mehr etwas – oder ist es Verschwendung?</h2>` +
     `<p>Mehr Vorlauf lässt die Heizkörper mehr abnehmen – der Kessel läuft länger und startet seltener. Dafür steigt der Rücklauf, und über 55 °C kondensiert der Kessel kaum noch. HeatPilot vergleicht dazu deine Heizstunden der letzten ${fs.window_days} Tage bei gleicher Außentemperatur (nur Stunden ohne Aufheizen und ohne Warmwasser). Nur Beobachtung – es wird nichts verstellt.</p>` +
-    `<p style="border-left:3px solid ${kindCol[fs.verdict.kind]};padding-left:8px;color:var(--text-primary)">${esc(fs.verdict.text)}</p>` + tables;
+    `<p style="border-left:3px solid ${kindCol[fs.verdict.kind]};padding-left:8px;color:var(--text-primary)">${esc(fs.verdict.text)}</p>` +
+    (fs.curve ? `<p class="muted">Am Regler (Heizkurve): Auslegungstemperatur ${fmt(fs.curve.design, 0)} °C ergibt bei ${fmt(fs.curve.t_out, 0)} °C außen etwa ${fmt(fs.curve.flow_now, 0)} °C Vorlauf. ` +
+      `+${fmt(fs.curve.d_flow, 0)} K Vorlauf entspräche etwa <b>Auslegungstemperatur ${fmt(fs.curve.design, 0)} → ${fmt(fs.curve.design_new, 0)} °C</b>` +
+      `${fs.curve.min_ext_known ? "" : " (tiefste Außentemperatur unbekannt, −10 °C angenommen)"}${fs.curve.offset ? `, Offset ${fmt(fs.curve.offset, 0)} K` : ""}.</p>` : "") + tables;
 }
 let DHW_MODE = "day", LAST_DHW = null;
 function setDhwMode(m) { DHW_MODE = m; drawDhwProfile(); }

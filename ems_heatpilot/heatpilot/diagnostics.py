@@ -15,6 +15,7 @@ import logging
 import logging.handlers
 import os
 import platform
+import re
 import time
 from collections import deque
 from datetime import datetime, timezone
@@ -153,6 +154,8 @@ def self_check(app) -> list[dict]:
                 add("info", "EMS-ESP", f"{ROLE_LABELS.get(role, role)} liefert EMS-ESP nicht – fürs Zertifikat "
                                        "unter Einstellungen → Haus & Kessel eintragen")
 
+    plant_checks(eng, add)
+
     critical = [f.gas, *f.outdoor, f.boiler.get("flow_temp"), *(r.climate for r in f.rooms)]
     for eid in filter(None, critical):
         st = eng.states.get(eid)
@@ -236,6 +239,47 @@ def self_check(app) -> list[dict]:
 
 
 # ---------------------------------------------------------------- Diagnose-Datei
+PRESS_LOW, PRESS_CRIT, PRESS_HIGH = 1.0, 0.8, 2.5
+_DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
+
+
+def _code_date(text) -> datetime | None:
+    m = _DATE.search(str(text or ""))
+    if not m:
+        return None
+    try:
+        return datetime(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+    except ValueError:
+        return None
+
+
+def plant_checks(eng, add) -> None:
+    """Anlagendruck, Wartungsmeldung und letzter Fehler des Kessels/Reglers (nur Hinweise)."""
+    press = num(eng._boiler("sys_press"))
+    if press is not None:
+        rows = eng.store.query("SELECT MIN(syspress) AS lo FROM samples WHERE ts >= ? AND syspress IS NOT NULL",
+                               (int(time.time()) - 7 * 86400,))
+        low = rows[0]["lo"] if rows and rows[0]["lo"] is not None else press
+        if press < PRESS_CRIT:
+            add("error", "Anlagendruck", f"{press:.1f} bar – zu wenig Wasser in der Heizung, Heizungsbauer bzw. nachfüllen")
+        elif press < PRESS_LOW or low < PRESS_LOW:
+            add("warn", "Anlagendruck", f"{press:.1f} bar (7-Tage-Minimum {low:.1f} bar) – unter {PRESS_LOW:.1f} bar, "
+                                        "bitte nachfüllen lassen")
+        elif press > PRESS_HIGH:
+            add("warn", "Anlagendruck", f"{press:.1f} bar – ungewöhnlich hoch (Ausdehnungsgefäß prüfen lassen)")
+        else:
+            add("ok", "Anlagendruck", f"{press:.1f} bar (7-Tage-Minimum {low:.1f} bar)")
+    msg, date = eng._boiler("maint_msg"), eng._boiler("maint_date")
+    if msg not in (None, "", "-", "0", "keine", "none", "unknown", "unavailable"):
+        add("info", "Wartung", f"Kessel meldet „{msg}“" + (f" (Termin {date})" if date else "") +
+            " – ist die Wartung erledigt, im Kessel bzw. in EMS-ESP zurücksetzen, sonst bleibt die Meldung stehen")
+    for device, getter in (("Kessel", eng._boiler), ("Regler", eng._thermo)):
+        code = getter("last_code")
+        when = _code_date(code)
+        if code and when and (datetime.now() - when).days <= 14:
+            add("info", "Störung", f"{device}: letzter Fehlercode {code} – in den letzten 14 Tagen")
+
+
 def _rows(eng, sql: str, params: tuple = ()) -> list[dict]:
     return [dict(r) for r in eng.store.query(sql, params)]
 
@@ -394,7 +438,26 @@ def export(app, days: int = 14) -> dict:
         "anwesenheit": _table(q("SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
                                 (since,)), 900, key="person"),
         "brenner": _table(q("SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)), None),
+        # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen
+        "selbsttest": _safe(lambda: self_check(app)),
+        "ems_werte": getattr(eng, "ems", None),
+        "zeiten": _safe(lambda: {"gelernt": eng.schedule_learned, "verwendet": eng.eff.as_dict()}),
+        "warmwasser": _safe(lambda: {k: v for k, v in eng.dhw_summary().items() if k not in ("points", "curve_kh")}),
+        "vorlauf_studie": _safe(eng.flow_study),
+        "woche": _safe(eng.week),
+        "personen": _safe(lambda: {p: {"heimfahrt_kmh": round(l.approach_speed_kmh, 1), "heimfahrten": l.arrivals_learned,
+                                       "gewohnheit_7x24": l.habit_hours(), "heimkehr_kontrolle": l.arrivals,
+                                       "vorhersage_guete": l.arrival_quality()}
+                                   for p, l in eng.persons.items()}),
     }
+
+
+def _safe(fn):
+    """Ein Teil des Exports darf scheitern, ohne dass die ganze Datei fehlt."""
+    try:
+        return fn()
+    except Exception as err:  # noqa: BLE001
+        return {"fehler": f"{type(err).__name__}: {err}"}
 
 
 def export_estimate(app, days: int) -> int:

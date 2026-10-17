@@ -112,6 +112,31 @@ def study(store, now_ts: int | None = None) -> dict:
     return {"bands": result, "hours": len(rows), "verdict": _verdict(result), "window_days": WINDOW_DAYS}
 
 
+CURVE_EXP = 1 / 1.3        # Heizkörper-Exponent: so krümmen Regler ihre Heizkurve
+REF_OUT = 5.0              # Bezugs-Außentemperatur für die Umrechnung
+
+
+def curve_hint(design: float | None, room: float | None, min_ext: float | None, offset: float | None,
+               d_flow: float = 5.0, t_out: float = REF_OUT) -> dict | None:
+    """Wie viel mehr Auslegungstemperatur am Regler ergibt d_flow mehr Vorlauf bei t_out?
+
+    Heizkurve wie bei EMS-Reglern (RC35/ES73): Vorlauf = Raum + (Auslegung − Raum) ·
+    ((Raum − außen) / (Raum − tiefste Außentemperatur))^(1/1,3). Unbekannte tiefste
+    Außentemperatur: −10 °C (Werkseinstellung).
+    """
+    if design is None:
+        return None
+    room = 21.0 if room is None else room
+    known = min_ext is not None
+    min_ext = -10.0 if min_ext is None else min_ext
+    if room - min_ext <= 0 or room - t_out <= 0 or design <= room:
+        return None
+    ratio = ((room - t_out) / (room - min_ext)) ** CURVE_EXP
+    return {"design": design, "offset": offset, "min_ext": min_ext, "min_ext_known": known, "room": room,
+            "t_out": t_out, "d_flow": d_flow, "flow_now": round(room + (design - room) * ratio, 1),
+            "design_new": round(design + d_flow / ratio)}
+
+
 def _finding(cells: list[dict]) -> dict | None:
     ok = [c for c in cells if c["enough"]]
     if len(ok) < 2:

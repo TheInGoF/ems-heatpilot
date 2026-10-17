@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.25.0
+- **Mehr EMS-ESP-Daten im Modell** (wenn der Kessel sie liefert):
+  - Warmwasser-**Ladezähler**: jede Speicherladung wird exakt erkannt statt nur aus dem Temperaturanstieg
+  - **Legionellenschaltung** und **Einmalladung** laufen mit, werden aber nicht gelernt (weder Ladekosten noch Zapfprofil); Tag/Uhrzeit der Legionellenschaltung als Kachel
+  - **Nächste Ladung**: aus Soll und Einschalt-Hysterese des Kessels (z. B. 55 − 10 = 45 °C) plus gelerntem Auskühlen und Zapfprofil
+  - **Heizkurve des Reglers** in „Vorlauf gegen Takten“: +5 K Vorlauf als konkrete Auslegungstemperatur am ES73 (z. B. 60 → 68 °C)
+  - Live: **Kesselstatus** (Servicecode mit Klartext, z. B. „0Y – Kessel wärmer als Soll“), **Anlagendruck**, Pumpennachlauf
+  - Diagnose: Anlagendruck (Warnung unter 1,0 bar), Wartungsmeldung des Kessels, Fehlercodes der letzten 14 Tage
+- **Export „Gelernte Werte“** enthält jetzt auch Selbsttest, rohe EMS-ESP-Werte, gelernte Zeiten, Warmwasser-Auswertung (inkl. nächster Ladung), Vorlauf-Studie, Wochenraster und je Person Gewohnheit, Heimkehr-Kontrolle und Vorhersagegüte – alles zum Gegenprüfen in einer Datei
+
 ## 0.24.5
 - **EMS-ESP auf Deutsch:** „an“/„aus“ werden jetzt erkannt – vorher galten Brenner, Pumpe usw. beim direkten Lesen als „aus“, sobald EMS-ESP deutsche Werte lieferte
 - Warmwasser lädt: wenn der Kessel kein Ladesignal hat, zählt auch die Speicherladepumpe (`dhw_chargepump`) bzw. das 3-Wege-Ventil; die Erkennung über den Temperaturanstieg bleibt zusätzlich aktiv
