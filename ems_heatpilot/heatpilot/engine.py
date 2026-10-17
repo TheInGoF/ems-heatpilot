@@ -159,6 +159,13 @@ class Engine:
             on = None if p is None else int(p > 0)
         return on
 
+    def dhw_special(self) -> int | None:
+        """Legionellenschaltung oder Einmalladung läuft – solche Ladungen lernt das Modell nicht."""
+        vals = [flag(self._boiler(r)) for r in ("dhw_disinfecting", "dhw_onetime")]
+        if all(v is None for v in vals):
+            return None
+        return int(any(vals))
+
     def _vacation_entity_state(self) -> str | None:
         ent = self.cfg.vacation_entity
         return self.states.get(ent, {}).get("state") if ent else None
@@ -325,6 +332,10 @@ class Engine:
             "demand_pct": num(self._val(self.found.demand_sensor)),
             "dhw_set": num(self._boiler("dhw_seltemp")),
             "vacation": int(self.on_vacation()),
+            # seit 0.25: Warmwasser-Ladezähler, Sonderladung (Legionellen/Einmalladung), Anlagendruck
+            "dhw_starts": num(self._boiler("dhw_starts")),
+            "dhw_special": self.dhw_special(),
+            "syspress": num(self._boiler("sys_press")),
             # nur für die Live-Ansicht (nicht in der Datenbank): läuft die Heizungspumpe?
             "pump_on": flag(self._boiler("heating_pump")),
         }
@@ -380,6 +391,13 @@ class Engine:
         Heizkreis in dieser Zeit nichts.
         """
         flag, t = sample.get("dhw"), sample.get("dhw_temp")
+        # Ladezähler des Kessels: jede Erhöhung ist der Beginn einer Speicherladung (exakt)
+        starts, prev_starts = sample.get("dhw_starts"), getattr(self, "_dhw_starts_prev", None)
+        if starts is not None:
+            self._dhw_starts_prev = starts
+            if prev_starts is not None and 0 < starts - prev_starts <= 5 and not flag:
+                sample["dhw"] = flag = 1
+                self.dhw_counted = getattr(self, "dhw_counted", 0) + 1
         if flag:
             self.dhw_flag_seen = True
         prev = self._dhw_prev
@@ -645,7 +663,9 @@ class Engine:
         cached = getattr(self, "_flow_study", None)
         if cached is None or now - cached[0] > max_age_s:
             self._flow_study = (now, flowstudy.study(self.store))
-        return self._flow_study[1]
+        curve = flowstudy.curve_hint(num(self._thermo("hc_designtemp")), num(self._thermo("hc_seltemp")),
+                                     num(self._thermo("hc_minexttemp")), num(self._thermo("hc_offsettemp")))
+        return {**self._flow_study[1], "curve": curve}
 
     def week(self, days: int = weekly.WINDOW_DAYS, room: str | None = None, max_age_s: int = 600) -> dict:
         """Wochenraster Mo–So × Stunde (alle 10 min neu)."""
@@ -744,7 +764,7 @@ class Engine:
         now = local(ts)
         vacation = bool(sample.get("vacation"))
         res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
-                            learn_usage=not vacation)
+                            learn_usage=not vacation, special=bool(sample.get("dhw_special")))
         home = sample.get("home_count")
         arrival = None
         if vacation:
@@ -1063,7 +1083,30 @@ class Engine:
             "curve_kh": {t: round(self.dhw.cooling_kh(t), 3) for t in range(30, 71)},
             "model_ok": guards.check_dhw(self.dhw)["ok"],
             "kwh_per_k_avg": None if self.dhw.kwh_per_kelvin() is None else round(self.dhw.kwh_per_kelvin(), 3),
+            "next_charge": self.dhw_next_charge(t_now),
+            "disinfect": self.disinfect_schedule(),
         }
+
+    def dhw_next_charge(self, t_now: float | None) -> dict | None:
+        """Nächste Speicherladung aus Soll und Einschalt-Hysterese des Kessels (z. B. 55 − 10 = 45 °C)."""
+        set_t, hyst = num(self._boiler("dhw_seltemp")), num(self._boiler("dhw_hyst_on"))
+        if t_now is None or set_t is None or hyst is None:
+            return None
+        trigger = set_t - abs(hyst)
+        if flag(self._boiler("dhw_active")) or t_now <= trigger:
+            return {"trigger": trigger, "eta": None, "now": True}
+        now = local(time.time())
+        eta = self.dhw.next_charge(now, t_now, trigger)
+        return {"trigger": trigger, "eta": eta.isoformat() if eta else None,
+                "hours": None if eta is None else round((eta - now).total_seconds() / 3600, 1), "now": False}
+
+    def disinfect_schedule(self) -> dict | None:
+        """Legionellenschaltung laut Regler (Tag/Uhrzeit) – diese Ladungen lernt das Modell nicht."""
+        day, hour = self._thermo("disinfect_day"), num(self._thermo("disinfect_hour"))
+        if day is None and hour is None:
+            return None
+        return {"day": day, "hour": None if hour is None else int(hour),
+                "special_charges": self.dhw.special_charges}
 
     def dhw_for_arrival(self, arrival: datetime, now: datetime) -> dict | None:
         """Wie lange muss der Speicher vor der Ankunft laden? (teilt sich die Therme mit dem Heizen)"""

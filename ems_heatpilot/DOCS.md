@@ -227,6 +227,24 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
+## Zusatzdaten aus EMS-ESP
+
+Liefert der Kessel sie (Diagnose → Alle Sensoren), nutzt HeatPilot außerdem:
+
+- **Warmwasser-Ladezähler** – jede Ladung exakt statt nur über den Temperaturanstieg;
+  ohne Ladesignal zählt auch die Speicherladepumpe.
+- **Legionellenschaltung und Einmalladung** – werden geladen, aber nicht gelernt
+  (Ladekosten und Zapfprofil bleiben sauber).
+- **Einschalt-Hysterese** – daraus die Kachel „Nächste Ladung“.
+- **Heizkurve des Reglers** (Auslegungstemperatur, Offset) – „Vorlauf gegen Takten“ nennt
+  den Versuch als konkreten Wert am Regler.
+- **Kesselstatus, Anlagendruck, Wartung, Fehlercodes** – in Live und Diagnose. Eine
+  erledigte Wartung muss im Kessel bzw. in EMS-ESP zurückgesetzt werden, sonst bleibt die
+  Meldung stehen.
+
+Was der Kessel gar nicht kennt, steht unter „Alle Sensoren“ als „Kessel liefert nicht“ –
+da lässt sich nichts freischalten.
+
 ## Heizen (Bedienung)
 
 Der Reiter **Heizen** bedient Tado – nur auf Knopfdruck, HeatPilot schaltet nie von selbst.
