@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.24.2
+- Grafen am Handy: Marker mit dem Finger **verschieben** (waagerecht wischen; senkrecht scrollt weiter die Seite). Das Hinweisfeld erscheint links über dem Finger mit etwas Abstand und verschwindet nach 3 s – auch Marker und Punkt; es bleibt nicht mehr hängen
+
 ## 0.24.1
 - Live: Warmwasser-Graf steht jetzt vor „Außen & innen“
 
