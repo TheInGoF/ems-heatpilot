@@ -362,7 +362,7 @@ function showTip(e, html, onHide) {
   const touch = e.pointerType === "touch" || e.pointerType === "pen" || Date.now() - LAST_TOUCH < 800;
   const w = tip.offsetWidth, h = tip.offsetHeight;
   if (touch) {
-    let x = e.clientX - w - 28, y = e.clientY - h - 28;
+    let x = e.clientX - w - 28, y = e.clientY - h - 48;
     if (x < 8) x = Math.min(e.clientX + 28, innerWidth - w - 8);
     if (y < 8) y = e.clientY + 36;
     tip.style.left = Math.max(8, x) + "px"; tip.style.top = y + "px";
