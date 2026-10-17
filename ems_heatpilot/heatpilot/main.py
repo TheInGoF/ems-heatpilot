@@ -11,6 +11,7 @@ from aiohttp import web
 
 from . import __version__
 from .backfill import run_backfill
+from .control import Control
 from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
 from .diagnostics import set_debug, setup_logging
 from .discovery import discover
@@ -36,6 +37,7 @@ class App:
         self.ha = HAClient()
         self.store = Store(DATA_DIR / "heatpilot.db")
         self.eng: Engine | None = None
+        self.control: Control | None = None
         self.pending: dict[str, dict | None] = {}
         self._ems_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
@@ -99,6 +101,7 @@ class App:
                 eng.forecast = old.forecast
                 eng.live = old.live
             self.eng = eng
+            self.control = Control(self.ha, self.store, [r.climate for r in found.rooms])
             self._restart_emsesp()
             self.status = "läuft"
 
@@ -141,6 +144,15 @@ class App:
         """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers)."""
         self._reset = True
         await self.build(backfill=True)
+
+    async def refresh_rooms(self) -> None:
+        """Nach einer Bedienung: Thermostate sofort neu lesen (nicht erst beim nächsten Ereignis)."""
+        if self.eng is None:
+            return
+        rooms = {r.climate for r in self.eng.found.rooms}
+        for s in await self.ha.get_states():
+            if s["entity_id"] in rooms:
+                self.eng.on_state(s["entity_id"], s)
 
     async def suggestions(self) -> dict:
         """Was die automatische Erkennung ohne eigene Vorgaben finden würde."""

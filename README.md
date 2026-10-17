@@ -20,7 +20,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 > Home Assistant verbundene Thermostate (z. B. Zigbee, Z-Wave, Matter, Homematic)
 > dazukommen.
 
-## Was es heute kann (0.21, Beobachtungsmodus)
+## Was es heute kann (0.23, Beobachtungsmodus)
 
 - **Haus lernen:** Wärmeverlust (W/K), Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume lernen:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil
@@ -32,6 +32,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Ersparnis ehrlich schätzen:** nur bei gleichem Komfort – geprüft je Raum, mit realistischem Wiederaufheizen über die Heizkörper
 - **Empfehlungen für Tado:** wo Tado zu spät oder zu früh heizt – Zeitplan, Frühstart, Geofencing je Raum
 - **Hydraulischer Abgleich mit maschinellem Lernen:** welcher Heizkörper zu wenig oder zu viel Heizwasser bekommt – Voreinstellung am Ventil eine Stufe auf oder zu
+- **Heizen per Knopfdruck:** Tado-Timer (Boost) für ausgewählte Räume, Soll und Betriebsart je Raum – der Timer läuft in Tado selbst
 - **Live-Ansicht:** was Kessel, Warmwasser und jeder Raum gerade tun, mit Grafen der letzten Stunden
 - **Sonne je Raum lernen:** welcher Raum wie stark und aus welcher Richtung von der Sonne geheizt wird – ohne Sensor, aus Sonnenstand und Bewölkung
 - **Vorlauf gegen Takten messen:** ob ein höherer Vorlauf bei deinem Kessel weniger Starts und Gas bringt oder Verschwendung ist
@@ -45,8 +46,10 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 ## Grundsätze
 
 - **Lokal.** Alle Daten und alles Lernen bleiben auf dem Home-Assistant-Rechner.
-- **Erst beobachten, dann handeln.** Bis jetzt schreibt HeatPilot nichts an Kessel,
-  Regler oder Tado – im Code hart gesperrt. Eingriffe kommen nur einzeln und nach Freigabe.
+- **Erst beobachten, dann handeln.** HeatPilot schaltet nichts von selbst – nicht an
+  Kessel, Regler oder Tado, im Code hart gesperrt. Einzige Ausnahme: Was du im Reiter
+  „Heizen“ selbst antippst (Tado-Timer, Soll, Betriebsart). Automatische Eingriffe kommen
+  nur einzeln und nach Freigabe.
 - **Sparen ja, übertreiben nein.** Komfort ist eine feste Grenze, gezählt wird am
   Gaszähler fürs ganze Haus, „gar nicht heizen“ ist keine Strategie, unsichere
   Modelle empfehlen nichts (siehe [Leitplanken](ems_heatpilot/DOCS.md)).
@@ -57,7 +60,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
 | Phase | Inhalt | Status |
 |---|---|---|
-| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.21** |
+| 1 | Beobachten: Daten sammeln, Modelle lernen, Auswertung, Empfehlungen | **0.1–0.23** |
 | 2 | Kesselseite: Heizfreigabe ereignisgesteuert, Sammelbetrieb bei Abwesenheit statt vieler Kurzstarts, Nachlauf vermeiden | geplant |
 | 3 | Warmwasser-Soll nach Nutzung und Anwesenheit | geplant |
 | 4 | Optional: Vorheizen vor Ankunft per Tado-Übersteuerung „bis zum nächsten Zeitplanblock“ | Idee |
