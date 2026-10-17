@@ -350,8 +350,40 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
 const $ = (id) => document.getElementById(id);
 const fmt = (v, d = 1) => v === null || v === undefined || Number.isNaN(v) ? "–" : Number(v).toLocaleString("de-DE", { maximumFractionDigits: d, minimumFractionDigits: 0 });
 const tip = $("tip");
-function showTip(e, html) { tip.innerHTML = html; tip.style.display = "block"; tip.style.left = Math.min(e.clientX + 12, innerWidth - tip.offsetWidth - 8) + "px"; tip.style.top = (e.clientY + 12) + "px"; }
-function hideTip() { tip.style.display = "none"; }
+// Hinweisfeld: Maus wie gewohnt rechts unten; mit dem Finger links über dem Finger (nicht verdeckt)
+// und nach 3 s wieder weg – auch Fadenkreuz/Punkt (onHide)
+let LAST_TOUCH = 0, TIP_TIMER = null, TIP_ON_HIDE = null;
+addEventListener("touchstart", (e) => { LAST_TOUCH = Date.now(); if (!(e.target.closest && e.target.closest("svg"))) hideTip(); }, { passive: true });
+addEventListener("scroll", () => { if (Date.now() - LAST_TOUCH < 3000) hideTip(); }, { passive: true });
+function showTip(e, html, onHide) {
+  if (TIP_ON_HIDE && TIP_ON_HIDE !== onHide) { const f = TIP_ON_HIDE; TIP_ON_HIDE = null; f(); }
+  TIP_ON_HIDE = onHide || null;
+  tip.innerHTML = html; tip.style.display = "block";
+  const touch = e.pointerType === "touch" || e.pointerType === "pen" || Date.now() - LAST_TOUCH < 800;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  if (touch) {
+    let x = e.clientX - w - 28, y = e.clientY - h - 28;
+    if (x < 8) x = Math.min(e.clientX + 28, innerWidth - w - 8);
+    if (y < 8) y = e.clientY + 36;
+    tip.style.left = Math.max(8, x) + "px"; tip.style.top = y + "px";
+  } else {
+    tip.style.left = Math.min(e.clientX + 12, innerWidth - w - 8) + "px"; tip.style.top = (e.clientY + 12) + "px";
+  }
+  clearTimeout(TIP_TIMER);
+  if (touch) TIP_TIMER = setTimeout(hideTip, 3000);
+}
+function hideTip() {
+  clearTimeout(TIP_TIMER); tip.style.display = "none";
+  if (TIP_ON_HIDE) { const f = TIP_ON_HIDE; TIP_ON_HIDE = null; f(); }
+}
+// Zeitachse: Marker mit Maus oder Finger verschieben (waagerecht wischen = Marker, senkrecht = Seite scrollen)
+function scrub(svg, hit, onMove, onHide) {
+  svg.style.touchAction = "pan-y";
+  const move = (e) => onMove(e, (e.clientX - svg.getBoundingClientRect().left) / svg.getBoundingClientRect().width);
+  hit.addEventListener("pointerdown", move);
+  hit.addEventListener("pointermove", move);
+  hit.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hideTip(); });
+}
 const NS = "http://www.w3.org/2000/svg";
 function el(name, attrs, parent) { const n = document.createElementNS(NS, name); for (const k in attrs) n.setAttribute(k, attrs[k]); if (parent) parent.appendChild(n); return n; }
 
@@ -407,14 +439,14 @@ function lineChart(container, pts, unit, label) {
   const cross = el("line", { y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, f.svg);
   const dot = el("circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, f.svg);
   const hit = el("rect", { x: f.m.l, y: f.m.t, width: f.W - f.m.l - f.m.r, height: f.H - f.m.t - f.m.b, fill: "transparent" }, f.svg);
-  hit.addEventListener("mousemove", (e) => {
-    const r = f.svg.getBoundingClientRect(); const x = (e.clientX - r.left) / r.width * f.W;
+  const off = () => { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); };
+  scrub(f.svg, hit, (e, rel) => {
+    const x = rel * f.W;
     let best = pts[0]; for (const p of pts) if (Math.abs(f.sx(p[0]) - x) < Math.abs(f.sx(best[0]) - x)) best = p;
     cross.setAttribute("x1", f.sx(best[0])); cross.setAttribute("x2", f.sx(best[0])); cross.setAttribute("visibility", "visible");
     dot.setAttribute("cx", f.sx(best[0])); dot.setAttribute("cy", f.sy(best[1])); dot.setAttribute("visibility", "visible");
-    showTip(e, `${new Date(best[0] * 1000).toLocaleDateString("de-DE")}<br><b>${fmt(best[1], 2)} ${unit}</b>`);
+    showTip(e, `${new Date(best[0] * 1000).toLocaleDateString("de-DE")}<br><b>${fmt(best[1], 2)} ${unit}</b>`, off);
   });
-  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
 }
 
 function barChart(container, rows, unit, label) {
@@ -541,8 +573,9 @@ function timeChart(container, ts, lines, opts = {}) {
   }
   const cross = el("line", { y1: top, y2: bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, f.svg);
   const hit = el("rect", { x: f.m.l, y: top, width: f.W - f.m.l - f.m.r, height: bottom - top, fill: "transparent" }, f.svg);
-  hit.addEventListener("mousemove", (e) => {
-    const rc = f.svg.getBoundingClientRect(), x = (e.clientX - rc.left) / rc.width * f.W;
+  const off = () => cross.setAttribute("visibility", "hidden");
+  scrub(f.svg, hit, (e, rel) => {
+    const x = rel * f.W;
     let best = 0; ts.forEach((t, i) => { if (Math.abs(f.sx(t) - x) < Math.abs(f.sx(ts[best]) - x)) best = i; });
     cross.setAttribute("x1", f.sx(ts[best])); cross.setAttribute("x2", f.sx(ts[best])); cross.setAttribute("visibility", "visible");
     const rows = lines.filter((l) => !l.hidden && l.values[best] !== null && l.values[best] !== undefined)
@@ -550,9 +583,8 @@ function timeChart(container, ts, lines, opts = {}) {
     if (opts.right) rows.push(`${opts.right.name}: <b>${fmt(opts.right.values[best], 0)}</b> %`);
     for (const l of opts.rightLines || []) rows.push(`${l.name}: <b>${fmt(l.values[best], 0)}</b> %`);
     for (const b of opts.bands || []) if (b.values[best]) rows.push(b.name);
-    showTip(e, `${new Date(ts[best] * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}<br>${rows.join("<br>")}`);
+    showTip(e, `${new Date(ts[best] * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}<br>${rows.join("<br>")}`, off);
   });
-  hit.addEventListener("mouseleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); });
 }
 
 function legend(id, items) {
