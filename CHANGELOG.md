@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.23.1
+- Handy: Seite scrollt nicht mehr seitlich – Raum-Legende und Legenden brechen um, Grafen und Kacheln passen auch auf schmale Bildschirme (ab 320 px)
+- Raumnamen kürzer: „Katzenzimmer Heizung“ erscheint in Legende, Boost und Kacheln als „Katzenzimmer“
+
 ## 0.23.0
 - Neuer Reiter **Heizen** – Tado bedienen, nur auf Knopfdruck (HeatPilot schaltet weiterhin nie von selbst):
   - **Heiz-Boost:** Räume wählen, Temperatur und Dauer einstellen, Starten – nutzt den **Tado-Timer** (`tado.set_climate_timer`), nach Ablauf gilt in Tado wieder der Zeitplan. „Zeitplan“ beendet ihn sofort

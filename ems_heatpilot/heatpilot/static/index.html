@@ -36,21 +36,21 @@
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text-primary);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-main { max-width: 1200px; margin: 0 auto; padding: 16px; }
+main { max-width: 1200px; margin: 0 auto; padding: 16px; overflow-x: clip; }
 h1 { font-size: 20px; margin: 4px 0 2px; }
 h2 { font-size: 15px; margin: 0 0 4px; }
 .sub { color: var(--text-secondary); margin: 0 0 16px; }
 .muted { color: var(--text-muted); font-size: 12px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 40vw), 1fr)); gap: 12px; margin-bottom: 16px; }
 .tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
 .tile .label { color: var(--text-secondary); font-size: 12px; }
 .tile .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile .unit { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
-.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 12px; margin-bottom: 12px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; margin-bottom: 12px; }
 .card p { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; }
 svg { display: block; width: 100%; height: auto; overflow: visible; }
 svg text { fill: var(--text-muted); font-size: 11px; }
-.legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
@@ -121,7 +121,7 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
 #boost-start:disabled { opacity: .45; cursor: default; }
 .boost-sum { font-weight: 700; color: var(--text-primary); }
 .boost, .rtile { background: var(--tile-bg, var(--surface-1)); border-left: 4px solid var(--tile-fg, var(--border)); }
-.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px; }
 .rtile { position: relative; padding: 14px; border-radius: 12px; border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .rtile h3 { margin: 0; font-size: 15px; }
 .rtile .big { font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
@@ -131,7 +131,7 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
 .modes { display: flex; gap: 4px; margin-top: 8px; }
 .modes button { flex: 1; padding: 5px 0; font-size: 12px; }
 .modes button.on { background: var(--tile-fg); color: #111; border-color: transparent; font-weight: 700; }
-.room-legend span { cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px; }
+.room-legend span { white-space: nowrap; cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px; }
 .room-legend span.off { opacity: .4; text-decoration: line-through; }
 </style>
 </head>
@@ -674,10 +674,10 @@ function renderHeat() {
   BOOST.rooms = BOOST.rooms.filter((c) => ids.includes(c));
   const c = tileColors(BOOST.temp, "heat"), box = $("boost");
   box.style.setProperty("--tile-fg", c.fg); box.style.setProperty("--tile-bg", c.bg);
-  const n = BOOST.rooms.length, names = j.rooms.filter((r) => BOOST.rooms.includes(r.climate)).map((r) => r.name);
+  const n = BOOST.rooms.length, names = j.rooms.filter((r) => BOOST.rooms.includes(r.climate)).map((r) => shortName(r.name));
   $("boost-sum").textContent = (n === 0 ? "Kein Raum gewählt" : n === ids.length ? "Alle Räume" : n <= 2 ? names.join(", ") : `${n} Räume`) +
     ` · ${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`;
-  $("boost-rooms").innerHTML = j.rooms.map((r) => `<span class="chip ${BOOST.rooms.includes(r.climate) ? "on" : ""}" onclick="boostRoom('${esc(r.climate)}')">${BOOST.rooms.includes(r.climate) ? "✓ " : ""}${esc(r.name)}</span>`).join("") +
+  $("boost-rooms").innerHTML = j.rooms.map((r) => `<span class="chip ${BOOST.rooms.includes(r.climate) ? "on" : ""}" onclick="boostRoom('${esc(r.climate)}')">${BOOST.rooms.includes(r.climate) ? "✓ " : ""}${esc(shortName(r.name))}</span>`).join("") +
     `<span class="chip" onclick="boostAll()">${n === ids.length ? "Keine" : "Alle"}</span>`;
   $("boost-temp").textContent = fmt(BOOST.temp) + " °C";
   $("boost-dur").min = j.limits.dur_min; $("boost-dur").max = j.limits.dur_max; $("boost-dur").value = BOOST.minutes;
@@ -689,7 +689,7 @@ function renderHeat() {
     const modes = ["auto", "heat", "off"].filter((m) => !r.modes.length || r.modes.includes(m));
     return `<div class="rtile" style="--tile-fg:${col.fg};--tile-bg:${col.bg}">` +
       (r.boost ? `<span class="left">noch ${r.boost.left_min >= 60 ? hm(r.boost.left_min) : r.boost.left_min + " min"}</span>` : "") +
-      `<h3>${esc(r.name)}</h3><div class="big">${fmt(r.temp)} <span style="font-size:15px">°C</span></div>` +
+      `<h3>${esc(shortName(r.name))}</h3><div class="big">${fmt(r.temp)} <span style="font-size:15px">°C</span></div>` +
       `<div class="muted">${r.action === "heating" ? "heizt · " : ""}Ventil ${fmt(r.valve, 0)} %${r.humidity !== null && r.humidity !== undefined ? ` · Feuchte ${fmt(r.humidity, 0)} %` : ""}</div>` +
       `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${r.mode === "off" ? "disabled" : ""}>−</button>` +
       `<span>Soll <b>${r.mode === "off" ? "aus" : fmt(r.target) + " °C"}</b></span>` +
@@ -721,6 +721,7 @@ function roomTemp(c, d) {
 function roomMode(c, m) { heatPost("mode", { room: c, mode: m }, "Schalte …"); }
 
 // Räume gemeinsam: eine Farbe je Raum, antippen blendet aus
+const shortName = (n) => String(n || "").replace(/\s+(heizung|heating|thermostat|klima)$/i, "");
 const ROOM_COL = ["#2a78d6", "#eb6834", "#1a9641", "#8e5bd0", "#d4a106", "#0fa3a3", "#d63a7a", "#8a8984", "#6b8e23", "#b5651d"];
 let LIVE = null;
 const HIDDEN_ROOMS = new Set((() => { try { return JSON.parse(localStorage.getItem("hp-hidden-rooms") || "[]"); } catch (e) { return []; } })());
@@ -734,9 +735,9 @@ function drawRoomCharts() {
   $("rooms-box").hidden = !j.rooms.length;
   if (!j.rooms.length) return;
   const col = (i) => ROOM_COL[i % ROOM_COL.length];
-  $("lg-rooms").innerHTML = j.rooms.map((r, i) => `<span class="${HIDDEN_ROOMS.has(r.climate) ? "off" : ""}" onclick="toggleRoom('${esc(r.climate)}')"><i style="background:${col(i)}"></i>${esc(r.name)}</span>`).join("");
+  $("lg-rooms").innerHTML = j.rooms.map((r, i) => `<span class="${HIDDEN_ROOMS.has(r.climate) ? "off" : ""}" onclick="toggleRoom('${esc(r.climate)}')"><i style="background:${col(i)}"></i>${esc(shortName(r.name))}</span>`).join("");
   const ts = j.rooms[0].ts;
-  const series = (key, unit) => j.rooms.map((r, i) => ({ name: r.name, values: r[key], color: col(i), unit, hidden: HIDDEN_ROOMS.has(r.climate) }));
+  const series = (key, unit) => j.rooms.map((r, i) => ({ name: shortName(r.name), values: r[key], color: col(i), unit, hidden: HIDDEN_ROOMS.has(r.climate) }));
   timeChart($("ch-rooms-temp"), ts, series("temp", "°C"), { unit: "°C", label: "Raumtemperaturen" });
   const hum = series("humidity", "%");
   if (hum.some((l) => l.values.some((v) => v !== null))) timeChart($("ch-rooms-hum"), ts, hum, { unit: "%", digits: 0, label: "Luftfeuchte" });
