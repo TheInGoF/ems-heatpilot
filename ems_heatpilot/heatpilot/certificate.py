@@ -1,7 +1,7 @@
 """Zertifikat über Haus und Heizung – aus Messdaten, als PDF zum Weitergeben.
 
-Ein Augenzwinkern mit ernstem Kern: zeigt einem Vermieter oder Handwerker
-schwarz auf weiß, was das Haus braucht und was der Kessel liefert. Enthält keine
+Rein sachlich: zeigt schwarz auf weiß, was das Haus braucht und was der Kessel
+liefert – bezogen auf die letzten 12 Monate Messung. Enthält keine
 Namen, Adressen oder Standortdaten. Kein Energieausweis nach GEG.
 """
 
@@ -145,11 +145,6 @@ def collect(eng, now_ts: int | None = None) -> dict:
         run_src = "ereignisse" if n_runs >= 20 else None
         if run_src is None:
             run_min = None
-    life_starts, life_min = num(eng._boiler("heat_starts")), num(eng._boiler("heat_runtime"))
-    life_all = False
-    if not (life_starts and life_min):  # nur Gesamtzähler (Heizen + Warmwasser)
-        life_starts, life_min, life_all = num(eng._boiler("burner_starts")), num(eng._boiler("burner_runtime")), True
-    life_run = life_min / life_starts if life_starts and life_min else None
 
     dhw_ok = guards.check_dhw(eng.dhw)["ok"]
     dhw_loss_w = eng.dhw.loss_w(55.0) if dhw_ok else None
@@ -269,9 +264,6 @@ def collect(eng, now_ts: int | None = None) -> dict:
             "below_min_pct": below,
             "starts_per_day": None if starts_day is None else round(starts_day, 1),
             "run_per_start_min": None if run_min is None else round(run_min, 1),
-            "lifetime_run_per_start_min": None if life_run is None else round(life_run, 1),
-            "lifetime_all_starts": life_all,
-            "lifetime_starts": None if life_starts is None else int(life_starts),
             "run_source": run_src,
             "cycling_extra": cycling,
         },
@@ -422,8 +414,7 @@ def render(data: dict) -> bytes:
     if "Taktverhalten" in grades:
         badge(grades["Taktverhalten"], y, "Takten: ")
     y = row("Laufzeit je Heizstart", f"{fmt(bo['run_per_start_min'])} min" if bo["run_per_start_min"] else "–", y,
-            f"seit Einbau {fmt(bo['lifetime_run_per_start_min'])} min" + (" (alle Starts)" if bo.get("lifetime_all_starts") else "")
-            if bo["lifetime_run_per_start_min"] else "")
+            "Mittel der letzten 30 Tage" if bo["run_per_start_min"] else "")
     ce = bo.get("cycling_extra")
     if ce:
         y = row("Mehrkosten durch Takten (Schätzung)", f"{fmt(ce['eur_lo'])}–{fmt(ce['eur_hi'])} € / Jahr", y,

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.25.3
+- Zertifikat rein sachlich: bezieht sich nur auf die letzten 12 Monate Messung (keine Werte „seit Einbau“ mehr) und nicht mehr auf Vermietung
+
 ## 0.25.2
 - Zertifikat: bei zu großem Kessel bzw. sehr kurzen Läufen ein Hinweis auf die **Ineffizienz** – „Mehrkosten durch Takten (Schätzung)“ in € pro Jahr, gerechnet mit Erfahrungswerten von 5–15 % des Heizgases und deutlich als Schätzung gekennzeichnet
 - Zertifikat: „Laufzeit je Heizstart“ auch ohne Heizlaufzeit-Zähler des Kessels – aus den aufgezeichneten Brennerläufen der letzten 30 Tage (ohne Warmwasserladungen); „seit Einbau“ notfalls aus Gesamtlaufzeit und allen Starts

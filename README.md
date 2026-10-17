@@ -38,7 +38,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Vorlauf gegen Takten messen:** ob ein höherer Vorlauf bei deinem Kessel weniger Starts und Gas bringt oder Verschwendung ist
 - **Ausreißer werden nicht gelernt:** Gaszähler-Nachträge, verpasste Zählungen, unmögliche Werte und Einzelspitzen aus Tado, EMS-ESP oder Home Assistant
 - **Zeiten und Temperaturen lernen:** Nachtabsenkung und Abwesenheit aus Tado, die Einstellungen sind nur Startwerte
-- **Zertifikat als PDF:** Haus und Heizung auf einer Seite – Heizlast, Kesselgröße, Takten, Energieklasse und Gesamtbewertung – zum Weitergeben an Vermieter oder Heizungsbauer
+- **Zertifikat als PDF:** Haus und Heizung auf einer Seite – Heizlast, Kesselgröße, Takten, Energieklasse und Gesamtbewertung – sachlich, bezogen auf die letzten 12 Monate
 - **Urlaubsmodus:** Gewohnheiten pausieren, nichts wird umgelernt
 - **Einrichtung komplett in der Oberfläche** – keine YAML-Optionen, Vorschläge vorausgefüllt
 - Oberfläche in der HA-Seitenleiste und Sensoren `sensor.heatpilot_*` für eigene Dashboards

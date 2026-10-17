@@ -99,15 +99,18 @@ Länge, nie der Schlüssel selbst).
 ## Zertifikat über Haus & Heizung
 
 In der Übersicht gibt es ein **Zertifikat als PDF** zum Herunterladen und
-Weitergeben, z. B. an Vermieter oder Heizungsbauer. Es zeigt, gemessen statt
-geschätzt:
+Weitergeben, z. B. an den Heizungsbauer. Es ist rein sachlich, bezieht sich auf die
+letzten 12 Monate Messung und zeigt, gemessen statt geschätzt:
 
 - **Gebäude:** Wärmeverlust, Heizlast am kältesten Tag, Trägheit; mit Wohnfläche
   auch Heizlast je m² und nach 12 Monaten eine Energieklasse (A+ bis H, Skala wie
   im Energieausweis)
 - **Heizkessel:** Nennleistung und kleinste Leistung gegen die Heizlast, Anteil der
   Heizstunden unter der kleinsten Leistung (dort muss der Kessel takten),
-  Heizstarts pro Tag und Laufzeit je Start
+  Heizstarts pro Tag und Laufzeit je Start (ohne Heizlaufzeit-Zähler aus den
+  Brennerläufen der letzten 30 Tage). Ist der Kessel deutlich zu groß oder laufen die
+  Starts sehr kurz: **Mehrkosten durch Takten** als Schätzung in € pro Jahr
+  (Erfahrungswerte 5–15 % des Heizgases, ausdrücklich nicht gemessen)
 - **Warmwasser & Verbrauch:** Warmhalteverlust des Speichers, Gasverbrauch und -kosten
 - **Urteil** in Klartext und ein Stempel: „GEMESSEN“ oder „VORLÄUFIG“ (mit Grund),
   solange das Hausmodell unsicher ist, weniger als 500 Heizstunden oder noch kein
@@ -225,7 +228,7 @@ daraus folgt, welchen Vorlauf der Raum am kältesten Tag bräuchte.
 Leitplanken: erst ab 3 Räumen mit plausiblem Modell und je mindestens 12 Stunden
 Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
-als Mieter vorher kurz mit dem Vermieter absprechen.
+Änderungen am besten mit dem Heizungsbauer bzw. Eigentümer abstimmen.
 
 ## Zusatzdaten aus EMS-ESP
 
