@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.0
+- **Heizen** ist jetzt der erste Reiter und öffnet beim Start
+- Räume umbenennen: Spalte **Anzeigename** unter Einstellungen → Räume – gilt nur in HeatPilot, in Home Assistant bleibt der Name (z. B. „Wohnzimmer Heizung“ für Siri). Der neue Name gilt überall, auch für bereits gelernte Raummodelle
+
 ## 0.23.1
 - Handy: Seite scrollt nicht mehr seitlich – Raum-Legende und Legenden brechen um, Grafen und Kacheln passen auch auf schmale Bildschirme (ab 320 px)
 - Raumnamen kürzer: „Katzenzimmer Heizung“ erscheint in Legende, Boost und Kacheln als „Katzenzimmer“

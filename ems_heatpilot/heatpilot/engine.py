@@ -72,6 +72,7 @@ class Engine:
             if model is None or model.floor != floor:  # neu oder Fußboden-Einstellung geändert
                 model = RoomModel(room.name, floor=floor)
                 fresh_rooms.add(room.climate)
+            model.room = room.name  # Umbenennen in den Einstellungen gilt auch für gelernte Modelle
             self.rooms[room.climate] = model
         self.vacation = Vacation(cfg.vacations, cfg.vacation_entity, cfg.vacation_arrival_time)
         self.vacation.returned = set(store.get("vacation_returned", []))
