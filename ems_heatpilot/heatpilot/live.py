@@ -58,7 +58,10 @@ def series(eng, hours: float = 12, now_ts: int | None = None) -> dict:
         _append(out, rooms, r["ts"], {k: row.get(k) for k in KEYS}, db_rooms.get(r["ts"], {}))
     for ts, sample, rmap in ring:
         _append(out, rooms, ts, sample, rmap)
-    return {"series": out, "rooms": [{"climate": c, **v} for c, v in rooms.items()], "step_s": STEP_S}
+    gas = [[r["ts"], None if r["gas_kwh"] is None else round(r["gas_kwh"], 3)] for r in eng.store.query(
+        "SELECT ts, gas_kwh FROM hourly WHERE ts >= ? ORDER BY ts", (start - 3600,))]
+    return {"series": out, "rooms": [{"climate": c, **v} for c, v in rooms.items()], "step_s": STEP_S,
+            "gas_hours": gas}
 
 
 def _append(out: dict, rooms: dict, ts: int, sample: dict, rmap: dict) -> None:

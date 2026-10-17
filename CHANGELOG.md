@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.22.0
+- Live: **alle Räume gemeinsam** in drei Grafen – Raumtemperatur, Luftfeuchte und Heizbedarf (Ventile), eine Farbe je Raum; Räume per Antippen aus- und einblenden (bleibt gemerkt). Die Einzelgrafen je Raum stehen aufklappbar darunter
+- Live: neuer Graf **Gas und Außentemperatur** – Gas je Stunde als Balken, Außentemperatur als Linie
+- Kurven ruhiger und schärfer: Messwerte werden auf die Bildschirmbreite gemittelt und weich gezeichnet (keine Treppen aus 0,1-K-Sprüngen mehr), dünnere Linien, höhere Grafen, Lücken (z. B. Neustart) werden nicht überbrückt
+
 ## 0.21.1
 - Live und alle anderen Ansichten: statt „The string did not match the expected pattern“ (HA-App und Browser auf iPhone/iPad, wenn die Antwort kein gültiges JSON war) steht jetzt die Ursache da – z. B. „Add-on antwortet nicht (HTTP 502) – startet es gerade neu?“ oder der Fehler aus dem Add-on. Live versucht es nach 15 s selbst erneut
 - Add-on: Fehler einer Abfrage kommen als lesbare Meldung zurück und stehen mit Ursache im Protokoll; ungültige Zahlen (NaN, unendlich) werden zu „kein Wert“, statt die ganze Antwort unlesbar zu machen
