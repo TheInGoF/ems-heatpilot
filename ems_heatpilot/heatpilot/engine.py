@@ -717,7 +717,8 @@ class Engine:
         cached = getattr(self, "_flow_study", None)
         if cached is None or now - cached[0] > max_age_s:
             ok = guards.check_house(self.house)["ok"]
-            self._flow_study = (now, flowstudy.study(self.store, offset_kw=self.house.offset_kw if ok else None))
+            self._flow_study = (now, flowstudy.study(self.store, offset_kw=self.house.offset_kw if ok else None,
+                                                     heating_limit_k=self.house.heating_limit_k if ok else None))
         curve = flowstudy.curve_hint(num(self._thermo("hc_designtemp")), num(self._thermo("hc_seltemp")),
                                      num(self._thermo("hc_minexttemp")), num(self._thermo("hc_offsettemp")))
         return {**self._flow_study[1], "curve": curve}
@@ -930,6 +931,7 @@ class Engine:
         names_by_climate = {r.climate: r.name for r in self.found.rooms}
         gas_total = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in hourly)
         span_days = savings.hours / 24  # nur Stunden, in denen sich Heizgas bestimmen ließ
+        year_days = savings.span_hours / 24  # Hochrechnung: Urlaub zählt mit (dort wird nichts gespart)
         price, fee = self.cfg.gas_price_eur_per_kwh, self.cfg.gas_base_fee_eur_per_year
         last_year = [h for h in hourly if h["ts"] >= now_ts - 365 * 86400]
         year_kwh = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in last_year)
@@ -1033,9 +1035,10 @@ class Engine:
                 "saved_pct": savings.saved_pct,
                 "saved_eur": round(savings.saved_kwh * self.cfg.gas_price_eur_per_kwh, 2),
                 # Jahreswert nur mit vollem Jahr, sonst bleibt der Prozentwert die Aussage
-                "year_kwh": round(savings.saved_kwh * 365 / span_days, 0) if span_days >= 360 else None,
-                "year_eur": round(savings.saved_kwh * 365 / span_days * self.cfg.gas_price_eur_per_kwh, 0)
-                if span_days >= 360 else None,
+                "year_kwh": round(savings.saved_kwh * 365 / year_days, 0) if year_days >= 360 else None,
+                "year_eur": round(savings.saved_kwh * 365 / year_days * self.cfg.gas_price_eur_per_kwh, 0)
+                if year_days >= 360 else None,
+                "dhw_separated": savings.dhw_separated,
                 "gas_total_kwh": round(gas_total, 1),
                 "span_days": round(span_days, 1),
                 "daily": savings.daily[-60:],
