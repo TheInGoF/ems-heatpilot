@@ -716,7 +716,8 @@ class Engine:
         now = time.time()
         cached = getattr(self, "_flow_study", None)
         if cached is None or now - cached[0] > max_age_s:
-            self._flow_study = (now, flowstudy.study(self.store))
+            ok = guards.check_house(self.house)["ok"]
+            self._flow_study = (now, flowstudy.study(self.store, offset_kw=self.house.offset_kw if ok else None))
         curve = flowstudy.curve_hint(num(self._thermo("hc_designtemp")), num(self._thermo("hc_seltemp")),
                                      num(self._thermo("hc_minexttemp")), num(self._thermo("hc_offsettemp")))
         return {**self._flow_study[1], "curve": curve}
@@ -728,10 +729,11 @@ class Engine:
         key = (days, room)
         if key not in cache or now - cache[key][0] > max_age_s:
             rooms = [r.climate for r in self.found.rooms]
-            data = weekly.collect(self.store, int(now), days, self.house, rooms, room)
+            house_ok = guards.check_house(self.house)["ok"]
+            data = weekly.collect(self.store, int(now), days, self.house, rooms, room, house_ok)
             data["rooms"] = [{"climate": r.climate, "name": r.name} for r in self.found.rooms]
             data["room"] = room
-            data["house_ok"] = guards.check_house(self.house)["ok"]
+            data["house_ok"] = house_ok
             if len(cache) > 8:
                 cache.clear()
             cache[key] = (now, data)
@@ -889,6 +891,9 @@ class Engine:
         counters = self.counter_days(today).get(today)
         if counters:  # Zähler der Therme sind genauer als Ein/Aus-Ereignisse
             cycling.update(counters)
+        if "avg_run_min" not in (counters or {}):  # ohne Heizlaufzeit-Zähler: Läufe ohne Warmwasser
+            avg, _ = analysis.heat_runs(self.store, day_start, now_ts + 1)
+            cycling["avg_run_min"] = None if avg is None else round(avg, 1)
         live = self.store.daily(today).get(today, {})
         cycling["blocked_min"] = round(live.get("blocked_min", 0.0), 1)
         cycling["waiting_min"] = round(live.get("waiting_min", 0.0), 1)
@@ -924,7 +929,7 @@ class Engine:
         house_check = guards.check_house(self.house)
         names_by_climate = {r.climate: r.name for r in self.found.rooms}
         gas_total = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in hourly)
-        span_days = (hourly[-1]["ts"] - hourly[0]["ts"]) / 86400 if len(hourly) > 1 else 0
+        span_days = savings.hours / 24  # nur Stunden, in denen sich Heizgas bestimmen ließ
         price, fee = self.cfg.gas_price_eur_per_kwh, self.cfg.gas_base_fee_eur_per_year
         last_year = [h for h in hourly if h["ts"] >= now_ts - 365 * 86400]
         year_kwh = sum((h["gas_kwh"] or 0) + (h["gas_spike_kwh"] or 0) for h in last_year)
@@ -997,9 +1002,12 @@ class Engine:
             "schedule": {"learned": self.schedule_learned, "effective": self.eff.as_dict(),
                          "learning": self.cfg.learn_schedule},
             "limits": {
-                "away_temp": self.eff.away_temp,
+                "away_temp": self.eff.away_temp,      # damit rechnet die Ersparnis (gelernt, nie darunter)
                 "night_temp": self.eff.night_temp,
+                "away_floor": self.cfg.away_temp,     # feste Untergrenzen aus den Einstellungen
+                "night_floor": self.cfg.night_temp,
                 "dhw_min_temp": self.cfg.dhw_min_temp,
+                "max_flow_temp": self.cfg.max_flow_temp,
             },
             "guards": {
                 "house": house_check,
@@ -1012,6 +1020,8 @@ class Engine:
                 "cold_hours": savings.cold_hours,
                 "rooms_checked": len(check_rooms),
                 "rooms_total": len(self.rooms),
+                # plausible Fußbodenräume werden nicht je Raum simuliert (zu träge für Stundenschritte)
+                "rooms_ok_floor": sum(1 for c, m in self.rooms.items() if room_checks[c]["ok"] and c not in check_rooms),
                 "room_hours": savings.room_hours,
                 "room_cold": [{"room": c, "name": names_by_climate.get(c, c), "hours": n}
                               for c, n in (savings.room_cold or {}).items() if n],
@@ -1072,7 +1082,7 @@ class Engine:
             "SELECT ts, t_in, t_out, gas_kwh, dhw_frac FROM hourly WHERE ts >= ? AND gas_kwh IS NOT NULL "
             "AND t_in IS NOT NULL AND t_out IS NOT NULL", (since,)
         ):
-            if r["t_out"] > 15 or (r["dhw_frac"] or 0) > 0.1:
+            if r["t_out"] > 15 or (r["dhw_frac"] or 0) > 0:  # wie beim Lernen
                 continue
             by_day.setdefault(local(r["ts"]).date().isoformat(), []).append((r["t_in"] - r["t_out"], r["gas_kwh"]))
         out = []
@@ -1225,7 +1235,12 @@ class Engine:
         counters = self.counter_days(first)
         live = self.store.daily(first)
         for d in daily_cycles:
-            d.update(counters.get(d["day"], {}))
+            cnt = counters.get(d["day"], {})
+            d.update(cnt)
+            if "avg_run_min" not in cnt:  # ohne Heizlaufzeit-Zähler: nur Läufe ohne Warmwasser
+                day = datetime.fromisoformat(d["day"])
+                avg, _ = analysis.heat_runs(self.store, int(day.timestamp()), int((day + timedelta(days=1)).timestamp()))
+                d["avg_run_min"] = None if avg is None else round(avg, 1)
             for k, v in live.get(d["day"], {}).items():
                 d[k] = round(v, 2)
         return {"hourly": hourly, "snapshots": snaps, "cycles": list(reversed(daily_cycles))}

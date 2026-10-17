@@ -293,7 +293,7 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
         ev = {"nötiger Vorlauf am kältesten Tag (°C)": round(d["flow"]),
               "Median aller Räume (°C)": round(d["median"]),
               "Ventil im Mittel offen (%)": round(d["mean_open"]),
-              "Anteil Heizzeit Ventil über 90 %": round(d["wide_frac"], 2),
+              "Heizzeit mit Ventil über 90 % (%)": round(100 * d["wide_frac"]),
               "Heizstunden ausgewertet": round(d["hours"])}
         if d["state"] == "under":
             gain = ""
@@ -362,7 +362,7 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
             early_frac = sum(e["early_open"] for e in evs) / len(evs)
             reached = sum(e["reached"] for e in evs) / len(evs)
             ev_txt = {"Beobachtungen": len(evs), "Verspätung Median (min)": round(late),
-                      "Frühstart erkannt (Anteil)": round(early_frac, 2)}
+                      "Frühstart erkannt (%)": round(100 * early_frac)}
             if reached < 0.5:
                 continue  # wird meist gar nicht warm: Leistungsfrage, kein Zeitplan-Problem
             if late >= LATE_MIN:

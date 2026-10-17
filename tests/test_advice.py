@@ -76,7 +76,7 @@ def test_each_problem_gets_one_concrete_recommendation(tmp_path):
     assert "Frühstart" in bad["text"] and "06:30" in bad["title"]
     assert bad["evidence"]["Beobachtungen"] >= 4 and bad["evidence"]["Verspätung Median (min)"] >= 40
     assert "um 30 min vorziehen" in bad["text"]  # gedeckelt: max. 30 min auf einmal
-    assert bad["evidence"]["Frühstart erkannt (Anteil)"] == 0.0
+    assert bad["evidence"]["Frühstart erkannt (%)"] == 0
     buero = items[("climate.buero", "zeitplan")]
     assert buero["impact"] == "Sparen" and "später" in buero["text"]
     wz = items[("climate.wz", "geofencing")]

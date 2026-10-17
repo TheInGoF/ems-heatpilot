@@ -26,6 +26,7 @@ from dataclasses import dataclass, field
 from .rls import RLS
 
 ROOM_STEP_H = 0.5
+FLOOR_MAX_H = 48   # länger rechnet der Fußboden-Aufheizlauf nicht
 
 
 @dataclass
@@ -138,9 +139,9 @@ class RoomModel:
         return self.a * u + self.b * (t_out - t_room) + self.c_eff
 
     def equilibrium(self, flow: float, t_out: float, valve: float = 1.0) -> float:
-        """Endtemperatur bei Dauerbetrieb (Fußboden als konstant angenommen – kurzfristig)."""
-        a = self.a * valve
-        return (a * flow + self.b * t_out + self.c_eff) / (a + self.b)
+        """Endtemperatur bei Dauerbetrieb – die Fußbodenheizung heizt dann mit (wie in required_flow)."""
+        a = self.a * valve + self.f
+        return (a * flow + self.b * t_out + self.c) / (a + self.b)
 
     def time_to_reach(
         self, t_now: float, target: float, flow: float, t_out: float, valve: float = 1.0
@@ -151,6 +152,17 @@ class RoomModel:
         t_inf = self.equilibrium(flow, t_out, valve)
         if t_inf <= target + 0.05:
             return None
+        if self.floor:
+            # Estrich wärmt verzögert: in 6-min-Schritten nachrechnen, ab dem heutigen Estrich-Zustand
+            step, t, u = 0.1, t_now, self.floor_u
+            keep = 1 - math.exp(-step / self.floor_lag_h)
+            for i in range(1, FLOOR_MAX_H * 10 + 1):
+                warm = max(flow - t, 0.0)
+                u += keep * (warm - u)
+                t += (self.a * valve * warm + self.f * u + self.b * (t_out - t) + self.c) * step
+                if t >= target:
+                    return round(i * step, 2)
+            return float(FLOOR_MAX_H)  # erreichbar, aber sehr langsam
         k = self.a * valve + self.b
         return -math.log((t_inf - target) / (t_inf - t_now)) / k
 
