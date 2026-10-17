@@ -24,6 +24,7 @@ from .vacation import Vacation
 log = logging.getLogger(__name__)
 
 DHW_RISE_KH = 6.0  # so schnell steigt der Speicher nur beim Laden (Auskühlen: < 2 K/h)
+DHW_HOLD_MAX_S = 90 * 60  # nach dem Ladezähler höchstens so lange „lädt“ annehmen
 
 ENABLE_DELAY_MAX_MIN = 15
 HEAT_SEASON_24H = 15.0          # darüber (24-h-Mittel außen) lernt das Hausmodell nicht
@@ -245,7 +246,7 @@ class Engine:
         demand = self.setpoint_demand()
         enabled = self.heat_enabled()
         period = num(self._boiler("min_period"))
-        power, nom = num(self._boiler("burner_power")), num(self._boiler("nom_power"))
+        power, nom = num(self._boiler("burner_power")), self.nominal_kw()
         locked = bool(
             period and self._last_off_ts is not None and now - self._last_off_ts < period * 60
         )
@@ -402,6 +403,20 @@ class Engine:
             if prev_starts is not None and 0 < starts - prev_starts <= 5 and not flag:
                 sample["dhw"] = flag = 1
                 self.dhw_counted = getattr(self, "dhw_counted", 0) + 1
+                self._dhw_hold = {"since": ts, "hot": False}
+        # Ladung läuft weiter, auch wenn der Speicher gerade fällt (gleichzeitig gezapft) – bis der
+        # Brenner aus ist, der Vorlauf nicht mehr über dem Speicher liegt oder 90 min um sind
+        hold = getattr(self, "_dhw_hold", None)
+        if hold is not None and not flag:
+            flow = sample.get("flow")
+            if flow is not None and t is not None and flow > t:
+                hold["hot"] = True
+            done = (not sample.get("burner_on") or ts - hold["since"] > DHW_HOLD_MAX_S
+                    or (hold["hot"] and flow is not None and t is not None and flow <= t + 2.0))
+            if done:
+                self._dhw_hold = None
+            else:
+                sample["dhw"] = flag = 1
         if flag:
             self.dhw_flag_seen = True
         prev = self._dhw_prev
@@ -412,7 +427,9 @@ class Engine:
                 sample["dhw"] = 0
             return
         dt_h = (ts - prev[0]) / 3600
-        if 0 < dt_h <= 0.25 and t - prev[1] >= 0.5 and (t - prev[1]) / dt_h >= DHW_RISE_KH:
+        flow = sample.get("flow")
+        valve_dhw = flow is None or flow >= t + 5.0  # Speicher wird nur warm, wenn das Kesselwasser heißer ist
+        if valve_dhw and 0 < dt_h <= 0.25 and t - prev[1] >= 0.5 and (t - prev[1]) / dt_h >= DHW_RISE_KH:
             sample["dhw"] = 1
             self.dhw_inferred += 1
         elif flag is None:
@@ -787,24 +804,12 @@ class Engine:
                     log.info("Änderung: %s %s → %s", key, prev.get(key), value)
         self._noted = current
 
-    def dhw_step(self, ts: int, sample: dict) -> None:
-        """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
-        t_cur = sample.get("dhw_temp")
-        prev, self._prev_dhw = self._prev_dhw, (ts, t_cur)
-        if prev is None:
-            return
-        dt_h = (ts - prev[0]) / 3600
-        nom = num(self._boiler("nom_power"))
-        kw = None
-        if sample.get("burner_pow") is not None and nom:
-            kw = sample["burner_pow"] / 100 * nom
+    def dhw_recommend(self, ts: int, sample: dict) -> tuple[dict, float]:
+        """Empfehlung für den Speicher jetzt; gibt (Prüfung, Ziel für den Schatten) zurück."""
         now = local(ts)
-        vacation = bool(sample.get("vacation"))
-        res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
-                            learn_usage=not vacation, special=bool(sample.get("dhw_special")))
         home = sample.get("home_count")
         arrival = None
-        if vacation:
+        if sample.get("vacation"):
             ret = self.vacation.arrival(now, list(self.persons.values()))
             home, arrival = 0, ret["eta"] if ret else None
         elif home == 0:
@@ -813,11 +818,30 @@ class Engine:
         check = guards.check_dhw(self.dhw)
         if check["ok"]:
             self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg)
-            shadow_target = self.dhw_rec["target"]
-        else:
-            # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll
-            self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
-            shadow_target = sample.get("dhw_set") or self.cfg.dhw_comfort_temp
+            return check, self.dhw_rec["target"]
+        # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll
+        self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
+        return check, sample.get("dhw_set") or self.cfg.dhw_comfort_temp
+
+    def dhw_step(self, ts: int, sample: dict) -> None:
+        """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
+        t_cur = sample.get("dhw_temp")
+        prev, self._prev_dhw = self._prev_dhw, (ts, t_cur)
+        if prev is None:
+            # erst ab dem zweiten Messpunkt lernen – die Empfehlung gibt es aber sofort
+            self.dhw_recommend(ts, sample)
+            return
+        dt_h = (ts - prev[0]) / 3600
+        nom = self.nominal_kw()  # Einstellung vor Kessel-Sensor (der liefert oft keine Zahl)
+        kw = None
+        if sample.get("burner_pow") is not None and nom:
+            kw = sample["burner_pow"] / 100 * nom
+        now = local(ts)
+        vacation = bool(sample.get("vacation"))
+        res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
+                            learn_usage=not vacation, special=bool(sample.get("dhw_special")),
+                            dhw_set=num(sample.get("dhw_set")))
+        check, shadow_target = self.dhw_recommend(ts, sample)
         sh = self.dhw_shadow.step(
             self.dhw, t_cur, shadow_target, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp
         )
@@ -880,7 +904,7 @@ class Engine:
         )
 
         hourly = [dict(r) for r in self.store.query("SELECT * FROM hourly ORDER BY ts")]
-        nom = num(self._boiler("nom_power"))
+        nom = self.nominal_kw()
         room_checks = {c: guards.check_room(m) for c, m in self.rooms.items()}
         check_rooms = {c: m for c, m in self.rooms.items()
                        if room_checks[c]["ok"] and not m.floor and c not in self.cfg.floor_heating_rooms}

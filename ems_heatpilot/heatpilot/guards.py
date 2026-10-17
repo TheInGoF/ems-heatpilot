@@ -52,9 +52,10 @@ DHW_MARGIN_DECAY = 0.25    # K pro Tag ohne Problem wieder abbauen
 
 def _within(name: str, value: float | None, reasons: list[str], label: str) -> None:
     lo, hi = LIMITS[name]
-    if value is None or not (lo <= value <= hi):
-        shown = "–" if value is None else f"{value:.3g}"
-        reasons.append(f"{label} {shown} außerhalb {lo:g}–{hi:g}")
+    if value is None:
+        reasons.append(f"{label} noch nicht gemessen")
+    elif not (lo <= value <= hi):
+        reasons.append(f"{label} {value:.3g} außerhalb {lo:g}–{hi:g}")
 
 
 def check_house(house) -> dict:
