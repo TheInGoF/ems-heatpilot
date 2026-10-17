@@ -26,7 +26,8 @@ log = logging.getLogger(__name__)
 DHW_RISE_KH = 6.0  # so schnell steigt der Speicher nur beim Laden (Auskühlen: < 2 K/h)
 
 ENABLE_DELAY_MAX_MIN = 15
-ON_STATES = {"on", "true", "1", "heat", "heating"}
+ON_STATES = {"on", "true", "1", "heat", "heating",
+             "an", "ein", "ja", "wahr", "aktiv"}  # EMS-ESP mit deutscher Sprache: „an“/„aus“
 STALE_S = 12 * 3600
 
 

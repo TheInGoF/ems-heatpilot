@@ -40,3 +40,11 @@ def test_reads_extra_devices_that_answer():
     assert first["mixer"] == {"hc2_flowtemp": 33.0} and extra == ["mixer"]
     assert n_first == 2 + len(EXTRA_DEVICES)
     assert "mixer" in later  # zwischen den selteneren Abfragen bleibt der letzte Stand
+
+
+def test_german_on_off_from_emsesp():
+    """EMS-ESP mit deutscher Sprache liefert „an“/„aus“ – muss wie on/off gelten."""
+    from heatpilot.engine import flag
+
+    assert flag("an") == 1 and flag("aus") == 0
+    assert flag("on") == 1 and flag("off") == 0 and flag(True) == 1 and flag("unavailable") is None

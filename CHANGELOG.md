@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.24.5
+- **EMS-ESP auf Deutsch:** „an“/„aus“ werden jetzt erkannt – vorher galten Brenner, Pumpe usw. beim direkten Lesen als „aus“, sobald EMS-ESP deutsche Werte lieferte
+- Warmwasser lädt: wenn der Kessel kein Ladesignal hat, zählt auch die Speicherladepumpe (`dhw_chargepump`) bzw. das 3-Wege-Ventil; die Erkennung über den Temperaturanstieg bleibt zusätzlich aktiv
+- Diagnose → Alle Sensoren: Werte, die der Kessel laut EMS-ESP gar nicht kennt, heißen jetzt „Kessel liefert nicht“ statt „fehlt“ – da lässt sich nichts freischalten
+
 ## 0.24.4
 - „Gas und Außentemperatur“: Marker verschiebbar wie in den anderen Grafen – zeigt Uhrzeit, Außentemperatur und das Gas der Stunde (Balken wird hervorgehoben)
 

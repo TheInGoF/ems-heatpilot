@@ -593,7 +593,7 @@ function legend(id, items) {
 
 let SENSORS = [];
 const STATUS_CSS = { ok: "var(--good)", fehlt: "#e34948", veraltet: "var(--warn)", "nicht gefunden": "var(--text-muted)",
-  "nicht gewählt": "var(--text-muted)", "nicht verwendet": "var(--text-muted)" };
+  "nicht gewählt": "var(--text-muted)", "nicht verwendet": "var(--text-muted)", "Kessel liefert nicht": "var(--text-muted)" };
 async function loadSensors() {
   const j = await getJSON("api/sensors");
   SENSORS = j.rows || [];
