@@ -1186,7 +1186,7 @@ async function certPrint() {
         ${row("Nennleistung", b.nominal_kw ? `${fmt(b.nominal_kw, 0)} kW` : "–")}${row("Kleinste Leistung", b.min_kw ? `${fmt(b.min_kw)} kW` : "–", b.min_pct ? `${fmt(b.min_pct, 0)} % der Nennleistung` : "")}
         ${row("Nennleistung im Verhältnis zur Heizlast", b.ratio ? `${fmt(b.ratio)}-fach` : "–", "ideal: 1,0 bis 1,5")}
         ${row("Heizstunden unter der kleinsten Leistung", b.below_min_pct !== null ? `${b.below_min_pct} %` : "–", "dann muss der Kessel takten")}
-        ${row("Heizstarts pro Tag", fmt(b.starts_per_day, 0), "Mittel der letzten 30 Tage")}${row("Laufzeit je Heizstart", b.run_per_start_min ? `${fmt(b.run_per_start_min, 0)} min` : "–", (v["Taktverhalten"] ? "Takten: " + esc(v["Taktverhalten"].label) : "") + (b.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(b.lifetime_run_per_start_min)} min${b.lifetime_all_starts ? " (alle Starts)" : ""}` : ""))}
+        ${row("Heizstarts pro Tag", fmt(b.starts_per_day, 0), "Mittel der letzten 30 Tage")}${row("Laufzeit je Heizstart", b.run_per_start_min ? `${fmt(b.run_per_start_min, 0)} min` : "–", (v["Taktverhalten"] ? "Takten: " + esc(v["Taktverhalten"].label) : ""))}
         ${b.cycling_extra ? row("Mehrkosten durch Takten (Schätzung)", `${fmt(b.cycling_extra.eur_lo, 0)}–${fmt(b.cycling_extra.eur_hi, 0)} € / Jahr`, `${b.cycling_extra.pct_lo}–${b.cycling_extra.pct_hi} % des Heizgases, Erfahrungswerte`) : ""}</table>
       ${top ? `<div style="margin-top:8px">${bars.map(([l, x, col]) => `<div style="font-size:12px;margin:3px 0"><span style="display:inline-block;width:190px">${l}</span>${x ? `<span class="bar" style="width:${Math.max(x / top * 380, 2)}px;background:${col}"></span> <b>${fmt(x)} kW</b>` : "–"}</div>`).join("")}</div>` : ""}
       <h3>Warmwasser & Verbrauch ${pill(v["Warmwasser"])}</h3><table>
@@ -1235,7 +1235,7 @@ async function loadCert() {
     `<div class="row"><button class="btn" onclick="certPrint()">Druckansicht</button><button class="btn" onclick="certPdf(true)">Anzeigen</button>` +
     `<button class="btn primary" onclick="certPdf(false)">PDF herunterladen</button></div></div>` +
     `<p class="muted" id="cert-msg"></p>` +
-    `<p>Gemessen statt geschätzt – zum Weitergeben, z. B. an Vermieter oder Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
+    `<p>Gemessen statt geschätzt, bezogen auf die letzten 12 Monate – z. B. für den Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
     (c.overall ? `<div class="row" style="margin:4px 0 8px"><span style="display:inline-block;min-width:44px;text-align:center;padding:4px 8px;border-radius:6px;font-weight:700;font-size:20px;background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>` +
       `<div><b>Gesamtbewertung ${c.overall.score} von 100 Punkten</b><div class="muted">${c.overall.parts.map((x) => `${esc(x.area)} ${x.points ?? "–"}`).join(" · ")} – gewichtet 40/25/20/15 %</div></div></div>`
       : `<p class="muted">Gesamtbewertung, sobald das Gebäude und mindestens zwei weitere Bereiche (Kessel, Takten, Warmwasser) bewertet sind.</p>`) +
