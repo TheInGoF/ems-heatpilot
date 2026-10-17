@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.4
+- **Empfehlungen:** „unnötig früh warm“ kam auch, wenn der Raum einfach noch warm war und Tado das Ventil gar nicht geöffnet hatte (der Zeitplanblock ist nur ein Soll, es floss keine Wärme). Jetzt zählt das nur noch, wenn Tado vor dem Block mit offenem Ventil vorgeheizt hat. Räume, die ohnehin warm sind, bekommen weder Spar- noch Komfort-Hinweise zum Zeitplan. Die alten Hinweise werden zurückgezogen, nicht als „behoben“ gemeldet
+- Zertifikat: die Fußzeile lag auf dem Rahmen – sie steht jetzt innerhalb; reicht der Platz nicht, wird der Inhalt enger gesetzt
+
 ## 0.25.3
 - Zertifikat rein sachlich: bezieht sich nur auf die letzten 12 Monate Messung (keine Werte „seit Einbau“ mehr) und nicht mehr auf Vermietung
 

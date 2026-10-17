@@ -234,3 +234,24 @@ def test_schedule_with_off_blocks_is_evaluated(tmp_path):
     items = by_kind(advice.build(eng, t0 + DAYS * 86400))
     late = [a for (r, k), a in items.items() if r == "climate.wz" and k in ("frühstart", "zeitplan")]
     assert late and "16:00" in late[0]["title"] and late[0]["evidence"]["Verspätung Median (min)"] >= 40
+
+
+def test_room_warm_anyway_is_not_early_heating(tmp_path):
+    """Tado „aus“ bis 05:00, dann 18 °C – der Raum hat ohnehin 19,5 °C und das Ventil bleibt zu.
+
+    Das ist kein unnötiges Vorheizen: der Zeitplanblock ist nur ein Soll, es fließt keine Wärme.
+    """
+    found = Discovered(rooms=[Room("Arbeitszimmer", "climate.az")], persons=["person.a"])
+    eng = Engine(Config(), Store(tmp_path / "w.db"), found)
+    t0 = int(START.timestamp())
+    for i in range(DAYS * 288):
+        ts = t0 + i * STEP
+        d = datetime.fromtimestamp(ts)
+        m = d.hour * 60 + d.minute
+        block = d.weekday() < 5 and 5 * 60 <= m < 8 * 60
+        eng.store.add_person_samples([(ts, "person.a", 1, 0.0)])
+        eng.store.add_sample(ts, {"flow": 45.0})
+        eng.store.add_room_samples([(ts, "climate.az", 19.5, 18.0 if block else None, 0.0, None)])
+    eng.store.commit()
+    items = by_kind(advice.build(eng, t0 + DAYS * 86400))
+    assert ("climate.az", "zeitplan") not in items and ("climate.az", "frühstart") not in items

@@ -316,7 +316,12 @@ def _finite(obj):
     return obj
 
 
-def render(data: dict) -> bytes:
+FOOT_TOP = 60          # Fußzeile beginnt so weit über dem Seitenende – sicher innerhalb des Rahmens
+MIN_STEP = 12.0
+
+
+def render(data: dict, step: float = 15.0) -> bytes:
+    """Eine A4-Seite. Passt der Inhalt nicht über die Fußzeile, wird enger gesetzt."""
     data = _finite(data)
     p = Page()
     W = p.w
@@ -372,7 +377,7 @@ def render(data: dict) -> bytes:
         p.text(L + 250, y, value, 10, bold=True, color=NAVY_DARK)
         if note:
             p.text(L + 250 + text_width(value, 10, True) + 6, y, note, 8, color=GREY)
-        return y + 15
+        return y + step
 
     h, bo = data["house"], data["boiler"]
     # --- Gebäude
@@ -433,7 +438,7 @@ def render(data: dict) -> bytes:
                 w = max(full * v / top, 2)
                 p.rect(L + 150, y, w, 12, fill=col, radius=2)
                 p.text(L + 150 + w + 5, y + 9.5, f"{fmt(v, 1)} kW", 9, bold=True, color=NAVY_DARK)
-            y += 17
+            y += step + 2
         y += 6
     else:
         y += 6
@@ -478,7 +483,9 @@ def render(data: dict) -> bytes:
     foot = ("Automatisch erstellt aus den Messdaten von EMS HeatPilot. Ohne Gewähr. Kein Energieausweis "
             "nach GEG; Werte nicht witterungsbereinigt. Leistungen und Verbrauch sind Gas (einschließlich "
             "Kesselwirkungsgrad). Enthält keine Namen, Adressen oder Standortdaten.")
-    p.paragraph(L, max(y + 6, p.h - 62), foot, R - L, 7.5, color=GREY, leading=9.5)
+    if y + 6 > p.h - FOOT_TOP and step > MIN_STEP:
+        return render(data, step - 1)
+    p.paragraph(L, max(y + 6, p.h - FOOT_TOP), foot, R - L, 7.5, color=GREY, leading=9.5)
     return document([p], title="Zertifikat Haus & Heizung", author="EMS HeatPilot")
 
 

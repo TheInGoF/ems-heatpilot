@@ -94,6 +94,9 @@ def _arrivals(home: dict[int, bool], vacation: set[int]) -> list[int]:
     return out
 
 
+PREHEAT_VALVE = 20  # % Ventil: darunter heizt Tado praktisch nicht
+
+
 def _first_warm(series, i0: int, target: float, horizon_s: int = 4 * 3600) -> int | None:
     t0 = series[i0][0]
     for ts, temp, _, _ in series[i0:]:
@@ -114,15 +117,23 @@ def schedule_events(series, home, vacation) -> list[dict]:
             continue
         if target - prev_target < RISE_K or not home.get(ts, True):
             continue
-        if target - temp < 0.8:  # war schon fast warm (Frühstart hat gereicht)
+        if target - temp < 0.8:  # war schon (fast) warm
             warm_since = None
             for j in range(i - 1, -1, -1):
                 tj, tempj, _, _ = series[j]
                 if tempj is None or tempj < target - WARM_MARGIN or ts - tj > 4 * 3600:
                     break
                 warm_since = tj
-            events.append({"ts": ts, "late_min": 0.0, "early_open": True, "reached": True,
-                           "warm_ahead_min": (ts - warm_since) / 60 if warm_since else 0.0})
+            # Nur Verschwendung, wenn Tado vorher wirklich geheizt hat (Ventil offen, obwohl das
+            # bisherige Soll erreicht war = Frühstart). Hält der Raum die Wärme von selbst oder
+            # hat ihn die Sonne gewärmt, ist der Zeitplanblock nur ein Soll – es fließt keine Wärme.
+            preheat = [tj for tj, tempj, tgtj, vj in series[max(0, i - 48):i]
+                       if ts - tj <= 4 * 3600 and vj is not None and vj >= PREHEAT_VALVE
+                       and tempj is not None and tgtj is not None and tempj >= tgtj - WARM_MARGIN]
+            heated = bool(preheat) and warm_since is not None
+            events.append({"ts": ts, "late_min": 0.0, "early_open": heated, "reached": True,
+                           "warm_anyway": not heated,
+                           "warm_ahead_min": (ts - max(warm_since, min(preheat))) / 60 if heated else 0.0})
             continue
         warm_at = _first_warm(series, i, target)
         late = (warm_at - ts) / 60 if warm_at else 240.0
@@ -336,6 +347,11 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
             if len(evs) < MIN_EVENTS:
                 continue
             when = f"{'Mo–Fr' if weekday else 'Sa–So'} {slot // 2:02d}:{30 * (slot % 2):02d}"
+            # Raum war ohnehin warm und Tado hat nicht geheizt: kein Komfort-, kein Sparthema
+            needy = [e for e in evs if not e.get("warm_anyway")]
+            if len(needy) < MIN_EVENTS:
+                continue
+            evs = needy
             late = statistics.median(e["late_min"] for e in evs)
             ahead = statistics.median(e["warm_ahead_min"] for e in evs)
             early_frac = sum(e["early_open"] for e in evs) / len(evs)
@@ -358,9 +374,10 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
                         f"Block in Tado um {shift} min vorziehen{step}.", ev_txt)
             elif ahead >= EARLY_MIN:
                 shift = _round5(ahead - 15)
-                add(climate, "zeitplan", "Sparen", f"{name}: zum Block {when} unnötig früh warm",
-                    f"Im Mittel schon {ahead:.0f} min vor dem Block warm. Block um {shift} min später "
-                    f"legen oder den Frühstart für diesen Raum ausschalten.",
+                add(climate, "zeitplan", "Sparen", f"{name}: zum Block {when} unnötig früh geheizt",
+                    f"Tado heizt vor dem Block schon mit offenem Ventil, der Raum ist im Mittel {ahead:.0f} min "
+                    f"vor dem Block warm. Block um {shift} min später legen oder den Frühstart für diesen Raum "
+                    f"ausschalten.",
                     {**ev_txt, "früher warm Median (min)": round(ahead)})
 
         # 2. Geofencing
@@ -408,10 +425,17 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
     return out
 
 
+ADVICE_VERSION = 2  # 2 (0.25.4): „unnötig früh warm“ nur noch bei echtem Vorheizen
+
+
 def track(store, advice: list[dict], now_ts: int | None = None) -> list[dict]:
     """Merkt sich, seit wann eine Empfehlung besteht, und was inzwischen behoben ist."""
     now_ts = now_ts or int(time.time())
     state: dict = store.get("advice_state", {})
+    if store.get("advice_version", 1) != ADVICE_VERSION:
+        # geänderte Regeln: alte Empfehlungen sind zurückgezogen, nicht „behoben“
+        state = {}
+        store.put("advice_version", ADVICE_VERSION)
     current = {f"{a['room']}|{a['kind']}|{a['title']}": a for a in advice}
     for key, a in current.items():
         a["since"] = state.get(key, {}).get("since", now_ts)
