@@ -414,7 +414,7 @@ function frame(container, xs, ys, opts = {}) {
   });
   const xt = opts.xTicks ? opts.xTicks(x0, x1) : ticks(x0, x1).map((v) => [v, fmt(v)]);
   xt.forEach(([v, label]) => { el("text", { x: sx(v), y: H - 8, "text-anchor": "middle" }, svg).textContent = label; });
-  return { svg, sx, sy, W, H, m };
+  return { svg, sx, sy, W, H, m, x0, x1 };
 }
 
 function dateTicks(x0, x1) {
@@ -797,14 +797,27 @@ function drawGasChart(ts, tOut, gas) {
   const f = frame(box, xs, ys.length ? ys : [0, 1], { xTicks: timeTicks, label: "Gas und Außentemperatur", right: true });
   const top = f.m.t, bottom = f.H - f.m.b, gmax = Math.max(0.5, ...g.map((x) => x[1]));
   const sg = (v) => bottom - v / gmax * (bottom - top) * 0.9;
-  g.forEach(([t, v]) => {
+  const bars = g.map(([t, v]) => {
     const x0 = f.sx(t) + 1, x1 = f.sx(t + 3600) - 1;
-    const r = el("rect", { x: x0, y: sg(v), width: Math.max(x1 - x0, 1), height: bottom - sg(v), fill: "var(--series-2)", "fill-opacity": 0.55, rx: 1.5 }, f.svg);
-    r.addEventListener("mousemove", (e) => showTip(e, `${new Date(t * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}–${new Date((t + 3600) * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}<br>Gas <b>${fmt(v, 2)} kWh</b>`));
-    r.addEventListener("mouseleave", hideTip);
+    return el("rect", { x: x0, y: sg(v), width: Math.max(x1 - x0, 1), height: bottom - sg(v), fill: "var(--series-2)", "fill-opacity": 0.55, rx: 1.5 }, f.svg);
   });
   [0, gmax / 2, gmax].forEach((v) => { el("text", { x: f.W - f.m.r + 4, y: sg(v) + 4 }, f.svg).textContent = fmt(v, 1); });
   el("path", { d: smoothPath(ts, tOut, f.sx, f.sy), fill: "none", stroke: "var(--series-1)", "stroke-width": 1.8, "vector-effect": "non-scaling-stroke" }, f.svg);
+  // Marker wie in den anderen Grafen: Uhrzeit, Außentemperatur und Gas der Stunde darunter
+  const cross = el("line", { y1: top, y2: bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.m.l, y: top, width: f.W - f.m.l - f.m.r, height: bottom - top, fill: "transparent" }, f.svg);
+  const hm2 = (t) => new Date(t * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+  const off = () => { cross.setAttribute("visibility", "hidden"); bars.forEach((b) => b.setAttribute("fill-opacity", 0.55)); };
+  scrub(f.svg, hit, (e, rel) => {
+    const x = rel * f.W, t = f.x0 + (x - f.m.l) / (f.W - f.m.l - f.m.r) * (f.x1 - f.x0);
+    let best = 0; ts.forEach((u, i) => { if (Math.abs(u - t) < Math.abs(ts[best] - t)) best = i; });
+    const tt = ts.length ? ts[best] : t, bi = g.findIndex(([h]) => h <= t && t < h + 3600);
+    cross.setAttribute("x1", f.sx(tt)); cross.setAttribute("x2", f.sx(tt)); cross.setAttribute("visibility", "visible");
+    bars.forEach((b, i) => b.setAttribute("fill-opacity", i === bi ? 0.9 : 0.55));
+    const rows = [`<span style="color:var(--series-1)">●</span> Außen: <b>${fmt(tOut[best])}</b> °C`];
+    if (bi >= 0) rows.push(`<span style="color:var(--series-2)">●</span> Gas ${hm2(g[bi][0])}–${hm2(g[bi][0] + 3600)}: <b>${fmt(g[bi][1], 2)}</b> kWh`);
+    showTip(e, `${hm2(tt)}<br>${rows.join("<br>")}`, off);
+  });
 }
 
 // Auskühlen des Speichers: Messpunkte (je 1 K gemittelt) und gelernte Kurve – passt das Modell?
