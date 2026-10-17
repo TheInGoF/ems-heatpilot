@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.24.1
+- Live: Warmwasser-Graf steht jetzt vor „Außen & innen“
+
 ## 0.24.0
 - **Heizen** ist jetzt der erste Reiter und öffnet beim Start
 - Räume umbenennen: Spalte **Anzeigename** unter Einstellungen → Räume – gilt nur in HeatPilot, in Home Assistant bleibt der Name (z. B. „Wohnzimmer Heizung“ für Siri). Der neue Name gilt überall, auch für bereits gelernte Raummodelle
