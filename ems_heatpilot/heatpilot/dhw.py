@@ -20,6 +20,7 @@ schlechtere Kondensieren beim Laden aus warmem Speicher und jeder Brennerstart.
 from __future__ import annotations
 
 import math
+import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
@@ -32,6 +33,9 @@ BIG_DRAW_K = 6.0       # ab so viel Abfall in einer Stunde: große Zapfung (z. B
 BIG_KEEP_DAYS = 60
 BIG_WARMUP_DAYS = 14
 SEGMENT_H = 0.5       # Auskühlen über so lange ruhige Abschnitte lernen
+SPECIAL_ABOVE_SET_K = 8.0  # so weit über dem Soll geladen = Legionellenschaltung
+HIT_K = 1.0               # ab so viel Temperaturabfall in einer Stunde zählt sie als „mit Zapfung“
+HIT_THRESHOLD = 0.25      # in jeder 4. Woche gezapft: Warmwasser bereithalten
 AFTER_CHARGE_H = 0.5   # so lange nach einer Ladung zieht der Fühler noch nach – nicht als Auskühlen lernen
 MAX_RISE_K = 0.3       # steigt die Temperatur ohne Ladung stärker, wird geheizt (Ladesignal fehlt o. ä.)
 
@@ -61,6 +65,10 @@ class DhwModel:
     big_draws: list = field(default_factory=list)
     # Legionellenschaltung/Einmalladung: geladen, aber nicht gelernt
     special_charges: int = 0
+    # Wie oft in dieser Stunde überhaupt gezapft wird (Anteil, nicht Menge) – seltene, aber
+    # regelmäßige Nutzung (Wanne am Sonntag) verschwindet sonst im Mittelwert
+    hit: list[float] = field(default_factory=lambda: [0.0] * SLOTS)
+    hit_daily: list[float] = field(default_factory=lambda: [0.0] * 24)
     # laufende Zustände
     _charge: dict | None = None
     _slot: int | None = None
@@ -98,8 +106,11 @@ class DhwModel:
             v = self.kwh_per_k["kalt" if start_temp < LOW_START_LIMIT else "warm"]
             if v is not None:
                 return v
-        vals = [v for v in self.kwh_per_k.values() if v is not None]
-        return sum(vals) / len(vals) if vals else None
+        # nach Zahl der Messungen gewichtet (höchstens 5 je Topf) – ein Topf mit 2 Messungen
+        # zählt nicht so viel wie einer mit 20
+        pairs = [(v, min(self.kwh_per_k_n.get(k, 1), 5)) for k, v in self.kwh_per_k.items() if v is not None]
+        w = sum(n for _, n in pairs)
+        return sum(v * n for v, n in pairs) / w if w else None
 
     def loss_w(self, t: float) -> float | None:
         """Bereitschaftsverlust als Gasleistung in W (was das Warmhalten kostet)."""
@@ -117,6 +128,21 @@ class DhwModel:
     def slot_draw_at(self, weekday: int, hour: int) -> float:
         w = self.weekly_weight(weekday, hour)
         return (1 - w) * self.daily[hour] + w * self.profile[weekday * 24 + hour]
+
+    def hit_at(self, weekday: int, hour: int) -> float:
+        w = self.weekly_weight(weekday, hour)
+        return (1 - w) * self.hit_daily[hour] + w * self.hit[weekday * 24 + hour]
+
+    def big_draw_expected(self, now: datetime, hours: float) -> float | None:
+        """Wiederkehrende große Zapfung (mind. 2× am selben Wochentag ±1 h) im Zeitfenster: übliche Größe."""
+        sizes = []
+        for h in range(int(hours) + 1):
+            t = now + timedelta(hours=h)
+            same = [k for ts, k in self.big_draws
+                    if (d := datetime.fromisoformat(ts)).weekday() == t.weekday() and abs(d.hour - t.hour) <= 1]
+            if len(same) >= 2:
+                sizes.append(statistics.median(same))
+        return max(sizes) if sizes else None
 
     def expected_draw(self, now: datetime, hours: float) -> float:
         """Erwarteter Temperaturabfall durch Zapfungen in den nächsten Stunden (K)."""
@@ -143,6 +169,7 @@ class DhwModel:
         burner_kw: float | None,
         learn_usage: bool = True,
         special: bool = False,
+        dhw_set: float | None = None,
     ) -> dict:
         """Ein Abtastschritt. Gibt {'draw_k', 'loss_kwh', 'charge_kwh'} zurück.
 
@@ -171,11 +198,13 @@ class DhwModel:
                 self._slot_draw += out["draw_k"]
             if self._charge is None:
                 # Starttemperatur = nach der Zapfung, vor der ersten Ladewärme
-                self._charge = {"start": t_prev - out["draw_k"], "max": t_cur, "kwh": 0.0, "h": 0.0, "special": False}
+                self._charge = {"start": t_prev - out["draw_k"], "max": t_cur, "kwh": 0.0, "h": 0.0,
+                                "special": False, "set": dhw_set, "drawn": False}
             elif out["draw_k"]:
                 self._charge["start"] -= out["draw_k"]  # gezapfte Wärme muss zusätzlich geladen werden
             c = self._charge
             c["special"] = c.get("special") or special
+            c["drawn"] = c.get("drawn") or out["draw_k"] > 0
             c["max"] = max(c["max"], t_cur)
             c["h"] += dt_h
             if burner_kw is not None:
@@ -217,10 +246,13 @@ class DhwModel:
         rise = c["max"] - c["start"]
         if rise < 2.0 or c["h"] <= 0:
             return
-        if c.get("special"):
+        # Sonderladung auch ohne Kesselschalter: weit über das Soll geladen (Legionellenschaltung)
+        if c.get("special") or (c.get("set") is not None and c["max"] > c["set"] + SPECIAL_ABOVE_SET_K):
             self.special_charges += 1
             return
         self.charges += 1
+        if c.get("drawn"):
+            return  # während der Ladung gezapft: Anstieg nur geschätzt – keine Ladekosten daraus lernen
         self.charge_rate_kh += 0.2 * (rise / c["h"] - self.charge_rate_kh)
         if c["kwh"] > 0:
             key = "kalt" if c["start"] < LOW_START_LIMIT else "warm"
@@ -247,6 +279,9 @@ class DhwModel:
             self.profile[self._slot] += 0.3 * (draw - self.profile[self._slot])
             self.profile_n[self._slot] += 1
             self.daily[hour] += 0.15 * (draw - self.daily[hour])
+            hit = 1.0 if self._slot_draw >= HIT_K else 0.0  # vor dem Deckeln: große Zapfung zählt voll
+            self.hit[self._slot] += 0.3 * (hit - self.hit[self._slot])
+            self.hit_daily[hour] += 0.15 * (hit - self.hit_daily[hour])
         if slot != self._slot:
             if self._slot is not None and learn_usage:
                 self.comfort_margin = max(self.comfort_margin - DHW_MARGIN_DECAY / 24, 0.0)
@@ -271,12 +306,21 @@ class DhwModel:
             if next_arrival is None or (next_arrival - now).total_seconds() / 3600 > horizon:
                 return {"target": cfg.dhw_min_temp, "reason": "niemand zu Hause"}
         draw = self.expected_draw(now, horizon)
-        if draw >= 1.0:
+        chance = max(self.hit_at((now + timedelta(hours=h)).weekday(), (now + timedelta(hours=h)).hour)
+                     for h in range(int(horizon) + 1))
+        big = self.big_draw_expected(now, horizon)
+        if draw >= 1.0 or chance >= HIT_THRESHOLD or big:
             # Komfort zu Beginn der Nutzung; bei viel Verbrauch so hoch, dass er danach
             # nicht unter das Minimum fällt
-            target = min(max(comfort, cfg.dhw_min_temp + draw), cfg.dhw_max_temp)
-            return {"target": round(target), "reason": f"Zapfung erwartet (≈{draw:.0f} K)"}
-        return {"target": cfg.dhw_min_temp, "reason": "keine Zapfung erwartet"}
+            need = max(draw, big or 0.0)
+            target = min(max(comfort, cfg.dhw_min_temp + need), cfg.dhw_max_temp)
+            why = (f"große Zapfung üblich (≈{big:.0f} K)" if big else
+                   f"Zapfung erwartet (≈{draw:.0f} K)" if draw >= 1.0 else
+                   f"hier wird oft gezapft ({chance * 100:.0f} % der Wochen)")
+            return {"target": round(target), "reason": why}
+        # Selbstkorrektur nach zu kalten Zapfungen gilt auch für das Minimum
+        floor = min(cfg.dhw_min_temp + self.comfort_margin, comfort) if someone_home is not False else cfg.dhw_min_temp
+        return {"target": round(floor), "reason": "keine Zapfung erwartet"}
 
     def summary(self, t_now: float | None) -> dict:
         hours = self.daily
@@ -313,6 +357,8 @@ class DhwModel:
             "comfort_margin": self.comfort_margin,
             "big_draws": self.big_draws,
             "special_charges": self.special_charges,
+            "hit": self.hit,
+            "hit_daily": self.hit_daily,
         }
 
     @classmethod
@@ -329,6 +375,8 @@ class DhwModel:
             comfort_margin=d.get("comfort_margin", 0.0),
             big_draws=d.get("big_draws", []),
             special_charges=d.get("special_charges", 0),
+            hit=d.get("hit", [0.0] * SLOTS),
+            hit_daily=d.get("hit_daily", [0.0] * 24),
         )
         return m
 

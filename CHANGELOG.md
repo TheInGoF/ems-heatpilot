@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.28.0
+Korrekturen am Warmwasser aus der Export-Prüfung (jeder Punkt gegengeprüft):
+- **Ladekosten wurden nie gelernt**, wenn der Kessel seine Nennleistung nicht als Zahl meldet – die Nennleistung aus den Einstellungen wurde beim Warmwasser nicht verwendet. Folge waren „Modell unplausibel“, keine Empfehlung, Bereitschaftsverlust „–“ und Ersparnis 0. Betraf auch „Brenner ohne Wärmebedarf“ (kWh) und die Ersparnis-Simulation
+- **Legionellenschaltung** wird jetzt auch ohne Kesselschalter erkannt: eine Ladung weit über das Soll (mehr als 8 K) zählt als Sonderladung und wird nicht gelernt
+- **Gleichzeitig gezapft** (z. B. Wanne beim Ladestart): die Ladung zerfiel bisher in Stücke und lieferte falsche Ladekosten. Nach dem Ladezähler bleibt „lädt“ bestehen, bis der Brenner aus ist; Ladungen mit Zapfung zählen, lernen aber keine Kosten
+- Ladung aus dem Temperaturanstieg nur, wenn das Kesselwasser heißer ist als der Speicher (der erste Heizschritt nach einer Ladung galt sonst als Warmwasser)
+- **Empfehlung:** seltene, aber regelmäßige Nutzung (z. B. Wanne am Sonntag) verschwand im Mittelwert – jetzt zählt auch, *wie oft* in einer Stunde gezapft wird, und wiederkehrende große Zapfungen. Die Reserve nach zu kalten Zapfungen hebt auch das Minimum an. Die Empfehlung gibt es direkt nach dem Start
+- Ladekosten-Mittel nach Zahl der Messungen gewichtet; „noch nicht gemessen“ statt „außerhalb –“ in den Leitplanken
+- Beim Update wird der Lernstand einmal neu berechnet
+
 ## 0.27.0
 Korrekturen an den Raummodellen aus der Export-Prüfung (jeder Punkt gegengeprüft):
 - **Wärme kommt über die Pumpe:** bisher zählte Wärme nur, solange der Brenner brannte. Bei taktenden Kesseln läuft die Heizungspumpe aber 3- bis 4-mal so lange und liefert dabei Wärme. Dadurch war die Heizwirkung je Raum zu hoch gelernt – „Vorlauf für 21 °C“ und Aufheizzeiten waren unrealistisch niedrig. Live zeigt die Pumpe jetzt nach ihrer Drehzahl
