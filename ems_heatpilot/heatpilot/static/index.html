@@ -1186,7 +1186,8 @@ async function certPrint() {
         ${row("Nennleistung", b.nominal_kw ? `${fmt(b.nominal_kw, 0)} kW` : "–")}${row("Kleinste Leistung", b.min_kw ? `${fmt(b.min_kw)} kW` : "–", b.min_pct ? `${fmt(b.min_pct, 0)} % der Nennleistung` : "")}
         ${row("Nennleistung im Verhältnis zur Heizlast", b.ratio ? `${fmt(b.ratio)}-fach` : "–", "ideal: 1,0 bis 1,5")}
         ${row("Heizstunden unter der kleinsten Leistung", b.below_min_pct !== null ? `${b.below_min_pct} %` : "–", "dann muss der Kessel takten")}
-        ${row("Heizstarts pro Tag", fmt(b.starts_per_day, 0), "Mittel der letzten 30 Tage")}${row("Laufzeit je Heizstart", b.run_per_start_min ? `${fmt(b.run_per_start_min, 0)} min` : "–", v["Taktverhalten"] ? "Takten: " + esc(v["Taktverhalten"].label) : "")}</table>
+        ${row("Heizstarts pro Tag", fmt(b.starts_per_day, 0), "Mittel der letzten 30 Tage")}${row("Laufzeit je Heizstart", b.run_per_start_min ? `${fmt(b.run_per_start_min, 0)} min` : "–", (v["Taktverhalten"] ? "Takten: " + esc(v["Taktverhalten"].label) : "") + (b.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(b.lifetime_run_per_start_min)} min${b.lifetime_all_starts ? " (alle Starts)" : ""}` : ""))}
+        ${b.cycling_extra ? row("Mehrkosten durch Takten (Schätzung)", `${fmt(b.cycling_extra.eur_lo, 0)}–${fmt(b.cycling_extra.eur_hi, 0)} € / Jahr`, `${b.cycling_extra.pct_lo}–${b.cycling_extra.pct_hi} % des Heizgases, Erfahrungswerte`) : ""}</table>
       ${top ? `<div style="margin-top:8px">${bars.map(([l, x, col]) => `<div style="font-size:12px;margin:3px 0"><span style="display:inline-block;width:190px">${l}</span>${x ? `<span class="bar" style="width:${Math.max(x / top * 380, 2)}px;background:${col}"></span> <b>${fmt(x)} kW</b>` : "–"}</div>`).join("")}</div>` : ""}
       <h3>Warmwasser & Verbrauch ${pill(v["Warmwasser"])}</h3><table>
         ${row("Warmhalten des Speichers bei 55 °C", d.loss_w_55 ? `${fmt(d.loss_w_55, 0)} W` : "–")}

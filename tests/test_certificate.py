@@ -95,3 +95,21 @@ def test_overall_score_brings_everything_to_one_class(tmp_path):
     assert o["class"] == next(c for c, lo in certificate.OVERALL_CLASSES if o["score"] >= lo)
     assert certificate.overall({"Gebäude": 80, "Kesselgröße": 50, "Taktverhalten": None, "Warmwasser": None}) is None
     assert certificate.overall({"Gebäude": None, "Kesselgröße": 50, "Taktverhalten": 60, "Warmwasser": 70}) is None
+
+
+def test_burner_runs_without_heat_runtime_counter(tmp_path):
+    """Kessel ohne Heizlaufzeit-Zähler: Laufzeit je Heizstart aus den Brennerläufen, ohne Warmwasser."""
+    from heatpilot.certificate import burner_runs
+    from heatpilot.store import Store
+
+    st = Store(tmp_path / "r.db")
+    t = 1_000_000
+    for i in range(25):  # 25 Heizläufe à 6 min
+        st.add_burner_event(t + i * 3600, True)
+        st.add_burner_event(t + i * 3600 + 360, False)
+    st.add_burner_event(t + 30 * 3600, True)  # Warmwasserladung 20 min
+    st.add_sample(t + 30 * 3600 + 120, {"dhw": 1})
+    st.add_burner_event(t + 30 * 3600 + 1200, False)
+    st.commit()
+    mean, n = burner_runs(st, t - 1)
+    assert n == 25 and abs(mean - 6.0) < 1e-9
