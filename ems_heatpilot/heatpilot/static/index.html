@@ -451,7 +451,11 @@ function lineChart(container, pts, unit, label) {
 
 function barChart(container, rows, unit, label, zeroText) {
   if (!rows.length) return empty(container, "Noch keine Daten.");
-  if (rows.every((r) => !r[1])) return empty(container, zeroText || "Noch keine Daten.");
+  if (rows.every((r) => !r[1])) {  // lauter Nullen ist auch eine Aussage – Karte mit Satz zeigen
+    if (!zeroText) return empty(container, "Noch keine Daten.");
+    container.innerHTML = `<p class="muted">${zeroText}</p>`;
+    return showCard(container);
+  }
   const xs = rows.map((_, i) => i), ys = rows.map((r) => r[1]);
   const f = frame(container, [-0.5, rows.length - 0.5], [0, ...ys], {
     yMin: 0, label,
@@ -901,7 +905,7 @@ async function load() {
     tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),
     tile("Brenner ohne Bedarf", fmt(c.overrun_min, 0), "min heute", `≈ ${fmt(c.overrun_kwh, 1)} kWh · alle Räume waren am Soll`),
     tile("Gaskosten", fmt(s.costs.eur, 0), s.costs.full_year ? "€ / Jahr" : `€ in ${fmt(s.costs.days, 0)} Tagen`, `${fmt(s.costs.kwh, 0)} kWh · Betrag inkl. anteiligem Grundpreis` + (s.costs.full_year ? "" : " – noch kein volles Jahr")),
-    tile(sv.reliable ? "Ersparnis-Schätzung Heizen" : "Ersparnis Heizen (Modell lernt noch)", fmt(sv.saved_pct), "%", "vom Heizgas · " + (sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`) +
+    tile(sv.reliable ? "Ersparnis-Schätzung Heizen" : "Ersparnis Heizen (Modell lernt noch)", fmt(sv.saved_pct), "%", (sv.dhw_separated === false ? "vom gesamten Gas · " : "vom Heizgas · ") + (sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`) +
       (sv.rooms_checked ? ` · Komfort je Raum geprüft (${sv.rooms_checked} Räume)` : " · Komfort nur fürs ganze Haus geprüft")),
     tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `Kessel-Soll ${fmt(s.flow_current_setpoint, 0)} °C` + (s.flow_calculated !== null ? ` · Regler ${fmt(s.flow_calculated, 0)} °C` : "")),
   ].join("");
@@ -932,7 +936,7 @@ async function load() {
   $("dhw-tiles").innerHTML = [
     tile("Speicher", fmt(w.temp, 0), "°C", `Soll ${fmt(w.set, 0)} °C · ` + (w.charges > 0 ? `lädt mit ${fmt(w.charge_rate_kh, 0)} K/h nach` : "Nachladen noch nicht gemessen")),
     rec && rec.target !== null ? tile("Empfehlung jetzt", fmt(rec.target, 0), "°C", esc(rec.reason))
-      : tile("Empfehlung jetzt", "lernt noch", "", rec ? esc(rec.reason) : "noch keine Messung"),
+      : w.temp !== null ? tile("Empfehlung jetzt", "lernt noch", "", rec ? esc(rec.reason) : "noch keine Messung") : "",
     tile("Bereitschaftsverlust", fmt(w.loss_w_now, 0), "W", prelim + `bei 45 °C ${fmt(w.loss_w_at[45], 0)} W · bei 55 °C ${fmt(w.loss_w_at[55], 0)} W`),
     tile("Ladekosten", fmt(kpk.kalt ?? kpk.warm, 3), "kWh/K", `Start unter 47 °C: ${fmt(kpk.kalt, 3)} (${w.kwh_per_k_n.kalt}×) · darüber: ${fmt(kpk.warm, 3)} (${w.kwh_per_k_n.warm}×)`),
     tile(dok ? "Ersparnis-Schätzung" : "Ersparnis (Modell lernt noch)", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
@@ -960,7 +964,7 @@ async function load() {
   barChart($("chart-overrun"), hist.cycles.map((d) => [dlabel(d), d.overrun_min || 0, `≈ ${fmt(d.overrun_kwh || 0, 1)} kWh`]), "min", "Brenner ohne Wärmebedarf pro Tag", "An keinem Tag lief der Brenner ohne Wärmebedarf – gut.");
   barChart($("chart-blocked"), hist.cycles.map((d) => [dlabel(d), d.blocked_min || 0, `Startverzögerung ${fmt(d.enable_delay_min || 0, 0)} min · Regler auf Nacht ${fmt(d.mode_wait_min || 0, 0)} min · insgesamt ${fmt(d.waiting_min || 0, 0)} min`]), "min", "Wartezeit durch Taktsperre pro Tag", "Die Taktsperre hat an keinem Tag Wärme zurückgehalten.");
   barChart($("chart-savings"), sv.daily.map((d) => [d.day.slice(8, 10) + "." + d.day.slice(5, 7), d.saved_kwh, `Verbrauch ${fmt(d.actual_kwh)} kWh`]), "kWh", "Geschätzte Ersparnis pro Tag", "Absenken hätte an keinem Tag etwas gespart – die Heizung war ohnehin so niedrig wie möglich, oder es fehlen noch Zeiten mit Abwesenheit/Nacht.");
-  $("savings-text").textContent = `Was Absenken bei Abwesenheit und nachts gespart hätte, berechnet mit dem gelernten Modell. Über ${fmt(sv.span_days)} Tage: ${fmt(sv.saved_kwh, 0)} kWh von ${fmt(sv.actual_kwh, 0)} kWh Heizgas (${fmt(sv.saved_pct)} %, ≈ ${fmt(sv.saved_eur, 0)} €; Warmwasser nicht mitgerechnet). Schätzung – sie wird genauer, je länger das Modell lernt.` +
+  $("savings-text").textContent = `Was Absenken bei Abwesenheit und nachts gespart hätte, berechnet mit dem gelernten Modell. Über ${fmt(sv.span_days)} Tage: ${fmt(sv.saved_kwh, 0)} kWh von ${fmt(sv.actual_kwh, 0)} kWh ${sv.dhw_separated === false ? "Gas" : "Heizgas"} (${fmt(sv.saved_pct)} %, ≈ ${fmt(sv.saved_eur, 0)} €; ${sv.dhw_separated === false ? "ohne Warmwasser-Signal mit Warmwasser" : "Warmwasser nicht mitgerechnet"}). Schätzung – sie wird genauer, je länger das Modell lernt.` +
     (sv.reliable ? "" : ` Vorläufig – Hausmodell noch nicht plausibel: ${s.guards.house.reasons.join("; ")}.`);
 
   const outNote = s.t_out === null ? " (5 °C außen angenommen)" : "";
@@ -986,7 +990,8 @@ async function load() {
   $("persons").closest(".card").hidden = !s.persons.length;
   $("rooms").closest(".card").hidden = !s.rooms.length;
   if (!s.arrival) $("plan").innerHTML = "";
-  else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – noch kein machbarer Plan (Modell lernt noch).</p>`;
+  else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – ` +
+    (plan && plan.unreachable ? `${esc(plan.unreachable)} wird laut Modell selbst mit dem höchsten Vorlauf (${fmt(maxFlow, 0)} °C) nicht warm genug – kein machbarer Plan.</p>` : `noch kein machbarer Plan (Modell lernt noch).</p>`);
   else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${src[s.arrival.source] || s.arrival.source || ""}). Start <b>${timeOf(plan.best.start)}</b>` +
     (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:13px">` +
     plan.best.steps.map((st) => st.what === "Warmwasser"
@@ -1019,7 +1024,7 @@ function renderFlowStudy(fs) {
         `<td>${fmt(c.gas_per_kh * 1000, 0)} Wh${base && c.enough && c !== ok[0] ? ` (${c.gas_per_kh / base - 1 >= 0 ? "+" : ""}${fmt((c.gas_per_kh / base - 1) * 100, 0)} %)` : ""}</td></tr>`).join("") + "</table></div>";
   }).join("");
   box.innerHTML = `<h2>Vorlauf: bringt mehr etwas – oder ist es Verschwendung?</h2>` +
-    `<p>Mehr Vorlauf lässt die Heizkörper mehr abnehmen – der Kessel läuft länger und startet seltener. Dafür steigt der Rücklauf, und über 55 °C kondensiert der Kessel kaum noch. HeatPilot vergleicht dazu deine Heizstunden der letzten ${fs.window_days} Tage bei gleicher Außentemperatur (nur Stunden ohne Aufheizen und ohne Warmwasser). „Gas je K·h“ ist das Gas der Stunde${fs.offset_kw !== null ? " abzüglich Fremdwärme (Hausmodell)" : ""} je Grad Unterschied innen–außen. Nur Beobachtung – es wird nichts verstellt.</p>` +
+    `<p>Mehr Vorlauf lässt die Heizkörper mehr abnehmen – der Kessel läuft länger und startet seltener. Dafür steigt der Rücklauf, und über 55 °C kondensiert der Kessel kaum noch. HeatPilot vergleicht dazu deine Heizstunden der letzten ${fs.window_days} Tage bei gleicher Außentemperatur (nur Stunden ohne Aufheizen und ohne Warmwasser). „Gas je K·h“ ist das Gas der Stunde${fs.offset_kw !== null ? " plus die Fremdwärme aus dem Hausmodell (also der Wärmeverlust, nur Stunden deutlich über der Heizgrenze)" : ""} je Grad Unterschied innen–außen. Nur Beobachtung – es wird nichts verstellt.</p>` +
     `<p style="border-left:3px solid ${kindCol[fs.verdict.kind]};padding-left:8px;color:var(--text-primary)">${esc(fs.verdict.text)}</p>` +
     (fs.curve ? `<p class="muted">Am Regler (Heizkurve): Auslegungstemperatur ${fmt(fs.curve.design, 0)} °C ergibt bei ${fmt(fs.curve.t_out, 0)} °C außen und ${fmt(fs.curve.room, 0)} °C Raum-Soll etwa ${fmt(fs.curve.flow_now, 0)} °C Vorlauf${fs.curve.offset ? ` (mit Offset ${fmt(fs.curve.offset, 0)} K)` : ""}. ` +
       `+${fmt(fs.curve.d_flow, 0)} K Vorlauf entspräche etwa <b>Auslegungstemperatur ${fmt(fs.curve.design, 0)} → ${fmt(fs.curve.design_new, 0)} °C</b>` +
@@ -1079,7 +1084,7 @@ const WEEK_INFO = {
   gas: "Mittlerer Gasverbrauch (kW = kWh je Stunde), Heizen und Warmwasser zusammen. Rechts: Summe je Tag.",
   heat: "Nur Heizen: Gas außerhalb der Warmwasser-Ladezeiten. Rechts: Summe je Tag.",
   dhw: "Nur Warmwasser: Gas, während der Speicher lädt. Rechts: Summe je Tag.",
-  gas_k: "Heizgas je Kelvin Unterschied innen–außen (W/K, nur Stunden bis 15 °C außen). Mit plausiblem Hausmodell ist die Fremdwärme vorher herausgerechnet und es zählen nur Stunden deutlich unter der Heizgrenze – dann gilt: Ist ein Tag hier höher, braucht das Haus an diesem Tag wirklich mehr, nicht nur, weil die Woche kälter war. Ohne Hausmodell sehen kalte Stunden noch etwas teurer aus.",
+  gas_k: "Heizgas je Kelvin Unterschied innen–außen (W/K, nur Stunden bis 15 °C außen). Mit plausiblem Hausmodell ist die Fremdwärme wieder hinzugezählt (der Wert entspricht dann dem Wärmeverlust) und es zählen nur Stunden deutlich unter der Heizgrenze – dann gilt: Ist ein Tag hier höher, braucht das Haus an diesem Tag wirklich mehr, nicht nur, weil die Woche kälter war. Ohne Hausmodell sehen kalte Stunden noch etwas teurer aus.",
   model: "Gemessen minus das, was das Hausmodell erwartet (kW). Das Modell kennt keine Wochentage – wiederkehrende Flecken zeigen, was es noch nicht erklärt. Blau: weniger als erwartet (Kochen, Sonne, viele Leute im Haus), orange: mehr (Lüften, Aufheizen nach der Absenkung).",
   starts: "Brennerstarts je Stunde im Mittel – wann der Kessel am meisten taktet. Rechts: Starts je Tag.",
   home: "Anteil der Zeit, in der mindestens eine gewählte Person zu Hause war (gemessen). Die gelernte Gewohnheit je Person steht im Live-Tab unter „Anwesenheit“.",

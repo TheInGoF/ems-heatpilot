@@ -93,3 +93,38 @@ def test_eta_keeps_gps_during_short_rest():
     eta = p.eta(t)
     assert eta["source"] == "gps" and eta["eta"] > t
 
+
+
+def test_flow_study_skips_hours_below_heating_limit(tmp_path):
+    store = fill(tmp_path, gas_low=0.20, gas_high=0.18)  # alle Stunden: 19 K innen–außen
+    assert flowstudy.study(store, FS_NOW, offset_kw=-1.0, heating_limit_k=10.0)["hours"] > 0
+    assert flowstudy.study(store, FS_NOW, offset_kw=-1.0, heating_limit_k=18.0)["hours"] == 0
+
+
+def test_certificate_cycling_ignores_hours_without_dhw_info(tmp_path):
+    eng = year_engine(tmp_path, days=40)
+    full = certificate.collect(eng, NOW)["boiler"]["cycling_extra"]
+    # ein Jahr Langzeitstatistik davor: ohne Warmwasser-Angabe, zählt nicht als Heizgas
+    old = [(NOW - 400 * 86400 + i * 3600, 5.0, 20.5, 2.0, None, None) for i in range(300 * 24)]
+    eng.store.add_hourly(old)
+    eng.store.commit()
+    again = certificate.collect(eng, NOW)["boiler"]["cycling_extra"]
+    assert again["kwh_lo"] == full["kwh_lo"] and again["full_year"] is False
+
+
+def test_savings_year_projection_counts_vacation_days():
+    cfg = Config()
+    rows = week_hourly()
+    rows = [{**r, "vacation_frac": 1.0} if i >= len(rows) - 48 else r for i, r in enumerate(rows)]
+    res = estimate_savings(rows, house(), cfg.away_temp, cfg.night_temp, cfg.is_night, p_max_kw=17)
+    assert res.hours == len(rows) - 48 and res.span_hours == len(rows)
+    assert res.dhw_separated is False
+
+
+def test_preheat_plan_names_unreachable_room():
+    from heatpilot.analysis import preheat_plan
+    weak = RoomModel("Bad")
+    weak.rls.theta = [0.005, 0.1, 0.0, 0.0, 0.0, 0.0]  # Heizkörper viel zu klein
+    now = datetime(2026, 1, 5, 12, 0)
+    plan = preheat_plan([(weak, 17.0, 21.0)], house(), now + timedelta(hours=3), now, -5.0, 75.0)
+    assert plan["feasible"] is False and plan["unreachable"] == "Bad"

@@ -7,8 +7,9 @@ Alles aus den gespeicherten Stunden der letzten Wochen, je Wochentag und Stunde 
   Gas in der Zeit, in der der Speicher lädt.
 * **Gas wetterbereinigt** (W je Kelvin innen–außen): Heizgas ohne den Einfluss kalter
   oder milder Wochen – zeigt, ob ein Wochentag wirklich mehr braucht oder nur kälter war.
-  Mit plausiblem Hausmodell wird vorher die Fremdwärme (Achsabschnitt) herausgerechnet und
-  nur Stunden deutlich unter der Heizgrenze zählen – sonst sähen kalte Tage teurer aus.
+  Mit plausiblem Hausmodell wird der Achsabschnitt herausgerechnet (die Fremdwärme also wieder
+  hinzugezählt, der Wert entspricht dem Wärmeverlust) und nur Stunden deutlich unter der
+  Heizgrenze zählen – sonst sähen kalte Tage teurer aus.
 * **Abweichung vom Hausmodell** (kW): gemessen minus vom Modell erwartet. Das Hausmodell
   kennt keinen Wochentag; ein festes Muster hier (z. B. Sonntag mittags weniger, weil gekocht
   wird) erklärt es noch nicht.

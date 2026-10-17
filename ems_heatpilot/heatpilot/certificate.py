@@ -85,10 +85,13 @@ CYCLING_RUN_MIN = 10.0      # … oder so kurzen Läufen je Start wird der Hinwe
 burner_runs = heat_runs     # Laufzeit je Heizstart ohne Heizlaufzeit-Zähler (siehe analysis)
 
 
-def _dhw_share(h: dict) -> float:
-    """Warmwasser-Anteil am Gas der Stunde: nach Brennerleistung, ältere Stunden nach Zeit."""
+def _dhw_share(h: dict) -> float | None:
+    """Warmwasser-Anteil am Gas der Stunde: nach Brennerleistung, ältere Stunden nach Zeit.
+
+    None: nicht trennbar (Langzeitstatistik aus der Zeit vor HeatPilot).
+    """
     v = h.get("dhw_energy_frac")
-    return (h.get("dhw_frac") or 0) if v is None else v
+    return h.get("dhw_frac") if v is None else v
 
 
 def collect(eng, now_ts: int | None = None) -> dict:
@@ -185,13 +188,16 @@ def collect(eng, now_ts: int | None = None) -> dict:
     # Kein Hochrechnen aus Teilen des Jahres (Sommer/Winter verzerrt) – dann gilt der Messzeitraum
     cycling = None
     if (ratio and ratio > CYCLING_RATIO) or (run_min is not None and run_min < CYCLING_RUN_MIN):
-        dhw_kwh = sum((h["gas_kwh"] or 0) * min(max(_dhw_share(h), 0), 1) for h in year)
-        heat_kwh = max(year_kwh - dhw_kwh, 0.0)
-        if heat_kwh > 0 and year_days >= 30:
+        # Stunden ohne Warmwasser-Angabe zählen nicht (wie bei der Ersparnis) – außer es gibt gar keine
+        track = any(_dhw_share(h) is not None for h in year)
+        used = [h for h in year if _dhw_share(h) is not None or not track]
+        heat_kwh = sum((h["gas_kwh"] or 0) * (1 - min(max(_dhw_share(h) or 0.0, 0.0), 1.0)) for h in used)
+        days = (now_ts - used[0]["ts"]) / 86400 if used else 0.0
+        if heat_kwh > 0 and days >= 30:
             lo, hi = (heat_kwh * f for f in CYCLING_LOSS)
             cycling = {"pct_lo": round(CYCLING_LOSS[0] * 100), "pct_hi": round(CYCLING_LOSS[1] * 100),
                        "kwh_lo": round(lo), "kwh_hi": round(hi), "eur_lo": round(lo * price), "eur_hi": round(hi * price),
-                       "full_year": full_year, "days": round(year_days)}
+                       "full_year": days >= FULL_YEAR_DAYS, "days": round(days)}
     cycling_text = None
     if cycling:
         period = "im Jahr" if cycling["full_year"] else f"in den bisher gemessenen {cycling['days']} Tagen"

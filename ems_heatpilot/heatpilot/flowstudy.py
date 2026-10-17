@@ -11,10 +11,10 @@ Brennwertkessel kaum noch. Was überwiegt, misst HeatPilot an deinen eigenen Stu
   bei ähnlicher Außentemperatur werden miteinander verglichen,
 * darin nach Vorlauf (Mittel, solange der Brenner fürs Heizen lief) in 5-K-Stufen,
 * je Stufe: Starts pro Stunde, Laufzeit je Start, Rücklauf und **Gas je Kelvin-Stunde**
-  ((Gas − Achsabschnitt des Hausmodells) / (innen − außen)). Der Achsabschnitt (meist negativ:
-  Fremdwärme) wird abgezogen, sonst sähe die kältere Stunde – in der der Regler auch den Vorlauf
-  höher fährt – schon allein deshalb teurer aus. Ohne plausibles Hausmodell bleibt er 0 und das
-  Urteil gilt als vorläufig.
+  ((Gas − Achsabschnitt des Hausmodells) / (innen − außen), bei Fremdwärme also Gas plus
+  Fremdwärme = Wärmeverlust). Sonst sähe die kältere Stunde – in der der Regler auch den Vorlauf
+  höher fährt – schon allein deshalb teurer aus. Dann zählen nur Stunden mindestens 2 K über der
+  Heizgrenze. Ohne plausibles Hausmodell bleibt der Achsabschnitt 0 und das Urteil gilt als vorläufig.
 
 Nur Beobachtung: HeatPilot stellt nichts um. Gibt es zu wenig Vielfalt, schlägt es einen
 Versuch vor, den du selbst machst – und wertet ihn dann aus.
@@ -41,7 +41,7 @@ def _band(t_out: float):
     return None
 
 
-def hours_table(store, now_ts: int | None = None, offset_kw: float = 0.0) -> list[dict]:
+def hours_table(store, now_ts: int | None = None, offset_kw: float = 0.0, min_dt: float = 3.0) -> list[dict]:
     """Heizstunden mit Vorlauf, Rücklauf, Starts und Gas je K·h."""
     now_ts = now_ts or int(time.time())
     since = now_ts - WINDOW_DAYS * 86400
@@ -74,7 +74,7 @@ def hours_table(store, now_ts: int | None = None, offset_kw: float = 0.0) -> lis
         if (hr["dhw_frac"] or 0) > 0:  # wie beim Lernen: keine Stunde mit Warmwasserladung
             continue
         dt = hr["t_in"] - hr["t_out"]
-        if dt < 3:
+        if dt < max(min_dt, 3.0):
             continue
         before = hourly.get(ts - 3600)
         if not before or abs(hr["t_in"] - before["t_in"]) > STEADY_K:
@@ -88,9 +88,15 @@ def hours_table(store, now_ts: int | None = None, offset_kw: float = 0.0) -> lis
     return out
 
 
-def study(store, now_ts: int | None = None, offset_kw: float | None = None) -> dict:
-    """``offset_kw``: Achsabschnitt des Hausmodells – nur übergeben, wenn das Modell plausibel ist."""
-    rows = hours_table(store, now_ts, offset_kw or 0.0)
+def study(store, now_ts: int | None = None, offset_kw: float | None = None,
+          heating_limit_k: float | None = None) -> dict:
+    """``offset_kw``/``heating_limit_k``: aus dem Hausmodell – nur übergeben, wenn es plausibel ist.
+
+    Mit Achsabschnitt zählen nur Stunden deutlich über der Heizgrenze: darunter sagt das Modell
+    kein Gas voraus, und der Abzug würde die wärmeren (niedrigeren) Vorlaufstufen verteuern.
+    """
+    min_dt = max(heating_limit_k or 0.0, 0.0) + 2 if offset_kw is not None else 3.0
+    rows = hours_table(store, now_ts, offset_kw or 0.0, min_dt)
     bands: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
     for r in rows:
         b = _band(r["t_out"])

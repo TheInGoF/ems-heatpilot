@@ -87,6 +87,8 @@ class SavingsResult:
     room_cold: dict | None = None
     lead_by_rooms: int = 0     # Absenkungen, die wegen eines langsamen Raums früher endeten
     lead_by_house: int = 0
+    span_hours: int = 0        # ausgewertete Stunden plus Urlaub (Nenner der Jahres-Hochrechnung)
+    dhw_separated: bool = True  # False: kein Warmwasser-Signal, alles Gas gilt als Heizgas
 
 
 def estimate_savings(
@@ -168,12 +170,14 @@ def estimate_savings(
     track_dhw = any(r.get("dhw_energy_frac") is not None or r.get("dhw_frac") is not None for r in hourly)
     t_sim: float | None = None
     saved = actual = 0.0
-    hours = cold = 0
+    hours = cold = vac_hours = 0
     daily: dict[str, dict] = {}
     for i, (row, when, occupied, night) in enumerate(rows):
         t_in, t_out = row.get("t_in"), row.get("t_out")
         if t_in is None or t_out is None or (row.get("vacation_frac") or 0) > 0:
-            t_sim = None  # Urlaubsstunden zählen nicht zur Ersparnis
+            t_sim = None  # Urlaubsstunden zählen nicht zur Ersparnis (aber im Jahr: dort spart man nichts)
+            if t_in is not None and t_out is not None:
+                vac_hours += 1
             continue
         if t_sim is None:
             t_sim = t_in
@@ -270,7 +274,8 @@ def estimate_savings(
         d["saved_kwh"] = round(d["saved_kwh"], 2)
     pct = round(100 * saved / actual, 1) if actual > 1 else None
     return SavingsResult(hours, round(actual, 1), round(saved, 1), pct, list(daily.values()), cold,
-                         room_hours, {r: n for r, n in room_cold.items()} if rooms else None, by_rooms, by_house)
+                         room_hours, {r: n for r, n in room_cold.items()} if rooms else None, by_rooms, by_house,
+                         hours + vac_hours, track_dhw)
 
 
 def preheat_plan(
@@ -301,6 +306,7 @@ def preheat_plan(
         return None
     hours_left = max((arrival - now).total_seconds() / 3600, 0.0)
     options = []
+    blocker = None  # Raum, der auch mit dem höchsten Vorlauf nicht warm wird
     flow = min_flow
     while flow <= max_flow + 0.1:
         worst = 0.0
@@ -310,7 +316,7 @@ def preheat_plan(
             t_at_start = model.cool_down(t_now, t_out, max(hours_left - 1, 0))
             d = model.time_to_reach(t_at_start, target, flow, t_out)
             if d is None:
-                feasible = False
+                feasible, blocker = False, model.room
                 break
             worst = max(worst, d)
             rises.append(max(target - t_at_start, 0.0))
@@ -332,7 +338,7 @@ def preheat_plan(
             )
         flow += 5
     if not options:
-        return {"feasible": False, "options": []}
+        return {"feasible": False, "options": [], "unreachable": blocker}
     in_time = [o for o in options if not o["too_late"]]
     if in_time:
         best = dict(min(in_time, key=lambda o: (o["est_kwh"], o["flow"])))

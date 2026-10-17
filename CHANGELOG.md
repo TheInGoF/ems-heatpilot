@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.29.1
+Nachbesserungen aus der Gegenprüfung von 0.29.0:
+- **Vorlauf-Studie:** Mit Hausmodell zählen nur Stunden mindestens 2 K über der Heizgrenze. Darunter sagt das Modell kein Gas voraus, und das Herausrechnen der Fremdwärme hätte das Urteil zu „lohnt“ gekippt
+- **Balkengrafen mit lauter Nullen** (Brenner ohne Wärmebedarf, Taktsperre, Ersparnis pro Tag) sind jetzt wirklich sichtbar, mit einem Satz. Bisher wurde die Karte trotzdem ausgeblendet
+- **Zertifikat:** Stunden aus der Langzeitstatistik ohne Warmwasser-Angabe zählen bei den Takt-Mehrkosten nicht mehr als Heizgas
+- **Ersparnis:** In der Jahres-Hochrechnung zählen Urlaubstage als Tage ohne Ersparnis. Ohne Warmwasser-Signal steht „vom gesamten Gas“ statt „vom Heizgas“
+- **Vorheizplan:** Wird ein Raum selbst mit dem höchsten Vorlauf nicht warm, wird er genannt, statt „Modell lernt noch“ anzuzeigen
+- „Empfehlung jetzt: lernt noch“ erscheint nur noch mit Speicherfühler
+- Texte zur Fremdwärme richtiggestellt: Sie wird wieder hinzugezählt, der Wert entspricht dem Wärmeverlust
+
 ## 0.29.0
 Die Anzeigen der Übersicht passen jetzt zum Modell. Grundlage war eine Prüfung jeder Kachel, jedes Grafen und des Zertifikats gegen den Code und im Simulator:
 - **Ersparnis-Schätzung:** Die Prozentangabe bezog sich auf das gesamte Gas mit Warmwasser. Sie bezieht sich jetzt nur noch auf das Heizgas. Stunden aus der Langzeitstatistik ohne Warmwasser-Angabe zählen nicht mit. In gasfreien Stunden klingt die Absenkung mindestens mit der Trägheit ab: Sonne wärmt das abgesenkte Haus genauso wie das echte. Ist das Hausmodell unsicher, steht der Hinweis „vorläufig“ beim Text.
@@ -15,9 +25,9 @@ Die Anzeigen der Übersicht passen jetzt zum Modell. Grundlage war eine Prüfung
   - Die Texte zum Zapfprofil wurden korrigiert: Trefferquote, „nach etwa 6 Wochen“, große Zapfungen „im Profil nur gedeckelt“.
   - Die Legionellenschaltung erscheint auch, wenn der Regler nur die Uhrzeit liefert.
 - **Wärmebedarf des Hauses:** Wie beim Lernen zählen keine Stunden mit Warmwasserladung. Vorher waren Stunden mit bis zu 10 % Ladezeit dabei. Ist das Modell unsicher, ist die Linie gestrichelt.
-- **Vorlauf-Studie:** „Gas je K·h“ zieht die Fremdwärme des Hausmodells ab. Sonst sah der höhere Vorlauf schon deshalb teurer aus, weil der Regler ihn bei Kälte fährt. Stunden mit Warmwasser zählen nicht mehr. Im Heizkurven-Hinweis sind der Offset und das Raum-Soll eingerechnet.
+- **Vorlauf-Studie:** In „Gas je K·h“ ist der Achsabschnitt des Hausmodells herausgerechnet. Bei Fremdwärme wird sie also wieder hinzugezählt, der Wert entspricht dem Wärmeverlust. Sonst sah der höhere Vorlauf schon deshalb teurer aus, weil der Regler ihn bei Kälte fährt. Stunden mit Warmwasser zählen nicht mehr. Im Heizkurven-Hinweis sind der Offset und das Raum-Soll eingerechnet.
 - **Woche:**
-  - „Gas wetterbereinigt“ rechnet mit plausiblem Hausmodell die Fremdwärme heraus.
+  - „Gas wetterbereinigt“ rechnet mit plausiblem Hausmodell den Achsabschnitt heraus (Wärmeverlust je Kelvin).
   - Brennerstarts stehen in „Starts je Tag“ statt in „je h je Tag“.
 - **Vorheizplan:** Das Gas fürs Heizen berücksichtigt die Fremdwärme.
 - **Laufzeit je Heizstart:** Ohne Heizlaufzeit-Zähler wird sie aus Brennerläufen ohne Warmwasser berechnet, in der Kachel und im Grafen.

@@ -182,7 +182,7 @@ Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
 | Ansicht | Was sie zeigt |
 | --- | --- |
 | Gas gesamt / Heizen / Warmwasser | Verbrauch in kW (= kWh je Stunde); Warmwasser = Gas, während der Speicher lädt |
-| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell ohne Fremdwärme und nur aus Stunden deutlich unter der Heizgrenze – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
+| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell ohne den Achsabschnitt (Fremdwärme wieder hinzugezählt, also der Wärmeverlust) und nur aus Stunden deutlich unter der Heizgrenze – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
 | Abweichung vom Hausmodell | gemessen minus erwartet. Das Hausmodell kennt keine Wochentage; feste Muster (Kochen, Lüften, Aufheizen nach der Absenkung) sieht man hier |
 | Brennerstarts | wann der Kessel am meisten taktet |
 | Jemand zu Hause | gemessener Anteil der Zeit |
@@ -404,7 +404,11 @@ Verschwendung?“** misst das an den eigenen Heizstunden der letzten 90 Tage:
 - verglichen werden nur Stunden mit ähnlicher Außentemperatur (unter 0, 0–5, 5–10, 10–15 °C),
 - nur Beharrungsstunden (innen höchstens 0,3 K Änderung) und ohne Warmwasserladung,
 - je 5-K-Vorlaufstufe: Starts pro Stunde, Laufzeit je Start, Rücklauf und Gas je
-  Kelvin-Stunde (Gas geteilt durch innen − außen), je Stufe mindestens 20 Stunden.
+  Kelvin-Stunde, je Stufe mindestens 20 Stunden. Mit plausiblem Hausmodell ist das
+  (Gas − Achsabschnitt) / (innen − außen) – bei Fremdwärme also der Wärmeverlust – und es
+  zählen nur Stunden mindestens 2 K über der Heizgrenze; sonst sähe die kältere Stunde (mit
+  höherem Vorlauf vom Regler) schon allein deshalb teurer aus. Ohne plausibles Hausmodell:
+  Gas / (innen − außen), das Urteil gilt dann als vorläufig.
 
 Urteil: „lohnt sich“, „Verschwendung“ (mit Hinweis, wenn der Rücklauf über 55 °C liegt),
 „kein klarer Unterschied“ oder „zu wenig Vielfalt“ – dann mit Vorschlag für einen
