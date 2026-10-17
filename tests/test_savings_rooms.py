@@ -24,7 +24,7 @@ def setup(days=7):
 
 def room(a):
     m = RoomModel("r")
-    m.rls.theta, m.rls.updates = [a, 0.05, 0.0], 500
+    m.rls.theta, m.rls.updates, m.excitation = [a, 0.05, 0.0], 500, 100.0
     return m
 
 

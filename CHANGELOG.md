@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.27.0
+Korrekturen an den Raummodellen aus der Export-Prüfung (jeder Punkt gegengeprüft):
+- **Wärme kommt über die Pumpe:** bisher zählte Wärme nur, solange der Brenner brannte. Bei taktenden Kesseln läuft die Heizungspumpe aber 3- bis 4-mal so lange und liefert dabei Wärme. Dadurch war die Heizwirkung je Raum zu hoch gelernt – „Vorlauf für 21 °C“ und Aufheizzeiten waren unrealistisch niedrig. Live zeigt die Pumpe jetzt nach ihrer Drehzahl
+- **Kein Aufblähen in Aus-Phasen:** lange Zeiten ohne Heizbetrieb machten das Lernen instabil, ein einzelner Heizschritt danach konnte das Modell umwerfen (gerichtetes Vergessen)
+- **Sonne kann nicht kühlen:** negative Sonnenwerte werden nicht mehr gelernt; ein Raum kühlt rechnerisch nie unter die Außentemperatur
+- **Strengere Leitplanken je Raum:** unplausibles Verhältnis Heizwirkung/Auskühlen, zu wenig gesehener Heizbetrieb, unsichere Zeitkonstante oder Endtemperatur unter außen → keine Empfehlungen und keine Vorlauf-/Komfortaussagen für diesen Raum, bis er genug gelernt hat
+- **„Soll nicht erreichbar – Vorlauf am Limit“:** der Höchstwert stammte aus Warmwasser- bzw. Legionellenladungen; jetzt zählt nur der Vorlauf, der wirklich zu den Heizkörpern geht
+- **Ersparnis-Schätzung:** Stunden, in denen die Heizung ohnehin aus war, bringen keine Ersparnis mehr; nie negative Ersparnis
+- Beim Update wird der Lernstand einmal neu berechnet
+
 ## 0.26.0
 Korrekturen am Hausmodell aus der Prüfung eines echten Exports (jeder Punkt gegengeprüft):
 - **Fremdwärme statt gekappter Grundlast:** Sonne, Personen und Geräte decken einen Teil der Verluste – der gelernte Achsabschnitt ist negativ und wurde bisher auf 0 gesetzt. Heizlast, „Heizlast jetzt“, Zertifikat, Wochenansicht „Abweichung vom Hausmodell“ und die Linie im Wärmebedarf-Grafen lagen dadurch rund 0,8 kW zu hoch. Neue Kachel „Fremdwärme“ mit Heizgrenze

@@ -44,6 +44,8 @@ class RoomModel:
     floor_lag_h: float = 3.0
     floor_u: float = 0.0  # geglätteter Fußboden-Eingang (K über Raumtemperatur)
     rls: RLS | None = None
+    # wie viel Heizbetrieb das Modell gesehen hat (K·h, klingt mit dem Vergessen ab)
+    excitation: float = 0.0
 
     def __post_init__(self) -> None:
         if self.rls is None:
@@ -109,7 +111,26 @@ class RoomModel:
         x += [v * dt_h for v in (solar or (0.0, 0.0, 0.0))]
         if not update:
             return 0.0
-        return self.rls.update(x, t_end - t_start)
+        idle = [i for i, v in enumerate(x) if abs(v) < 1e-6]
+        if self.floor and abs(x[1]) < 0.05 * dt_h:
+            idle.append(1)
+        err = self.rls.update(x, t_end - t_start, idle=idle)
+        self.excitation = self.rls.lam * self.excitation + x[0]
+        self._sun_not_negative()
+        return err
+
+    def _sun_not_negative(self) -> None:
+        """Sonne kann nicht kühlen: negative Sonnenwerte auf 0 projizieren (P-gewichtet).
+
+        Die zusammenhängenden Parameter (Fremdwärme, Auskühlen, andere Richtungen) werden
+        dabei optimal nachgeführt; P bleibt, damit der Wert später wieder wachsen kann.
+        """
+        th, P = self.rls.theta, self.rls.P
+        for i in range(self._base_n, self._base_n + 3):
+            if i < len(th) and th[i] < 0 and P[i][i] > 1e-12:
+                ti = th[i]
+                self.rls.theta = th = [th[j] - P[j][i] / P[i][i] * ti for j in range(len(th))]
+                th[i] = 0.0
 
     def rate(self, t_room: float, flow: float, t_out: float, valve: float = 1.0) -> float:
         """Temperaturänderung in K/h bei gegebener Vorlauftemperatur."""
@@ -139,8 +160,8 @@ class RoomModel:
         return target + max(need, 0.0) / (self.a * valve + self.f)
 
     def cool_down(self, t_now: float, t_out: float, hours: float) -> float:
-        """Raumtemperatur nach ``hours`` Stunden ohne Heizung."""
-        t_inf = t_out + self.c / self.b
+        """Raumtemperatur nach ``hours`` Stunden ohne Heizung (nie unter die Außentemperatur)."""
+        t_inf = max(t_out + self.c / self.b, t_out)
         return t_inf + (t_now - t_inf) * math.exp(-self.b * hours)
 
     def summary(self, t_out: float, max_flow: float) -> dict:
@@ -164,18 +185,22 @@ class RoomModel:
             "floor": self.floor,
             "floor_lag_h": self.floor_lag_h,
             "floor_u": self.floor_u,
+            "excitation": self.excitation,
             "rls": self.rls.to_dict(),
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "RoomModel":
-        return cls(
+        m = cls(
             room=d["room"],
             floor=d.get("floor", False),
             floor_lag_h=d.get("floor_lag_h", 3.0),
             floor_u=d.get("floor_u", 0.0),
             rls=RLS.from_dict(d["rls"]),
+            excitation=d.get("excitation", 0.0),
         )
+        m._sun_not_negative()
+        return m
 
 
 COOL_MIN_UPDATES = 30   # so viele gasfreie Nachtstunden, bevor die gemessene Auskühlzeit gilt

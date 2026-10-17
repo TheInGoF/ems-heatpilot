@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import math
+
+GAS_FREE_KWH = 0.05  # Stunde ohne Heizbetrieb (wie beim Lernen der Auskühlzeit)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -189,15 +191,30 @@ def estimate_savings(
                 if r_sim[r] < want - 0.5:
                     room_cold[r] += 1
         room_hours += checked
-        if t_sim > target:
-            t_eq = t_out + excess
-            cooled = t_eq + (t_sim - t_eq) * math.exp(-1.0 / tau)
-            t_sim = max(cooled, target)
-        elif t_sim < target:
+        def heat_up(t: float) -> float:
             # während Warmwasserladung bekommt der Heizkreis nichts (3-Wege-Ventil)
             p_heat = p_max_kw * (1.0 - min(row.get("dhw_frac") or 0.0, 1.0))
-            rise = (p_heat - h * (t_sim - t_out)) / c if c > 0 else 99.0
-            t_sim = min(target, t_sim + max(rise, 0.0))
+            rise = (p_heat - h * (t - t_out)) / c if c > 0 else 99.0
+            return min(target, t + max(rise, 0.0))
+
+        prev = rows[i - 1][0] if i > 0 else None
+        prev_in = prev.get("t_in") if prev and prev["ts"] == row["ts"] - 3600 else None
+        gas = row.get("gas_kwh")
+        gas_free = gas is not None and gas <= GAS_FREE_KWH and not row.get("dhw_frac")
+        if gas_free and prev_in is not None and prev_in - t_out - excess >= 0.5:
+            # Die Heizung war auch in Wirklichkeit aus: der Rückstand der Absenkung klingt so ab,
+            # wie das Haus tatsächlich abkühlt – keine Ersparnis aus Stunden ohne Heizbetrieb
+            ratio = min(max((t_in - t_out - excess) / (prev_in - t_out - excess), 0.0), 1.0)
+            t_sim = t_in - max(prev_in - t_sim, 0.0) * ratio
+            if t_sim < target:
+                t_sim = heat_up(t_sim)
+        elif t_sim > target:
+            t_eq = t_out + excess
+            cooled = t_eq + (t_sim - t_eq) * math.exp(-1.0 / tau)
+            t_sim = max(min(cooled, t_sim), target)  # Auskühlen hebt nie an
+        elif t_sim < target:
+            t_sim = heat_up(t_sim)
+        t_sim = min(t_sim, t_in)  # nie wärmer als in Wirklichkeit – keine negative Ersparnis
         if occupied and not night and t_sim < t_in - 0.5:
             cold += 1
         diff = h * (t_in - t_sim)

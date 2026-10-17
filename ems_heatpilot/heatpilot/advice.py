@@ -73,8 +73,13 @@ def _load(store, since: int, rooms_sel: set[str] | None = None, persons: list[st
     home = store.home_by_ts(since, persons)
     vacation = {r["ts"] for r in store.query(
         "SELECT ts FROM samples WHERE ts >= ? AND vacation = 1", (since,))}
-    flow = {r["ts"]: r["flow"] for r in store.query(
-        "SELECT ts, flow FROM samples WHERE ts >= ?", (since,))}
+    flow = {}
+    for r in store.query("SELECT ts, flow, dhw, sel_flow, calc_flow FROM samples WHERE ts >= ?", (since,)):
+        if r["flow"] is None or r["dhw"]:
+            continue  # Ventil auf Warmwasser: dieser Vorlauf erreicht die Heizkörper nicht
+        if r["sel_flow"] is not None and r["calc_flow"] is not None and r["sel_flow"] > r["calc_flow"] + 15:
+            continue  # nicht markierte Speicherladung (Kessel-Soll weit über dem Heizkreis)
+        flow[r["ts"]] = r["flow"]
     return rooms, home, vacation, flow
 
 

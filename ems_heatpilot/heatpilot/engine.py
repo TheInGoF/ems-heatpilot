@@ -340,7 +340,8 @@ class Engine:
             "dhw_special": self.dhw_special(),
             "syspress": num(self._boiler("sys_press")),
             # nur für die Live-Ansicht (nicht in der Datenbank): läuft die Heizungspumpe?
-            "pump_on": flag(self._boiler("heating_pump")),
+            "pump_on": (int(num(self._boiler("pump_mod")) > 0) if num(self._boiler("pump_mod")) is not None
+                        else flag(self._boiler("heating_pump"))),
         }
         rooms = []
         for r in self.found.rooms:
@@ -512,7 +513,7 @@ class Engine:
         sys_rows = {
             r["ts"]: r
             for r in self.store.query(
-                "SELECT ts, flow, heating, burner_on, dhw, t_out, vacation, sun_e, sun_s, sun_w FROM samples "
+                "SELECT ts, flow, heating, burner_on, dhw, pump_mod, t_out, vacation, sun_e, sun_s, sun_w FROM samples "
                 "WHERE ts BETWEEN ? AND ?",
                 (start, end),
             )
@@ -534,9 +535,14 @@ class Engine:
                 if not s or s["flow"] is None or s["t_out"] is None:
                     continue
                 vacation = vacation or bool(s["vacation"])
-                active = s["heating"] if s["heating"] is not None else (s["burner_on"] or 0)
+                # Wärme kommt an, solange die Heizungspumpe Wasser umwälzt – auch nach dem
+                # Brennerlauf (Nachlauf, Taktpausen). Fehlt die Pumpendrehzahl: Pumpen-, sonst Brennersignal.
+                if s["pump_mod"] is not None:
+                    active = int(s["pump_mod"] > 0)
+                else:
+                    active = s["heating"] if s["heating"] is not None else (s["burner_on"] or 0)
                 if s["dhw"]:
-                    active = 0
+                    active = 0  # Ventil auf Warmwasser
                 warm = max(s["flow"] - r["temp"], 0) * (active or 0)
                 inputs.append(warm * (r["valve"] or 0) / 100)
                 floor_inputs.append(warm)  # Fußboden: kein Ventil, heizt immer mit

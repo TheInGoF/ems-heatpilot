@@ -19,6 +19,8 @@ Grundsätze (gelten für Empfehlungen jetzt und für jede spätere Steuerung):
 
 from __future__ import annotations
 
+import math
+
 # (min, max) physikalisch sinnvoller Bereiche
 LIMITS = {
     "house_h_w_per_k": (20.0, 1500.0),       # Wärmeverlust Einfamilienhaus
@@ -31,6 +33,11 @@ LIMITS = {
     "room_tau_h": (2.0, 300.0),
     "room_heat_gain": (1e-4, 1.0),
     "room_min_updates": 96,                  # mind. 2 Tage à 30 min
+    # Vorlauf-Verhältnis (a+f)/b: 0,3 ≈ 130 °C, 3 ≈ 32 °C Vorlauf für 21 °C bei −12 °C
+    "room_static_gain": (0.3, 3.0),
+    "room_min_excitation": 15.0,             # K·h Heizbetrieb gesehen
+    "room_min_free_k": -1.0,                 # Endtemperatur ohne Heizung mind. außen − 1 K
+    "room_tau_uncertainty": 0.5,             # relative Unsicherheit der Auskühlrate
     "dhw_ambient": (5.0, 35.0),              # Aufstellraum des Speichers
     "dhw_cooling_kh_at_55": (0.05, 5.0),
     "dhw_kwh_per_k": (0.03, 1.5),            # 50–1000 l Speicher inkl. Wirkungsgrad
@@ -66,6 +73,17 @@ def check_room(room) -> dict:
         reasons.append(f"erst {room.rls.updates} Lernschritte")
     _within("room_tau_h", room.tau_h, reasons, "Zeitkonstante h")
     _within("room_heat_gain", room.rls.theta[0], reasons, "Heizwirkung")
+    _within("room_static_gain", (room.a + room.f) / room.b, reasons, "Heizwirkung/Auskühlen")
+    if getattr(room, "excitation", None) is not None and room.excitation < LIMITS["room_min_excitation"]:
+        reasons.append(f"zu wenig Heizbetrieb gelernt ({room.excitation:.0f} K·h)")
+    if room.c / room.b < LIMITS["room_min_free_k"]:
+        reasons.append(f"ohne Heizung rechnerisch {room.c / room.b:.1f} K unter außen – unplausibel")
+    bi = 2 if room.floor else 1
+    err = room.rls.err_sq_ewma
+    if err is not None and room.rls.P[bi][bi] > 0:
+        rel = math.sqrt(room.rls.P[bi][bi] * err) / room.b
+        if rel > LIMITS["room_tau_uncertainty"]:
+            reasons.append(f"Zeitkonstante noch unsicher (±{rel * 100:.0f} %)")
     return {"ok": not reasons, "reasons": reasons}
 
 
