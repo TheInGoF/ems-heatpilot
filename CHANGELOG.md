@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.24.4
+- „Gas und Außentemperatur“: Marker verschiebbar wie in den anderen Grafen – zeigt Uhrzeit, Außentemperatur und das Gas der Stunde (Balken wird hervorgehoben)
+
 ## 0.24.3
 - Grafen am Handy: Hinweisfeld steht etwa einen halben Zentimeter höher über dem Finger
 
