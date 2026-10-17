@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.29.0
+Die Anzeigen der Übersicht passen jetzt zum Modell. Grundlage war eine Prüfung jeder Kachel, jedes Grafen und des Zertifikats gegen den Code und im Simulator:
+- **Ersparnis-Schätzung:** Die Prozentangabe bezog sich auf das gesamte Gas mit Warmwasser. Sie bezieht sich jetzt nur noch auf das Heizgas. Stunden aus der Langzeitstatistik ohne Warmwasser-Angabe zählen nicht mit. In gasfreien Stunden klingt die Absenkung mindestens mit der Trägheit ab: Sonne wärmt das abgesenkte Haus genauso wie das echte. Ist das Hausmodell unsicher, steht der Hinweis „vorläufig“ beim Text.
+- **Zertifikat:**
+  - Die Mehrkosten durch Takten wurden aus wenigen Wochen aufs Jahr hochgerechnet. Jetzt stehen dort die Kosten im gemessenen Zeitraum („in 40 Tagen“), bis ein volles Jahr vorliegt. Der Warmwasser-Anteil wird nach Energie gerechnet.
+  - Steht kein Urteil zur Kesselgröße da, erscheint der Kostenhinweis beim Taktverhalten.
+  - „Im Schnitt – Heizstarts“ ist behoben. Ohne Heizstart-Zähler heißt es „Brennerstarts (mit Warmwasser)“. Der angefangene Tag zählt nicht mehr ins Mittel.
+  - Fehlt die Wohnfläche, steht der Hinweis darauf bei der Gesamtbewertung. Lädt das Zertifikat nicht, erscheint eine Fehlermeldung.
+- **Räume:** Für Räume, die die Leitplanken nicht bestehen, steht „lernt noch“ (mit Grund) statt Zeitkonstante, Aufheizzeit, Vorlauf und Sonne.
+  - **Fußbodenräume** zeigten „nicht erreichbar“, obwohl der Vorlauf für 21 °C niedrig war. Ursache: Der Estrich wurde beim Aufheizen als kalt angenommen. Jetzt heizt er im Dauerbetrieb mit, und die Aufheizzeit wird mit der Estrich-Verzögerung berechnet. Das korrigiert auch den Vorheizplan.
+  - Liegt der Vorlauf über dem eingestellten Maximum, steht das so da. Ohne Außenfühler steht dabei, dass 5 °C angenommen sind.
+- **Warmwasser:** Bei unsicherem Modell sind Bereitschaftsverlust, nächste Ladung und Ersparnis als „vorläufig“ gekennzeichnet und die Modelllinie ist gestrichelt. „Empfehlung jetzt“ zeigt dann „lernt noch“ mit Grund, statt zu verschwinden.
+  - Die Texte zum Zapfprofil wurden korrigiert: Trefferquote, „nach etwa 6 Wochen“, große Zapfungen „im Profil nur gedeckelt“.
+  - Die Legionellenschaltung erscheint auch, wenn der Regler nur die Uhrzeit liefert.
+- **Wärmebedarf des Hauses:** Wie beim Lernen zählen keine Stunden mit Warmwasserladung. Vorher waren Stunden mit bis zu 10 % Ladezeit dabei. Ist das Modell unsicher, ist die Linie gestrichelt.
+- **Vorlauf-Studie:** „Gas je K·h“ zieht die Fremdwärme des Hausmodells ab. Sonst sah der höhere Vorlauf schon deshalb teurer aus, weil der Regler ihn bei Kälte fährt. Stunden mit Warmwasser zählen nicht mehr. Im Heizkurven-Hinweis sind der Offset und das Raum-Soll eingerechnet.
+- **Woche:**
+  - „Gas wetterbereinigt“ rechnet mit plausiblem Hausmodell die Fremdwärme heraus.
+  - Brennerstarts stehen in „Starts je Tag“ statt in „je h je Tag“.
+- **Vorheizplan:** Das Gas fürs Heizen berücksichtigt die Fremdwärme.
+- **Laufzeit je Heizstart:** Ohne Heizlaufzeit-Zähler wird sie aus Brennerläufen ohne Warmwasser berechnet, in der Kachel und im Grafen.
+- **Leitplanken:** Als feste Untergrenzen stehen die eingestellten Temperaturen da. Daneben steht, mit welchen aus Tado gelernten Werten die Ersparnis rechnet. Für Fußbodenräume gibt es einen eigenen Text bei der Prüfung je Raum.
+- **Kleinigkeiten:**
+  - Belege der Empfehlungen in Prozent mit Komma.
+  - Der Komfort-Hinweis fehlte beim Jahreswert der Ersparnis.
+  - Die Balkengrafen zeigen bei lauter Nullen einen Satz statt „Noch keine Daten“.
+  - Anwesenheit: Bei einer Rast auf der Heimfahrt bleibt die GPS-Ankunftszeit stehen.
+  - Raum- und Personennamen werden sicher dargestellt.
+
 ## 0.28.0
 Korrekturen am Warmwasser aus der Export-Prüfung (jeder Punkt gegengeprüft):
 - **Ladekosten wurden nie gelernt**, wenn der Kessel seine Nennleistung nicht als Zahl meldet – die Nennleistung aus den Einstellungen wurde beim Warmwasser nicht verwendet. Folge waren „Modell unplausibel“, keine Empfehlung, Bereitschaftsverlust „–“ und Ersparnis 0. Betraf auch „Brenner ohne Wärmebedarf“ (kWh) und die Ersparnis-Simulation

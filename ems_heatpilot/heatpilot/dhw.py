@@ -316,7 +316,7 @@ class DhwModel:
             target = min(max(comfort, cfg.dhw_min_temp + need), cfg.dhw_max_temp)
             why = (f"große Zapfung üblich (≈{big:.0f} K)" if big else
                    f"Zapfung erwartet (≈{draw:.0f} K)" if draw >= 1.0 else
-                   f"hier wird oft gezapft ({chance * 100:.0f} % der Wochen)")
+                   f"hier wird oft gezapft (in {chance * 100:.0f} % der Fälle)")
             return {"target": round(target), "reason": why}
         # Selbstkorrektur nach zu kalten Zapfungen gilt auch für das Minimum
         floor = min(cfg.dhw_min_temp + self.comfort_margin, comfort) if someone_home is not False else cfg.dhw_min_temp

@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import math
-
-GAS_FREE_KWH = 0.05  # Stunde ohne Heizbetrieb (wie beim Lernen der Auskühlzeit)
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from .models import HouseModel, RoomModel
+
+GAS_FREE_KWH = 0.05  # Stunde ohne Heizbetrieb (wie beim Lernen der Auskühlzeit)
 
 # Brennwert-Wirkungsgrad sinkt mit der Vorlauftemperatur (Richtwert ~0,4 %/K
 # über 40 °C). Wird in Phase 2 aus dem Gasverbrauch gelernt.
@@ -45,6 +45,33 @@ def cycling_stats(events: list[tuple[int, int]], day_start: int, day_end: int) -
         "avg_pause_min": round(sum(pauses) / len(pauses), 1) if pauses else None,
         "short_runs": sum(1 for r in runs if r < 10),
     }
+
+
+RUN_MAX_MIN = 180           # längere „Läufe“ sind Aufzeichnungslücken
+
+
+def heat_runs(store, since: int, until: int | None = None) -> tuple[float | None, int]:
+    """Mittlere Laufzeit je Heizstart aus den Brenner-Ereignissen (ohne Warmwasserladungen).
+
+    Für Kessel ohne Heizlaufzeit-Zähler. Ein Lauf zählt als Warmwasser, wenn währenddessen
+    ein Messwert „Warmwasser lädt“ zeigt. Gezählt werden Läufe, die im Zeitraum enden.
+    """
+    until = until or 2**62
+    events = store.query("SELECT ts, state FROM burner_events WHERE ts >= ? AND ts < ? ORDER BY ts",
+                         (since - RUN_MAX_MIN * 60, until))
+    dhw_ts = [r["ts"] for r in store.query("SELECT ts FROM samples WHERE ts >= ? AND ts < ? AND dhw = 1",
+                                           (since - RUN_MAX_MIN * 60, until + 60))]
+    runs, start = [], None
+    for e in events:
+        if e["state"] == 1 and start is None:
+            start = e["ts"]
+        elif e["state"] == 0 and start is not None:
+            minutes = (e["ts"] - start) / 60
+            if (e["ts"] >= since and 0.2 <= minutes <= RUN_MAX_MIN
+                    and not any(start - 60 <= t <= e["ts"] + 60 for t in dhw_ts)):
+                runs.append(minutes)
+            start = None
+    return (sum(runs) / len(runs) if runs else None), len(runs)
 
 
 @dataclass
@@ -138,6 +165,7 @@ def estimate_savings(
                     return target
         return t
 
+    track_dhw = any(r.get("dhw_energy_frac") is not None or r.get("dhw_frac") is not None for r in hourly)
     t_sim: float | None = None
     saved = actual = 0.0
     hours = cold = 0
@@ -202,9 +230,10 @@ def estimate_savings(
         gas = row.get("gas_kwh")
         gas_free = gas is not None and gas <= GAS_FREE_KWH and not row.get("dhw_frac")
         if gas_free and prev_in is not None and prev_in - t_out - excess >= 0.5:
-            # Die Heizung war auch in Wirklichkeit aus: der Rückstand der Absenkung klingt so ab,
-            # wie das Haus tatsächlich abkühlt – keine Ersparnis aus Stunden ohne Heizbetrieb
-            ratio = min(max((t_in - t_out - excess) / (prev_in - t_out - excess), 0.0), 1.0)
+            # Die Heizung war auch in Wirklichkeit aus: die Absenkung wird nicht tiefer, der Rückstand
+            # klingt ab – so wie das Haus tatsächlich abkühlt, aber mindestens mit der Trägheit
+            # (hält Sonne das echte Haus warm, wärmt sie das abgesenkte genauso)
+            ratio = min(max((t_in - t_out - excess) / (prev_in - t_out - excess), 0.0), 1.0, math.exp(-1.0 / tau))
             t_sim = t_in - max(prev_in - t_sim, 0.0) * ratio
             if t_sim < target:
                 t_sim = heat_up(t_sim)
@@ -217,9 +246,19 @@ def estimate_savings(
         t_sim = min(t_sim, t_in)  # nie wärmer als in Wirklichkeit – keine negative Ersparnis
         if occupied and not night and t_sim < t_in - 0.5:
             cold += 1
+        # Bezug ist das Heizgas: Warmwasser-Anteil nach Brennerleistung, ältere Stunden nach Zeit.
+        # Ohne Angabe (Langzeitstatistik) lässt sich Heizen nicht vom Warmwasser trennen – zählt nicht.
+        # Ganz ohne Warmwasser-Sensor zählt alles Gas als Heizgas.
+        frac = row.get("dhw_energy_frac")
+        if frac is None:
+            frac = row.get("dhw_frac")
+        if frac is None:
+            if track_dhw:
+                continue
+            frac = 0.0
+        gas = (row.get("gas_kwh") or 0.0) * (1.0 - min(max(frac, 0.0), 1.0))
         diff = h * (t_in - t_sim)
         saved += diff
-        gas = row.get("gas_kwh") or 0.0
         actual += gas
         hours += 1
         day = when.date().isoformat()
@@ -277,7 +316,7 @@ def preheat_plan(
             rises.append(max(target - t_at_start, 0.0))
         if feasible:
             t_in_avg = sum(t for _, _, t in rooms) / len(rooms) - 1.0
-            heat = house.h_kw_per_k * max(t_in_avg - t_out, 0) * worst
+            heat = house.demand_kw(t_in_avg, t_out) * worst  # mit Fremdwärme (Achsabschnitt)
             heat += house.c_kwh_per_k * sum(rises) / len(rises)
             eff = 1.0 + EFF_PENALTY_PER_K * max(flow - 40, 0)
             total = worst + dhw_h + buffer_h

@@ -114,8 +114,12 @@ meist deutlich kürzer als die echte Auskühlzeit der Wände.
 - **Zertifikat:** Heizlast am kältesten Tag, Verhältnis Kessel-Nennleistung zu Heizlast, Trägheit
 - **Ersparnis-Schätzung:** Absenken lässt das Haus nach τ auskühlen (nie unter außen plus
   Fremdwärme-Übertemperatur); Wiederaufheizen mit der Kesselleistung abzüglich Verlust, geteilt durch C.
-  Stunden, in denen die Heizung in Wirklichkeit ohnehin aus war, bringen keine Ersparnis.
-- **Vorheizplan** und **Wochenansicht „Abweichung vom Hausmodell“**
+  In Stunden, in denen die Heizung in Wirklichkeit ohnehin aus war, wird die Absenkung nicht
+  tiefer – der Rückstand klingt mit der Trägheit ab. Bezug der Prozentangabe ist das Heizgas
+  (ohne Warmwasser).
+- **Vorlauf-Studie** und **Wochenansicht „Gas wetterbereinigt“:** ziehen den Achsabschnitt b ab,
+  damit kältere Stunden nicht allein wegen der Fremdwärme teurer aussehen.
+- **Vorheizplan** (Gas fürs Heizen mit Fremdwärme) und **Wochenansicht „Abweichung vom Hausmodell“**
 
 ## Leitplanken
 

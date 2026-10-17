@@ -5,8 +5,10 @@ Alles aus den gespeicherten Stunden der letzten Wochen, je Wochentag und Stunde 
 
 * **Gas gesamt / Heizen / Warmwasser** (kW): was im Mittel verbraucht wird. Warmwasser =
   Gas in der Zeit, in der der Speicher lädt.
-* **Gas wetterbereinigt** (W je Kelvin innen–außen): dasselbe ohne den Einfluss kalter
+* **Gas wetterbereinigt** (W je Kelvin innen–außen): Heizgas ohne den Einfluss kalter
   oder milder Wochen – zeigt, ob ein Wochentag wirklich mehr braucht oder nur kälter war.
+  Mit plausiblem Hausmodell wird vorher die Fremdwärme (Achsabschnitt) herausgerechnet und
+  nur Stunden deutlich unter der Heizgrenze zählen – sonst sähen kalte Tage teurer aus.
 * **Abweichung vom Hausmodell** (kW): gemessen minus vom Modell erwartet. Das Hausmodell
   kennt keinen Wochentag; ein festes Muster hier (z. B. Sonntag mittags weniger, weil gekocht
   wird) erklärt es noch nicht.
@@ -60,7 +62,7 @@ def _grid(values: dict[tuple[int, int], list[float]], digits: int) -> tuple[list
 
 
 def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=None,
-            rooms: list[str] | None = None, room: str | None = None) -> dict:
+            rooms: list[str] | None = None, room: str | None = None, house_ok: bool = False) -> dict:
     """Alle Wochenraster auf einmal (für das gewählte Zeitfenster)."""
     now_ts = now_ts or int(time.time())
     since = now_ts - days * 86400
@@ -71,6 +73,8 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         "WHERE ts >= ? ORDER BY ts",
         (since,))}
     vacation = {ts for ts, r in hourly.items() if (r["vacation_frac"] or 0) > 0.5}
+    offset = house.offset_kw if house is not None and house_ok else 0.0
+    min_dt = max(house.heating_limit_k or 0.0, 0.0) + 2 if house is not None and house_ok else 3.0
     for ts, r in hourly.items():
         if ts in vacation:
             continue
@@ -92,8 +96,8 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         if r["t_in"] is None or r["t_out"] is None:
             continue
         dt = r["t_in"] - r["t_out"]
-        if dt >= 3 and r["t_out"] <= 15:
-            v["gas_k"][c].append(gas * (1 - frac) * 1000 / dt)
+        if dt >= max(min_dt, 3.0) and r["t_out"] <= 15:
+            v["gas_k"][c].append((gas * (1 - frac) - offset) * 1000 / dt)
         before, after = hourly.get(ts - 3600), hourly.get(ts + 3600)
         if (house is not None and r["t_out"] <= house.max_learn_outdoor and before and after
                 and before["t_in"] is not None and after["t_in"] is not None):
@@ -177,8 +181,8 @@ def findings(key: str, m: dict) -> list[str]:
         hi = max(days)
         if mean > 0:
             suffix = " je Tag" if key in SUM_METRICS else ""
-            u = "kWh" if key in ("gas", "heat", "dhw") else unit
-            out.append(f"Tag mit dem meisten: {DAY_NAMES[hi[1]]} ({_fmt(hi[0], digits)} {u}{suffix}, "
+            u = "kWh" if key in ("gas", "heat", "dhw") else "Starts" if key == "starts" else unit
+            out.append(f"Tag mit dem meisten: {DAY_NAMES[hi[1]]} ({_fmt(hi[0], 0 if key == 'starts' else digits)} {u}{suffix}, "
                        f"{(hi[0] / mean - 1) * 100:+.0f} % gegenüber dem Mittel)")
         wk = [x for x, d in days if d < 5]
         we = [x for x, d in days if d >= 5]

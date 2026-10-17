@@ -109,8 +109,10 @@ letzten 12 Monate Messung und zeigt, gemessen statt geschätzt:
   Heizstunden unter der kleinsten Leistung (dort muss der Kessel takten),
   Heizstarts pro Tag und Laufzeit je Start (ohne Heizlaufzeit-Zähler aus den
   Brennerläufen der letzten 30 Tage). Ist der Kessel deutlich zu groß oder laufen die
-  Starts sehr kurz: **Mehrkosten durch Takten** als Schätzung in € pro Jahr
-  (Erfahrungswerte 5–15 % des Heizgases, ausdrücklich nicht gemessen)
+  Starts sehr kurz: **Mehrkosten durch Takten** als Schätzung in € pro Jahr – solange
+  noch kein volles Jahr gemessen ist, für den bisher gemessenen Zeitraum, nicht hochgerechnet
+  (Erfahrungswerte 5–15 % des Heizgases, ausdrücklich nicht gemessen). Ohne Heizstart-Zähler
+  heißen die Starts „Brennerstarts (mit Warmwasser)“
 - **Warmwasser & Verbrauch:** Warmhalteverlust des Speichers, Gasverbrauch und -kosten
 - **Urteil** in Klartext und ein Stempel: „GEMESSEN“ oder „VORLÄUFIG“ (mit Grund),
   solange das Hausmodell unsicher ist, weniger als 500 Heizstunden oder noch kein
@@ -180,7 +182,7 @@ Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
 | Ansicht | Was sie zeigt |
 | --- | --- |
 | Gas gesamt / Heizen / Warmwasser | Verbrauch in kW (= kWh je Stunde); Warmwasser = Gas, während der Speicher lädt |
-| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K) – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
+| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell ohne Fremdwärme und nur aus Stunden deutlich unter der Heizgrenze – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
 | Abweichung vom Hausmodell | gemessen minus erwartet. Das Hausmodell kennt keine Wochentage; feste Muster (Kochen, Lüften, Aufheizen nach der Absenkung) sieht man hier |
 | Brennerstarts | wann der Kessel am meisten taktet |
 | Jemand zu Hause | gemessener Anteil der Zeit |
@@ -321,7 +323,7 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
 | `sensor.heatpilot_nachlauf_ohne_bedarf_heute` | Minuten (und kWh), die der Brenner lief, obwohl laut Tado-Soll kein Raum mehr Wärme brauchte |
 | `sensor.heatpilot_laufzeit_je_start` | mittlere Laufzeit je Heizstart heute, Attribut: seit Einbau |
 | `sensor.heatpilot_gaskosten` | Gaskosten der letzten 12 Monate inkl. anteiligem Grundpreis |
-| `sensor.heatpilot_ersparnis_schaetzung` | geschätzte Ersparnis durch Absenken (%), kWh/€ als Attribute |
+| `sensor.heatpilot_ersparnis_schaetzung` | geschätzte Ersparnis durch Absenken (% des Heizgases, ohne Warmwasser), kWh/€ als Attribute |
 | `sensor.heatpilot_ww_empfehlung` | sparsamste Speichertemperatur jetzt (nur Empfehlung) mit Begründung |
 | `sensor.heatpilot_ww_bereitschaftsverlust` | was das Warmhalten gerade kostet (W Gas), Attribut je Temperatur |
 | `sensor.heatpilot_ww_ersparnis_schaetzung` | Ersparnis der Warmwasser-Strategie (% der Warmwasser-Energie) |

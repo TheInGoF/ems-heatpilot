@@ -268,6 +268,10 @@ class PersonLearner:
             info["source"] = "gps"
             info["confidence"] = 0.8
             return info
+        ret = self.steady_return(now)
+        if ret:  # bestätigte Heimfahrt, gerade kurz Rast/Stau: deren Ankunft gilt weiter
+            info["eta"], info["source"], info["confidence"] = ret["eta"], "gps", 0.7
+            return info
         habit = self.next_home_by_habit(now)
         if habit:
             info["eta"], info["confidence"] = habit[0], round(habit[1], 2)

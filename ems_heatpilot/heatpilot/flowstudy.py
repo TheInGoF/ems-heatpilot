@@ -11,7 +11,10 @@ Brennwertkessel kaum noch. Was überwiegt, misst HeatPilot an deinen eigenen Stu
   bei ähnlicher Außentemperatur werden miteinander verglichen,
 * darin nach Vorlauf (Mittel, solange der Brenner fürs Heizen lief) in 5-K-Stufen,
 * je Stufe: Starts pro Stunde, Laufzeit je Start, Rücklauf und **Gas je Kelvin-Stunde**
-  (Gas / (innen − außen)) – ohne Hausmodell, also auch früh schon belastbar.
+  ((Gas − Achsabschnitt des Hausmodells) / (innen − außen)). Der Achsabschnitt (meist negativ:
+  Fremdwärme) wird abgezogen, sonst sähe die kältere Stunde – in der der Regler auch den Vorlauf
+  höher fährt – schon allein deshalb teurer aus. Ohne plausibles Hausmodell bleibt er 0 und das
+  Urteil gilt als vorläufig.
 
 Nur Beobachtung: HeatPilot stellt nichts um. Gibt es zu wenig Vielfalt, schlägt es einen
 Versuch vor, den du selbst machst – und wertet ihn dann aus.
@@ -38,7 +41,7 @@ def _band(t_out: float):
     return None
 
 
-def hours_table(store, now_ts: int | None = None) -> list[dict]:
+def hours_table(store, now_ts: int | None = None, offset_kw: float = 0.0) -> list[dict]:
     """Heizstunden mit Vorlauf, Rücklauf, Starts und Gas je K·h."""
     now_ts = now_ts or int(time.time())
     since = now_ts - WINDOW_DAYS * 86400
@@ -66,9 +69,9 @@ def hours_table(store, now_ts: int | None = None) -> list[dict]:
     out = []
     for ts, hr in hourly.items():
         s = per_hour.get(ts)
-        if not s or not s["n"] or not s["flow"] or hr["t_out"] > 15 or s["dhw"] / s["n"] > 0.1:
+        if not s or not s["n"] or not s["flow"] or hr["t_out"] > 15 or s["dhw"]:
             continue
-        if (hr["dhw_frac"] or 0) > 0.1:
+        if (hr["dhw_frac"] or 0) > 0:  # wie beim Lernen: keine Stunde mit Warmwasserladung
             continue
         dt = hr["t_in"] - hr["t_out"]
         if dt < 3:
@@ -80,13 +83,14 @@ def hours_table(store, now_ts: int | None = None) -> list[dict]:
         out.append({
             "ts": ts, "t_out": hr["t_out"], "flow": sum(s["flow"]) / len(s["flow"]),
             "ret": sum(s["ret"]) / len(s["ret"]) if s["ret"] else None,
-            "starts": starts.get(ts, 0), "on_min": on_frac * 60, "gas_per_kh": hr["gas_kwh"] / dt,
+            "starts": starts.get(ts, 0), "on_min": on_frac * 60, "gas_per_kh": (hr["gas_kwh"] - offset_kw) / dt,
         })
     return out
 
 
-def study(store, now_ts: int | None = None) -> dict:
-    rows = hours_table(store, now_ts)
+def study(store, now_ts: int | None = None, offset_kw: float | None = None) -> dict:
+    """``offset_kw``: Achsabschnitt des Hausmodells – nur übergeben, wenn das Modell plausibel ist."""
+    rows = hours_table(store, now_ts, offset_kw or 0.0)
     bands: dict[str, dict[int, list]] = defaultdict(lambda: defaultdict(list))
     for r in rows:
         b = _band(r["t_out"])
@@ -109,7 +113,12 @@ def study(store, now_ts: int | None = None) -> dict:
             })
         if cells:
             result.append({"band": name, "cells": cells, "finding": _finding(cells)})
-    return {"bands": result, "hours": len(rows), "verdict": _verdict(result), "window_days": WINDOW_DAYS}
+    verdict = _verdict(result)
+    if offset_kw is None and verdict["kind"] in ("lohnt", "verschwendung", "unklar"):
+        verdict["text"] += (" Vorläufig: ohne plausibles Hausmodell ist der Einfluss der Außentemperatur "
+                            "innerhalb einer Gruppe nicht ganz herausgerechnet.")
+    return {"bands": result, "hours": len(rows), "verdict": verdict, "window_days": WINDOW_DAYS,
+            "offset_kw": None if offset_kw is None else round(offset_kw, 3)}
 
 
 CURVE_EXP = 1 / 1.3        # Heizkörper-Exponent: so krümmen Regler ihre Heizkurve
@@ -122,7 +131,8 @@ def curve_hint(design: float | None, room: float | None, min_ext: float | None, 
 
     Heizkurve wie bei EMS-Reglern (RC35/ES73): Vorlauf = Raum + (Auslegung − Raum) ·
     ((Raum − außen) / (Raum − tiefste Außentemperatur))^(1/1,3). Unbekannte tiefste
-    Außentemperatur: −10 °C (Werkseinstellung).
+    Außentemperatur: −10 °C (Werkseinstellung). Der Offset verschiebt den Vorlauf und ist
+    in ``flow_now`` enthalten.
     """
     if design is None:
         return None
@@ -133,7 +143,7 @@ def curve_hint(design: float | None, room: float | None, min_ext: float | None, 
         return None
     ratio = ((room - t_out) / (room - min_ext)) ** CURVE_EXP
     return {"design": design, "offset": offset, "min_ext": min_ext, "min_ext_known": known, "room": room,
-            "t_out": t_out, "d_flow": d_flow, "flow_now": round(room + (design - room) * ratio, 1),
+            "t_out": t_out, "d_flow": d_flow, "flow_now": round(room + (design - room) * ratio + (offset or 0.0), 1),
             "design_new": round(design + d_flow / ratio)}
 
 

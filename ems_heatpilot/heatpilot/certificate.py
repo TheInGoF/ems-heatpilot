@@ -12,6 +12,7 @@ import time
 from datetime import datetime
 
 from . import __version__, guards
+from .analysis import heat_runs
 from .engine import local, num
 from .pdf import Page, document, text_width
 
@@ -81,27 +82,13 @@ def overall(parts: dict[str, float | None]) -> dict | None:
 CYCLING_LOSS = (0.05, 0.15)
 CYCLING_RATIO = 2.5         # ab dieser Überdimensionierung …
 CYCLING_RUN_MIN = 10.0      # … oder so kurzen Läufen je Start wird der Hinweis gezeigt
-RUN_MAX_MIN = 180           # längere „Läufe“ sind Aufzeichnungslücken
+burner_runs = heat_runs     # Laufzeit je Heizstart ohne Heizlaufzeit-Zähler (siehe analysis)
 
 
-def burner_runs(store, since: int) -> tuple[float | None, int]:
-    """Mittlere Laufzeit je Heizstart aus den Brenner-Ereignissen (ohne Warmwasserladungen).
-
-    Für Kessel ohne Heizlaufzeit-Zähler. Ein Lauf zählt als Warmwasser, wenn währenddessen
-    ein Messwert „Warmwasser lädt“ zeigt.
-    """
-    events = store.query("SELECT ts, state FROM burner_events WHERE ts >= ? ORDER BY ts", (since,))
-    dhw_ts = [r["ts"] for r in store.query("SELECT ts FROM samples WHERE ts >= ? AND dhw = 1", (since,))]
-    runs, start = [], None
-    for e in events:
-        if e["state"] == 1 and start is None:
-            start = e["ts"]
-        elif e["state"] == 0 and start is not None:
-            minutes = (e["ts"] - start) / 60
-            if 0.2 <= minutes <= RUN_MAX_MIN and not any(start - 60 <= t <= e["ts"] + 60 for t in dhw_ts):
-                runs.append(minutes)
-            start = None
-    return (sum(runs) / len(runs) if runs else None), len(runs)
+def _dhw_share(h: dict) -> float:
+    """Warmwasser-Anteil am Gas der Stunde: nach Brennerleistung, ältere Stunden nach Zeit."""
+    v = h.get("dhw_energy_frac")
+    return (h.get("dhw_frac") or 0) if v is None else v
 
 
 def collect(eng, now_ts: int | None = None) -> dict:
@@ -135,7 +122,10 @@ def collect(eng, now_ts: int | None = None) -> dict:
              if min_kw and len(pure) >= 24 else None)
 
     since = datetime.fromtimestamp(now_ts - 30 * 86400).date().isoformat()
-    days = list(eng.counter_days(since).values())
+    today = local(now_ts).date().isoformat()  # angefangener Tag drückt das Mittel
+    days = [d for k, d in eng.counter_days(since).items() if k != today]
+    # ohne Heizstart-Zähler zählen alle Brennerstarts (auch Warmwasser)
+    starts_heat = bool(days) and all("heat_starts" in d for d in days)
     starts_day = (sum(d.get("heat_starts", d["starts"]) for d in days) / len(days)) if len(days) >= 3 else None
     weighted = [(d["avg_run_min"], d["heat_starts"]) for d in days if d.get("avg_run_min") and d.get("heat_starts")]
     run_min = (sum(a * n for a, n in weighted) / sum(n for _, n in weighted)) if weighted else None
@@ -192,28 +182,34 @@ def collect(eng, now_ts: int | None = None) -> dict:
         verdicts.append(("Kesselgröße", g, word, text))
 
     # Hinweis Ineffizienz: zu großer Kessel taktet – das kostet Gas (Schätzung über Erfahrungswerte)
+    # Kein Hochrechnen aus Teilen des Jahres (Sommer/Winter verzerrt) – dann gilt der Messzeitraum
     cycling = None
     if (ratio and ratio > CYCLING_RATIO) or (run_min is not None and run_min < CYCLING_RUN_MIN):
-        dhw_kwh = sum((h["gas_kwh"] or 0) * min(max(h.get("dhw_frac") or 0, 0), 1) for h in year)
+        dhw_kwh = sum((h["gas_kwh"] or 0) * min(max(_dhw_share(h), 0), 1) for h in year)
         heat_kwh = max(year_kwh - dhw_kwh, 0.0)
         if heat_kwh > 0 and year_days >= 30:
-            scale = 365 / year_days if not full_year else 1.0
-            lo, hi = (heat_kwh * scale * f for f in CYCLING_LOSS)
+            lo, hi = (heat_kwh * f for f in CYCLING_LOSS)
             cycling = {"pct_lo": round(CYCLING_LOSS[0] * 100), "pct_hi": round(CYCLING_LOSS[1] * 100),
                        "kwh_lo": round(lo), "kwh_hi": round(hi), "eur_lo": round(lo * price), "eur_hi": round(hi * price),
-                       "extrapolated": not full_year}
-            for i, v in enumerate(verdicts):
-                if v[0] == "Kesselgröße":
-                    verdicts[i] = (v[0], v[1], v[2], v[3] + (
-                        f" Häufiges Takten kostet erfahrungsgemäß {cycling['pct_lo']}–{cycling['pct_hi']} % mehr Heizgas – "
-                        f"hier etwa {fmt(cycling['eur_lo'])}–{fmt(cycling['eur_hi'])} € im Jahr (Schätzung)."))
+                       "full_year": full_year, "days": round(year_days)}
+    cycling_text = None
+    if cycling:
+        period = "im Jahr" if cycling["full_year"] else f"in den bisher gemessenen {cycling['days']} Tagen"
+        cycling_text = (f" Häufiges Takten kostet erfahrungsgemäß {cycling['pct_lo']}–{cycling['pct_hi']} % mehr Heizgas – "
+                        f"hier etwa {fmt(cycling['eur_lo'])}–{fmt(cycling['eur_hi'])} € {period} (Schätzung).")
+        for i, v in enumerate(verdicts):
+            if v[0] == "Kesselgröße":
+                verdicts[i] = (v[0], v[1], v[2], v[3] + cycling_text)
+                cycling_text = None
 
     if run_min is not None:
         g = "good" if run_min >= 20 else "mid" if run_min >= 10 else "bad"
         word = "ruhig" if g == "good" else "unruhig" if g == "mid" else "taktet stark"
-        verdicts.append(("Taktverhalten", g, word,
-                         f"Im Schnitt {fmt(starts_day)} Heizstarts am Tag, je Start {fmt(run_min)} min Laufzeit"
-                         + (" – gut wären 20 min und mehr." if g != "good" else ".")))
+        what = "Heizstarts" if starts_heat else "Brennerstarts (mit Warmwasser)"
+        text = (f"Im Schnitt {fmt(starts_day)} {what} am Tag, je Heizstart {fmt(run_min)} min Laufzeit"
+                if starts_day is not None else f"Im Schnitt {fmt(run_min)} min Laufzeit je Heizstart")
+        text += " – gut wären 20 min und mehr." if g != "good" else "."
+        verdicts.append(("Taktverhalten", g, word, text + (cycling_text or "")))
 
     if dhw_loss_w is not None:
         g = "good" if dhw_loss_w < 60 else "mid" if dhw_loss_w < 100 else "bad"
@@ -263,6 +259,7 @@ def collect(eng, now_ts: int | None = None) -> dict:
             "ratio": None if ratio is None else round(ratio, 2),
             "below_min_pct": below,
             "starts_per_day": None if starts_day is None else round(starts_day, 1),
+            "starts_heat": starts_heat,
             "run_per_start_min": None if run_min is None else round(run_min, 1),
             "run_source": run_src,
             "cycling_extra": cycling,
@@ -415,15 +412,19 @@ def render(data: dict, step: float = 15.0) -> bytes:
             "ideal: 1,0 bis 1,5")
     y = row("Heizstunden unter der kleinsten Leistung", f"{bo['below_min_pct']} %" if bo["below_min_pct"] is not None else "–", y,
             "dann muss der Kessel takten")
-    y = row("Heizstarts pro Tag", fmt(bo["starts_per_day"]), y, "Mittel der letzten 30 Tage")
+    y = row("Heizstarts pro Tag" if bo.get("starts_heat", True) else "Brennerstarts pro Tag", fmt(bo["starts_per_day"]), y,
+            "Mittel der letzten 30 Tage" + ("" if bo.get("starts_heat", True) else ", mit Warmwasser"))
     if "Taktverhalten" in grades:
         badge(grades["Taktverhalten"], y, "Takten: ")
     y = row("Laufzeit je Heizstart", f"{fmt(bo['run_per_start_min'])} min" if bo["run_per_start_min"] else "–", y,
             "Mittel der letzten 30 Tage" if bo["run_per_start_min"] else "")
     ce = bo.get("cycling_extra")
     if ce:
-        y = row("Mehrkosten durch Takten (Schätzung)", f"{fmt(ce['eur_lo'])}–{fmt(ce['eur_hi'])} € / Jahr", y,
-                f"{ce['pct_lo']}–{ce['pct_hi']} % des Heizgases, Erfahrungswerte")
+        full = ce.get("full_year", True)
+        y = row("Mehrkosten durch Takten (Schätzung)",
+                f"{fmt(ce['eur_lo'])}–{fmt(ce['eur_hi'])} € " + ("/ Jahr" if full else f"in {ce['days']} Tagen"), y,
+                f"{ce['pct_lo']}–{ce['pct_hi']} % des Heizgases, Erfahrungswerte"
+                + ("" if full else "; kein volles Jahr gemessen"))
     # Balken: Bedarf gegen Kessel
     bars = [("Heizlast am kältesten Tag", h["design_kw"], ORANGE),
             ("Kleinste Kesselleistung", bo["min_kw"], "#8a9bb0"),
