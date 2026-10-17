@@ -138,7 +138,7 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
 <body>
 <main>
   <h1 style="display:flex;align-items:center;gap:10px"><img src="icon.svg" alt="" width="36" height="36"> EMS HeatPilot</h1>
-  <nav class="tabs"><button id="tab-overview" class="active" onclick="showTab('overview')">Übersicht</button><button id="tab-live" onclick="showTab('live')">Live</button><button id="tab-heat" onclick="showTab('heat')">Heizen</button><button id="tab-settings" onclick="showTab('settings')">Einstellungen</button><button id="tab-diag" onclick="showTab('diag')">Diagnose</button></nav>
+  <nav class="tabs"><button id="tab-heat" class="active" onclick="showTab('heat')">Heizen</button><button id="tab-overview" onclick="showTab('overview')">Übersicht</button><button id="tab-live" onclick="showTab('live')">Live</button><button id="tab-settings" onclick="showTab('settings')">Einstellungen</button><button id="tab-diag" onclick="showTab('diag')">Diagnose</button></nav>
   <div id="setup-banner" class="banner" hidden>Noch nicht eingerichtet – bitte einmal die <a href="#" onclick="showTab('settings');return false">Einstellungen</a> prüfen und speichern. Vorschläge aus der automatischen Erkennung sind schon eingetragen.</div>
   <section id="view-live" hidden>
     <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -172,7 +172,7 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
         <div class="grid2" id="live-rooms" style="margin-top:8px"></div></details>
     </div>
   </section>
-  <section id="view-heat" hidden>
+  <section id="view-heat">
     <div class="card boost" id="boost" style="margin-bottom:12px">
       <div class="row" style="justify-content:space-between"><h2 style="font-size:17px">Heiz-Boost</h2><span id="boost-sum" class="boost-sum"></span></div>
       <div class="chips" id="boost-rooms"></div>
@@ -235,7 +235,7 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
     </div>
     </div>
   </section>
-  <section id="view-overview">
+  <section id="view-overview" hidden>
   <p class="sub" id="status">Lade …</p>
 
   <div class="tiles" id="tiles"></div>
@@ -813,6 +813,7 @@ async function load() {
     setTimeout(load, 5000); return;
   }
   $("setup-banner").hidden = !!s.configured;
+  OV_STALE = $("view-overview").hidden;  // im Hintergrund gezeichnet: Grafen beim Öffnen in voller Breite neu
   const hist = await getJSON("api/history?days=60");
   const h = s.house, c = s.cycling, sv = s.savings;
   $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
@@ -1205,14 +1206,14 @@ function liveError(e) {
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 function showTab(name) {
-  for (const t of ["overview", "live", "heat", "settings", "diag"]) {
+  for (const t of ["heat", "overview", "live", "settings", "diag"]) {
     $("view-" + t).hidden = t !== name;
     $("tab-" + t).classList.toggle("active", t === name);
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
   if (name === "live") loadLive().catch(liveError);
   if (name === "heat") loadHeat().catch(heatError);
-  if (name === "overview") { drawWeek(); drawDhwProfile(); }  // Raster erst bei sichtbarer Breite richtig
+  if (name === "overview") { if (OV_STALE) load().catch(() => {}); else { drawWeek(); drawDhwProfile(); } }  // Raster erst bei sichtbarer Breite richtig
   if (name === "diag") { exportSize(); loadSensors(); }
   if (name === "diag") loadDiag().catch((e) => { $("diag-checks").textContent = "Fehler: " + e; });
 }
@@ -1269,7 +1270,7 @@ function roomRows() {
     const on = chosen[c.id] ? true : (auto && !!sug[c.id]);
     return `<tr class="room" data-climate="${esc(c.id)}">
       <td><input type="checkbox" class="r-on" ${on ? "checked" : ""}></td>
-      <td><input class="r-name" value="${esc(r.name || g.name || c.name)}"><div class="hint">${esc(c.id)}</div></td>
+      <td><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}"><div class="hint">${esc(c.id)} · in HA: ${esc(c.name)}</div></td>
       <td>${esc(c.platform || "–")}${c.platform && c.platform !== "tado" ? '<div class="hint">kein Tado – wirklich ein Raum?</div>' : ""}</td>
       <td style="text-align:center"><input type="checkbox" class="r-floor" ${(SET.floor_heating_rooms || []).includes(c.id) ? "checked" : ""}></td>
       <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || "")}" placeholder="Ventil % (optional)"></td>
@@ -1299,8 +1300,8 @@ function renderSettings() {
       ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Für die Vorhersage beim Vorheizen.")}
       ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
     </div>`) +
-    card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
-      <div class="scroll"><table class="form"><tr><th></th><th>Name</th><th>Quelle</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+    card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet). „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
+      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>Quelle</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
     card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus z. B. als leer, wenn nur das Auto weg ist. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit HA-Benutzer und Gerät.</p>
       <div class="scroll"><table class="form"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`) +
     card("Gas & Kosten", `<div class="form-grid">
@@ -1440,6 +1441,8 @@ async function loadSettings() {
   renderSettings();
 }
 
+let OV_STALE = false;
+loadHeat().catch(heatError);
 load().then(() => { if (!$("setup-banner").hidden) showTab("settings"); }).catch((e) => { $("status").textContent = "Fehler: " + e; });
 setInterval(() => load().catch(() => {}), 300000);
 let resizeTimer; addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => load().catch(() => {}), 300); });
