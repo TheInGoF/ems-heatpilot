@@ -270,6 +270,19 @@ async def ws_handler(request):
             result = history(m)
         elif t == "recorder/statistics_during_period":
             result = statistics(m)
+        elif t == "call_service" and m["domain"] in ("tado", "climate"):
+            eid = m["target"]["entity_id"]
+            CALLS.append({k: m[k] for k in ("domain", "service", "service_data", "target")})
+            st, attrs = STATES[eid]
+            attrs = dict(attrs)
+            data = m.get("service_data", {})
+            if "temperature" in data:
+                attrs["temperature"], st = data["temperature"], "heat"
+            if "hvac_mode" in data:
+                st = data["hvac_mode"]
+                if st == "auto":
+                    attrs["temperature"] = 20.0
+            STATES[eid] = (st, attrs)
         elif t == "call_service":
             fc = [{"datetime": datetime.fromtimestamp(END + i * 3600, timezone.utc).isoformat(), "temperature": 2.0 - 0.1 * i} for i in range(48)]
             result = {"response": {"weather.forecast_home": {"forecast": fc}}}
@@ -307,6 +320,13 @@ async def post_state(request):
     return web.json_response({})
 
 
+CALLS: list = []
+
+
+async def get_calls(_request):
+    return web.json_response(CALLS)
+
+
 async def get_published(_request):
     return web.json_response(PUBLISHED)
 
@@ -315,6 +335,7 @@ app = web.Application()
 app.router.add_get("/websocket", ws_handler)
 app.router.add_post("/api/states/{eid}", post_state)
 app.router.add_get("/published", get_published)
+app.router.add_get("/calls", get_calls)
 app.router.add_get("/api/{device}", ems_handler)
 
 if __name__ == "__main__":

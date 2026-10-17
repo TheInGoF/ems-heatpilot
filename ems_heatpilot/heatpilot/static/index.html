@@ -61,7 +61,9 @@ th { color: var(--text-secondary); font-weight: 500; }
   color: var(--text-primary); padding: 6px 8px; border-radius: 6px; font-size: 12px; display: none; z-index: 10;
   box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
 details summary { cursor: pointer; color: var(--text-secondary); }
-.tabs { display: flex; gap: 4px; margin: 8px 0 14px; border-bottom: 1px solid var(--border); }
+.tabs { display: flex; gap: 4px; margin: 8px 0 14px; border-bottom: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex: none; white-space: nowrap; }
+@media (max-width: 520px) { .tabs button { padding: 8px 8px; } }
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit;
   color: var(--text-secondary); cursor: pointer; }
 .tabs button.active { color: var(--text-primary); border-bottom-color: var(--series-1); font-weight: 600; }
@@ -106,6 +108,29 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
 .grid2:not(:has(> .card:not([hidden]))) { display: none; }
 select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); max-width: 100%; }
 #live-persons h3 { font-size: 13px; margin: 10px 0 4px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
+.chip { cursor: pointer; user-select: none; padding: 6px 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg); font-weight: 600; font-size: 13px; }
+.chip.on { background: var(--tile-fg, #c98500); border-color: transparent; color: #111; }
+.boost-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; align-items: end; }
+@media (max-width: 520px) { .boost-grid { grid-template-columns: 1fr; } }
+.stepper { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+.stepper b { font-size: 22px; min-width: 76px; text-align: center; }
+.stepper .btn, .tile-ctl .btn { min-width: 40px; font-size: 18px; padding: 4px 10px; }
+.btn.big { padding: 10px 18px; font-size: 15px; }
+#boost-start { background: var(--tile-fg); border-color: transparent; color: #111; }
+#boost-start:disabled { opacity: .45; cursor: default; }
+.boost-sum { font-weight: 700; color: var(--text-primary); }
+.boost, .rtile { background: var(--tile-bg, var(--surface-1)); border-left: 4px solid var(--tile-fg, var(--border)); }
+.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.rtile { position: relative; padding: 14px; border-radius: 12px; border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.rtile h3 { margin: 0; font-size: 15px; }
+.rtile .big { font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
+.rtile .left { position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 10px; background: var(--tile-fg); color: #111; }
+.tile-ctl { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
+.tile-ctl b { font-size: 17px; }
+.modes { display: flex; gap: 4px; margin-top: 8px; }
+.modes button { flex: 1; padding: 5px 0; font-size: 12px; }
+.modes button.on { background: var(--tile-fg); color: #111; border-color: transparent; font-weight: 700; }
 .room-legend span { cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px; }
 .room-legend span.off { opacity: .4; text-decoration: line-through; }
 </style>
@@ -113,7 +138,7 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
 <body>
 <main>
   <h1 style="display:flex;align-items:center;gap:10px"><img src="icon.svg" alt="" width="36" height="36"> EMS HeatPilot</h1>
-  <nav class="tabs"><button id="tab-overview" class="active" onclick="showTab('overview')">Übersicht</button><button id="tab-live" onclick="showTab('live')">Live</button><button id="tab-settings" onclick="showTab('settings')">Einstellungen</button><button id="tab-diag" onclick="showTab('diag')">Diagnose</button></nav>
+  <nav class="tabs"><button id="tab-overview" class="active" onclick="showTab('overview')">Übersicht</button><button id="tab-live" onclick="showTab('live')">Live</button><button id="tab-heat" onclick="showTab('heat')">Heizen</button><button id="tab-settings" onclick="showTab('settings')">Einstellungen</button><button id="tab-diag" onclick="showTab('diag')">Diagnose</button></nav>
   <div id="setup-banner" class="banner" hidden>Noch nicht eingerichtet – bitte einmal die <a href="#" onclick="showTab('settings');return false">Einstellungen</a> prüfen und speichern. Vorschläge aus der automatischen Erkennung sind schon eingetragen.</div>
   <section id="view-live" hidden>
     <div class="row" style="justify-content:space-between;margin-bottom:10px">
@@ -146,6 +171,25 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
       <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600">Je Raum einzeln – Ist, Tado-Soll, Ventil und Feuchte</summary>
         <div class="grid2" id="live-rooms" style="margin-top:8px"></div></details>
     </div>
+  </section>
+  <section id="view-heat" hidden>
+    <div class="card boost" id="boost" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between"><h2 style="font-size:17px">Heiz-Boost</h2><span id="boost-sum" class="boost-sum"></span></div>
+      <div class="chips" id="boost-rooms"></div>
+      <div class="boost-grid">
+        <div><div class="muted">Temperatur</div>
+          <div class="stepper"><button class="btn" onclick="boostTemp(-0.5)">−</button><b id="boost-temp"></b><button class="btn" onclick="boostTemp(0.5)">+</button></div></div>
+        <div><div class="muted">Dauer <b id="boost-dur-text"></b></div>
+          <input type="range" id="boost-dur" min="15" max="720" step="15" oninput="boostDur(this.value)" style="width:100%"></div>
+      </div>
+      <div class="row" style="gap:8px;margin-top:10px">
+        <button class="btn primary big" id="boost-start" onclick="heatAction('boost')">▶ Starten</button>
+        <button class="btn big" onclick="heatAction('schedule')">↻ Zeitplan</button>
+        <span id="heat-msg" class="muted"></span>
+      </div>
+      <p class="muted" style="margin:8px 0 0">Schaltet Tado nur auf Knopfdruck – HeatPilot schaltet nie von selbst. Der Timer läuft in Tado; danach gilt dort wieder der Zeitplan, auch wenn das Add-on neu startet. „Zeitplan“ beendet den Timer für die gewählten Räume sofort.</p>
+    </div>
+    <div class="room-tiles" id="heat-rooms"></div>
   </section>
   <section id="view-settings" hidden></section>
   <section id="view-diag" hidden>
@@ -602,6 +646,79 @@ async function loadLive() {
   loadPresence().catch(() => {});
   if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(liveError), 30000);
 }
+
+// ---------------------------------------------------------------- Heizen (Bedienung von Tado auf Knopfdruck)
+// Farbe nach Soll wie im eigenen Dashboard: aus = grau, kühl = türkis, ab 19 °C bernstein bis orange
+function tileColors(target, mode) {
+  if (mode === "off" || target === null || target === undefined || target < 5) return { fg: "#8f9aa6", bg: "rgba(143,154,166,.10)" };
+  if (target < 19) { const h = 175 - (target - 5) * 1.2; return { fg: `hsl(${h},70%,45%)`, bg: `hsla(${h},70%,45%,.12)` }; }
+  const h = 45 - Math.min(target - 19, 6) * 3.5;
+  return { fg: `hsl(${h},95%,52%)`, bg: `hsla(${h},95%,52%,.14)` };
+}
+const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
+let HEAT = null, heatTimer = null;
+const BOOST = { rooms: store.get("hp-boost-rooms", []), temp: store.get("hp-boost-temp", 21), minutes: store.get("hp-boost-min", 60) };
+const hm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
+async function loadHeat() {
+  clearTimeout(heatTimer);
+  const j = await getJSON("api/heat");
+  if (j.starting) { $("heat-msg").textContent = "Startet noch …"; heatTimer = setTimeout(() => loadHeat().catch(heatError), 5000); return; }
+  HEAT = j; renderHeat();
+  if (!$("view-heat").hidden) heatTimer = setTimeout(() => loadHeat().catch(heatError), 30000);
+}
+function heatError(e) { $("heat-msg").innerHTML = `<span class="msg-err">${esc(e.message || e)}</span>`; }
+function renderHeat() {
+  const j = HEAT; if (!j) return;
+  const ids = j.rooms.map((r) => r.climate);
+  BOOST.rooms = BOOST.rooms.filter((c) => ids.includes(c));
+  const c = tileColors(BOOST.temp, "heat"), box = $("boost");
+  box.style.setProperty("--tile-fg", c.fg); box.style.setProperty("--tile-bg", c.bg);
+  const n = BOOST.rooms.length, names = j.rooms.filter((r) => BOOST.rooms.includes(r.climate)).map((r) => r.name);
+  $("boost-sum").textContent = (n === 0 ? "Kein Raum gewählt" : n === ids.length ? "Alle Räume" : n <= 2 ? names.join(", ") : `${n} Räume`) +
+    ` · ${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`;
+  $("boost-rooms").innerHTML = j.rooms.map((r) => `<span class="chip ${BOOST.rooms.includes(r.climate) ? "on" : ""}" onclick="boostRoom('${esc(r.climate)}')">${BOOST.rooms.includes(r.climate) ? "✓ " : ""}${esc(r.name)}</span>`).join("") +
+    `<span class="chip" onclick="boostAll()">${n === ids.length ? "Keine" : "Alle"}</span>`;
+  $("boost-temp").textContent = fmt(BOOST.temp) + " °C";
+  $("boost-dur").min = j.limits.dur_min; $("boost-dur").max = j.limits.dur_max; $("boost-dur").value = BOOST.minutes;
+  $("boost-dur-text").textContent = hm(BOOST.minutes);
+  $("boost-start").disabled = !n;
+  const modeName = { auto: "Zeitplan", heat: "Manuell", off: "Aus" };
+  $("heat-rooms").innerHTML = j.rooms.map((r) => {
+    const t = r.mode === "off" ? null : r.target, col = tileColors(t, r.mode);
+    const modes = ["auto", "heat", "off"].filter((m) => !r.modes.length || r.modes.includes(m));
+    return `<div class="rtile" style="--tile-fg:${col.fg};--tile-bg:${col.bg}">` +
+      (r.boost ? `<span class="left">noch ${r.boost.left_min >= 60 ? hm(r.boost.left_min) : r.boost.left_min + " min"}</span>` : "") +
+      `<h3>${esc(r.name)}</h3><div class="big">${fmt(r.temp)} <span style="font-size:15px">°C</span></div>` +
+      `<div class="muted">${r.action === "heating" ? "heizt · " : ""}Ventil ${fmt(r.valve, 0)} %${r.humidity !== null && r.humidity !== undefined ? ` · Feuchte ${fmt(r.humidity, 0)} %` : ""}</div>` +
+      `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${r.mode === "off" ? "disabled" : ""}>−</button>` +
+      `<span>Soll <b>${r.mode === "off" ? "aus" : fmt(r.target) + " °C"}</b></span>` +
+      `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${r.mode === "off" ? "disabled" : ""}>+</button></div>` +
+      `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')">${modeName[m]}</button>`).join("")}</div></div>`;
+  }).join("");
+}
+function boostRoom(c) { BOOST.rooms = BOOST.rooms.includes(c) ? BOOST.rooms.filter((x) => x !== c) : [...BOOST.rooms, c]; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
+function boostAll() { const ids = HEAT.rooms.map((r) => r.climate); BOOST.rooms = BOOST.rooms.length === ids.length ? [] : ids; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
+function boostTemp(d) { const l = HEAT ? HEAT.limits : { temp_min: 5, temp_max: 25 }; BOOST.temp = Math.min(Math.max(BOOST.temp + d, l.temp_min), l.temp_max); store.set("hp-boost-temp", BOOST.temp); renderHeat(); }
+function boostDur(v) { BOOST.minutes = Number(v); store.set("hp-boost-min", BOOST.minutes); renderHeat(); }
+async function heatPost(action, body, busy) {
+  $("heat-msg").textContent = busy;
+  try {
+    const j = await getJSON("api/heat/" + action, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    HEAT = { rooms: j.rooms, limits: j.limits }; renderHeat();
+    $("heat-msg").innerHTML = j.ok ? `<span class="msg-ok">Erledigt.</span>` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc(j.errors.join(" · "))}</span>`;
+  } catch (e) { heatError(e); }
+}
+function heatAction(a) {
+  if (a === "boost") heatPost("boost", { rooms: BOOST.rooms, temp: BOOST.temp, minutes: BOOST.minutes }, "Starte Tado-Timer …");
+  else heatPost("schedule", { rooms: BOOST.rooms.length ? BOOST.rooms : HEAT.rooms.map((r) => r.climate) }, "Zurück zum Zeitplan …");
+}
+function roomTemp(c, d) {
+  const r = HEAT.rooms.find((x) => x.climate === c); if (!r) return;
+  const t = Math.min(Math.max((r.target ?? 20) + d, HEAT.limits.temp_min), HEAT.limits.temp_max);
+  heatPost("temp", { room: c, temp: t }, `Soll ${fmt(t)} °C …`);
+}
+function roomMode(c, m) { heatPost("mode", { room: c, mode: m }, "Schalte …"); }
 
 // Räume gemeinsam: eine Farbe je Raum, antippen blendet aus
 const ROOM_COL = ["#2a78d6", "#eb6834", "#1a9641", "#8e5bd0", "#d4a106", "#0fa3a3", "#d63a7a", "#8a8984", "#6b8e23", "#b5651d"];
@@ -1087,12 +1204,13 @@ function liveError(e) {
 const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 
 function showTab(name) {
-  for (const t of ["overview", "live", "settings", "diag"]) {
+  for (const t of ["overview", "live", "heat", "settings", "diag"]) {
     $("view-" + t).hidden = t !== name;
     $("tab-" + t).classList.toggle("active", t === name);
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
   if (name === "live") loadLive().catch(liveError);
+  if (name === "heat") loadHeat().catch(heatError);
   if (name === "overview") { drawWeek(); drawDhwProfile(); }  // Raster erst bei sichtbarer Breite richtig
   if (name === "diag") { exportSize(); loadSensors(); }
   if (name === "diag") loadDiag().catch((e) => { $("diag-checks").textContent = "Fehler: " + e; });

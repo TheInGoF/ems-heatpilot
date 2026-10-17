@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23.0
+- Neuer Reiter **Heizen** – Tado bedienen, nur auf Knopfdruck (HeatPilot schaltet weiterhin nie von selbst):
+  - **Heiz-Boost:** Räume wählen, Temperatur und Dauer einstellen, Starten – nutzt den **Tado-Timer** (`tado.set_climate_timer`), nach Ablauf gilt in Tado wieder der Zeitplan. „Zeitplan“ beendet ihn sofort
+  - **Raumkacheln** farbig nach Soll: Ist, Ventil, Feuchte, Soll −/+ und Zeitplan / Manuell / Aus, Restzeit eines laufenden Timers
+  - Erlaubt sind nur Tado-Timer, Soll und Betriebsart auf die gewählten Räume; alles andere (auch EMS-ESP) bleibt im Code gesperrt
+- Handy: Reiterleiste wischbar statt über den Rand
+
 ## 0.22.0
 - Live: **alle Räume gemeinsam** in drei Grafen – Raumtemperatur, Luftfeuchte und Heizbedarf (Ventile), eine Farbe je Raum; Räume per Antippen aus- und einblenden (bleibt gemerkt). Die Einzelgrafen je Raum stehen aufklappbar darunter
 - Live: neuer Graf **Gas und Außentemperatur** – Gas je Stunde als Balken, Außentemperatur als Linie

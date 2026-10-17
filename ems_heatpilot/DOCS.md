@@ -227,12 +227,31 @@ Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 als Mieter vorher kurz mit dem Vermieter absprechen.
 
-## Was das Add-on in Version 0.21 macht
+## Heizen (Bedienung)
 
-**Nur beobachten und lernen.** Es greift nicht in die Heizung ein:
+Der Reiter **Heizen** bedient Tado – nur auf Knopfdruck, HeatPilot schaltet nie von selbst.
+
+- **Heiz-Boost:** Räume antippen (oder „Alle“), Temperatur mit −/+ und Dauer (15 min
+  bis 12 h) wählen, **Starten**. Das setzt in Tado einen Timer
+  (`tado.set_climate_timer`); nach Ablauf kehrt Tado selbst zum Zeitplan zurück – auch
+  wenn das Add-on gerade neu startet. **Zeitplan** beendet den Timer der gewählten Räume
+  sofort.
+- **Raumkacheln:** Ist-Temperatur, Ventil, Feuchte, Soll mit −/+ und die Betriebsart
+  Zeitplan / Manuell / Aus. Ein laufender Timer zeigt „noch …“. Farbe nach Soll: grau =
+  aus, türkis = kühl, ab 19 °C bernstein bis orange.
+
+Erlaubt sind nur diese drei Aufrufe und nur auf die Thermostate der in den
+Einstellungen gewählten Räume, Temperaturen 5–25 °C. Raumauswahl, Temperatur und Dauer
+merkt sich das Gerät. Jede Bedienung steht im Protokoll.
+
+## Was das Add-on in Version 0.23 macht
+
+**Nur beobachten und lernen.** Es greift nicht von selbst in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
-- In Home Assistant schreibt es nur seine eigenen `sensor.heatpilot_*`. Jeder
-  andere Schreibversuch wird im Code hart abgewiesen.
+- In Home Assistant schreibt es von selbst nur seine eigenen `sensor.heatpilot_*`.
+- Ausnahme, nur auf deinen Knopfdruck im Reiter „Heizen“: Tado-Timer, Soll und
+  Betriebsart der gewählten Räume (siehe unten). Jeder andere Schreibversuch wird im
+  Code hart abgewiesen.
 
 1. **Daten übernehmen:** Beim ersten Start holt sich das Add-on selbst die
    vorhandenen Daten aus Home Assistant. Ein Export ist nicht nötig.

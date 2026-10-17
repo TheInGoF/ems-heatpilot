@@ -13,7 +13,7 @@ from aiohttp import web
 
 from .config import Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
-from . import certificate, diagnostics, live
+from . import certificate, control as control_mod, diagnostics, live
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -188,6 +188,56 @@ def make_app(app) -> web.Application:
         hours = min(max(float(req.query.get("hours", "24")), 1), 168)
         return json_response(app.eng.presence(hours))
 
+    def heat_state() -> dict:
+        eng, ctl = app.eng, app.control
+        targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
+                   for r in eng.found.rooms}
+        boosts = ctl.active(targets) if ctl else {}
+        rooms = []
+        for r in eng.found.rooms:
+            st = eng.states.get(r.climate) or {}
+            a = st.get("attributes", {})
+            rooms.append({
+                "climate": r.climate, "name": r.name, "mode": st.get("state"),
+                "action": a.get("hvac_action"), "temp": a.get("current_temperature"),
+                "target": a.get("temperature"), "valve": eng._val(r.heating_power),
+                "humidity": eng._val(r.humidity) or a.get("current_humidity"),
+                "modes": a.get("hvac_modes") or [], "boost": boosts.get(r.climate),
+            })
+        return {"rooms": rooms, "limits": {"temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX,
+                                           "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX}}
+
+    async def heat_get(_req):
+        if app.eng is None:
+            return json_response({"starting": True, "status": app.status})
+        return json_response(heat_state())
+
+    async def heat_post(req):
+        """Bedienung auf Knopfdruck – nur Tado, nur die gewählten Räume (siehe control.py)."""
+        if app.eng is None or app.control is None:
+            return json_response({"error": f"HeatPilot startet noch ({app.status})"}, status=503)
+        try:
+            body = await req.json()
+        except Exception:  # noqa: BLE001
+            return json_response({"error": "Ungültige Daten"}, status=400)
+        action, ctl = req.match_info["action"], app.control
+        try:
+            if action == "boost":
+                res = await ctl.boost(body.get("rooms"), body.get("temp"), body.get("minutes"))
+            elif action == "schedule":
+                res = await ctl.schedule(body.get("rooms"))
+            elif action == "temp":
+                res = await ctl.set_temp(body.get("room"), body.get("temp"))
+            elif action == "mode":
+                res = await ctl.set_mode(body.get("room"), body.get("mode"))
+            else:
+                return json_response({"error": "Unbekannte Aktion"}, status=404)
+        except control_mod.ControlError as err:
+            return json_response({"error": str(err)}, status=400)
+        await asyncio.sleep(1.5)  # Tado meldet den neuen Zustand mit kurzer Verzögerung
+        await app.refresh_rooms()
+        return json_response({**res, **heat_state()})
+
     async def cert_json(_req):
         if app.eng is None:
             return json_response({"starting": True})
@@ -256,6 +306,8 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/sensors", sensors)
     web_app.router.add_get("/api/live", live_data)
     web_app.router.add_get("/api/week", week_data)
+    web_app.router.add_get("/api/heat", heat_get)
+    web_app.router.add_post("/api/heat/{action}", heat_post)
     web_app.router.add_get("/api/presence", presence_data)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
