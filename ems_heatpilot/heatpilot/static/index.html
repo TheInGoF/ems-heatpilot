@@ -171,6 +171,14 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
       <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600">Je Raum einzeln – Ist, Tado-Soll, Ventil und Feuchte</summary>
         <div class="grid2" id="live-rooms" style="margin-top:8px"></div></details>
     </div>
+    <div id="pres-box" hidden>
+      <div class="row" style="justify-content:space-between;margin:16px 0 8px"><h2 style="margin:0">Anwesenheit</h2>
+        <div class="row"><span class="muted">Zeitraum</span>
+          <select id="pres-hours" onchange="loadPresence()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
+            <option value="12">12 h</option><option value="24" selected>24 h</option><option value="72">3 Tage</option><option value="168">7 Tage</option></select></div></div>
+      <p class="muted" id="pres-text" style="margin:0 0 8px"></p>
+      <div class="grid2" id="live-persons"></div>
+    </div>
   </section>
   <section id="view-heat">
     <div class="card boost" id="boost" style="margin-bottom:12px">
@@ -204,14 +212,6 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
       <div class="row"><a class="btn primary" href="api/diagnostics/bundle" download style="text-decoration:none">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div>
     </div>
     <div class="card" style="margin-bottom:12px">
-      <div class="row" style="justify-content:space-between"><h2>Alle Sensoren</h2>
-        <div class="row"><input id="sensor-filter" placeholder="Filter, z. B. Raum, pump, fehlt" oninput="renderSensors()" style="width:220px">
-          <label class="muted"><input type="checkbox" id="sensor-unused" onchange="renderSensors()"> auch nicht verwendete EMS-ESP-Werte</label>
-          <button class="btn small" onclick="loadSensors()">Aktualisieren</button></div></div>
-      <p>Was HeatPilot liest – wofür, woher, wie es in Home Assistant heißt und was es gerade meldet. Hier sieht man schnell, was fehlt, veraltet ist oder unsinnige Werte liefert und besser abgewählt oder unter „Zuordnungen“ korrigiert wird.</p>
-      <div class="scroll"><table id="sensor-table" style="font-size:12px"></table></div>
-    </div>
-    <div class="card" style="margin-bottom:12px">
       <h2>Gelernte Werte exportieren</h2>
       <p>Alles, was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in Klartext mit Gütemaß, dazu die Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage. Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne GPS-Koordinaten.</p>
       <div class="row"><select id="export-days" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
@@ -219,20 +219,20 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
         <a class="btn primary" id="export-btn" href="api/export?days=14" download style="text-decoration:none">Gelernte Werte herunterladen</a>
         <span class="muted" id="export-size"></span></div>
     </div>
+    <div class="card" style="margin-bottom:12px">
+      <div class="row" style="justify-content:space-between"><h2>Alle Sensoren</h2>
+        <div class="row"><input id="sensor-filter" placeholder="Filter, z. B. Raum, pump, fehlt" oninput="renderSensors()" style="width:220px">
+          <label class="muted"><input type="checkbox" id="sensor-unused" onchange="renderSensors()"> auch nicht verwendete EMS-ESP-Werte</label>
+          <button class="btn small" onclick="loadSensors()">Aktualisieren</button></div></div>
+      <p>Was HeatPilot liest – wofür, woher, wie es in Home Assistant heißt und was es gerade meldet. Hier sieht man schnell, was fehlt, veraltet ist oder unsinnige Werte liefert und besser abgewählt oder unter „Zuordnungen“ korrigiert wird.</p>
+      <div class="scroll"><table id="sensor-table" style="font-size:12px"></table></div>
+    </div>
     <div class="card">
       <div class="row" style="justify-content:space-between"><h2>Log</h2>
         <div class="row"><select id="diag-level" onchange="loadDiag()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
           <option value="DEBUG">alles (Debug)</option><option value="INFO" selected>Info und wichtiger</option><option value="WARNING">Warnungen und Fehler</option><option value="ERROR">nur Fehler</option></select>
           <button class="btn small" onclick="loadDiag()">Aktualisieren</button></div></div>
       <div class="scroll"><table id="diag-log" style="font-size:12px"></table></div>
-    <div id="pres-box" hidden>
-      <div class="row" style="justify-content:space-between;margin:16px 0 8px"><h2 style="margin:0">Anwesenheit</h2>
-        <div class="row"><span class="muted">Zeitraum</span>
-          <select id="pres-hours" onchange="loadPresence()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-            <option value="12">12 h</option><option value="24" selected>24 h</option><option value="72">3 Tage</option><option value="168">7 Tage</option></select></div></div>
-      <p class="muted" id="pres-text" style="margin:0 0 8px"></p>
-      <div class="grid2" id="live-persons"></div>
-    </div>
     </div>
   </section>
   <section id="view-overview" hidden>

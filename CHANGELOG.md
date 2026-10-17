@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.25.1
+- Diagnose: die langen Listen „Alle Sensoren“ und „Log“ stehen jetzt am Ende der Seite
+- Behoben: der Abschnitt „Anwesenheit“ war seit 0.22 versehentlich in die Log-Karte der Diagnose gerutscht – er steht wieder am Ende des Live-Reiters
+
 ## 0.25.0
 - **Mehr EMS-ESP-Daten im Modell** (wenn der Kessel sie liefert):
   - Warmwasser-**Ladezähler**: jede Speicherladung wird exakt erkannt statt nur aus dem Temperaturanstieg
