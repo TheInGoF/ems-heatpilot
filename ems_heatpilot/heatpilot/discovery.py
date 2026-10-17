@@ -24,7 +24,7 @@ BOILER_ROLES: dict[str, tuple[str, ...]] = {
     "burner_starts": ("burnstarts", "burner_starts"),
     "heating_pump": ("heatingpump", "heating_pump"),
     "heating_active": ("heatingactive", "heating_active"),
-    "dhw_active": ("dhw_charging", "wwcharging", "dhw_active"),
+    "dhw_active": ("dhw_charging", "wwcharging", "dhw_active", "dhw_chargepump", "wwchargepump", "dhw_3wayvalve"),
     "dhw_seltemp": ("dhw_seltemp", "dhw_selected_temperature"),
     "dhw_temp": ("dhw_curtemp", "dhw_current_intern_temperature"),
     "boiler_outdoor": ("outdoortemp", "outside_temperature"),

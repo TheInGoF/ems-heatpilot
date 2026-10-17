@@ -441,9 +441,12 @@ def sensor_table(eng) -> list[dict]:
                 used_ems.add((device, key))
                 add(group, ROLE_LABELS.get(role, role), f"EMS-ESP {device}/{key}", {"value": ems[key]})
             elif found_map.get(role):
-                add(group, ROLE_LABELS.get(role, role), found_map[role], ha(found_map[role]))
+                info = ha(found_map[role])
+                # EMS-ESP direkt verbunden, aber der Wert kommt dort gar nicht vor: der Kessel kennt ihn nicht
+                no_value = ems and info.get("value") in (None, "unknown", "unavailable")
+                add(group, ROLE_LABELS.get(role, role), found_map[role], info, "Kessel liefert nicht" if no_value else None)
             else:
-                add(group, ROLE_LABELS.get(role, role), "–", {}, "nicht gefunden")
+                add(group, ROLE_LABELS.get(role, role), "–", {}, "Kessel liefert nicht" if ems else "nicht gefunden")
     for e in f.outdoor:
         add("Außen", "Außentemperatur", e, ha(e))
     if f.weather:
