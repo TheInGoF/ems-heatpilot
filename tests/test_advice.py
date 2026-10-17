@@ -23,7 +23,7 @@ def scenario(tmp_path, vacation=False, fine=False):
     found = Discovered(rooms=[Room(r.split(".")[1].title(), r) for r in rooms], persons=["person.a"])
     eng = Engine(Config(), Store(tmp_path / "a.db"), found)
     k = eng.rooms["climate.kueche"]  # plausibles Modell: kann nach Absenkung schnell aufheizen
-    k.rls.theta, k.rls.updates = [0.06, 0.04, 0.0], 500
+    k.rls.theta, k.rls.updates, k.excitation = [0.06, 0.04, 0.0], 500, 100.0
     t0 = int(START.timestamp())
     for i in range(DAYS * 288):
         ts = t0 + i * STEP
@@ -180,6 +180,7 @@ def balance_engine(tmp_path, weak_valve=100.0, strong_valve=20.0, weak_gain=0.02
     eng = Engine(Config(), Store(tmp_path / "h.db"), found)
     for c, a in gains.items():
         eng.rooms[c].rls.theta, eng.rooms[c].rls.updates = [a, 0.05, 0.0], 500
+        eng.rooms[c].excitation = 100.0
     t0 = int(START.timestamp())
     valves = {"climate.schwach": weak_valve, "climate.stark": strong_valve}
     for i in range(5 * 288):

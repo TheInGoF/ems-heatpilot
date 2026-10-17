@@ -54,7 +54,10 @@ def series(eng, hours: float = 12, now_ts: int | None = None) -> dict:
         db_rooms.setdefault(r["ts"], {})[r["room"]] = (r["temp"], r["target"], r["valve"], r["humidity"])
     for r in eng.store.query("SELECT * FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts", (start, ring_start)):
         row = dict(r)
-        row.setdefault("pump_on", row.get("heating"))  # in der Datenbank steht die Pumpe als „heating“
+        if row.get("pump_mod") is not None:
+            row["pump_on"] = int(row["pump_mod"] > 0)
+        else:
+            row.setdefault("pump_on", row.get("heating"))  # ältere Daten: Pumpensignal als „heating“
         _append(out, rooms, r["ts"], {k: row.get(k) for k in KEYS}, db_rooms.get(r["ts"], {}))
     for ts, sample, rmap in ring:
         _append(out, rooms, ts, sample, rmap)

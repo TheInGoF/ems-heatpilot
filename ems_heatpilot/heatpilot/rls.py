@@ -47,8 +47,13 @@ class RLS:
     def predict(self, x: list[float]) -> float:
         return sum(t * xi for t, xi in zip(self.theta, x))
 
-    def update(self, x: list[float], y: float) -> float:
-        """Lernt aus einem Messpunkt, gibt den Vorhersagefehler zurück."""
+    def update(self, x: list[float], y: float, idle: list[int] | None = None) -> float:
+        """Lernt aus einem Messpunkt, gibt den Vorhersagefehler zurück.
+
+        ``idle``: Eingänge, die in diesem Schritt nicht angeregt sind (z. B. Heizung aus).
+        Für sie wird nicht vergessen – sonst wächst ihre Unsicherheit in langen Aus-Phasen
+        unbegrenzt, und der nächste einzelne Heizschritt würde den Parameter umwerfen.
+        """
         n = self.n
         Px = [sum(self.P[i][j] * x[j] for j in range(n)) for i in range(n)]
         denom = self.lam + sum(x[i] * Px[i] for i in range(n))
@@ -74,11 +79,19 @@ class RLS:
             [(self.P[i][j] - k[i] * xP[j]) / self.lam for j in range(n)]
             for i in range(n)
         ]
-        # Kovarianz begrenzen, sonst explodiert sie bei wenig Anregung
+        # gerichtetes Vergessen: nicht angeregte Richtungen behalten ihre Unsicherheit
+        s_lam = math.sqrt(self.lam)
+        for i in idle or ():
+            for j in range(n):
+                self.P[i][j] *= s_lam
+                self.P[j][i] *= s_lam
+        # Kovarianz begrenzen (Zeile und Spalte, damit sie symmetrisch bleibt)
         for i in range(n):
             if self.P[i][i] > 1e6:
-                scale = 1e6 / self.P[i][i]
-                self.P[i] = [v * scale for v in self.P[i]]
+                s = math.sqrt(1e6 / self.P[i][i])
+                for j in range(n):
+                    self.P[i][j] *= s
+                    self.P[j][i] *= s
         self.updates += 1
         a = 0.02
         self.err_sq_ewma = (
