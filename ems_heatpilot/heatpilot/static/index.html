@@ -106,6 +106,8 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
 .grid2:not(:has(> .card:not([hidden]))) { display: none; }
 select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); max-width: 100%; }
 #live-persons h3 { font-size: 13px; margin: 10px 0 4px; }
+.room-legend span { cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px; }
+.room-legend span.off { opacity: .4; text-decoration: line-through; }
 </style>
 </head>
 <body>
@@ -129,17 +131,21 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
       <div class="card"><h2>Außen & innen</h2><p>Außentemperatur (Minimum der Fühler) und Mittel aller Räume.</p><div class="legend" id="lg-house"></div><div id="ch-house"></div></div>
       <div class="card"><h2>Warmwasser</h2><p>Speichertemperatur und Soll. Blau hinterlegt: Speicher lädt.</p><div class="legend" id="lg-dhw"></div><div id="ch-dhw"></div></div>
     </div>
-    <div id="pres-box" hidden>
-      <div class="row" style="justify-content:space-between;margin:16px 0 8px"><h2 style="margin:0">Anwesenheit</h2>
-        <div class="row"><span class="muted">Zeitraum</span>
-          <select id="pres-hours" onchange="loadPresence()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
-            <option value="12">12 h</option><option value="24" selected>24 h</option><option value="72">3 Tage</option><option value="168">7 Tage</option></select></div></div>
-      <p class="muted" id="pres-text" style="margin:0 0 8px"></p>
-      <div class="grid2" id="live-persons"></div>
+    <div id="rooms-box">
+      <h2 style="margin:16px 0 4px">Räume</h2>
+      <p class="muted" style="margin:0 0 6px">Antippen blendet einen Raum aus oder ein – gilt für alle drei Grafen.</p>
+      <div class="legend room-legend" id="lg-rooms" style="margin-bottom:8px"></div>
+      <div class="grid2">
+        <div class="card"><h2>Raumtemperatur</h2><p>Ist-Temperatur je Raum (°C).</p><div id="ch-rooms-temp"></div></div>
+        <div class="card"><h2>Luftfeuchte</h2><p>Relative Feuchte je Raum (%). Über 65 % öfter lüften.</p><div id="ch-rooms-hum"></div></div>
+      </div>
+      <div class="grid2">
+        <div class="card"><h2>Heizbedarf</h2><p>Ventilöffnung bzw. Heizleistung je Raum laut Tado (%).</p><div id="ch-rooms-valve"></div></div>
+        <div class="card"><h2>Gas und Außentemperatur</h2><p>Gasverbrauch je Stunde (Balken, kWh) und Außentemperatur (Linie).</p><div class="legend" id="lg-gas"></div><div id="ch-gas"></div></div>
+      </div>
+      <details style="margin-top:4px"><summary style="cursor:pointer;font-weight:600">Je Raum einzeln – Ist, Tado-Soll, Ventil und Feuchte</summary>
+        <div class="grid2" id="live-rooms" style="margin-top:8px"></div></details>
     </div>
-    <h2 style="margin:16px 0 8px">Räume</h2>
-    <p class="muted" style="margin:0 0 8px">Linie: Raumtemperatur · gestrichelt: Tado-Soll · Fläche: Ventil · grün gepunktet: Luftfeuchte (rechte Skala, %)</p>
-    <div class="grid2" id="live-rooms"></div>
   </section>
   <section id="view-settings" hidden></section>
   <section id="view-diag" hidden>
@@ -175,6 +181,14 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
           <option value="DEBUG">alles (Debug)</option><option value="INFO" selected>Info und wichtiger</option><option value="WARNING">Warnungen und Fehler</option><option value="ERROR">nur Fehler</option></select>
           <button class="btn small" onclick="loadDiag()">Aktualisieren</button></div></div>
       <div class="scroll"><table id="diag-log" style="font-size:12px"></table></div>
+    <div id="pres-box" hidden>
+      <div class="row" style="justify-content:space-between;margin:16px 0 8px"><h2 style="margin:0">Anwesenheit</h2>
+        <div class="row"><span class="muted">Zeitraum</span>
+          <select id="pres-hours" onchange="loadPresence()" style="padding:5px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text-primary)">
+            <option value="12">12 h</option><option value="24" selected>24 h</option><option value="72">3 Tage</option><option value="168">7 Tage</option></select></div></div>
+      <p class="muted" id="pres-text" style="margin:0 0 8px"></p>
+      <div class="grid2" id="live-persons"></div>
+    </div>
     </div>
   </section>
   <section id="view-overview">
@@ -309,7 +323,7 @@ function ticks(min, max, n = 4) {
 function frame(container, xs, ys, opts = {}) {
   container.innerHTML = "";
   showCard(container);
-  const W = Math.max(container.clientWidth || 560, 280), H = opts.height || 220, m = { l: 44, r: opts.right ? 36 : 12, t: 10, b: 26 };
+  const W = Math.max(container.clientWidth || 560, 280), H = opts.height || 240, m = { l: 44, r: opts.right ? 36 : 12, t: 10, b: 26 };
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": opts.label || "" }, container);
   let [x0, x1] = [Math.min(...xs), Math.max(...xs)];
   let [y0, y1] = [Math.min(opts.yMin ?? Infinity, ...ys), Math.max(opts.yMax ?? -Infinity, ...ys)];
@@ -409,8 +423,34 @@ function timeTicks(x0, x1) {
 }
 
 // Mehrere Linien über der Zeit; Lücken bei null. bands: Hintergrund, wo Wert 1 ist; right: Fläche mit eigener 0–100-Skala.
+// Messkurven ruhig zeichnen: je 2 px ein gemittelter Punkt (keine Treppen aus 0,1-K-Sprüngen
+// und dicht gedrängten 30-s-Werten), dazwischen weiche Bögen ohne Überschwingen
+function smoothPath(ts, values, sx, sy, maxGap = 1200) {
+  const segs = [];
+  let cur = [], bx = null, acc = 0, n = 0, ax = 0, last = null;
+  const flush = () => { if (n) cur.push([ax / n, sy(acc / n)]); acc = n = ax = 0; };
+  values.forEach((v, i) => {
+    const gap = v !== null && v !== undefined && last !== null && ts[i] - last > maxGap;  // Lücke (Neustart, Ausfall): nicht überbrücken
+    if (v === null || v === undefined || gap) { flush(); if (cur.length) segs.push(cur); cur = []; bx = null; if (!gap) return; }
+    last = ts[i];
+    const x = sx(ts[i]), b = Math.round(x / 3);
+    if (b !== bx) { flush(); bx = b; }
+    acc += v; ax += x; n++;
+  });
+  flush(); if (cur.length) segs.push(cur);
+  return segs.map((p) => {
+    if (p.length === 1) return `M${p[0][0]},${p[0][1]}h0.5`;
+    let d = `M${p[0][0].toFixed(1)},${p[0][1].toFixed(1)}`;
+    for (let i = 1; i < p.length - 1; i++) {
+      const mx = (p[i][0] + p[i + 1][0]) / 2, my = (p[i][1] + p[i + 1][1]) / 2;
+      d += `Q${p[i][0].toFixed(1)},${p[i][1].toFixed(1)} ${mx.toFixed(1)},${my.toFixed(1)}`;
+    }
+    const q = p[p.length - 1];
+    return d + `L${q[0].toFixed(1)},${q[1].toFixed(1)}`;
+  }).join("");
+}
 function timeChart(container, ts, lines, opts = {}) {
-  const ys = lines.flatMap((l) => l.values.filter((v) => v !== null && v !== undefined));
+  const ys = lines.filter((l) => !l.hidden).flatMap((l) => l.values.filter((v) => v !== null && v !== undefined));
   if (ts.length < 2 || !ys.length) return empty(container, "Noch keine Werte in diesem Zeitraum.");
   const f = frame(container, ts, ys, { xTicks: timeTicks, label: opts.label, height: opts.height, yMin: opts.yMin, yMax: opts.yMax, right: opts.right });
   const top = f.m.t, bottom = f.H - f.m.b;
@@ -443,12 +483,17 @@ function timeChart(container, ts, lines, opts = {}) {
     }
   }
   for (const l of lines) {
-    let d = "", pen = false;
-    l.values.forEach((v, i) => {
-      if (v === null || v === undefined) { pen = false; return; }
-      d += !pen ? `M${f.sx(ts[i])},${f.sy(v)}` : l.step ? `H${f.sx(ts[i])}V${f.sy(v)}` : `L${f.sx(ts[i])},${f.sy(v)}`; pen = true;
-    });
-    el("path", { d, fill: "none", stroke: l.color, "stroke-width": l.width || 2, "stroke-dasharray": l.dash || "", "stroke-linejoin": "round" }, f.svg);
+    if (l.hidden) continue;
+    let d = "";
+    if (l.step) {
+      let pen = false;
+      l.values.forEach((v, i) => {
+        if (v === null || v === undefined) { pen = false; return; }
+        d += !pen ? `M${f.sx(ts[i])},${f.sy(v)}` : `H${f.sx(ts[i])}V${f.sy(v)}`; pen = true;
+      });
+    } else d = smoothPath(ts, l.values, f.sx, f.sy);
+    el("path", { d, fill: "none", stroke: l.color, "stroke-width": l.width || 1.6, "stroke-dasharray": l.dash || "",
+      "stroke-linejoin": "round", "stroke-linecap": "round", "vector-effect": "non-scaling-stroke" }, f.svg);
   }
   const cross = el("line", { y1: top, y2: bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, f.svg);
   const hit = el("rect", { x: f.m.l, y: top, width: f.W - f.m.l - f.m.r, height: bottom - top, fill: "transparent" }, f.svg);
@@ -456,7 +501,8 @@ function timeChart(container, ts, lines, opts = {}) {
     const rc = f.svg.getBoundingClientRect(), x = (e.clientX - rc.left) / rc.width * f.W;
     let best = 0; ts.forEach((t, i) => { if (Math.abs(f.sx(t) - x) < Math.abs(f.sx(ts[best]) - x)) best = i; });
     cross.setAttribute("x1", f.sx(ts[best])); cross.setAttribute("x2", f.sx(ts[best])); cross.setAttribute("visibility", "visible");
-    const rows = lines.map((l) => `<span style="color:${l.color}">●</span> ${l.name}: <b>${fmt(l.values[best])}</b> ${l.unit || opts.unit || ""}`);
+    const rows = lines.filter((l) => !l.hidden && l.values[best] !== null && l.values[best] !== undefined)
+      .map((l) => `<span style="color:${l.color}">●</span> ${l.name}: <b>${fmt(l.values[best], opts.digits ?? 1)}</b> ${l.unit || opts.unit || ""}`);
     if (opts.right) rows.push(`${opts.right.name}: <b>${fmt(opts.right.values[best], 0)}</b> %`);
     for (const l of opts.rightLines || []) rows.push(`${l.name}: <b>${fmt(l.values[best], 0)}</b> %`);
     for (const b of opts.bands || []) if (b.values[best]) rows.push(b.name);
@@ -550,17 +596,65 @@ async function loadLive() {
   legend("lg-dhw", [["Speicher", C.flow], ["Soll", C.sel, 1]]);
   timeChart($("ch-dhw"), ts, [{ name: "Speicher", values: s.dhw_temp, color: C.flow }, { name: "Soll", values: s.dhw_set, color: C.sel, dash: "5 4", width: 1.5, step: true }],
     { unit: "°C", bands: [bands[1]], label: "Warmwasser" });
-  const now = Object.fromEntries(n.rooms.map((r) => [r.climate, r]));
+  LIVE = j;
+  drawRoomCharts();
+  drawGasChart(ts, s.t_out, j.gas_hours || []);
+  loadPresence().catch(() => {});
+  if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(liveError), 30000);
+}
+
+// Räume gemeinsam: eine Farbe je Raum, antippen blendet aus
+const ROOM_COL = ["#2a78d6", "#eb6834", "#1a9641", "#8e5bd0", "#d4a106", "#0fa3a3", "#d63a7a", "#8a8984", "#6b8e23", "#b5651d"];
+let LIVE = null;
+const HIDDEN_ROOMS = new Set((() => { try { return JSON.parse(localStorage.getItem("hp-hidden-rooms") || "[]"); } catch (e) { return []; } })());
+function toggleRoom(c) {
+  HIDDEN_ROOMS.has(c) ? HIDDEN_ROOMS.delete(c) : HIDDEN_ROOMS.add(c);
+  try { localStorage.setItem("hp-hidden-rooms", JSON.stringify([...HIDDEN_ROOMS])); } catch (e) {}
+  drawRoomCharts();
+}
+function drawRoomCharts() {
+  const j = LIVE; if (!j) return;
+  $("rooms-box").hidden = !j.rooms.length;
+  if (!j.rooms.length) return;
+  const col = (i) => ROOM_COL[i % ROOM_COL.length];
+  $("lg-rooms").innerHTML = j.rooms.map((r, i) => `<span class="${HIDDEN_ROOMS.has(r.climate) ? "off" : ""}" onclick="toggleRoom('${esc(r.climate)}')"><i style="background:${col(i)}"></i>${esc(r.name)}</span>`).join("");
+  const ts = j.rooms[0].ts;
+  const series = (key, unit) => j.rooms.map((r, i) => ({ name: r.name, values: r[key], color: col(i), unit, hidden: HIDDEN_ROOMS.has(r.climate) }));
+  timeChart($("ch-rooms-temp"), ts, series("temp", "°C"), { unit: "°C", label: "Raumtemperaturen" });
+  const hum = series("humidity", "%");
+  if (hum.some((l) => l.values.some((v) => v !== null))) timeChart($("ch-rooms-hum"), ts, hum, { unit: "%", digits: 0, label: "Luftfeuchte" });
+  else empty($("ch-rooms-hum"), "Keine Feuchte-Werte.");
+  timeChart($("ch-rooms-valve"), ts, series("valve", "%").map((l) => ({ ...l, step: true, width: 1.4 })), { unit: "%", digits: 0, yMin: 0, yMax: 100, label: "Heizbedarf" });
+  const now = Object.fromEntries(j.now.rooms.map((r) => [r.climate, r]));
+  const C = { flow: "var(--series-2)", ret: "var(--series-1)", sel: "var(--series-4)", boiler: "var(--series-3)" };
   $("live-rooms").innerHTML = j.rooms.map((r, i) => {
     const c = now[r.climate] || {};
     return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><span class="muted">${fmt(c.temp)} °C · Soll ${fmt(c.target)} °C · Ventil ${fmt(c.valve, 0)} %${c.humidity !== null && c.humidity !== undefined ? ` · Feuchte ${fmt(c.humidity, 0)} %` : ""}</span></div><div id="ch-room-${i}"></div></div>`;
   }).join("");
   j.rooms.forEach((r, i) => timeChart($("ch-room-" + i), r.ts, [
     { name: "Raum", values: r.temp, color: C.flow }, { name: "Soll", values: r.target, color: C.sel, dash: "5 4", width: 1.5, step: true }],
-    { unit: "°C", height: 150, right: { name: "Ventil", values: r.valve, color: C.ret },
+    { unit: "°C", height: 180, right: { name: "Ventil", values: r.valve, color: C.ret },
       rightLines: (r.humidity || []).some((v) => v !== null) ? [{ name: "Luftfeuchte", values: r.humidity, color: C.boiler }] : [], label: r.name }));
-  loadPresence().catch(() => {});
-  if (!$("view-live").hidden) liveTimer = setTimeout(() => loadLive().catch(liveError), 30000);
+}
+// Gas je Stunde (Balken, eigene Skala rechts) und Außentemperatur (Linie)
+function drawGasChart(ts, tOut, gas) {
+  const box = $("ch-gas");
+  const g = gas.filter((x) => x[1] !== null && x[0] >= ts[0] - 3600);
+  if (!g.length && !tOut.some((v) => v !== null)) return empty(box, "Noch keine Werte.");
+  legend("lg-gas", [["Gas (kWh je Stunde)", "var(--series-2)"], ["Außen (°C)", "var(--series-1)"]]);
+  const xs = [...ts, ...g.map((x) => x[0]), ...g.map((x) => x[0] + 3600)];
+  const ys = tOut.filter((v) => v !== null);
+  const f = frame(box, xs, ys.length ? ys : [0, 1], { xTicks: timeTicks, label: "Gas und Außentemperatur", right: true });
+  const top = f.m.t, bottom = f.H - f.m.b, gmax = Math.max(0.5, ...g.map((x) => x[1]));
+  const sg = (v) => bottom - v / gmax * (bottom - top) * 0.9;
+  g.forEach(([t, v]) => {
+    const x0 = f.sx(t) + 1, x1 = f.sx(t + 3600) - 1;
+    const r = el("rect", { x: x0, y: sg(v), width: Math.max(x1 - x0, 1), height: bottom - sg(v), fill: "var(--series-2)", "fill-opacity": 0.55, rx: 1.5 }, f.svg);
+    r.addEventListener("mousemove", (e) => showTip(e, `${new Date(t * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}–${new Date((t + 3600) * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}<br>Gas <b>${fmt(v, 2)} kWh</b>`));
+    r.addEventListener("mouseleave", hideTip);
+  });
+  [0, gmax / 2, gmax].forEach((v) => { el("text", { x: f.W - f.m.r + 4, y: sg(v) + 4 }, f.svg).textContent = fmt(v, 1); });
+  el("path", { d: smoothPath(ts, tOut, f.sx, f.sy), fill: "none", stroke: "var(--series-1)", "stroke-width": 1.8, "vector-effect": "non-scaling-stroke" }, f.svg);
 }
 
 // Auskühlen des Speichers: Messpunkte (je 1 K gemittelt) und gelernte Kurve – passt das Modell?
