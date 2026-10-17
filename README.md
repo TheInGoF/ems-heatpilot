@@ -43,6 +43,10 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Einrichtung komplett in der Oberfläche** – keine YAML-Optionen, Vorschläge vorausgefüllt
 - Oberfläche in der HA-Seitenleiste und Sensoren `sensor.heatpilot_*` für eigene Dashboards
 
+## Wie rechnet HeatPilot?
+
+- [Das Hausmodell](docs/hausmodell.md) – Wärmeverlust, Fremdwärme, Heizlast und Trägheit: Gleichung, woher die Zahlen kommen, wann gelernt wird, Grenzen
+
 ## Grundsätze
 
 - **Lokal.** Alle Daten und alles Lernen bleiben auf dem Home-Assistant-Rechner.
