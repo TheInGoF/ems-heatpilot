@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.35.1
+- Übersicht „Haus-Trägheit“: erklärt, was die Stunden bedeuten (Zeitkonstante der Wände), und rechnet es für heute aus: „von 21,2 auf 18 °C in ≈ 24 h (5 °C außen; Fremdwärme hält ≈ 6 K über außen)“ – mit Nachttemperatur und Außentemperatur aus Einstellungen und Messung
+
 ## 0.35.0
 **Räume zuordnen, Hydraulik-Helfer** (abgesprochen)
 - **Einstellungen → Räume:** HeatPilot liest Bereiche und Geräte aus Home Assistant. Unter jeder Entität steht „Bereich: Wohnzimmer · Gerät: tado Smart Radiator Thermostat VA… (SRT01)“, die Zeilen sind nach Bereich und Name sortiert. Vorschläge füllen nur leere Felder: Bereich als Raum (Knopf „Bereiche übernehmen“), Sensoren des Geräts als Temperatur/Feuchte/Ventil, Raumregler-Vorschlag beim Wandthermostat. HomeKit-Ventile werden auch ohne Tado-Cloud gefunden; dasselbe Ventil wird nie doppelt (Cloud und HomeKit) gewählt. Nach dem Speichern nennt HeatPilot bei mehreren Geräten in einem Raum das Schlüsselgerät

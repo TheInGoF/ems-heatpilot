@@ -751,6 +751,20 @@ function tileColors(target, mode) {
   const h = 45 - Math.min(target - 19, 6) * 3.5;
   return { fg: `hsl(${h},95%,52%)`, bg: `hsla(${h},95%,52%,.14)` };
 }
+// Trägheit greifbar machen: Wie lange hält das Haus ohne Heizung die Nachttemperatur? Ohne Heizung
+// strebt es gegen außen plus Fremdwärme-Übertemperatur (Heizgrenze), mit Zeitkonstante τ.
+function coolDownText(h, s) {
+  const night = s.schedule && s.schedule.effective ? s.schedule.effective.night_temp : null;
+  if (!h.tau_h || s.t_in === null || s.t_in === undefined || s.t_out === null || s.t_out === undefined || night === null) return "";
+  const e = Math.min(Math.max(h.heating_limit_k || 0, 0), 10), eq = s.t_out + e;
+  const free = e > 0.5 ? `Fremdwärme hält ≈ ${fmt(e, 0)} K über außen` : "ohne nennenswerte Fremdwärme";
+  if (s.t_in <= night + 0.2) return ` · Heute: schon bei ${fmt(night)} °C`;
+  if (night <= eq + 0.2) return ` · Heute (${fmt(s.t_out, 0)} °C außen): ohne Heizung bleibt es über ${fmt(night)} °C – ${free}`;
+  const start = Math.max(s.t_in - (h.cool_fast_k || 0), night + 0.1);
+  const hours = h.tau_h * Math.log((start - eq) / (night - eq));
+  const dur = hours < 48 ? `${fmt(hours, 0)} h` : `${fmt(hours / 24, 1)} Tagen`;
+  return ` · Heute (${fmt(s.t_out, 0)} °C außen): von ${fmt(s.t_in)} auf ${fmt(night)} °C in ≈ ${dur} – ${free}`;
+}
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
 let HEAT = null, heatTimer = null, DLG = null;  // DLG: offener Dialog { kind, room, built }
@@ -1097,7 +1111,7 @@ async function load() {
       tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
       tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
       tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
-      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", h.tau_source === "abkuehlung" ? `Wände, gemessen in ${h.cool_updates} gasfreien Nachtstunden` + (h.cool_fast_k >= 0.1 ? ` · direkt nach dem Abschalten zusätzlich ≈ ${fmt(h.cool_fast_k, 1)} K schneller (Luft, Heizkörper)` : "") : "vorläufig aus der Gasbilanz – misst noch gasfreie Nächte"),
+      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", (h.tau_source === "abkuehlung" ? `Zeitkonstante der Wände, gemessen in ${h.cool_updates} gasfreien Nachtstunden` + (h.cool_fast_k >= 0.1 ? ` · direkt nach dem Abschalten zusätzlich ≈ ${fmt(h.cool_fast_k, 1)} K schneller (Luft, Heizkörper)` : "") : "vorläufig aus der Gasbilanz – misst noch gasfreie Nächte") + coolDownText(h, s)),
       h.free_heat_kw > 0.05 ? tile("Fremdwärme", fmt(h.free_heat_kw, 1), "kW", `Sonne, Personen, Geräte – bei 20 °C innen heizt das Haus erst unter ${fmt(20 - h.heating_limit_k, 0)} °C außen`) : ""] : []),
     tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
     tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
