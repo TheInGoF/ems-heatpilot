@@ -5,6 +5,7 @@ import asyncio
 import pytest
 
 from heatpilot.control import Control, ControlError
+from heatpilot.discovery import Room
 from heatpilot.store import Store
 
 
@@ -24,7 +25,9 @@ def run(coro):
 
 def make(tmp_path, fail=()):
     ha = FakeHA(fail)
-    return ha, Control(ha, Store(tmp_path / "c.db"), ["climate.bad", "climate.flur"])
+    # seit 0.34 entscheidet die Plattform laut Registry: Tado-Cloud-Entitäten bekommen den Tado-Timer
+    rooms = [Room("Bad", "climate.bad", platform="tado"), Room("Flur", "climate.flur", platform="tado")]
+    return ha, Control(ha, Store(tmp_path / "c.db"), rooms)
 
 
 def test_boost_uses_tado_timer_only(tmp_path):

@@ -153,9 +153,9 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     plain = sorted(set(f.boiler.values()) | set(f.thermostat.values()) | set(f.outdoor)
                    | ({f.gas} if f.gas else set())
                    | ({eng.cfg.vacation_entity} if eng.cfg.vacation_entity else set())
-                   | {r.heating_power for r in f.rooms if r.heating_power}
-                   | {r.humidity for r in f.rooms if r.humidity})
-    with_attrs = [r.climate for r in f.rooms] + f.persons + ([f.weather] if f.weather else [])  # Bewölkung
+                   | {d["heating_power"] for r in f.rooms for d in r.devices if d.get("heating_power")}
+                   | {d["humidity"] for r in f.rooms for d in r.devices if d.get("humidity")})
+    with_attrs = f.climate_ids() + f.persons + ([f.weather] if f.weather else [])  # Bewölkung
     series: dict[str, list] = {e: [] for e in plain + with_attrs}
     t = start_ts
     while t < end_ts:

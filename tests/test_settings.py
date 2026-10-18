@@ -71,3 +71,79 @@ def test_settings_backup_and_restore(tmp_path):
     assert restore_settings(data, backup_dir)
     assert '"living_area_m2": 85.0' in (data / "settings.json").read_text()
     assert not restore_settings(data, backup_dir)  # vorhanden: nichts überschreiben
+
+
+def test_settings_api_roundtrip_control_fields(tmp_path):
+    """0.34: Schalter, Nachtplan, Vorheizdeckel und Raumfelder gehen über die Oberfläche hin und zurück."""
+    import asyncio
+
+    from aiohttp.test_utils import TestClient, TestServer
+
+    from heatpilot import schedule
+    from heatpilot.web import make_app as web_app
+    from test_control34 import make_app
+
+    app, _ha, _loop = make_app(tmp_path / "eng")
+    (tmp_path / "options.json").write_text("{}")
+
+    async def apply_settings(raw):  # wie main.App.apply_settings, ohne Neuaufbau der Engine
+        clean, errors = validate(raw)
+        if errors:
+            return errors
+        save_settings(clean, tmp_path)
+        cfg = Config.load(tmp_path / "options.json")
+        app.cfg = app.eng.cfg = cfg
+        app.eng.eff = schedule.effective(cfg, app.eng.schedule_learned)
+        return []
+
+    app.apply_settings = apply_settings
+    plan = [{"start": "21:00", "end": "4:30"}] * 7
+    plan[0] = {"start": "20:30", "end": "04:30"}
+
+    async def go():
+        client = TestClient(TestServer(web_app(app)))
+        await client.start_server()
+        try:
+            body = {"control_mode": "heatpilot", "preheat_max_h": "2,5", "night_plan": plan, "night_temp": 17.5,
+                    "rooms": [{"climate": "climate.wz", "name": "Wz", "group": "Wohnzimmer", "controller": True,
+                               "managed": True, "comfort": "20,5", "heating_power": "", "temperature": "", "humidity": ""},
+                              {"climate": "climate.wz_v1", "name": "", "group": "Wohnzimmer", "controller": False,
+                               "managed": False, "comfort": ""}]}
+            r = await client.post("/api/settings", json=body)
+            assert r.status == 200 and (await r.json())["ok"]
+            j = await (await client.get("/api/settings")).json()
+            s = j["settings"]
+            assert s["control_mode"] == "heatpilot" and s["preheat_max_h"] == 2.5 and s["night_temp"] == 17.5
+            assert len(s["night_plan"]) == 7 and s["night_plan"][0] == {"start": "20:30", "end": "04:30"}
+            assert s["night_plan"][1] == {"start": "21:00", "end": "04:30"}  # 4:30 -> 04:30
+            assert s["rooms"][0] == {"name": "Wz", "climate": "climate.wz", "group": "Wohnzimmer", "controller": True,
+                                     "managed": True, "comfort": 20.5}
+            assert s["rooms"][1] == {"name": "", "climate": "climate.wz_v1", "group": "Wohnzimmer", "controller": False,
+                                     "managed": False}  # leerer Komfort wird nicht gespeichert (= 21)
+            assert validate(s)[1] == []  # was die Oberfläche bekommt, kann sie unverändert speichern
+            eff = j["schedule"]["effective"]
+            assert eff["plan"][0] == {"day": "Mo", "start": "20:30", "end": "04:30"} and eff["source"]["night_start"] == "wochenplan"
+            assert j["control"]["limits"] == {"temp_min": 5.0, "temp_max": 25.0} and j["climate_targets"]["climate.wz"] == 19.0
+            # Fehler kommen als 400 mit Klartext, nichts wird übernommen
+            for bad, text in (({"rooms": [{"climate": "climate.wz", "comfort": "30"}]}, "Komfort muss zwischen 5 und 25"),
+                              ({"rooms": [{"climate": "climate.wz", "comfort": "warm"}]}, "Komforttemperatur keine Zahl"),
+                              ({"night_plan": [{"start": "10:00", "end": "04:30"}] + plan[1:]}, "Mo: Beginn der Nacht liegt am Abend"),
+                              ({"night_plan": plan[:6]}, "7 Einträge"),
+                              ({"control_mode": "auto"}, "control_mode: erlaubt"),
+                              ({"preheat_max_h": 9}, "preheat_max_h")):
+                r = await client.post("/api/settings", json=bad)
+                assert r.status == 400, bad
+                errs = (await r.json())["errors"]
+                assert any(text in e for e in errs), (text, errs)
+            s = (await (await client.get("/api/settings")).json())["settings"]
+            assert s["control_mode"] == "heatpilot" and s["rooms"][0]["comfort"] == 20.5
+            # zurück auf Beobachten: Plan nicht mehr maßgeblich, Räume behalten ihre Felder
+            r = await client.post("/api/settings", json={"control_mode": "beobachten"})
+            assert r.status == 200
+            j = await (await client.get("/api/settings")).json()
+            assert j["settings"]["control_mode"] == "beobachten" and j["schedule"]["effective"]["plan"] is None
+            assert j["settings"]["rooms"][0]["managed"] is True
+        finally:
+            await client.close()
+
+    asyncio.run(go())

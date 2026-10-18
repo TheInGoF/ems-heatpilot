@@ -163,6 +163,19 @@ dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
 .modes button.on { background: var(--tile-fg); color: #111; border-color: transparent; font-weight: 700; }
 .room-legend span { white-space: nowrap; cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px; }
 .room-legend span.off { opacity: .4; text-decoration: line-through; }
+/* Steuerung (0.34): Schalter, Warnhinweis und Nachtplan in den Einstellungen; Statuszeile, Pause und Protokoll im Heizen-Reiter */
+.seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; max-width: 420px; }
+.seg label { flex: 1; text-align: center; padding: 8px 6px; cursor: pointer; font-weight: 600; color: var(--text-secondary); user-select: none; }
+.seg label:has(input:checked) { background: var(--series-1); color: #fff; }
+.seg input { position: absolute; opacity: 0; width: 0; height: 0; }
+.warnbox { border-left: 3px solid var(--warn); background: rgba(201, 133, 0, .09); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin: 10px 0; color: var(--text-primary); }
+table.plan { width: auto; } table.plan td, table.plan th { padding: 3px 6px; } table.form.plan input { min-width: 0; width: 108px; }
+table.form input[type=checkbox] { min-width: 0; } table.form input.r-comfort { min-width: 72px; width: 72px; }
+.acts.four { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 520px) { .acts.four { grid-template-columns: repeat(2, 1fr); } }
+#heat-status { margin: 0 0 10px; } #heat-status .warn { color: #e34948; display: block; }
+.pause-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0 10px; }
+.ctl-info { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; } .ctl-info b { color: var(--text-primary); }
 </style>
 </head>
 <body>
@@ -211,10 +224,13 @@ dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
     </div>
   </section>
   <section id="view-heat">
+    <p class="sub" id="heat-status"></p>
     <div class="acts" id="heat-acts"></div>
     <p class="muted" id="heat-msg" style="margin:0 0 10px;min-height:15px"></p>
     <div class="room-tiles" id="heat-rooms"></div>
-    <p class="muted" style="margin:10px 0 0">Antippen öffnet die Bedienung. Geschaltet wird nur auf Knopfdruck – HeatPilot schaltet nie von selbst.</p>
+    <p class="muted" id="heat-foot" style="margin:10px 0 0">Antippen öffnet die Bedienung. Geschaltet wird nur auf Knopfdruck – HeatPilot schaltet nie von selbst.</p>
+    <details id="heat-log-box" style="margin-top:12px" hidden><summary>Protokoll – die letzten Schreibvorgänge</summary>
+      <div class="scroll" style="margin-top:6px"><table id="heat-log" style="font-size:12px"></table></div></details>
     <dialog class="hp" id="heat-dlg" onclose="DLG=null" onclick="if(event.target===this)closeDlg()"><div id="heat-dlg-body"></div></dialog>
   </section>
   <section id="view-settings" hidden></section>
@@ -259,6 +275,7 @@ dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
   <div class="tiles" id="tiles"></div>
   <div class="card" id="advice" style="margin-bottom:12px"></div>
   <div class="card" id="guards" style="margin-bottom:12px"></div>
+  <div class="card" id="sched" style="margin-bottom:12px" hidden></div>
   <div class="card" id="cert" style="margin-bottom:12px"></div>
 
   <div class="grid2">
@@ -738,8 +755,39 @@ const ICON = {
   boost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4 0 7-3 7-7 0-5-5-8-5-12-2 2-3 4-3 6-1-1-2-3-2-5-3 3-4 7-4 11 0 4 3 7 7 7z"/></svg>',
   sched: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/><path d="M3 21v-5h5"/></svg>',
   off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
+  pause: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 5v14"/><path d="M15 5v14"/></svg>',
   drop: '<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><path d="M12 2.5s6 7 6 11.5a6 6 0 0 1-12 0C6 9.5 12 2.5 12 2.5z"/></svg>',
 };
+// Steuerung (0.34): Status der Regelschleife aus GET api/heat (control) – Phasen, Wunschsoll, Pause, Protokoll
+const PHASE = { komfort: "Komfort", nacht: "Nacht", abwesend: "Abwesend", vorheizen: "Vorheizen", urlaub: "Urlaub" };
+const PAUSE_MORNING_H = 6;  // „bis morgen“ = bis zum nächsten Morgen 06:00 – die Oberfläche rechnet es in Stunden um
+const clock = (iso) => iso ? new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "–";
+const ctl = () => (HEAT && HEAT.control) || { mode: "beobachten", active: false, paused_until: null, rooms: {}, log: [], warnings: [], status_text: "Beobachten" };
+const managing = () => ctl().mode === "heatpilot";
+function hoursUntilMorning() {
+  const n = new Date(), t = new Date(n);
+  t.setHours(PAUSE_MORNING_H, 0, 0, 0);
+  if (t - n < 3600e3) t.setDate(t.getDate() + 1);
+  return Math.round((t - n) / 36e5 * 4) / 4;
+}
+function heatStatus(c) {
+  let h = `<span class="badge">${esc(c.status_text || "Beobachten")}</span>`;
+  const more = [];
+  if (c.paused_until) more.push(`pausiert bis ${clock(c.paused_until)}`);
+  if (c.mode === "heatpilot") more.push(`${c.managed_rooms || 0} ${c.managed_rooms === 1 ? "Raum macht" : "Räume machen"} mit`);
+  if (more.length) h += `<span class="muted" style="display:block;margin-top:4px">${more.join(" · ")}</span>`;
+  for (const w of c.warnings || []) h += `<span class="warn">⚠ ${esc(w)}</span>`;
+  return h;
+}
+const ACTION_NAME = { set_temperature: "Soll", set_hvac_mode: "Betriebsart", set_climate_timer: "Tado-Timer" };
+function renderHeatLog(c) {
+  const box = $("heat-log-box"), rows = (c.log || []).slice(0, 20);
+  box.hidden = !rows.length;
+  if (!rows.length) return;
+  $("heat-log").innerHTML = "<tr><th>Zeit</th><th>Raum</th><th>Aktion</th><th>Wert</th><th>Grund</th></tr>" + rows.map((l) =>
+    `<tr><td style="white-space:nowrap">${esc(timeOf(l.time))}</td><td>${esc(shortName(l.name || l.room))}</td><td>${ACTION_NAME[l.action] || esc(l.action)}</td>` +
+    `<td>${l.value === null || l.value === undefined ? "–" : fmt(l.value) + " °C"}</td><td>${esc(l.reason || "")}</td></tr>`).join("");
+}
 async function loadHeat() {
   clearTimeout(heatTimer);
   const j = await getJSON("api/heat");
@@ -757,19 +805,38 @@ function renderHeat() {
   const n = j.rooms.length, running = j.rooms.filter((r) => r.boost), offN = j.rooms.filter((r) => r.mode === "off").length;
   const autoN = j.rooms.filter((r) => r.mode === "auto" && !r.boost).length;
   const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
+  const c = ctl(), pil = managing();
+  $("heat-status").innerHTML = heatStatus(c);
+  $("heat-acts").className = "acts" + (pil ? " four" : "");  // vierte Kachel „Pause“ nur bei Steuerung heatpilot
   $("heat-acts").innerHTML =
     act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
     act("sched", "Zeitplan", autoN === n ? "alle Räume" : `${autoN} von ${n} Räumen`, false) +
-    act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false);
+    act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false) +
+    (pil ? act("pause", "Pause", c.paused_until ? `noch ${leftText(c.pause_left_min || 1)}` : "HeatPilot anhalten", !!c.paused_until) : "");
   $("heat-rooms").innerHTML = j.rooms.map(roomTile).join("");
+  $("heat-foot").textContent = pil
+    ? "Antippen öffnet die Bedienung. HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst; was du von Hand einstellst, gilt bis zum nächsten Wechsel."
+    : "Antippen öffnet die Bedienung. Geschaltet wird nur auf Knopfdruck – HeatPilot schaltet nie von selbst.";
+  renderHeatLog(c);
   if (DLG) renderDlg();  // offener Dialog zeigt den neuen Stand
 }
 function act(kind, title, sub, on) {
   return `<button class="act${on ? " on" : ""}" onclick="openDlg('${kind}')">${ICON[kind]}<span><b>${title}</b><span class="muted">${sub}</span></span></button>`;
 }
+const unreachable = (c) => c && c.reach_c !== null && c.reach_c !== undefined && c.desired !== null && c.reach_c < c.desired - 0.2;
 function roomState(r) {
+  const c = r.control, t = fmt(r.target) + "°";
+  if (managing() && r.managed && c && c.phase) {  // Zustand aus der Regelschleife
+    if (r.boost) return `Timer · ${t}`;
+    const until = c.manual_until ? ` bis ${clock(c.manual_until)}` : "";
+    if (r.mode === "off") return "Aus von Hand" + until;
+    if (c.manual) return `manuell ${t}${until}`;
+    const d = fmt(c.desired) + "°";
+    let s = c.paused ? `Pause · ${t}` : c.phase === "vorheizen" ? `Vorheizen → ${d}` : `HeatPilot: ${PHASE[c.phase] || c.phase} ${d}`;
+    if (unreachable(c)) s += ` · erreicht ≈ ${fmt(c.reach_c)}°`;
+    return s;
+  }
   if (r.mode === "off") return "Frostschutz";
-  const t = fmt(r.target) + "°";
   return r.boost ? `Timer · ${t}` : r.mode === "heat" ? `Eingestellt auf ${t}` : `Zeitplan · ${t}`;
 }
 function roomTile(r) {
@@ -788,13 +855,14 @@ function closeDlg() { DLG = null; const d = $("heat-dlg"); if (d.open) d.close()
 function renderDlg() {
   const j = HEAT, d = DLG; if (!j || !d) return;
   const room = d.kind === "room" ? j.rooms.find((r) => r.climate === d.room) : null;
-  const key = d.kind + ":" + (d.room || "") + (room ? JSON.stringify(room) : "");
+  const key = d.kind + ":" + (d.room || "") + (room ? JSON.stringify(room) : "") + (d.kind === "pause" ? String(ctl().paused_until) : "");
   if (d.built !== key) {  // der Boost-Dialog wird nur einmal gebaut (Schieberegler), die anderen bei jeder Änderung
     let h = "";
     if (d.kind === "boost") h = boostDlg(j);
-    else if (d.kind === "sched") h = `<h2>Zeitplan fortsetzen</h2><p>Alle Räume zurück in den Tado-Zeitplan. Ein laufender Timer endet sofort.</p>` +
-      `<button class="btn primary big" onclick="heatPost('schedule', { rooms: allRooms() }, 'Zurück zum Zeitplan …')">↻ Alle Räume in den Zeitplan</button>`;
+    else if (d.kind === "sched") h = schedDlg(j);
+    else if (d.kind === "pause") h = pauseDlg();
     else if (d.kind === "off") h = `<h2>Ausschalten</h2><p>Alle Räume auf „Aus“ – Tado hält dann nur den Frostschutz (5 °C). Zurück geht es über „Zeitplan“.</p>` +
+      (managing() ? `<p>Bei „HeatPilot steuert“ gilt „Aus“ bis zum nächsten Phasenwechsel, dann schreibt HeatPilot wieder den Wunschzustand.</p>` : "") +
       `<button class="btn big" onclick="heatPost('mode', { rooms: allRooms(), mode: 'off' }, 'Schalte aus …')">⏻ Alle Räume aus</button>`;
     else h = roomDlg(room);
     $("heat-dlg-body").innerHTML = `<button class="btn dlg-x" onclick="closeDlg()" aria-label="Schließen">✕</button>${h}` +
@@ -808,7 +876,27 @@ function boostDlg(j) {
     `<div class="boost-grid"><div><div class="muted">Temperatur</div><div class="stepper"><button class="btn" onclick="boostTemp(-0.5)">−</button><b id="boost-temp"></b><button class="btn" onclick="boostTemp(0.5)">+</button></div></div>` +
     `<div><div class="muted">Dauer <b id="boost-dur-text"></b></div><input type="range" id="boost-dur" min="${j.limits.dur_min}" max="${j.limits.dur_max}" step="15" oninput="boostDur(this.value)" style="width:100%"></div></div>` +
     `<div class="row" style="gap:10px;margin-top:12px"><button class="btn primary big" id="boost-start" onclick="heatAction('boost')">▶ Starten</button><span id="boost-sum" class="boost-sum"></span></div>` +
-    `<p class="muted" style="margin:8px 0 0">Setzt in Tado einen Timer. Danach gilt dort wieder der Zeitplan, auch wenn das Add-on neu startet.</p>`;
+    `<p class="muted" id="boost-note" style="margin:8px 0 0"></p>`;
+}
+// Zeitplan-Knopf: Tado-Cloud-Räume zurück in den Tado-Zeitplan; andere Räume bekommen bei „HeatPilot steuert“ den
+// Wunschzustand, bei „Beobachten“ geht es nur in der Tado-App weiter (Hinweis aus der Antwort)
+function schedDlg(j) {
+  const n = j.rooms.length, cloud = j.rooms.filter((r) => r.tado_cloud).length;
+  const text = managing()
+    ? `Alle Räume zurück zum Wunschzustand von HeatPilot${cloud ? ` (${cloud === n ? "alle" : cloud} Tado-Cloud-Räume in den Tado-Zeitplan)` : ""}. Ein laufender Timer endet sofort.`
+    : cloud === n ? "Alle Räume zurück in den Tado-Zeitplan. Ein laufender Timer endet sofort."
+    : `${cloud ? `${cloud} von ${n} Räumen laufen über die Tado-Cloud und gehen zurück in den Tado-Zeitplan. ` : ""}Räume über HomeKit kann HeatPilot im Modus Beobachten nicht in den Zeitplan schicken – das geht in der Tado-App.`;
+  return `<h2>Zeitplan fortsetzen</h2><p>${text}</p>` +
+    `<button class="btn primary big" onclick="heatPost('schedule', { rooms: allRooms() }, 'Zurück zum Zeitplan …')">↻ Alle Räume in den Zeitplan</button>`;
+}
+// Pause: HeatPilot schreibt solange nichts; {hours: 0} = weiter
+function pauseDlg() {
+  const c = ctl(), morn = hoursUntilMorning();
+  const btn = (h, label) => `<button class="btn big" onclick="heatPost('pause', { hours: ${h} }, 'Pausiere …')">${label}</button>`;
+  return `<h2>HeatPilot pausieren</h2><p>Solange schreibt HeatPilot keine Solltemperaturen – was eingestellt ist, bleibt stehen. Boost und Bedienung von Hand gehen weiter; ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher. Danach geht es mit dem Wunschzustand weiter.</p>` +
+    (c.paused_until ? `<p>Pausiert noch <b>${leftText(c.pause_left_min || 1)}</b> (bis ${clock(c.paused_until)}).</p>` : "") +
+    `<div class="pause-grid">${btn(1, "1 h")}${btn(2, "2 h")}${btn(4, "4 h")}${btn(morn, `bis morgen früh (${String(PAUSE_MORNING_H).padStart(2, "0")}:00)`)}</div>` +
+    (c.paused_until ? `<button class="btn primary big" onclick="heatPost('pause', { hours: 0 }, 'Weiter …')">▶ Weiter</button>` : "");
 }
 function syncBoost(j) {
   const ids = allRooms(), n = BOOST.rooms.length, c = tileColors(BOOST.temp, "heat");
@@ -821,6 +909,11 @@ function syncBoost(j) {
   const dur = $("boost-dur"); if (String(dur.value) !== String(BOOST.minutes)) dur.value = BOOST.minutes;
   $("boost-dur-text").textContent = hm(BOOST.minutes);
   $("boost-start").disabled = !n;
+  // Tado-Cloud-Räume: Timer in Tado; andere: lokaler Timer in HeatPilot
+  const local = j.rooms.some((r) => BOOST.rooms.includes(r.climate) && !r.tado_cloud);
+  $("boost-note").textContent = local
+    ? "Läuft als Timer in HeatPilot. Nach Ablauf stellt es den Wunschzustand (HeatPilot steuert) bzw. das Soll von vorher (Beobachten) wieder her – nur, wenn das Boost-Soll noch steht."
+    : "Setzt in Tado einen Timer. Danach gilt dort wieder der Zeitplan, auch wenn das Add-on neu startet.";
 }
 function roomDlg(r) {
   if (!r) return "<h2>Raum</h2><p>Nicht mehr vorhanden.</p>";
@@ -834,7 +927,23 @@ function roomDlg(r) {
     `<span>Soll <b>${off ? "aus" : fmt(r.target) + " °C"}</b></span>` +
     `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${off ? "disabled" : ""}>+</button></div>` +
     `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')">${modeName[m]}</button>`).join("")}</div>` +
-    (r.boost ? `<p class="muted" style="margin:8px 0 0">Timer läuft noch ${leftText(r.boost.left_min)} – „Zeitplan“ beendet ihn sofort.</p>` : "");
+    (r.boost ? `<p class="muted" style="margin:8px 0 0">Timer läuft noch ${leftText(r.boost.left_min)}${r.boost.local ? " (lokal in HeatPilot)" : ""} – „Zeitplan“ beendet ihn sofort.</p>` : "") +
+    ctlInfo(r);
+}
+// Was die Regelschleife mit dem Raum vorhat (nur bei „HeatPilot steuert“)
+function ctlInfo(r) {
+  const c = r.control;
+  const devices = (r.devices || []).length > 1
+    ? `<div class="ctl-info">Geräte: ${r.devices.map((d) => `${esc(shortName(d.name))} ${fmt(d.temp)}°${d.controller ? " (Raumregler)" : ""}`).join(" · ")}</div>` : "";
+  if (!managing()) return devices;
+  if (!r.managed || !c || !c.phase) return devices + `<div class="ctl-info">Macht nicht mit – HeatPilot schreibt hier nichts (Einstellungen → Räume → „macht mit“).</div>`;
+  let h = `<div class="ctl-info">HeatPilot: <b>${PHASE[c.phase] || c.phase}</b> → Soll <b>${fmt(c.desired)} °C</b>${c.reason ? ` · ${esc(c.reason)}` : ""}`;
+  if (c.next_change) h += `<br>nächste Änderung ${clock(c.next_change)}${c.next_phase ? " " + (PHASE[c.next_phase] || c.next_phase) : ""}`;
+  if (c.manual) h += `<br>von Hand geändert – gilt bis ${clock(c.manual_until)}, dann schreibt HeatPilot wieder`;
+  if (unreachable(c)) h += `<br>Ziel laut Raummodell nicht erreichbar – erreicht ≈ ${fmt(c.reach_c)} °C bei maximalem Vorlauf`;
+  if (c.paused) h += "<br>Pause – HeatPilot schreibt gerade nicht";
+  if (c.errors >= 3) h += `<br><span class="msg-err">${c.errors} Schreibfehler in Folge – Thermostat prüfen${c.retry_at ? `, nächster Versuch ${clock(c.retry_at)}` : ""}</span>`;
+  return devices + h + "</div>";
 }
 function boostRoom(c) { BOOST.rooms = BOOST.rooms.includes(c) ? BOOST.rooms.filter((x) => x !== c) : [...BOOST.rooms, c]; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
 function boostAll() { const ids = allRooms(); BOOST.rooms = BOOST.rooms.length === ids.length ? [] : ids; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
@@ -844,12 +953,12 @@ async function heatPost(action, body, busy) {
   heatMsg(busy);
   try {
     const j = await getJSON("api/heat/" + action, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    HEAT = { rooms: j.rooms, limits: j.limits }; renderHeat();
-    heatMsg(j.ok ? `<span class="msg-ok">Erledigt.</span>` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc(j.errors.join(" · "))}</span>`);
+    HEAT = { rooms: j.rooms, limits: j.limits, control: j.control }; renderHeat();
+    heatMsg(j.ok ? `<span class="msg-ok">Erledigt.</span>${j.hint ? " " + esc(j.hint) : ""}` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc((j.errors || []).join(" · "))}</span>`);
   } catch (e) { heatError(e); }
 }
 function heatAction(a) {
-  if (a === "boost") heatPost("boost", { rooms: BOOST.rooms, temp: BOOST.temp, minutes: BOOST.minutes }, "Starte Tado-Timer …");
+  if (a === "boost") heatPost("boost", { rooms: BOOST.rooms, temp: BOOST.temp, minutes: BOOST.minutes }, "Starte Boost …");
   else heatPost("schedule", { rooms: BOOST.rooms.length ? BOOST.rooms : allRooms() }, "Zurück zum Zeitplan …");
 }
 function roomTemp(c, d) {
@@ -970,7 +1079,7 @@ async function load() {
   OV_STALE = $("view-overview").hidden;  // im Hintergrund gezeichnet: Grafen beim Öffnen in voller Breite neu
   const hist = await getJSON("api/history?days=60");
   const h = s.house, c = s.cycling, sv = s.savings;
-  $("status").innerHTML = `Modus <span class="badge">${s.mode === "observe" ? "Beobachten – greift nicht ein" : s.mode}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
+  $("status").innerHTML = `Modus <span class="badge">${s.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten – greift nicht ein"}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
     ` · Wärmebedarf laut Tado-Soll: <b>${s.setpoint_demand === null ? "–" : s.setpoint_demand ? "ja" : "nein"}</b>` +
     (s.demand_pct !== null ? ` · Heizungsanforderung ${fmt(s.demand_pct, 0)} %` : "") +
     ` · Regler: ${s.hc_mode ?? "–"}` +
@@ -1012,6 +1121,7 @@ async function load() {
     `<li><b>Komfort-Kontrolle:</b> Heizen ${sv.cold_hours} Stunden zu kalt (Haus) · Warmwasser ${s.dhw.cold_draws}× zu kalt (Reserve aktuell +${fmt(s.dhw.comfort_margin)} K)</li>` +
     `<li><b>Je Raum geprüft:</b> ${roomCheckText(sv)}</li>` +
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul>`;
+  renderSchedule(s);
   loadCert().catch((e) => { $("cert").innerHTML = `<h2>Zertifikat über Haus & Heizung</h2><p class="muted">Konnte nicht geladen werden: ${esc(e.message)}</p>`; });
   renderFlowStudy(s.flow_study);
   loadWeek().catch(() => {});
@@ -1093,7 +1203,7 @@ async function load() {
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
 }
 // ---------------------------------------------------------------- Einstellungen
-let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null;
+let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {};
 function sunText(g, updates) {
   if (!g || updates < 96) return '<span class="muted">lernt noch</span>';
   const names = ["Ost", "Süd", "West"], best = g.indexOf(Math.max(...g));
@@ -1263,6 +1373,21 @@ async function loadPresence() {
     heatmap($("hm-pers-" + i), p.habit, { color: "var(--series-3)", min: 0, max: 1, now: nowCell(), label: "Gewohnheit " + p.name,
       tip: (v) => `<b>${fmt(v * 100, 0)} %</b> zu Hause`, totals: p.habit.map((r) => r.reduce((x, y) => x + y, 0)), totalUnit: "h", totalsLabel: "h/Tag" });
   });
+}
+// Zeitplan-Karte: bei „HeatPilot steuert“ der Wochenplan, sonst die aus Tado gelernten bzw. eingestellten Zeiten
+function renderSchedule(s) {
+  const box = $("sched"), sc = s.schedule;
+  if (!sc || !sc.effective) { box.hidden = true; return; }
+  const e = sc.effective, l = sc.learned || {};
+  box.hidden = false;
+  if (s.control_mode === "heatpilot" && e.plan) {
+    box.innerHTML = `<h2>Zeitplan – HeatPilot steuert</h2><p>Nachtabsenkung nach Wochenplan (Einstellungen → Steuerung): nachts ${fmt(e.night_temp)} °C, bei Abwesenheit und im Urlaub ${fmt(e.away_temp)} °C, sonst die Komforttemperatur des Raums; vorgeheizt wird so früh, wie der Raum laut Modell braucht. Aus Tado wird dabei nichts gelernt.</p>` +
+      `<div class="scroll"><table class="plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th></tr>${e.plan.map((d) => `<tr><td>${esc(d.day)}</td><td>${esc(d.start)}</td><td>${esc(d.end)}</td></tr>`).join("")}</table></div>`;
+    return;
+  }
+  const src = e.source || {}, how = (k) => src[k] === "gelernt" ? "gelernt" : "eingestellt";
+  box.innerHTML = `<h2>Zeitplan – Beobachten</h2><p>Nacht ab <b>${esc(e.night_start)}</b> (${how("night_start")}) bis <b>${esc(e.night_end)}</b> (${how("night_end")}) · Nachttemperatur ${fmt(e.night_temp)} °C (${how("night_temp")}) · Abwesenheit ${fmt(e.away_temp)} °C (${how("away_temp")})` +
+    `${l.nights ? ` · ${l.nights} Nächte aus Tado erkannt` : ""}. Damit rechnet die Ersparnis-Schätzung – geschaltet wird nichts.</p>`;
 }
 function roomCheckText(sv) {
   if (!sv.rooms_checked) return sv.rooms_ok_floor ? "kein plausibles Heizkörper-Raummodell (Fußbodenräume werden nicht je Raum geprüft) – nur das ganze Haus geprüft" : "noch kein Raummodell plausibel – nur das ganze Haus geprüft";
@@ -1455,13 +1580,21 @@ function roomRows() {
   const chosen = Object.fromEntries((SET.rooms || []).map((r) => [r.climate, r]));
   const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
   const auto = !(SET.rooms || []).length;
+  const lim = CTRL.limits || { temp_min: 5, temp_max: 25 };
   return climates.map((c) => {
     const r = chosen[c.id] || {}, g = sug[c.id] || {};
     const on = chosen[c.id] ? true : (auto && !!sug[c.id]);
+    // Komfort: gespeicherter Wert; schon gewählter Raum ohne Wert (Einstellungen vor 0.34) 21 °C wie im Backend;
+    // neu gewählter Raum: das aktuelle Soll des Thermostats, sonst 21 °C
+    const comfort = r.comfort ?? (chosen[c.id] ? 21 : (CT[c.id] ?? 21));
     return `<tr class="room" data-climate="${esc(c.id)}">
       <td><input type="checkbox" class="r-on" ${on ? "checked" : ""}></td>
       <td><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}"><div class="hint">${esc(c.id)} · in HA: ${esc(c.name)}</div></td>
-      <td>${esc(c.platform || "–")}${c.platform && c.platform !== "tado" ? '<div class="hint">kein Tado – wirklich ein Raum?</div>' : ""}</td>
+      <td style="text-align:center"><input type="checkbox" class="r-managed" ${r.managed ? "checked" : ""} onchange="modeHint()"></td>
+      <td><input type="number" class="r-comfort" step="0.5" min="${lim.temp_min}" max="${lim.temp_max}" value="${esc(comfort)}"></td>
+      <td><input class="r-group" value="${esc(r.group || g.group || "")}" placeholder="z. B. Wohnzimmer"></td>
+      <td style="text-align:center"><input type="checkbox" class="r-controller" ${r.controller ? "checked" : ""}></td>
+      <td>${esc(c.platform || "–")}${c.platform && c.platform !== "tado" && c.platform !== "homekit_controller" ? '<div class="hint">kein Tado – wirklich ein Raum?</div>' : ""}</td>
       <td style="text-align:center"><input type="checkbox" class="r-floor" ${(SET.floor_heating_rooms || []).includes(c.id) ? "checked" : ""}></td>
       <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || "")}" placeholder="Ventil % (optional)"></td>
       <td><input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || "")}" placeholder="Temperatur (optional)"></td>
@@ -1472,8 +1605,37 @@ function roomRows() {
 function learnedHint(key, show) {
   if (!SCHED || !SCHED.learned) return "";
   const l = SCHED.learned[key], e = SCHED.effective[key], src = SCHED.effective.source[key];
-  if (l === null || l === undefined) return "";
+  if (l === null || l === undefined || src === "wochenplan") return "";  // bei „HeatPilot steuert“ gilt der Wochenplan
   return ` · gelernt: ${show(l)}` + (src === "gelernt" || l === e ? " (verwendet)" : src.startsWith("eingestellt (") ? " – Untergrenze gilt" : ` – verwendet: ${show(e)}`);
+}
+
+// Steuerung (0.34): Schalter beobachten/heatpilot, Wochenplan der Nachtabsenkung, Nacht-/Abwesenheitstemperatur, Vorheizdeckel
+function controlCard(s) {
+  const mode = s.control_mode === "heatpilot" ? "heatpilot" : "beobachten";
+  const plan = (s.night_plan || []).length === 7 ? s.night_plan : (DEF.night_plan || []);
+  return `<p>Was HeatPilot mit den Räumen tut. <b>Beobachten</b>: lernen, empfehlen, Tado nur auf Knopfdruck. <b>HeatPilot steuert</b>: HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst – Komfort, Nacht nach Wochenplan, Abwesenheit, rechtzeitig vorheizen.</p>
+    <div class="seg" id="f-control_mode">
+      <label><input type="radio" name="control_mode" value="beobachten" ${mode === "beobachten" ? "checked" : ""} onchange="modeHint()"> Beobachten</label>
+      <label><input type="radio" name="control_mode" value="heatpilot" ${mode === "heatpilot" ? "checked" : ""} onchange="modeHint()"> HeatPilot steuert</label></div>
+    <p class="hint" id="mode-hint" style="margin:6px 0 0"></p>
+    <div class="warnbox">Zurück zu Tado nur hier über den Schalter – danach in der Tado-App den Zeitplan fortsetzen (HeatPilot stellt ihn nicht wieder her). Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt geschriebene Soll stehen. Es gibt keinen Zwischenmodus und keinen automatischen Rückfall.</div>
+    <h3 style="font-size:13px;margin:12px 0 4px">Nachtabsenkung – Wochenplan</h3>
+    <p class="muted" style="margin:0 0 6px">Je Wochentag: Beginn am Abend dieses Tages, Ende am Morgen dieses Tages (die Nacht Fr → Sa steht also bei Fr „ab“ und Sa „bis“). Gilt bei „HeatPilot steuert“; nachts bekommen alle Räume mit „macht mit“ die Nachttemperatur.</p>
+    <div class="scroll"><table class="form plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th></tr>${WEEKDAYS.map((d, i) =>
+      `<tr class="np" data-day="${i}"><td>${d}</td><td><input type="time" class="np-start" value="${esc((plan[i] || {}).start || "")}"></td><td><input type="time" class="np-end" value="${esc((plan[i] || {}).end || "")}"></td></tr>`).join("")}</table></div>
+    <div class="form-grid" style="margin-top:10px">
+      ${field("Nachttemperatur (°C)", num("f-night_temp", s.night_temp, "0.5"), "Soll aller Räume mit „macht mit“ in der Nacht; im Modus Beobachten Untergrenze der Ersparnis-Rechnung" + learnedHint("night_temp", (v) => fmt(v) + " °C"))}
+      ${field("Temperatur bei Abwesenheit (°C)", num("f-away_temp", s.away_temp, "0.5"), "Soll, wenn niemand zu Hause ist oder im Urlaub" + learnedHint("away_temp", (v) => fmt(v) + " °C"))}
+      ${field("Vorheizen höchstens (h)", num("f-preheat_max_h", s.preheat_max_h, "0.5"), "Deckel für die Aufheizzeit aus dem Raummodell (0,5–6 h). Räume, die das Ziel nicht schaffen, werden akzeptiert – nichts wird hochgedreht.")}
+    </div>`;
+}
+function modeHint() {
+  const m = document.querySelector('input[name="control_mode"]:checked'), box = $("mode-hint");
+  if (!box) return;
+  const managed = [...document.querySelectorAll("tr.room")].filter((tr) => tr.querySelector(".r-on").checked && tr.querySelector(".r-managed").checked).length;
+  box.textContent = m && m.value === "heatpilot"
+    ? `HeatPilot schreibt nur in Räume mit Häkchen „macht mit“ (zurzeit ${managed}), nur Solltemperaturen zwischen 5 und 25 °C. Boost, Soll und Betriebsart von Hand gelten bis zum nächsten Wechsel. EMS-ESP und Kessel bleiben unberührt.`
+    : "Wie bisher: HeatPilot lernt, empfiehlt und schaltet Tado nur auf Knopfdruck im Reiter Heizen – nie von selbst.";
 }
 
 function renderSettings() {
@@ -1483,6 +1645,7 @@ function renderSettings() {
   const outdoor = (s.outdoor_sensors || []).length ? s.outdoor_sensors : (SUG.outdoor || []);
   $("view-settings").innerHTML = datalists() +
     `<p class="sub">Alles, was das Add-on braucht. Felder mit Vorschlag sind aus der automatischen Erkennung vorausgefüllt – prüfen und speichern. Speichern wirkt sofort, ohne Neustart.</p>` +
+    card("Steuerung", controlCard(s)) +
     card("Verbindung", `<div class="form-grid">${field("EMS-ESP-Adresse", `<div class="row"><input id="f-emsesp_host" value="${esc(s.emsesp_host)}" placeholder="z. B. 192.168.1.50 oder ems-esp.local" style="flex:1"><button class="btn small" onclick="testEms()">Testen</button></div><div id="ems-msg" class="hint"></div>`, "Optional. Liest alle Kesselwerte direkt – nur lesend, ohne Token. Leer = nur über Home Assistant.")}</div>`) +
     card("Messwerte", `<div class="form-grid">
       ${field("Außenfühler", `<div id="outdoor-list">${outdoor.map((o, i) => `<div class="row" style="margin-bottom:4px">${ent("f-out-" + i, o, "temp")}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`).join("")}</div><button class="btn small" onclick="addOutdoor()">+ Fühler</button>`, "Einer oder mehrere – es zählt das Minimum. Leer = Außenfühler der Therme.")}
@@ -1490,8 +1653,9 @@ function renderSettings() {
       ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Für die Vorhersage beim Vorheizen.")}
       ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
     </div>`) +
-    card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet). „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
-      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>Quelle</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+    card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
+      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
+      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
     card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus z. B. als leer, wenn nur das Auto weg ist. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit HA-Benutzer und Gerät.</p>
       <div class="scroll"><table class="form"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`) +
     card("Gas & Kosten", `<div class="form-grid">
@@ -1500,9 +1664,7 @@ function renderSettings() {
       ${field("Arbeitspreis (€/kWh)", num("f-gas_price_eur_per_kwh", s.gas_price_eur_per_kwh))}
       ${field("Grundpreis (€/Jahr)", num("f-gas_base_fee_eur_per_year", s.gas_base_fee_eur_per_year))}
     </div><p class="muted" id="kwh-hint"></p>`) +
-    card("Komfort & Strategie", `<p>Startwerte. Mit „weiterlernen“ übernimmt HeatPilot Nachtzeiten und Temperaturen aus dem, was Tado tatsächlich tut (letzte 4 Wochen, ohne Urlaub) – Temperaturen nie kälter als hier eingestellt.</p><div class="form-grid">
-      ${field("Temperatur bei Abwesenheit (°C)", num("f-away_temp", s.away_temp, "0.5"), "Untergrenze – nie kälter" + learnedHint("away_temp", (v) => fmt(v) + " °C"))}
-      ${field("Nachttemperatur (°C)", num("f-night_temp", s.night_temp, "0.5"), "Untergrenze" + learnedHint("night_temp", (v) => fmt(v) + " °C"))}
+    card("Komfort & Strategie", `<p>Startwerte für den Modus Beobachten (Ersparnis-Schätzung). Mit „weiterlernen“ übernimmt HeatPilot Nachtzeiten und Temperaturen aus dem, was Tado tatsächlich tut (letzte 4 Wochen, ohne Urlaub) – Temperaturen nie kälter als unter „Steuerung“ eingestellt. Bei „HeatPilot steuert“ gilt der Wochenplan oben, aus Tado wird dann nichts gelernt.</p><div class="form-grid">
       ${field("Nacht ab", tim("f-night_start", s.night_start), learnedHint("night_start", (v) => v).replace(/^ · /, ""))}
       ${field("Nacht bis", tim("f-night_end", s.night_end), learnedHint("night_end", (v) => v).replace(/^ · /, ""))}
       ${field("Weiterlernen", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-learn_schedule" ${s.learn_schedule ? "checked" : ""}> Zeiten und Temperaturen aus Tado lernen</label>`, SCHED && SCHED.learned ? `${SCHED.learned.nights} Nächte erkannt · ${fmt(SCHED.learned.away_hours ?? (SCHED.learned.away_samples || 0) / 12, 0)} h Abwesenheit` : "noch nichts gelernt")}
@@ -1538,6 +1700,7 @@ function renderSettings() {
     `<div class="savebar"><button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="applySuggestions()">Vorschläge übernehmen</button><span id="save-msg"></span></div>`;
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
   $("f-gas_calorific_value").oninput = upd; $("f-gas_z_number").oninput = upd; upd();
+  modeHint();
 }
 
 let outdoorN = 100;
@@ -1550,17 +1713,23 @@ function collect() {
   for (const k of ["emsesp_host", "gas_sensor", "weather_entity", "demand_sensor", "vacation_entity",
                    "night_start", "night_end", "vacation_arrival_time"]) out[k] = v("f-" + k);
   for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
-                   "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp",
+                   "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp", "preheat_max_h",
                    "dhw_comfort_temp", "dhw_max_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
+  // Steuerung: Schalter (ohne Auswahl bleibt es bei Beobachten) und Wochenplan Mo..So
+  const cm = document.querySelector('input[name="control_mode"]:checked');
+  out.control_mode = cm ? cm.value : "beobachten";
+  out.night_plan = [...document.querySelectorAll("tr.np")].map((tr) => ({ start: tr.querySelector(".np-start").value, end: tr.querySelector(".np-end").value }));
   out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
   out.rooms = []; out.floor_heating_rooms = [];
   for (const tr of document.querySelectorAll("tr.room")) {
     if (!tr.querySelector(".r-on").checked) continue;
     const c = tr.dataset.climate;
     out.rooms.push({ climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
-                     temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim() });
+                     temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim(),
+                     group: tr.querySelector(".r-group").value.trim(), controller: tr.querySelector(".r-controller").checked,
+                     managed: tr.querySelector(".r-managed").checked, comfort: tr.querySelector(".r-comfort").value.trim() });
     if (tr.querySelector(".r-floor").checked) out.floor_heating_rooms.push(c);
   }
   out.vacations = [...document.querySelectorAll(".vac")].map((r) => {
@@ -1591,8 +1760,10 @@ function applySuggestions() {
   for (const tr of document.querySelectorAll("tr.room")) {
     const g = sug[tr.dataset.climate];
     tr.querySelector(".r-on").checked = !!g;
-    if (g) { tr.querySelector(".r-valve").value = g.heating_power || ""; tr.querySelector(".r-temp").value = g.temp_sensor || ""; tr.querySelector(".r-hum").value = g.humidity || ""; }
+    if (g) { tr.querySelector(".r-valve").value = g.heating_power || ""; tr.querySelector(".r-temp").value = g.temp_sensor || ""; tr.querySelector(".r-hum").value = g.humidity || "";
+      if (g.group) tr.querySelector(".r-group").value = g.group; }  // „macht mit“ setzt nie ein Vorschlag – nur der Nutzer
   }
+  modeHint();
   $("save-msg").className = ""; $("save-msg").textContent = "Vorschläge eingetragen – prüfen und speichern.";
 }
 
@@ -1628,6 +1799,7 @@ async function loadSettings() {
   }
   ENT = await getJSON("api/entities");
   SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
+  DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {};
   renderSettings();
 }
 

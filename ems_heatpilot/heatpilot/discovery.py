@@ -131,11 +131,40 @@ HEAT_MODES = {"tag", "day", "comfort", "heat", "heizen", "an", "on"}
 
 @dataclass
 class Room:
+    """Ein logischer Raum. ``climate`` ist sein Schlüssel (Raumregler, sonst erstes Gerät der Gruppe);
+    unter ihm laufen Messwerte und Modell. Weitere Geräte derselben Gruppe sind ``members``
+    (Mitläufer): ihre Messwerte fließen ins Mittel, sie werden nicht als eigener Raum gelernt."""
+
     name: str
     climate: str
     heating_power: str | None = None  # Tado: Ventilöffnung / Heizleistung in %
     humidity: str | None = None
     temp_sensor: str | None = None  # für die Langzeitstatistik (climate hat keine)
+    # seit 0.34: Steuerung
+    group: str | None = None          # Raumname der Gruppe (Einstellungen), None = eigener Raum
+    controller: bool = False          # Schlüssel ist ein Wandthermostat: nur er wird gemessen und beschrieben
+    managed: bool = False             # „macht mit“ – nur dann schreibt HeatPilot
+    comfort: float = 21.0             # Komforttemperatur (°C)
+    platform: str | None = None       # Integration des Schlüssels laut Registry (tado, homekit_controller …)
+    # Mitläufer: [{"climate", "heating_power", "humidity", "temp_sensor", "platform"}]
+    members: list[dict] = field(default_factory=list)
+
+    @property
+    def climates(self) -> list[str]:
+        """Alle climate-Entitäten des Raums (Schlüssel zuerst)."""
+        return [self.climate, *(m["climate"] for m in self.members)]
+
+    @property
+    def devices(self) -> list[dict]:
+        """Schlüssel und Mitläufer in einheitlicher Form."""
+        head = {"climate": self.climate, "heating_power": self.heating_power, "humidity": self.humidity,
+                "temp_sensor": self.temp_sensor, "platform": self.platform}
+        return [head, *self.members]
+
+    @property
+    def write_targets(self) -> list[str]:
+        """Wohin HeatPilot schreibt: nur der Raumregler, sonst alle Ventile des Raums."""
+        return [self.climate] if self.controller else self.climates
 
 
 @dataclass
@@ -154,12 +183,20 @@ class Discovered:
     def all_sensor_ids(self) -> list[str]:
         ids = list(self.boiler.values()) + list(self.thermostat.values()) + list(self.outdoor)
         for r in self.rooms:
-            ids += [x for x in (r.heating_power, r.humidity, r.temp_sensor) if x]
+            for d in r.devices:
+                ids += [x for x in (d.get("heating_power"), d.get("humidity"), d.get("temp_sensor")) if x]
         if self.gas:
             ids.append(self.gas)
         if self.demand_sensor:
             ids.append(self.demand_sensor)
         return sorted(set(ids))
+
+    def climate_ids(self) -> list[str]:
+        """Alle climate-Entitäten aller Räume (Schlüssel und Mitläufer)."""
+        return [c for r in self.rooms for c in r.climates]
+
+    def room_of(self, climate: str) -> "Room | None":
+        return next((r for r in self.rooms if climate in r.climates), None)
 
     def as_dict(self, private: bool = True) -> dict:
         """``private=False``: ohne Standort (für Log und Diagnose-Datei)."""
@@ -242,6 +279,51 @@ def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[di
         d.rooms.append(room)
 
 
+def group_rooms(entries: list[dict], by_id: dict, reg: dict) -> list[Room]:
+    """Raum-Einträge der Einstellungen zu logischen Räumen zusammenfassen (seit 0.34).
+
+    Gleicher ``group``-Name = derselbe Raum. Schlüssel ist das Gerät mit ``controller`` (Raumregler),
+    sonst das erste der Gruppe; die übrigen sind Mitläufer. „macht mit“ gilt, sobald ein Gerät der
+    Gruppe es hat; die Komforttemperatur kommt vom Schlüssel. Einträge ohne ``group``: eigener Raum.
+    """
+    def device(r: dict) -> dict:
+        return {"climate": r["climate"], "heating_power": r.get("heating_power") or None,
+                "humidity": r.get("humidity") or None, "temp_sensor": r.get("temperature") or None,
+                "platform": reg.get(r["climate"], {}).get("platform")}
+
+    def friendly(climate: str) -> str:
+        return by_id.get(climate, {}).get("attributes", {}).get("friendly_name", climate)
+
+    groups: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for i, r in enumerate(entries):
+        key = r.get("group") or f"\0{i}"  # ohne Gruppe: eigener Raum
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(r)
+    rooms = []
+    for key in order:
+        entries_ = groups[key]
+        head = next((r for r in entries_ if r.get("controller")), entries_[0])
+        others = [r for r in entries_ if r is not head]
+        name = (head.get("group") or head.get("name") or friendly(head["climate"])).strip()
+        comfort = head.get("comfort")
+        try:
+            comfort = float(comfort) if comfort is not None else 21.0
+        except (TypeError, ValueError):
+            comfort = 21.0
+        rooms.append(Room(
+            name=name, climate=head["climate"], heating_power=head.get("heating_power") or None,
+            humidity=head.get("humidity") or None, temp_sensor=head.get("temperature") or None,
+            group=head.get("group") or None, controller=bool(head.get("controller")),
+            managed=any(bool(r.get("managed")) for r in entries_), comfort=comfort,
+            platform=reg.get(head["climate"], {}).get("platform"),
+            members=[device(r) for r in others],
+        ))
+    return rooms
+
+
 def person_kind(state: dict) -> str:
     """``person``: HA-Benutzer mit Gerät · ``device``: Gerät, aber kein HA-Benutzer (z. B. Fahrzeug,
     das als Person angelegt ist, weil es ein Bild und Abwesenheiten hat) · ``dummy``: ohne Gerät."""
@@ -268,21 +350,11 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
             d.thermostat[role] = hit
 
     if cfg.rooms:
-        for r in cfg.rooms:
-            name = r.get("name") or by_id.get(r["climate"], {}).get("attributes", {}).get(
-                "friendly_name", r["climate"]
-            )
-            d.rooms.append(
-                Room(
-                    name=name,
-                    climate=r["climate"],
-                    heating_power=r.get("heating_power"),
-                    humidity=r.get("humidity"),
-                    temp_sensor=r.get("temperature"),
-                )
-            )
+        d.rooms = group_rooms(cfg.rooms, by_id, reg)
     else:
         _discover_tado(d, ids, by_id, registry, reg)
+        for room in d.rooms:
+            room.platform = reg.get(room.climate, {}).get("platform")
 
     all_persons = sorted(e for e in ids if e.startswith("person."))
     if cfg.persons:

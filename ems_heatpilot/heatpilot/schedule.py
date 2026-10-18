@@ -93,8 +93,9 @@ def _reference(pts: list[tuple[int, int, float]], i: int, day_vals: list[float],
 
 
 def learn(store, now_ts: int, skip_rooms: set[str] = frozenset(), rooms: set[str] | None = None,
-          persons: list[str] | None = None) -> dict:
-    since = now_ts - WINDOW_DAYS * 86400
+          persons: list[str] | None = None, since_ts: int | None = None) -> dict:
+    """``since_ts``: frühestens ab dann (zuletzt hat HeatPilot selbst gesteuert – das wäre zirkulär)."""
+    since = max(now_ts - WINDOW_DAYS * 86400, int(since_ts or 0))
     sp = house_setpoints(store, since, skip_rooms, rooms)
     home = store.home_by_ts(since, persons)
     vacation = {r["ts"] for r in store.query(
@@ -171,6 +172,7 @@ class Effective:
     night_temp: float
     away_temp: float
     source: dict
+    plan: list[dict] | None = None  # Wochenplan Mo..So (Steuerung heatpilot), sonst None
 
     def is_night(self, t: time) -> bool:
         if self.night_start <= self.night_end:
@@ -179,7 +181,8 @@ class Effective:
 
     def as_dict(self) -> dict:
         return {"night_start": self.night_start.strftime("%H:%M"), "night_end": self.night_end.strftime("%H:%M"),
-                "night_temp": self.night_temp, "away_temp": self.away_temp, "source": self.source}
+                "night_temp": self.night_temp, "away_temp": self.away_temp, "source": self.source,
+                "plan": self.plan}
 
 
 def _shift_ok(learned: str, configured: time) -> bool:
@@ -188,9 +191,25 @@ def _shift_ok(learned: str, configured: time) -> bool:
     return min(diff, 24 * 60 - diff) <= MAX_SHIFT_H * 60
 
 
+def _plan_median(cfg, key: str) -> time:
+    """Mo–Fr-Mittel (Median) des Wochenplans als feste Uhrzeit für ältere Aufrufer (Ersparnis)."""
+    mins = []
+    for d in range(5):
+        start, end = cfg.night_times(d)
+        mins.append(_minutes(start if key == "start" else end))
+    m = int(statistics.median(mins))
+    return time(m // 60, m % 60)
+
+
 def effective(cfg, learned: dict | None) -> Effective:
     src = {"night_start": "eingestellt", "night_end": "eingestellt", "night_temp": "eingestellt",
            "away_temp": "eingestellt"}
+    if getattr(cfg, "control_mode", "beobachten") == "heatpilot":
+        # HeatPilot schreibt die Zeiten selbst – aus Tado lernen wäre zirkulär: der Wochenplan gilt
+        src = {k: "wochenplan" for k in src}
+        plan = [{"day": day, **d} for day, d in zip(("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"), cfg.night_plan)]
+        return Effective(_plan_median(cfg, "start"), _plan_median(cfg, "end"), cfg.night_temp, cfg.away_temp,
+                         src, plan)
     eff = Effective(cfg.night_start, cfg.night_end, cfg.night_temp, cfg.away_temp, src)
     if not cfg.learn_schedule or not learned:
         return eff
