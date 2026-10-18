@@ -61,8 +61,14 @@ async def backfill_statistics(ha: HAClient, eng: Engine, days: int) -> int:
                  datetime.fromtimestamp(hour).strftime("%d.%m.%Y %H:00"), value)
     outdoor = [by_hour(e, "mean") for e in f.outdoor]
     rooms = [by_hour(e, "mean") for e in temp_ids]
+    # Stunden mit eigenen Messwerten nicht überschreiben – dort kennt HeatPilot Warmwasser,
+    # Anwesenheit und Urlaub (die Langzeitstatistik nicht); sie bildet replay/aggregate_hour
+    own = {r["h"] for r in eng.store.query(
+        "SELECT ts - ts % 3600 AS h, COUNT(*) AS n FROM samples GROUP BY h HAVING n >= 2")}
     rows = []
     for hour in sorted(gas_change):
+        if hour in own:
+            continue
         t_out = [o[hour] for o in outdoor if hour in o]
         t_in = [r[hour] for r in rooms if hour in r]
         rows.append(

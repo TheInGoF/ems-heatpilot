@@ -182,7 +182,7 @@ Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
 | Ansicht | Was sie zeigt |
 | --- | --- |
 | Gas gesamt / Heizen / Warmwasser | Verbrauch in kW (= kWh je Stunde); Warmwasser = Gas, während der Speicher lädt |
-| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell ohne den Achsabschnitt (Fremdwärme wieder hinzugezählt, also der Wärmeverlust) und nur aus Stunden deutlich unter der Heizgrenze – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
+| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell ohne den Achsabschnitt (Fremdwärme wieder hinzugezählt; über den Tag gemittelt der Wärmeverlust, je Stunde nachts niedriger und morgens höher) und nur aus Stunden deutlich unter der Heizgrenze – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
 | Abweichung vom Hausmodell | gemessen minus erwartet. Das Hausmodell kennt keine Wochentage; feste Muster (Kochen, Lüften, Aufheizen nach der Absenkung) sieht man hier |
 | Brennerstarts | wann der Kessel am meisten taktet |
 | Jemand zu Hause | gemessener Anteil der Zeit |
