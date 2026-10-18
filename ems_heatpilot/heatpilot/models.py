@@ -38,6 +38,11 @@ EXCITATION_DECAY = 0.998  # „gesehener Heizbetrieb“ klingt unabhängig vom L
 # Haus), Fremdwärme c, Sonne Ost/Süd/West. Mit gleicher Unsicherheit für alles verschob ein
 # einziger Schritt a um das Zehnfache; an echten Daten nachgerechnet (Export 10/2026).
 ROOM_PRIOR = {"a": (0.02, 0.05), "f": (0.01, 0.02), "b": (0.018, 0.03), "c": (0.0, 0.3), "sun": (0.0, 1.0)}
+# Fremdwärme-Erkennung (Kamin, Ofen, Gäste): Sonne und Fußboden gelten erst als gelernt, wenn das
+# Modell so viele Schritte hat und die Unsicherheit der gerade angeregten Parameter auf die Hälfte
+# des Startwerts gesunken ist – sonst verwürfe ein junges Modell seine eigene Lernchance als Ereignis
+EXT_LEARNED_STEPS = 200
+EXT_LEARNED_P_FRAC = 0.25   # P-Diagonale (Unsicherheit²) höchstens so viel vom Startwert
 
 
 @dataclass
@@ -151,6 +156,29 @@ class RoomModel:
                 ti = th[i]
                 self.rls.theta = th = [th[j] - P[j][i] / P[i][i] * ti for j in range(len(th))]
                 th[i] = 0.0
+
+    def explained_rate(self, heat_input: float, t_out: float, t_mean: float,
+                       solar: tuple[float, float, float] | None = None) -> float:
+        """Temperaturänderung in K/h, die das Modell aus Heizkörper, Auskühlen, Fremdwärme und Sonne erklärt.
+
+        Gleiche Gleichung wie beim Lernen (``heat_input`` wie dort schon mit Ventil und Heizbetrieb
+        gewichtet). Was darüber hinaus steigt, ist unerklärt – Kamin, Ofen, viele Gäste.
+        """
+        sun = sum(g * s for g, s in zip(self.solar, solar or (0.0, 0.0, 0.0)))
+        return self.a * heat_input + self.b * (t_out - t_mean) + self.c_eff + sun
+
+    def inputs_learned(self, solar: tuple[float, float, float] | None = None, floor: bool = False) -> bool:
+        """Sind Sonne (angeregte Richtungen) bzw. Fußboden schon gelernt? Siehe EXT_LEARNED_*."""
+        if self.rls.updates < EXT_LEARNED_STEPS:
+            return False
+        idx = [self._base_n + i for i, s in enumerate(solar or ()) if s >= 0.1]
+        if floor and self.floor:
+            idx.append(1)
+        for i in idx:
+            prior = ROOM_PRIOR["f" if i == 1 and self.floor else "sun"][1] ** 2
+            if i >= len(self.rls.P) or self.rls.P[i][i] > EXT_LEARNED_P_FRAC * prior:
+                return False
+        return True
 
     def rate(self, t_room: float, flow: float, t_out: float, valve: float = 1.0) -> float:
         """Temperaturänderung in K/h bei gegebener Vorlauftemperatur."""

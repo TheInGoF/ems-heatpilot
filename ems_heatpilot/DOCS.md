@@ -56,7 +56,8 @@ Reiter **Diagnose → Gelernte Werte herunterladen** liefert eine JSON-Datei mit
 was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in
 Klartext mit Gütemaß (Fehler, gekappte und verworfene Punkte, plausibel ja/nein),
 dazu Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage (7, 14 oder
-30) – im Spaltenformat und auf 5 min verdichtet (14 Tage etwa 1–3 MB). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
+30) – im Spaltenformat und auf 5 min verdichtet (14 Tage etwa 1–3 MB), dazu die
+erkannten Fremdwärme-Ereignisse je Raum (`fremdwaerme`: nur Zeiten und Kelvin). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
 GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten.
 
 Ob das Warmwasser-Modell passt, zeigt auch die Grafik „Was Warmhalten kostet“:
@@ -204,6 +205,7 @@ Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
 | Tado-Soll | Median der eingeschalteten Räume (nur wirklich eingestellte Werte) |
 | Tado aus | Anteil der Räume, die Tado auf „aus“ hat – so sieht HeatPilot den Zeitplan |
 | Ventile | mittlere Öffnung, auch je Raum |
+| Fremdwärme | Anteil der Stunde, in dem ein Raum ohne Heizkörper deutlich wärmer wurde – Kamin, Ofen, Gäste (siehe „Fremdwärme“ unten). Diese Stunden lernt weder Raum- noch Hausmodell |
 
 ## Empfehlungen für Tado
 
@@ -316,7 +318,9 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
    - *Hausmodell* (stündlich): Wärmeverlust in W/K, Wärmespeicher, **Fremdwärme**
      (Sonne, Personen, Geräte – darunter liegt die Heizgrenze), Heizlast jetzt und bei
      Auslegungstemperatur. Gelernt wird nur in der Heizperiode (24-h-Mittel außen bis
-     15 °C) und nur aus Stunden ohne Warmwasserladung. Wärmeverlust und Fremdwärme kommen
+     15 °C) und nur aus Stunden ohne Warmwasserladung und ohne Fremdwärme-Ereignis in einem
+     Raum (Kamin, Ofen – siehe unten); ein Tag mit 3 h oder mehr davon zählt nur als Vortag,
+     wie ein Urlaubstag. Wärmeverlust und Fremdwärme kommen
      ab 21 Heiztagen aus Tagesmitteln (mit dem Vortag und dem Mittel der Woche davor), weil
      sich Wärmeverlust und Speicher in Stundenwerten bei trägen Häusern (Fußboden, schwere
      Wände) kaum trennen lassen und die Wände über Tage nachwirken. Die
@@ -330,7 +334,10 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
      Parameter, damit ein einzelner auffälliger Schritt nichts umwirft. Das Gedächtnis
      reicht etwa 6 Wochen zurück. Im Herbst, bei kleinem Abstand innen–außen, lässt
      sich das Auskühlen kaum von Fremdwärme (Nachbarräume, Rohre) trennen. Räume, die
-     die Leitplanken nicht bestehen, zeigen deshalb „lernt noch“.
+     die Leitplanken nicht bestehen, zeigen deshalb „lernt noch“. Wird ein Raum deutlich
+     wärmer, ohne dass der Heizkörper es erklären kann (Kamin, Backofen, viele Gäste), gilt
+     das als **Fremdwärme-Ereignis**: diese Schritte lernt das Raummodell nicht (siehe
+     „Fremdwärme“ unten).
    - *Anwesenheit* (je Person): Wochenraster der Gewohnheiten und
      Heimfahrt-Geschwindigkeit. Annäherung und Ankunftszeit berechnet das
      Add-on selbst aus den GPS-Daten der `person.*`-Entitäten.
@@ -436,6 +443,44 @@ sonst „halbe Sonne“). Daraus entstehen drei Werte – Einstrahlung auf Ost-,
 Westfenster –, und jedes Raummodell lernt selbst, wie viel davon bei ihm ankommt. Die
 Raumtabelle zeigt das als „Sonne“, z. B. „Süd 0,8 K/h bei voller Sonne“; ein Nordraum
 lernt „kaum Sonne“. Für Vorheizpläne rechnet HeatPilot vorsichtig ohne Sonne.
+
+## Fremdwärme: Kamin, Ofen, Gäste
+
+Ein Kaminabend macht das Wohnzimmer 2–3 K wärmer, ohne dass der Heizkörper etwas tut.
+Ohne Erkennung lernte das Raummodell solche Abende als „Fremdwärme“ und „Auskühlen“ des
+Raums, und das Hausmodell sah „innen wärmer bei weniger Gas“ – beides verfälscht
+Vorlauf-Empfehlung, Vorheizplan und Wärmeverlust. Deshalb erkennt HeatPilot je Raum im
+30-Minuten-Schritt ein **Fremdwärme-Ereignis**, wenn
+
+- der Raum um mindestens 0,4 K steigt und davon mindestens 0,8 K/h **unerklärt** bleiben –
+  unerklärt heißt: mehr, als Heizkörper, Auskühlen, übliche Fremdwärme und Sonne laut
+  gelerntem Raummodell zusammen ergeben,
+- der Heizkörper praktisch nichts liefert (höchstens 10 % des Möglichen, Ventil in diesem
+  und im vorigen Schritt nie über 5 % offen, oder Pumpe/Heizkreis aus) – ein eben noch
+  offener Heizkörper gibt nach dem Schließen weiter Wärme ab, und ein Thermostat am
+  Heizkörper misst den warmen Körper verzögert; beides sähe sonst wie Fremdwärme aus,
+- keine Sonne auf den Fassaden steht oder das Modell die Sonne (bzw. den Fußboden) schon
+  gelernt hat (mindestens 200 Lernschritte und die Unsicherheit der angeregten Parameter
+  deutlich gesunken). Sonst verwürfe ein junges Modell seine eigene Lernchance als Ereignis
+  und lernte Sonne und Heizkörper nie. Fehlen Sonnendaten ganz (kein Standort in `zone.home`),
+  wird tagsüber (7–20 Uhr) nicht erkannt.
+
+Ein Abfall (Fenster auf) ist kein Ereignis – und die Erholung danach auch nicht: nach dem
+Stoßlüften wärmt sich die Luft aus Wänden und Möbeln in einer halben Stunde um 1–2 K zurück,
+bei geschlossenem Ventil (Nachtabsenkung). Deshalb zählt ein Anstieg nur, wenn der Raum
+mindestens 0,4 K **über das höchste Niveau der letzten 2 Stunden** steigt; dieses Niveau ist
+der Startwert. Das Ereignis endet, wenn der Raum wieder bis auf
+0,3 K am Startwert ist, der Heizkörper wieder deutlich öffnet (Ventil im Mittel ≥ 30 %) oder
+nach 12 Stunden. Währenddessen lernt das Raummodell nicht (der Estrich wird weiter
+nachgeführt), das Hausmodell lernt keine Stunde mit einem Ereignis in irgendeinem Raum, und
+ein Tag mit 3 h oder mehr davon zählt nur als Vortag. Ein laufendes Ereignis überlebt einen
+Neustart; beim Neuberechnen des Lernstands werden Ereignisse rückwirkend erkannt.
+
+Sichtbar: in der Übersicht als Badge in der Raumtabelle („Fremdwärme seit 19:10, +2,8 K“)
+mit Zähler der letzten 7 Tage („3× Fremdwärme“), in der Woche als Ansicht „Fremdwärme“, im
+Export als Tabelle `fremdwaerme` (nur Zeiten und Kelvin). Ein Raum mit laufendem Ereignis
+gilt im Vorheizplan als schon warm und wird nicht eingeplant („Wohnzimmer: gerade
+Fremdwärme, nicht eingeplant“).
 
 ## Vorlauf gegen Takten
 

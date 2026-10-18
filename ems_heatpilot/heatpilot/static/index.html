@@ -1060,7 +1060,10 @@ async function load() {
       const ok = !r.check || r.check.ok;
       const learn = `<span class="muted" title="${ok ? "" : esc(r.check.reasons.join("; "))}">lernt noch</span>`;
       const hold = r.flow_to_hold_21 > maxFlow ? `über max. Vorlauf (${fmt(maxFlow, 0)} °C)` : `${fmt(r.flow_to_hold_21, 0)} °C`;
-      return `<tr><td>${esc(r.room)}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td>` +
+      // Fremdwärme (Kamin, Ofen, Gäste): Raum wurde ohne Heizkörper deutlich wärmer – wird gerade nicht gelernt
+      const ext = r.ext_event ? ` <span class="badge" style="border-color:var(--warn);color:var(--warn)" title="Raum wurde ohne Heizkörper deutlich wärmer – Kamin, Ofen, Gäste. Diese Zeit lernt weder Raum- noch Hausmodell.">Fremdwärme seit ${timeOf(r.ext_event.since).split(" ").pop()}, +${fmt(r.ext_event.rise_k, 1)} K</span>` : "";
+      const extN = r.ext_events_7d ? ` <span class="muted" title="Fremdwärme-Ereignisse der letzten 7 Tage (Kamin, Ofen, Gäste)">${r.ext_events_7d}× Fremdwärme</span>` : "";
+      return `<tr><td>${esc(r.room)}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}${ext}${extN}</td><td>${fmt(r.temp)} °C</td><td>${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td>` +
         (ok ? `<td>${fmt(r.tau_h)} h</td><td>${r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min"}</td><td>${hold}</td><td>${sunText(r.solar_gain, r.updates)}</td>`
           : `<td>${learn}</td><td>${learn}</td><td>${learn}</td><td>${learn}</td>`) +
         `<td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`;
@@ -1083,7 +1086,8 @@ async function load() {
     plan.best.steps.map((st) => st.what === "Warmwasser"
       ? `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Warmwasser ${fmt(st.from, 0)} → ${fmt(st.to, 0)} °C</li>`
       : `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Räume heizen, Vorlauf ${st.flow} °C</li>`).join("") +
-    `</ol><p class="muted">Warmwasser und Heizen teilen sich die Therme – nacheinander, erst der Speicher. ≈ ${fmt(plan.best.est_kwh)} kWh fürs Heizen.</p>` +
+    `</ol><p class="muted">Warmwasser und Heizen teilen sich die Therme – nacheinander, erst der Speicher. ≈ ${fmt(plan.best.est_kwh)} kWh fürs Heizen.` +
+    ((plan.skipped_warm || []).length ? ` ${plan.skipped_warm.map((n) => `${esc(n)}: gerade Fremdwärme, nicht eingeplant`).join(" · ")}.` : "") + `</p>` +
     `<div class="scroll"><table><tr><th>Vorlauf</th><th>Start</th><th>Dauer</th><th>Gas</th></tr>${plan.options.map((o) => `<tr><td>${o.flow} °C</td><td>${o.too_late ? "zu spät" : timeOf(o.start)}</td><td>${fmt(o.total_h * 60, 0)} min</td><td>${fmt(o.est_kwh)} kWh</td></tr>`).join("")}</table></div>`;
 
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
@@ -1177,6 +1181,7 @@ const WEEK_INFO = {
   target: "Median-Soll der eingeschalteten Räume aus Tado – nur wirklich eingestellte Werte. Wie oft Tado aus ist, zeigt „Tado aus“.",
   off: "Anteil der Räume, die Tado auf „aus“ hat (Zeitplan, Abwesenheit) – so sieht HeatPilot deinen Zeitplan.",
   valve: "Mittlere Ventilöffnung – wann die Räume Wärme wollen. Ein Raum lässt sich einzeln wählen.",
+  ext: "Stunden, in denen ein Raum ohne Heizkörper deutlich wärmer wurde – Kamin, Ofen, Gäste. Diese Stunden lernt weder Raum- noch Hausmodell. Anteil der Stunde mit einem solchen Ereignis in irgendeinem Raum.",
 };
 let WEEK = null, WEEK_METRIC = "gas";
 async function loadWeek() {
@@ -1198,7 +1203,7 @@ function drawWeek() {
   const m = WEEK.metrics[WEEK_METRIC]; if (!m) return;
   $("week-room").hidden = WEEK_METRIC !== "valve";
   const sum = ["gas", "heat", "dhw", "starts"].includes(WEEK_METRIC);
-  const digits = { gas: 2, heat: 2, dhw: 2, gas_k: 0, model: 2, starts: 1, home: 0, target: 1, off: 0, valve: 0 }[WEEK_METRIC];
+  const digits = { gas: 2, heat: 2, dhw: 2, gas_k: 0, model: 2, starts: 1, home: 0, target: 1, off: 0, valve: 0, ext: 0 }[WEEK_METRIC];
   const tot = sum ? (WEEK_METRIC === "starts" ? "" : "kWh") : WEEK_METRIC === "model" ? "" : m.unit;
   $("week-text").textContent = `${WEEK_INFO[WEEK_METRIC] || ""} Zeitraum: ${WEEK.days} Tage, ${WEEK.hours} Stunden.` +
     (WEEK_METRIC === "model" && !WEEK.house_ok ? " Das Hausmodell ist noch nicht plausibel – die Abweichung ist vorläufig." : "");

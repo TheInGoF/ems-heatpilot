@@ -46,6 +46,24 @@ DHW_BASE_MIN_CELL = 4         # so viele Sommerstunden je Wochentag/Stunde, sons
 ON_STATES = {"on", "true", "1", "heat", "heating",
              "an", "ein", "ja", "wahr", "aktiv"}  # EMS-ESP mit deutscher Sprache: „an“/„aus“
 STALE_S = 12 * 3600
+# Fremdwärme je Raum (Kamin, Ofen, viele Gäste): der Raum wird deutlich wärmer, ohne dass der
+# Heizkörper es erklären kann – solche Schritte lernt das Raummodell nicht, solche Stunden das Haus nicht
+EXT_RATE_KH = 0.8        # unerklärter Anstieg ab so viel K/h …
+EXT_MIN_K = 0.4          # … und mindestens so viel K im Schritt
+EXT_HEAT_SHARE = 0.10    # Heizkörper liefert praktisch nichts: Eingang ≤ 10 % des möglichen (Vorlauf − Raum) …
+EXT_VALVE_MAX = 5.0      # … und das Ventil war in diesem und im vorigen Schritt nie weiter offen (%): ein eben
+#                          noch offener Heizkörper gibt nach dem Schließen weiter Wärme ab, und ein Thermostat
+#                          am Heizkörper misst den warmen Körper erst verzögert – beides sähe sonst wie Fremdwärme aus
+EXT_SUN_MAX = 0.1        # darunter keine Sonne auf den Fassaden – dann darf auch ein junges Modell erkennen
+EXT_DAY_HOURS = range(7, 20)  # ohne Sonnendaten (kein Standort) wird in diesen Stunden nicht erkannt: könnte Sonne sein
+EXT_REF_H = 2.0          # Bezug ist die höchste Temperatur der letzten so vielen Stunden: nach Stoßlüften muss der Raum
+#                          erst wieder über sein altes Niveau steigen – die Erholung aus Wänden und Möbeln bei
+#                          geschlossenem Ventil (Nachtabsenkung) ist keine Fremdwärme
+EXT_END_K = 0.3          # Ereignis endet, wenn der Raum wieder bis auf so viel K am Start ist …
+EXT_END_VALVE = 30.0     # … oder der Heizkörper wieder deutlich öffnet (Ventil-Mittel eines Schritts, %) …
+EXT_MAX_H = 12           # … spätestens nach so vielen Stunden
+EXT_DAY_SKIP_H = 3.0     # Tag mit so vielen Stunden Fremdwärme lernt das Tagesmodell nicht (zählt nur als Vortag)
+EXT_COUNT_DAYS = 7       # Zähler je Raum in der Übersicht
 PERSON_UNKNOWN = {None, "", "unknown", "unavailable"}  # Tracker ohne Wert: weder zu Hause noch weg
 
 
@@ -144,6 +162,10 @@ class Engine:
         }
         self._last_room_step: int | None = store.get("last_room_step")
         self._last_hour: int | None = store.get("last_hour")
+        # laufende Fremdwärme-Ereignisse je Raum (start_ts, t_start, peak, rise) – überleben einen Neustart
+        self.room_ext: dict[str, dict] = {c: e for c, e in (store.get("model.room_ext") or {}).items() if c in self.rooms}
+        self._room_valve_prev: dict[str, float] = {}  # größte Ventilöffnung des vorigen Raumschritts
+        self._room_temp_hist: dict[str, list[tuple[int, float]]] = {}  # (ts, Temperatur) am Ende der letzten Raumschritte
         if fresh_rooms and self._last_room_step is not None:
             self.relearn_rooms(fresh_rooms)
 
@@ -605,7 +627,7 @@ class Engine:
             rows = [r for r in rows if r["temp"] is not None]
             if len(rows) < 3 or rows[-1]["ts"] - rows[0]["ts"] < 0.8 * ROOM_STEP_H * 3600:
                 continue
-            inputs, floor_inputs, outs, suns = [], [], [], []
+            inputs, floor_inputs, outs, suns, overs, valves = [], [], [], [], [], []
             vacation = False
             for r in rows:
                 s = sys_rows.get(r["ts"])
@@ -623,6 +645,8 @@ class Engine:
                 warm = max(s["flow"] - r["temp"], 0) * (active or 0)
                 inputs.append(warm * (r["valve"] or 0) / 100)
                 floor_inputs.append(warm)  # Fußboden: kein Ventil, heizt immer mit
+                overs.append(max(s["flow"] - r["temp"], 0))  # was der Heizkörper höchstens liefern könnte
+                valves.append(r["valve"])  # None = kein Ventilwert
                 outs.append(s["t_out"])
                 if s["sun_s"] is not None:
                     suns.append((s["sun_e"], s["sun_s"], s["sun_w"]))
@@ -630,13 +654,97 @@ class Engine:
                 continue
             t0, t1 = rows[0]["temp"], rows[-1]["temp"]
             dt_h = (rows[-1]["ts"] - rows[0]["ts"]) / 3600
-            # Fenster offen o. ä., Urlaub oder alle lange weg: Estrich nachführen, aber nicht lernen
-            update = abs(t1 - t0) <= 2.0 and not vacation
-            model.learn(
-                t0, t1, sum(inputs) / len(inputs), sum(outs) / len(outs), dt_h,
-                floor_input=sum(floor_inputs) / len(floor_inputs), update=update,
-                solar=tuple(sum(v[i] for v in suns) / len(suns) for i in range(3)) if suns else None,
-            )
+            heat, floor_in = sum(inputs) / len(inputs), sum(floor_inputs) / len(floor_inputs)
+            t_out = sum(outs) / len(outs)
+            solar = tuple(sum(v[i] for v in suns) / len(suns) for i in range(3)) if suns else None
+            known = [v for v in valves if v is not None]
+            if known:
+                ext = self.ext_heat_step(climate, model, start, end, t0, t1, dt_h, heat, floor_in, t_out, solar,
+                                         sum(overs) / len(overs), sum(known) / len(known), max(known))
+            else:  # ohne Ventilwert ist Heizkörperwärme nicht von Fremdwärme zu trennen: nicht erkennen
+                self._room_valve_prev.pop(climate, None)
+                ext = climate in self.room_ext
+            # Fenster offen o. ä., Urlaub oder alle lange weg, Fremdwärme: Estrich nachführen, aber nicht lernen
+            update = abs(t1 - t0) <= 2.0 and not vacation and not ext
+            model.learn(t0, t1, heat, t_out, dt_h, floor_input=floor_in, update=update, solar=solar)
+
+    def ext_heat_step(self, climate: str, model: RoomModel, start: int, end: int, t0: float, t1: float,
+                      dt_h: float, heat_input: float, floor_input: float, t_out: float,
+                      solar: tuple[float, float, float] | None, flow_over: float, valve: float,
+                      valve_max: float) -> bool:
+        """Fremdwärme-Ereignis des Raums verfolgen; True = dieser Schritt gehört zu einem Ereignis.
+
+        Beginn: unerklärter Anstieg (gemessen minus Modell) ≥ EXT_RATE_KH und ≥ EXT_MIN_K im Schritt,
+        der Heizkörper liefert praktisch nichts (auch im Schritt davor, EXT_VALVE_MAX), und Sonne bzw.
+        Fußboden sind entweder nicht im Spiel oder schon gelernt – sonst würde ein junges Modell seine
+        eigene Lernchance als Ereignis verwerfen (Rückkopplung). Ein Abfall (Fenster auf) ist kein
+        Ereignis, die Erholung danach auch nicht: der Raum muss über das höchste Niveau der letzten
+        EXT_REF_H Stunden steigen, das ist dann der Startwert. Ende: siehe EXT_END_* / EXT_MAX_H.
+        """
+        valve_prev = self._room_valve_prev.get(climate)
+        self._room_valve_prev[climate] = valve_max
+        hist = [(ts, t) for ts, t in self._room_temp_hist.get(climate, ()) if start - EXT_REF_H * 3600 <= ts <= start]
+        self._room_temp_hist[climate] = hist + [(end, t1)]
+        ref = max([t0, *(t for _, t in hist)])  # Niveau vor einem Abfall (Lüften), sonst t0
+        ev = self.room_ext.get(climate)
+        if ev is not None:
+            ev["peak"] = max(ev["peak"], t1)
+            ev["rise"] = round(ev["peak"] - ev["t_start"], 2)
+            limit = ev["start_ts"] + EXT_MAX_H * 3600
+            if t1 <= ev["t_start"] + EXT_END_K or valve >= EXT_END_VALVE or end >= limit:
+                self.store.add_room_event(ev["start_ts"], min(end, limit), climate, ev["rise"])
+                del self.room_ext[climate]
+                log.info("Raum %s: Fremdwärme vorbei (%s–%s, +%.1f K)", climate,
+                         local(ev["start_ts"]).strftime("%d.%m. %H:%M"), local(min(end, limit)).strftime("%H:%M"), ev["rise"])
+            return True
+        if dt_h <= 0 or t1 - t0 < EXT_MIN_K or t1 - ref < EXT_MIN_K:
+            return False
+        unexplained = (t1 - t0) / dt_h - model.explained_rate(heat_input, t_out, (t0 + t1) / 2, solar)
+        if unexplained < EXT_RATE_KH:
+            return False
+        if heat_input > EXT_HEAT_SHARE * flow_over or valve_prev is None or max(valve_max, valve_prev) > EXT_VALVE_MAX:
+            return False  # der Heizkörper liefert(e) – das muss lernbar bleiben
+        if solar is None and local(start).hour in EXT_DAY_HOURS:
+            return False  # ohne Sonnendaten (kein Standort) kann es tagsüber Sonne sein – nicht erkennen, lernen
+        sunny = solar is not None and max(solar) >= EXT_SUN_MAX
+        floor_on = model.floor and floor_input > EXT_HEAT_SHARE * flow_over
+        if (sunny or floor_on) and not model.inputs_learned(solar, floor=floor_on):
+            return False  # Sonne/Fußboden noch nicht gelernt: erst lernen, dann erkennen
+        self.room_ext[climate] = {"start_ts": start, "t_start": ref, "peak": t1, "rise": round(t1 - ref, 2)}
+        log.info("Raum %s: Fremdwärme ab %s (+%.1f K, %.1f K/h unerklärt, Ventil %.0f %%)", climate,
+                 local(start).strftime("%d.%m. %H:%M"), t1 - ref, unexplained, valve)
+        return True
+
+    def ext_frac(self, hour: int) -> float:
+        """Anteil der Stunde, in dem irgendein gewählter Raum Fremdwärme hatte (abgeschlossen oder laufend)."""
+        spans = [(r["start_ts"], r["end_ts"]) for r in self.store.query(
+            "SELECT start_ts, end_ts, room FROM room_events WHERE end_ts > ? AND start_ts < ?", (hour, hour + 3600))
+            if r["room"] in self.rooms]
+        spans += [(ev["start_ts"], ev["start_ts"] + EXT_MAX_H * 3600) for ev in self.room_ext.values()]
+        covered, cur = 0, None  # Vereinigung der Abschnitte innerhalb der Stunde
+        for a, b in sorted((max(a, hour), min(b, hour + 3600)) for a, b in spans):
+            if b <= a:
+                continue
+            if cur is not None and a <= cur[1]:
+                cur[1] = max(cur[1], b)
+            else:
+                covered += cur[1] - cur[0] if cur else 0
+                cur = [a, b]
+        covered += cur[1] - cur[0] if cur else 0
+        return covered / 3600
+
+    def ext_summary(self, now_ts: int) -> dict[str, dict]:
+        """Je Raum: laufendes Fremdwärme-Ereignis und Zahl der Ereignisse der letzten EXT_COUNT_DAYS Tage."""
+        counts = Counter(r["room"] for r in self.store.query(
+            "SELECT room FROM room_events WHERE start_ts >= ?", (now_ts - EXT_COUNT_DAYS * 86400,)))
+        out = {}
+        for c in self.rooms:
+            ev = self.room_ext.get(c)
+            out[c] = {
+                "ext_event": None if ev is None else {"since": local(ev["start_ts"]).isoformat(), "rise_k": ev["rise"]},
+                "ext_events_7d": counts.get(c, 0) + (1 if ev else 0),
+            }
+        return out
 
     def nominal_kw(self) -> float | None:
         return self.cfg.boiler_nominal_kw or num(self._boiler("nom_power"))
@@ -702,6 +810,7 @@ class Engine:
             sum(vac) / len(vac) if vac else None,
             spike,
             dhw_energy,
+            self.ext_frac(hour),
         )
         self.store.add_hourly([row])
         self.store.commit()
@@ -758,13 +867,14 @@ class Engine:
         if not r24 or r24[0]["n"] < 12 or r24[0]["t"] > HEAT_SEASON_24H:
             return
         dhw = cur["dhw_frac"]
+        ext = cur["ext_frac"] or 0  # Fremdwärme (Kamin, Ofen) in einem Raum: weder Auskühlen noch Bilanz lernen
         gas_free = all(r["gas_kwh"] is not None and r["gas_kwh"] <= GAS_FREE_KWH for r in (prev, cur, nxt))
-        if gas_free and not dhw and local(h).hour in NIGHT_HOURS:
+        if gas_free and not dhw and not ext and local(h).hour in NIGHT_HOURS:
             last = self.store.query("SELECT MAX(ts) AS t FROM hourly WHERE ts < ? AND (gas_kwh IS NULL OR gas_kwh > ?)",
                                     (h, GAS_FREE_KWH))[0]["t"]
             self.house.learn_cooling(cur["t_in"], cur["t_out"], d_in, 99.0 if last is None else (h - last) / 3600)
-        if dhw is not None and dhw > 0:
-            return  # Warmwasserladung verfälscht die Heizbilanz (auch eine kurze verschiebt kWh)
+        if (dhw is not None and dhw > 0) or ext > 0:
+            return  # Warmwasserladung verfälscht die Heizbilanz (auch eine kurze verschiebt kWh), Fremdwärme auch
         self.house.learn(self.heating_gas(cur), cur["t_in"], cur["t_out"], d_in)
 
     def learn_house_days(self, h: int) -> None:
@@ -787,22 +897,25 @@ class Engine:
     def learn_house_day(self, ts: int) -> None:
         """Tagesmittel (Heizgas, innen–außen) des Kalendertags von ``ts`` lernen – siehe HouseModel.learn_day.
 
-        Ein Urlaubstag zählt nur als Zustand für die Folgetage (sein Unterschied innen–außen), nicht als Lerntag.
+        Ein Urlaubstag zählt nur als Zustand für die Folgetage (sein Unterschied innen–außen), nicht als
+        Lerntag – ebenso ein Tag mit mindestens EXT_DAY_SKIP_H Stunden Fremdwärme (Kaminabend).
         """
         day = local(ts)
+        span = (midnight(day), midnight(day + timedelta(days=1)))
         rows = self.store.query("SELECT * FROM hourly WHERE ts >= ? AND ts < ? AND gas_kwh IS NOT NULL "
-                                "AND t_in IS NOT NULL AND t_out IS NOT NULL",
-                                (midnight(day), midnight(day + timedelta(days=1))))
+                                "AND t_in IS NOT NULL AND t_out IS NOT NULL", span)
         if len(rows) < DAILY_MIN_HOURS:
             return
         vacation = any((r["vacation_frac"] or 0) > 0.5 for r in rows)
+        ext_h = self.store.query("SELECT COALESCE(SUM(ext_frac), 0) AS h FROM hourly WHERE ts >= ? AND ts < ?", span)[0]["h"]
         gas = []
         for r in rows:
             frac = r["dhw_energy_frac"] if r["dhw_energy_frac"] is not None else r["dhw_frac"]
             gas.append(self.heating_gas(r) if frac is None else r["gas_kwh"] * (1 - min(max(frac, 0.0), 1.0)))
         n = len(rows)
         self.house.learn_day(day.date().isoformat(), sum(r["t_in"] - r["t_out"] for r in rows) / n,
-                             sum(r["t_out"] for r in rows) / n, sum(gas) / n, learn=not vacation)
+                             sum(r["t_out"] for r in rows) / n, sum(gas) / n,
+                             learn=not vacation and ext_h < EXT_DAY_SKIP_H)
 
     def heating_gas(self, row) -> float:
         """Heizgas einer Stunde: bei Langzeitstunden (Warmwasser unbekannt) ohne den üblichen Warmwasserbedarf."""
@@ -1038,6 +1151,7 @@ class Engine:
             self.store.put(f"model.room.{climate}", m.to_dict())
         for p, learner in self.persons.items():
             self.store.put(f"model.person.{p}", learner.to_dict())
+        self.store.put("model.room_ext", self.room_ext)
         self.store.put("last_room_step", self._last_room_step)
         self.store.put("last_hour", self._last_hour)
 
@@ -1124,11 +1238,7 @@ class Engine:
             arrival = next_arrival(list(self.persons.values()), now)
         plan = None
         if arrival and arrival["eta"] and t_out is not None and house_check["ok"]:
-            room_inputs = []
-            for climate, temp, target, _, _ in rooms:
-                if (temp is not None and target is not None and climate in self.rooms
-                        and room_checks[climate]["ok"]):
-                    room_inputs.append((self.rooms[climate], temp, target))
+            room_inputs, skipped = self.plan_rooms(rooms, room_checks)
             t_out_arrival = self.outdoor_forecast_at(arrival["eta"])
             plan = analysis.preheat_plan(
                 room_inputs, self.house, arrival["eta"], now,
@@ -1136,9 +1246,10 @@ class Engine:
                 dhw=self.dhw_for_arrival(arrival["eta"], now),
             )
             if plan is not None:  # worauf der Plan sich verlässt
-                plan = {**plan, "arrival_source": arrival.get("source"),
+                plan = {**plan, "arrival_source": arrival.get("source"), "skipped_warm": skipped,
                         "arrival_confidence": arrival.get("confidence"), "arrival_person": arrival.get("person")}
         self.last_plan = plan
+        ext = self.ext_summary(now_ts)
 
         flow_needed = None
         if t_out is not None:
@@ -1159,7 +1270,7 @@ class Engine:
             "rooms": [
                 {**self.rooms[c].summary(t_out if t_out is not None else 5.0, self.cfg.max_flow_temp),
                  "temp": temp, "target": target, "valve": valve, "humidity": hum,
-                 "check": room_checks[c]}
+                 "check": room_checks[c], **ext[c]}
                 for c, temp, target, valve, hum in rooms if c in self.rooms
             ],
             "cycling": cycling,
@@ -1246,6 +1357,20 @@ class Engine:
             "emsesp": bool(self.ems),
             "discovered": self.found.as_dict(private=False),
         }
+
+    def plan_rooms(self, rooms: list[tuple], room_checks: dict) -> tuple[list[tuple], list[str]]:
+        """Räume für den Vorheizplan: plausible Modelle mit Ist und Soll – ein Raum mit laufender
+        Fremdwärme (Kamin) gilt als schon warm und wird nicht eingeplant (zweiter Wert: seine Namen)."""
+        names = {r.climate: r.name for r in self.found.rooms}
+        inputs, skipped = [], []
+        for climate, temp, target, _, _ in rooms:
+            if climate not in self.rooms or temp is None or target is None or not room_checks[climate]["ok"]:
+                continue
+            if climate in self.room_ext:
+                skipped.append(names.get(climate, climate))
+                continue
+            inputs.append((self.rooms[climate], temp, target))
+        return inputs, skipped
 
     def house_signature(self, days: int = 365) -> list[dict]:
         """Tagesmittel: Gasleistung gegen Temperaturdifferenz (Energiesignatur).

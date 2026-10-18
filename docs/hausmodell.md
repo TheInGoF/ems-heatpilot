@@ -43,7 +43,8 @@ Die Tageswerte gelten, sobald **21 Heiztage** gelernt sind und der Unterschied i
 zwischen den Tagen um mindestens **2 K streut** (sonst ist H nicht bestimmt). Ab dann kommen
 Wärmeverlust und Fremdwärme daraus, vorher aus den Stundenwerten. Ein Tag zählt nur mit
 mindestens 20 Stunden und nur in der Heizperiode; ein Urlaubstag wird nicht gelernt, sein
-Unterschied innen–außen zählt aber als Zustand für die Folgetage. Ein Tag wird abgeschlossen,
+Unterschied innen–außen zählt aber als Zustand für die Folgetage – ebenso ein Tag mit
+mindestens 3 Stunden Fremdwärme-Ereignis in einem Raum (Kaminabend). Ein Tag wird abgeschlossen,
 sobald eine Stunde des nächsten Tages gelernt wird – auch wenn die Stunde 00–01 Uhr fehlt
 (Neustart um Mitternacht). Die Tageswerte haben ein Gedächtnis von etwa einer Heizsaison
 (Vergessensfaktor 0,995). In den Testhäusern (Altbau, Neubau, Fußboden, durchgeheizt, schwere
@@ -78,6 +79,10 @@ Gelernt wird eine Stunde **nur**, wenn
   den üblichen Warmwasserbedarf dieser Wochentags-Stunde ab, gemessen in Sommerstunden
   (24-h-Mittel draußen ab 17 °C, dann ist alles Gas Warmwasser – inklusive einer
   Legionellenschaltung zur festen Stunde). Ohne mindestens 14 Tage Sommerdaten wird nichts abgezogen.
+- **kein Fremdwärme-Ereignis** in einem Raum lief (Kamin, Ofen, viele Gäste: ein Raum wird
+  deutlich wärmer, ohne dass der Heizkörper es erklären kann – siehe „Fremdwärme“ in der
+  Dokumentation). Sonst sähe das Haus „innen wärmer bei weniger Gas“. Auch das Auskühl-Modell
+  lässt solche Stunden aus,
 - der **Gaszähler plausibel** ist – keine Nachträge/Sprünge, keine verpassten Zählungen,
   kein gesunkener Zählerstand (siehe „Ausreißer“ in der Dokumentation),
 - Vor- und Folgestunde Messwerte haben (für die mittige Temperaturänderung).

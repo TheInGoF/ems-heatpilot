@@ -430,7 +430,8 @@ def export(app, days: int = 14) -> dict:
         "version": __version__,
         "hinweis": "Gelernte Werte von EMS HeatPilot mit Lerndaten der letzten Tage. Ohne GPS-Koordinaten. "
                    "Tabellen: 'spalten' + 'zeilen'; messwerte, raeume_messwerte und anwesenheit (nur Entfernungen) "
-                   "auf 5 min verdichtet, stundenwerte, tageswerte, lernkurve und brenner unverdichtet.",
+                   "auf 5 min verdichtet, stundenwerte, tageswerte, lernkurve, brenner und fremdwaerme "
+                   "(Ereignisse je Raum: Zeiten und Kelvin, nicht gelernt) unverdichtet.",
         "tage": days,
         "settings": app.cfg.to_raw(),
         "discovered": eng.found.as_dict(private=False),
@@ -448,6 +449,8 @@ def export(app, days: int = 14) -> dict:
         "anwesenheit": _table(q("SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
                                 (since,)), key="person"),
         "brenner": _table(q("SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)), None),
+        # seit 0.33: Fremdwärme-Ereignisse je Raum (Kamin, Ofen) – alle, sie sind klein
+        "fremdwaerme": _table(q("SELECT * FROM room_events ORDER BY start_ts"), None),
         # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen
         "selbsttest": _safe(lambda: self_check(app)),
         "ems_werte": getattr(eng, "ems", None),
