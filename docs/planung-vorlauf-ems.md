@@ -45,8 +45,10 @@ Ohne Regler hält der Kessel seinen eigenen Vorlauf-Sollwert (am Kessel einstell
 - Nachteile: keine Rückfallebene außer dem Knopf am Kessel. Fällt HeatPilot aus, bleibt der letzte
   Vorlauf stehen (bei Nacht-Vorlauf 30 °C wird es kalt). Warmwasser-Zeitprogramm und Legionellenschaltung
   des ES73 entfallen – HeatPilot müsste `wwseltemp` fahren (die Empfehlung dafür gibt es schon) und die
-  Legionellenladung selbst anstoßen. Pumpennachlauf/Frostschutz macht der Kessel selbst, aber ohne
-  Außentemperaturführung. Der Kessel „reagiert zickig auf Eingaben“ (Erfahrung Ingo) – also erst im
+  Legionellenladung selbst anstoßen. Pumpennachlauf/Frostschutz macht der Kessel selbst. Der
+  Außenfühler hängt am Kessel und bleibt verfügbar (EMS-ESP `boiler/outdoortemp`) – nur die Heizkurve
+  rechnet heute der ES73; ohne ihn hält der Kessel einen festen Vorlauf, bis HeatPilot die
+  Witterungsführung übernimmt. Der Kessel „reagiert zickig auf Eingaben“ (Erfahrung Ingo) – also erst im
   Trockenlauf (nur protokollieren, nichts schreiben) prüfen, was er annimmt.
 - Voraussetzung: HeatPilot muss vorher zuverlässig steuern (0.34 im Winter bewährt) und eine eigene
   witterungsgeführte Vorlaufrechnung haben (aus Hausmodell und Raummodellen: welcher Raum braucht gerade
@@ -88,5 +90,5 @@ Regler wie den ES73 oder die Tado-Erweiterung nachbilden. Weg C entfällt.
 Unsichtbar schalten ändert für HeatPilot nichts: Es liest Zustände über die API, nicht die Oberfläche.
 Die Modelle lernen aus Kesselwerten (Vorlauf, Brenner, Gas), Tado-Raumtemperaturen und Außenfühlern –
 nicht aus dem ES73. Vom ES73 nutzt HeatPilot nur Regler-Soll/Betriebsart als Hilfsgrößen (Warmwasser-
-erkennung, Vorlauf-Studie). **Den ES73 nicht abbauen**, bevor Weg B gebaut und geprüft ist – sonst fährt
-der Kessel ohne Außentemperaturführung.
+erkennung, Vorlauf-Studie). **Den ES73 nicht abbauen**, bevor Weg B gebaut und geprüft ist: Der Außenfühler
+bleibt zwar am Kessel, aber die Heizkurve rechnet der ES73 – ohne ihn läuft der Kessel mit festem Vorlauf.
