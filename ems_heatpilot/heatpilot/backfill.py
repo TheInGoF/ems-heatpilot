@@ -205,6 +205,7 @@ def replay(eng: Engine) -> None:
     Langzeitstatistik (nur Hausmodell), danach lernen auch die Raummodelle.
     """
     eng.house = HouseModel()
+    eng.__dict__.pop("_dhw_base", None)  # Warmwasser-Profil aus der frisch geladenen Langzeitstatistik
     eng.store.db.execute("DELETE FROM snapshots")
     hist_start = eng.store.get("history_start")
     room_step = int(ROOM_STEP_H * 3600)

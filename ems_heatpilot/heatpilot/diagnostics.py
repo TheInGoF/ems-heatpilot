@@ -366,6 +366,8 @@ def explain_models(eng) -> dict:
             "traegheit_quelle": "gasfreie Nächte" if h.tau_cool_h is not None else "Gasbilanz C/H",
             "traegheit_bilanz_h": None if h.tau_balance_h is None else round(h.tau_balance_h, 1),
             "auskuehl_lernschritte": h.cool.updates,
+            "auskuehlen_schnell_k": round(h.cool_fast_k, 2),
+            "fremdwaerme_uebertemperatur_k": round(h.cool_excess_k, 1),
             "rls_auskuehlen": rls(h.cool),
             "plausibel": guards.check_house(h),
             "rls": rls(h.rls),

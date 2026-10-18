@@ -169,13 +169,14 @@ def estimate_savings(
 
     track_dhw = any(r.get("dhw_energy_frac") is not None or r.get("dhw_frac") is not None for r in hourly)
     t_sim: float | None = None
+    off_h = 99.0  # Stunden, seit das abgesenkte Haus zuletzt geheizt hat (schnelle Auskühlphase)
     saved = actual = 0.0
     hours = cold = vac_hours = 0
     daily: dict[str, dict] = {}
     for i, (row, when, occupied, night) in enumerate(rows):
         t_in, t_out = row.get("t_in"), row.get("t_out")
         if t_in is None or t_out is None or (row.get("vacation_frac") or 0) > 0:
-            t_sim = None  # Urlaubsstunden zählen nicht zur Ersparnis (aber im Jahr: dort spart man nichts)
+            t_sim, off_h = None, 99.0  # Urlaubsstunden zählen nicht zur Ersparnis (aber im Jahr: dort spart man nichts)
             if t_in is not None and t_out is not None:
                 vac_hours += 1
             continue
@@ -244,13 +245,20 @@ def estimate_savings(
                 ratio = min(max((t_in - t_out - excess) / den, 0.0), ratio)
             t_sim = t_in - max(prev_in - t_sim, 0.0) * ratio
             if t_sim < target:
-                t_sim = heat_up(t_sim)
+                t_sim, off_h = heat_up(t_sim), 0.0
+            else:
+                off_h += 1
         elif t_sim > target:
+            # Auskühlen in zwei Phasen: kurz nach dem Abschalten zusätzlich der schnelle Abfall
+            # (Luft, Heizkörper), sonst langsam mit der Trägheit der Wände
             t_eq = t_out + excess
-            cooled = t_eq + (t_sim - t_eq) * math.exp(-1.0 / tau)
+            cooled = t_eq + (t_sim - t_eq) * math.exp(-1.0 / tau) - house.fast_drop(off_h)
             t_sim = max(min(cooled, t_sim), target)  # Auskühlen hebt nie an
-        elif t_sim < target:
-            t_sim = heat_up(t_sim)
+            off_h += 1
+        else:
+            if t_sim < target:
+                t_sim = heat_up(t_sim)
+            off_h = 0.0  # hält oder heizt
         t_sim = min(t_sim, t_in)  # nie wärmer als in Wirklichkeit – keine negative Ersparnis
         if occupied and not night and t_sim < t_in - 0.5:
             cold += 1

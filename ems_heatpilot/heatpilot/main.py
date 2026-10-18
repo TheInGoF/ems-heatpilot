@@ -25,12 +25,13 @@ from .web import make_app
 
 log = logging.getLogger("heatpilot")
 
-DATA_VERSION = 10  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladeerkennung · 6 (0.20): Sonne
+DATA_VERSION = 11  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladeerkennung · 6 (0.20): Sonne
 #                   7 (0.26): Hausmodell mit Fremdwärme, Auskühlzeit, mittiger Ableitung, Heizperiode
 #                   8 (0.27): Raummodelle – Pumpe liefert Wärme, gerichtetes Vergessen, Sonne ≥ 0
 #                   9 (0.28): Warmwasser – Nennleistung aus Einstellungen, Sonderladungen, Trefferquote
 #                  10 (0.30): Raummodelle – Startunsicherheit je Parameter, langsameres Vergessen,
 #                             Ausreißer-Schwelle mit Vorhersage-Unsicherheit
+#                  11 (0.31): Hausmodell – Auskühlen in zwei Phasen, Warmwasser aus Altdaten herausgerechnet
 
 
 class App:
