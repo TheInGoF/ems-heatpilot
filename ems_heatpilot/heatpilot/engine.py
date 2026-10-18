@@ -59,6 +59,15 @@ def local(ts: float) -> datetime:
     return datetime.fromtimestamp(ts).astimezone()
 
 
+def midnight(day: datetime) -> int:
+    """Beginn dieses Kalendertags (Ortszeit) – auch am Tag der Zeitumstellung richtig (23/25 h).
+
+    Nicht ``replace(hour=0)`` auf einem Zeitpunkt mit fester Zeitzone: Nach der Umstellung
+    läge Mitternacht sonst eine Stunde daneben.
+    """
+    return int(datetime.combine(day.date(), datetime.min.time()).timestamp())
+
+
 class Engine:
     def __init__(self, cfg: Config, store: Store, found: Discovered) -> None:
         self.cfg = cfg
@@ -880,7 +889,7 @@ class Engine:
         temps = [r[1] for r in rooms if r[1] is not None]
         t_in = sum(temps) / len(temps) if temps else None
 
-        day_start = int(now.replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+        day_start = midnight(now)
         events = [
             (r["ts"], r["state"])
             for r in self.store.query(
@@ -1227,9 +1236,10 @@ class Engine:
             for r in self.store.query("SELECT * FROM snapshots ORDER BY ts")
         ]
         daily_cycles = []
+        today = local(time.time())
         for d in range(min(days, 30)):
-            day = local(time.time()).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=d)
-            s, e = int(day.timestamp()), int((day + timedelta(days=1)).timestamp())
+            day = today - timedelta(days=d)
+            s, e = midnight(day), midnight(day + timedelta(days=1))
             ev = [(r["ts"], r["state"]) for r in self.store.query(
                 "SELECT ts, state FROM burner_events WHERE ts >= ? AND ts < ? ORDER BY ts", (s - 86400, e))]
             st = analysis.cycling_stats(ev, s, e)

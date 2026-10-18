@@ -45,7 +45,13 @@ def cooling_sample(d_t: float, since_charge_h: float) -> bool:
     return since_charge_h >= AFTER_CHARGE_H and -2.0 < d_t <= MAX_RISE_K
 
 
+def _wall(dt: datetime) -> datetime:
+    """Ortszeit dieses Zeitpunkts – nach Rechnen über die Zeitumstellung hinweg stimmt sonst die Stunde nicht."""
+    return dt.astimezone() if dt.tzinfo else dt
+
+
 def slot_of(ts: datetime) -> int:
+    ts = _wall(ts)
     return ts.weekday() * 24 + ts.hour
 
 
@@ -119,6 +125,7 @@ class DhwModel:
 
     def slot_draw(self, when: datetime) -> float:
         """Erwarteter Abfall (K) in dieser Stunde: Tagesprofil, mit genug Wochen das Wochenprofil."""
+        when = _wall(when)
         return self.slot_draw_at(when.weekday(), when.hour)
 
     def weekly_weight(self, weekday: int, hour: int) -> float:
@@ -137,7 +144,7 @@ class DhwModel:
         """Wiederkehrende große Zapfung (mind. 2× am selben Wochentag ±1 h) im Zeitfenster: übliche Größe."""
         sizes = []
         for h in range(int(hours) + 1):
-            t = now + timedelta(hours=h)
+            t = _wall(now + timedelta(hours=h))
             same = [k for ts, k in self.big_draws
                     if (d := datetime.fromisoformat(ts)).weekday() == t.weekday() and abs(d.hour - t.hour) <= 1]
             if len(same) >= 2:
@@ -306,8 +313,8 @@ class DhwModel:
             if next_arrival is None or (next_arrival - now).total_seconds() / 3600 > horizon:
                 return {"target": cfg.dhw_min_temp, "reason": "niemand zu Hause"}
         draw = self.expected_draw(now, horizon)
-        chance = max(self.hit_at((now + timedelta(hours=h)).weekday(), (now + timedelta(hours=h)).hour)
-                     for h in range(int(horizon) + 1))
+        chance = max(self.hit_at(slot // 24, slot % 24)
+                     for slot in (slot_of(now + timedelta(hours=h)) for h in range(int(horizon) + 1)))
         big = self.big_draw_expected(now, horizon)
         if draw >= 1.0 or chance >= HIT_THRESHOLD or big:
             # Komfort zu Beginn der Nutzung; bei viel Verbrauch so hoch, dass er danach

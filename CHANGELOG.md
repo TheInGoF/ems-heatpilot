@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.30.1
+Zeitumstellung (25.10.) geprüft. Gelernt und gespeichert wird in absoluter Zeit (Unix-Sekunden), das Lernen bleibt also unberührt. Drei Anzeigen lagen am Umstellungstag bzw. über die Umstellung hinweg eine Stunde daneben:
+- **Tagesgrenzen** (Brennerstarts heute, Tagesbalken): Mitternacht wird jetzt je Kalendertag bestimmt. Der 25-Stunden-Tag zählt also vollständig
+- **Warmwasser:** Zapfprofil, Trefferquote und „Nächste Ladung“ lesen die richtige Stunde, auch wenn die Vorhersage über die Umstellung reicht
+- **Anwesenheit:** Eine gewohnte Heimkehr (z. B. sonntags 17:00) bleibt 17:00 nach Wanduhr und rutscht nicht auf 16:00
+
 ## 0.30.0
 Raummodelle aus der Prüfung des Exports vom 18.10. Jeder Punkt wurde mit den echten Daten nachgerechnet und gegengeprüft:
 - **Ein einzelner Schritt warf ein Raummodell um.** Alle Parameter starteten mit derselben, viel zu großen Unsicherheit. Im Arbeitszimmer genügte ein Schritt mit kurz offenem Ventil (+0,4 K beim Start des Tagbetriebs): Die Heizwirkung stieg dadurch von 0,02 auf 0,24 und blieb dort. Jetzt hat jeder Parameter eine eigene Startunsicherheit. Das Auskühlen startet beim Wert eines typischen Hauses (≈ 55 h).
