@@ -297,7 +297,7 @@ def draw_logo(p: Page, x: float, y: float, size: float) -> None:
     hub = (x + 64 * s, y + 84 * s)
     for a, b in SPOKES:
         p.line(*hub, x + a * s, y + b * s, color="#fff3d6", lw=2.6 * s)
-    for a, b, c, d in [(74, 64, 92, 58), (74, 64, 80, 34), (38, 60, 58, 62)]:
+    for a, b, c, d in [(74, 64, 92, 58), (74, 64, 80, 34), (38, 60, 58, 62), (58, 62, 66, 14)]:
         p.line(x + a * s, y + b * s, x + c * s, y + d * s, color="#fff3d6", lw=2.6 * s)
     for a, b in NODES:
         p.circle(x + a * s, y + b * s, 5 * s, fill="#ffd27a", stroke=NAVY_DARK, lw=2.5 * s)
