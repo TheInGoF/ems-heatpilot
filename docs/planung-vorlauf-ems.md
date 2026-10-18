@@ -79,8 +79,9 @@ Regler wie den ES73 oder die Tado-Erweiterung nachbilden. Weg C entfällt.
    wird (aus dem Vorheizplan), danach wieder auf Beharrung.
 4. **Nacht/Abwesenheit:** Heizkreis über den Regler in Nacht/Absenkbetrieb, nicht nur die Ventile zu.
 
-Hebel ohne Vorlauf-Zugriff, schon über die Ventile möglich (0.37 „Soll nach Ventilstellung“): Räume
-gemeinsam anfordern lassen statt nacheinander – fordert nur der Flur Wärme an, taktet der Kessel immer;
+Hebel ohne Vorlauf-Zugriff, schon über die Sollwerte möglich (0.37 „Soll nach Ventilstellung“): Räume
+gemeinsam anfordern lassen statt nacheinander – gezählt werden Räume (Raumgruppen aus 0.34), nicht
+Ventile; das Wohnzimmer mit zwei Ventilen ist ein Raum – fordert nur der Flur Wärme an, taktet der Kessel immer;
 fordern drei Räume zusammen an, läuft er durch.
 
 ## Schutzregeln, falls geschrieben wird
