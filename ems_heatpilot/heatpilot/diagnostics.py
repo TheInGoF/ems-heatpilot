@@ -458,6 +458,8 @@ def export(app, days: int = 14) -> dict:
             "schalter": app.cfg.control_mode,
             "protokoll": _table(q("SELECT * FROM control_log WHERE ts >= ? ORDER BY ts", (since,)), None),
             "zustand": eng.control_loop.as_dict() if eng.control_loop else None}),
+        # seit 0.35: Hydraulik – gemerkte Änderungen der Voreinstellung (Raum, Stufe, Vorlauf vorher; ohne Ort)
+        "abgleich_aenderungen": _safe(lambda: eng.store.get("balance.changes", [])),
         # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen
         "selbsttest": _safe(lambda: self_check(app)),
         "ems_werte": getattr(eng, "ems", None),

@@ -11,9 +11,9 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .config import CONTROL_MODES, WEEKDAYS, Config
-from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
-from . import certificate, control as control_mod, controlloop, diagnostics, live
+from .config import CONTROL_MODES, PRESET_MAX, WEEKDAYS, Config
+from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
+from . import advice, certificate, control as control_mod, controlloop, diagnostics, live
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -94,17 +94,27 @@ def make_app(app) -> web.Application:
             # Steuerung (0.34): erlaubte Schalterstellungen, Wochentage des Nachtplans, aktuelles Soll je
             # Thermostat (Startwert der Komforttemperatur eines neu gewählten Raums)
             "control": {"modes": list(CONTROL_MODES), "weekdays": list(WEEKDAYS),
-                        "limits": {"temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX}},
+                        "limits": {"temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX,
+                                   # Hydraulik (0.35): Voreinstellung/Stufen 0…preset_max
+                                   "preset_max": PRESET_MAX}},
+            # Hydraulik (0.35): gemerkte Änderungen der Voreinstellung (jüngste zuletzt) und die Fristen
+            "balance": {"changes": advice.preset_changes(app.eng.store),
+                        "pause_days": advice.PRESET_PAUSE_DAYS, "effect_days": advice.PRESET_EFFECT_DAYS,
+                        "forget_days": advice.PRESET_FORGET_DAYS},
             "climate_targets": {eid: st.get("attributes", {}).get("temperature")
                                 for eid, st in app.eng.states.items()
                                 if eid.startswith("climate.") and st.get("state") != "off"},
         })
 
     async def entities(_req):
-        """Alle wählbaren Entitäten mit Name, Einheit, Klasse und Gerät (für Raum-Vorschläge)."""
+        """Alle wählbaren Entitäten mit Name, Einheit, Klasse, Gerät und Bereich (für Raum-Vorschläge).
+
+        climate-Einträge (0.35) zusätzlich mit ``device_name``, ``device_model``, ``controller`` (Vorschlag
+        Wandthermostat) und ``siblings`` (Sensoren desselben Geräts: id, kind, name, unit)."""
         if app.eng is None:
             return json_response([])
-        reg = {r["entity_id"]: r for r in await app.registry()}
+        idx = Registry.of(await app.registry()).lookup()
+        reg = idx.entity
         out = []
         for eid, st in sorted(app.eng.states.items()):
             if eid.split(".", 1)[0] not in PICK_DOMAINS:
@@ -118,10 +128,14 @@ def make_app(app) -> web.Application:
                 "state": st.get("state"),
                 "device_id": reg.get(eid, {}).get("device_id"),
                 "platform": reg.get(eid, {}).get("platform"),
+                "area": idx.area_of(eid),
                 # Personen: nur ob Gerät/GPS da ist – nie Koordinaten
                 **({"trackers": len(a.get("device_trackers") or []), "gps": "latitude" in a,
                     "user": bool(a.get("user_id"))}
                    if eid.startswith("person.") else {}),
+                **({k: v for k, v in climate_info(eid, idx, app.eng.states).items()
+                    if k in ("device_name", "device_model", "controller", "siblings")}
+                   if eid.startswith("climate.") else {}),
             })
         return json_response(out)
 
@@ -130,10 +144,26 @@ def make_app(app) -> web.Application:
             raw = await req.json()
         except ValueError:
             return json_response({"ok": False, "errors": ["Ungültige Daten"]}, status=400)
+        # Hydraulik (0.35): Voreinstellung vorher merken – mit dem nötigen Vorlauf laut Modell vor der Änderung
+        presets_before = advice.presets_of(app.cfg)
+        flows = {c: advice.room_flow(app.eng, c) for c in presets_before} if app.eng is not None else {}
         errors = await app.apply_settings(raw)
         if errors:
             return json_response({"ok": False, "errors": errors}, status=400)
-        return json_response({"ok": True})
+        changes = []
+        if app.eng is not None:
+            flows = {c: flows.get(c) if flows.get(c) is not None else
+                     advice.room_flow(app.eng, getattr(app.eng.found.room_of(c), "climate", c))
+                     for c in presets_before}
+            changes = advice.record_preset_changes(app.eng.store, presets_before, advice.presets_of(app.cfg), flows)
+            if changes:
+                log.info("Voreinstellung geändert: %s – %d Tage keine Abgleich-Empfehlung, dann Wirkung",
+                         ", ".join(f"{c['room']} {c['from']}→{c['to']}" for c in changes), advice.PRESET_PAUSE_DAYS)
+        # Räume nach dem Speichern: welches Gerät Schlüssel ist (Raumregler, sonst erstes der Gruppe)
+        rooms = [{"name": r.name, "climate": r.climate, "controller": r.controller,
+                  "members": [m["climate"] for m in r.members]}
+                 for r in (app.eng.found.rooms if app.eng is not None else [])]
+        return json_response({"ok": True, "rooms": rooms, "preset_changes": changes})
 
     async def test_emsesp(req):
         host = (await req.json()).get("host", "").strip()

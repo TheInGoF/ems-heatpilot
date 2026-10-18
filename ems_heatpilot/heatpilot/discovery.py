@@ -8,9 +8,22 @@ from __future__ import annotations
 
 import logging
 import re
+from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 log = logging.getLogger(__name__)
+
+# Integrationen, deren climate-Entitäten Räume sind (Tado-Cloud, HomeKit-Bridge von Tado u. a.)
+ROOM_PLATFORMS = ("tado", "homekit_controller")
+# EMS-ESP-Heizkreis als climate (climate.thermostat_hc1, climate.ems_esp_thermostat_hc1): kein Raum – gilt nur
+# für fremde Plattformen; eine Tado-Zone „Bad Thermostat“ oder ein HomeKit-Ventil „Wohnzimmer Thermostat“ bleibt Raum
+_EMS_CLIMATE = re.compile(r"^climate\.(.*_)?(boiler|thermostat)(_hc\d+)?$", re.IGNORECASE)
+# Wandthermostat (Raumregler) am Modell- oder Gerätenamen: Tado „Smart Thermostat“ (ohne „Radiator“),
+# HomeKit-Modelle ST01 (Smart Thermostat), RU01/RU02 (Wireless Temperature Sensor als Raumregler)
+_WALL_MODELS = re.compile(r"^(ST|RU)\d{2}", re.IGNORECASE)
+# Bestandteile von Gerätenamen, die keinen Raum beschreiben (für die Kurzform „Gerätename, gekürzt“)
+_NAME_NOISE = re.compile(r"\b(tado°?|smart|radiator|wireless|temperature|sensor|thermostat|valve|[A-Z]{2}\d{6,})\b",
+                         re.IGNORECASE)
 
 # Rolle -> EMS-ESP-Namen. Je Rolle zuerst der Kurzname (so heißen die Werte in
 # der EMS-ESP-API und bei "Entity-ID-Format: Kurzname"), dann der lange Name
@@ -146,8 +159,15 @@ class Room:
     managed: bool = False             # „macht mit“ – nur dann schreibt HeatPilot
     comfort: float = 21.0             # Komforttemperatur (°C)
     platform: str | None = None       # Integration des Schlüssels laut Registry (tado, homekit_controller …)
-    # Mitläufer: [{"climate", "heating_power", "humidity", "temp_sensor", "platform"}]
+    # Mitläufer: [{"climate", "heating_power", "humidity", "temp_sensor", "platform", "preset", "preset_max"}]
     members: list[dict] = field(default_factory=list)
+    # seit 0.35: Hydraulik – Voreinstellung am Ventilunterteil des Schlüssels (None = unbekannt) und Zahl der
+    # Stufen (None = unbekannt, 0 = kein Voreinstellventil); HA-Bereich und Gerät des Schlüssels
+    preset: int | None = None
+    preset_max: int | None = None
+    area: str | None = None
+    device_name: str | None = None
+    device_model: str | None = None
 
     @property
     def climates(self) -> list[str]:
@@ -158,13 +178,63 @@ class Room:
     def devices(self) -> list[dict]:
         """Schlüssel und Mitläufer in einheitlicher Form."""
         head = {"climate": self.climate, "heating_power": self.heating_power, "humidity": self.humidity,
-                "temp_sensor": self.temp_sensor, "platform": self.platform}
+                "temp_sensor": self.temp_sensor, "platform": self.platform,
+                "preset": self.preset, "preset_max": self.preset_max}
         return [head, *self.members]
 
     @property
     def write_targets(self) -> list[str]:
         """Wohin HeatPilot schreibt: nur der Raumregler, sonst alle Ventile des Raums."""
         return [self.climate] if self.controller else self.climates
+
+
+@dataclass
+class Registry:
+    """Entitäten-, Geräte- und Bereichsregistry von HA (seit 0.35). Geräte/Bereiche dürfen fehlen (alte HA)."""
+
+    entities: list[dict] = field(default_factory=list)
+    devices: list[dict] = field(default_factory=list)
+    areas: list[dict] = field(default_factory=list)
+
+    @classmethod
+    def of(cls, value) -> "Registry":
+        """Auch eine nackte Entitätenliste (ältere Aufrufer, Tests) oder ein dict annehmen."""
+        if isinstance(value, Registry):
+            return value
+        if isinstance(value, dict):
+            return cls(list(value.get("entities") or []), list(value.get("devices") or []),
+                       list(value.get("areas") or []))
+        return cls(list(value or []))
+
+    def lookup(self) -> "RegistryIndex":
+        return RegistryIndex(self)
+
+
+class RegistryIndex:
+    """Schnelle Nachschlagetabellen: Entität -> Eintrag, Gerät -> Eintrag, Gerät -> Entitäten, Bereich -> Name."""
+
+    def __init__(self, reg: Registry) -> None:
+        self.entity = {r["entity_id"]: r for r in reg.entities if r.get("entity_id")}
+        self.device = {d["id"]: d for d in reg.devices if d.get("id")}
+        self.area_name = {a["area_id"]: a.get("name") or a["area_id"] for a in reg.areas if a.get("area_id")}
+        self.by_device: dict[str, list[str]] = defaultdict(list)
+        for r in reg.entities:
+            if r.get("device_id") and r.get("entity_id"):
+                self.by_device[r["device_id"]].append(r["entity_id"])
+
+    def area_of(self, entity_id: str) -> str | None:
+        """Bereichsname: an der Entität gesetzt, sonst der des Geräts."""
+        e = self.entity.get(entity_id, {})
+        area_id = e.get("area_id") or self.device.get(e.get("device_id") or "", {}).get("area_id")
+        return self.area_name.get(area_id, area_id) if area_id else None
+
+    def device_of(self, entity_id: str) -> dict:
+        return self.device.get(self.entity.get(entity_id, {}).get("device_id") or "", {})
+
+    def siblings(self, entity_id: str, domain: str = "sensor.") -> list[str]:
+        """Entitäten desselben Geräts (ohne die Entität selbst)."""
+        device_id = self.entity.get(entity_id, {}).get("device_id")
+        return [e for e in self.by_device.get(device_id or "", []) if e != entity_id and e.startswith(domain)]
 
 
 @dataclass
@@ -179,6 +249,10 @@ class Discovered:
     gas_unit: str | None = None
     demand_sensor: str | None = None  # z. B. sensor.heizungsanforderung (Ventile in %)
     home_zone: tuple[float, float] | None = None
+    # nur bei ``all_rooms=True`` (Vorschläge): die climate-Entitäten, die die Erkennung im Betrieb ohne
+    # Raum-Einstellungen als Räume nähme – die Oberfläche hakt nur diese vorab an (sonst dasselbe Ventil
+    # doppelt über Tado-Cloud und HomeKit, Klimageräte fremder Plattformen als Raum)
+    auto_rooms: list[str] = field(default_factory=list)
 
     def all_sensor_ids(self) -> list[str]:
         ids = list(self.boiler.values()) + list(self.thermostat.values()) + list(self.outdoor)
@@ -211,6 +285,7 @@ class Discovered:
             "gas_unit": self.gas_unit,
             "demand_sensor": self.demand_sensor,
             "home_zone": self.home_zone if private else (self.home_zone is not None),
+            "auto_rooms": self.auto_rooms,
         }
 
 
@@ -242,54 +317,177 @@ def _is_heating_sensor(entity_id: str, attrs: dict, reg_entry: dict) -> bool:
     return any(w in name for w in HEATING_WORDS) and "feucht" not in name and "humid" not in name
 
 
-def _discover_tado(d: Discovered, ids: list[str], by_id: dict, registry: list[dict], reg: dict) -> None:
-    """Tado-Räume: climate-Entitäten der Tado-Integration, Zusatzsensoren über das Gerät."""
-    tado_climates = [
-        e for e in ids
-        if e.startswith("climate.") and reg.get(e, {}).get("platform") == "tado"
-    ]
-    if not tado_climates:
-        tado_climates = [
-            e for e in ids
+def short_name(name: str) -> str:
+    """Gerätename ohne Hersteller/Modellwörter/Seriennummer („tado Smart Radiator Thermostat VA03…“ -> „“)."""
+    out = re.sub(r"\s+", " ", _NAME_NOISE.sub(" ", name or "")).strip(" -–·")
+    return out
+
+
+def device_sensors(climate: str, idx: RegistryIndex, by_id: dict) -> dict:
+    """Sensoren am Gerät einer climate-Entität: Heizleistung/Ventil, Feuchte, Temperatur.
+
+    Gibt {"heating_power", "humidity", "temp_sensor", "siblings"}; ``siblings`` = alle Sensoren des Geräts
+    als [{"id", "kind", "name", "unit"}] mit kind temperature/humidity/heating_power/other.
+    Die Tado-Sonderfälle bleiben: Übersetzungsschlüssel ``heating`` bzw. unique_id, sprachabhängige
+    Namen, einziger %-Sensor (außer Feuchte/Batterie) = Heizleistung.
+    """
+    out: dict = {"heating_power": None, "humidity": None, "temp_sensor": None, "siblings": []}
+    percent = []
+    for sid in sorted(idx.siblings(climate)):
+        attrs = by_id.get(sid, {}).get("attributes", {})
+        kind = "other"
+        if _is_heating_sensor(sid, attrs, idx.entity.get(sid, {})):
+            kind = "heating_power"
+            out["heating_power"] = out["heating_power"] or sid
+        elif attrs.get("device_class") == "humidity":
+            kind = "humidity"
+            out["humidity"] = out["humidity"] or sid
+        elif attrs.get("device_class") == "temperature":
+            kind = "temperature"
+            out["temp_sensor"] = out["temp_sensor"] or sid
+        elif attrs.get("unit_of_measurement") == "%" and attrs.get("device_class") in (None, "power_factor"):
+            percent.append(sid)
+        out["siblings"].append({"id": sid, "kind": kind, "name": attrs.get("friendly_name", sid),
+                                "unit": attrs.get("unit_of_measurement")})
+    if out["heating_power"] is None and len(percent) == 1:
+        out["heating_power"] = percent[0]  # einziger %-Sensor am Thermostat (außer Feuchte) = Heizleistung
+        for sib in out["siblings"]:
+            if sib["id"] == percent[0]:
+                sib["kind"] = "heating_power"
+    return out
+
+
+def is_wall_thermostat(climate: str, idx: RegistryIndex, by_id: dict) -> bool:
+    """Vorschlag „Raumregler“: Wandthermostat laut Modell/Name (Tado Smart Thermostat, HomeKit ST01/RU0x)."""
+    dev = idx.device_of(climate)
+    model = str(dev.get("model") or "")
+    names = " ".join(str(x) for x in (dev.get("name_by_user"), dev.get("name"), model,
+                                      by_id.get(climate, {}).get("attributes", {}).get("friendly_name")) if x)
+    if _WALL_MODELS.match(model.strip()):
+        return True
+    low = names.lower()
+    return "smart thermostat" in low and "radiator" not in low
+
+
+def climate_info(climate: str, idx: RegistryIndex, by_id: dict) -> dict:
+    """Bereich, Gerät, Sensoren und Raumregler-Vorschlag einer climate-Entität (für Vorschläge und Oberfläche)."""
+    dev = idx.device_of(climate)
+    return {
+        "area": idx.area_of(climate),
+        "device_name": dev.get("name_by_user") or dev.get("name") or None,
+        "device_model": dev.get("model") or None,
+        "controller": is_wall_thermostat(climate, idx, by_id),
+        **device_sensors(climate, idx, by_id),
+    }
+
+
+def room_candidates(ids: list[str], by_id: dict, idx: RegistryIndex) -> list[str]:
+    """climate-Entitäten, die Räume sein können: Tado/HomeKit immer (nie über den Namen verworfen), sonst jede
+    mit Gerät außer dem EMS-Heizkreis."""
+    out = []
+    for e in sorted(ids):
+        if not e.startswith("climate."):
+            continue
+        platform = idx.entity.get(e, {}).get("platform")
+        if platform in ROOM_PLATFORMS or (idx.device_of(e) and not _EMS_CLIMATE.match(e)):
+            out.append(e)
+    return out
+
+
+def _operating(candidates: list[str], idx: RegistryIndex) -> list[str]:
+    """Räume im Betrieb ohne Raum-Einstellungen: nur die Tado-Cloud-Zonen, wenn es welche gibt (dieselben
+    Geräte sonst doppelt über HomeKit), sonst nur Tado/HomeKit, sonst alle Kandidaten."""
+    platform = {e: idx.entity.get(e, {}).get("platform") for e in candidates}
+    for keep in (("tado",), ROOM_PLATFORMS):
+        sel = [e for e in candidates if platform[e] in keep]
+        if sel:
+            return sel
+    return candidates
+
+
+def _unique_names(rooms: list[Room], by_id: dict) -> None:
+    """Gleicher Name (zwei Ventile im Bereich „Wohnzimmer“): Rest des HA-Namens anhängen („Wohnzimmer VA2“),
+    notfalls der HA-Name oder die Entität – in Übersicht, Grafen und Empfehlungen bleiben die Räume unterscheidbar."""
+    def friendly(r: Room) -> str:
+        return by_id.get(r.climate, {}).get("attributes", {}).get("friendly_name") or r.climate
+
+    for variant in (lambda r: f"{r.name} {friendly(r).split()[-1]}", friendly, lambda r: r.climate):
+        dup = {n for n, k in Counter(r.name for r in rooms).items() if k > 1}
+        if not dup:
+            return
+        for r in rooms:
+            if r.name in dup:
+                r.name = variant(r)
+
+
+def _discover_rooms(d: Discovered, ids: list[str], by_id: dict, idx: RegistryIndex, all_rooms: bool) -> None:
+    """Räume ohne eigene Einstellungen: Tado-Räume, Zusatzsensoren und Bereich über das Gerät.
+
+    ``all_rooms=False`` (laufender Betrieb ohne Raum-Einstellungen): nur die Tado-Cloud-Räume, wenn es welche
+    gibt (sonst doppelte Räume, wenn dieselben Geräte auch über HomeKit da sind), sonst Tado/HomeKit, sonst
+    alle (``_operating``); gleiche Namen werden unterscheidbar gemacht.
+    ``all_rooms=True`` (Vorschläge für die Einstellungen): jede climate-Entität mit Gerät, Name und Gruppe
+    aus dem HA-Bereich, Raumregler-Vorschlag für Wandthermostate; ``auto_rooms`` nennt die Betriebsauswahl.
+    """
+    candidates = room_candidates(ids, by_id, idx)
+    if not candidates:
+        candidates = [
+            e for e in sorted(ids)
             if e.startswith("climate.")
             and "current_temperature" in by_id[e].get("attributes", {})
             and "boiler" not in e and "thermostat" not in e
         ]
-    for climate in sorted(tado_climates):
-        device = reg.get(climate, {}).get("device_id")
-        siblings = [
-            r["entity_id"] for r in registry
-            if device and r.get("device_id") == device and r["entity_id"].startswith("sensor.")
-        ]
-        name = by_id[climate]["attributes"].get("friendly_name", climate)
-        room = Room(name=name, climate=climate)
-        percent = []
-        for s in siblings:
-            attrs = by_id.get(s, {}).get("attributes", {})
-            if _is_heating_sensor(s, attrs, reg.get(s, {})):
-                room.heating_power = s
-            elif attrs.get("device_class") == "humidity":
-                room.humidity = s
-            elif attrs.get("device_class") == "temperature":
-                room.temp_sensor = s
-            elif attrs.get("unit_of_measurement") == "%" and attrs.get("device_class") in (None, "power_factor"):
-                percent.append(s)
-        if room.heating_power is None and len(percent) == 1:
-            room.heating_power = percent[0]  # einziger %-Sensor am Thermostat (außer Feuchte) = Heizleistung
-        d.rooms.append(room)
+    if all_rooms:
+        d.auto_rooms = _operating(candidates, idx)
+    else:
+        candidates = _operating(candidates, idx)
+    for climate in candidates:
+        info = climate_info(climate, idx, by_id)
+        friendly = by_id[climate]["attributes"].get("friendly_name", climate)
+        name = info["area"] or short_name(info["device_name"] or "") or short_name(friendly) or friendly
+        if not all_rooms and idx.entity.get(climate, {}).get("platform") == "tado":
+            name = friendly  # Tado-Cloud: der Zonenname ist der Raumname
+        d.rooms.append(Room(
+            name=name, climate=climate, heating_power=info["heating_power"], humidity=info["humidity"],
+            temp_sensor=info["temp_sensor"], group=info["area"] if all_rooms else None,
+            controller=info["controller"] if all_rooms else False,
+            platform=idx.entity.get(climate, {}).get("platform"),
+            area=info["area"], device_name=info["device_name"], device_model=info["device_model"],
+        ))
+    if not all_rooms:
+        _unique_names(d.rooms, by_id)
 
 
-def group_rooms(entries: list[dict], by_id: dict, reg: dict) -> list[Room]:
+def _preset(r: dict, key: str) -> int | None:
+    """Voreinstellung/Stufen aus einem Raum-Eintrag (0.35): fehlt = None; preset 0 = unbekannt = None."""
+    v = r.get(key)
+    if v in (None, ""):
+        return None
+    try:
+        v = int(v)
+    except (TypeError, ValueError):
+        return None
+    if key == "preset" and v <= 0:
+        return None
+    return v if v >= 0 else None
+
+
+def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dict] | None = None) -> list[Room]:
     """Raum-Einträge der Einstellungen zu logischen Räumen zusammenfassen (seit 0.34).
 
     Gleicher ``group``-Name = derselbe Raum. Schlüssel ist das Gerät mit ``controller`` (Raumregler),
     sonst das erste der Gruppe; die übrigen sind Mitläufer. „macht mit“ gilt, sobald ein Gerät der
-    Gruppe es hat; die Komforttemperatur kommt vom Schlüssel. Einträge ohne ``group``: eigener Raum.
+    Gruppe es hat; die Komforttemperatur und die Voreinstellung (0.35) kommen vom Schlüssel, Mitläufer
+    behalten ihre eigene Voreinstellung. Einträge ohne ``group``: eigener Raum. ``info``: Bereich/Gerät je
+    climate (``climate_info``), optional.
     """
+    info = info or {}
+
     def device(r: dict) -> dict:
         return {"climate": r["climate"], "heating_power": r.get("heating_power") or None,
                 "humidity": r.get("humidity") or None, "temp_sensor": r.get("temperature") or None,
-                "platform": reg.get(r["climate"], {}).get("platform")}
+                "platform": reg.get(r["climate"], {}).get("platform"),
+                "preset": _preset(r, "preset"), "preset_max": _preset(r, "preset_max")}
 
     def friendly(climate: str) -> str:
         return by_id.get(climate, {}).get("attributes", {}).get("friendly_name", climate)
@@ -320,6 +518,10 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict) -> list[Room]:
             managed=any(bool(r.get("managed")) for r in entries_), comfort=comfort,
             platform=reg.get(head["climate"], {}).get("platform"),
             members=[device(r) for r in others],
+            preset=_preset(head, "preset"), preset_max=_preset(head, "preset_max"),
+            area=info.get(head["climate"], {}).get("area"),
+            device_name=info.get(head["climate"], {}).get("device_name"),
+            device_model=info.get(head["climate"], {}).get("device_model"),
         ))
     return rooms
 
@@ -333,10 +535,13 @@ def person_kind(state: dict) -> str:
     return "person" if a.get("user_id") else "device"
 
 
-def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
+def discover(states: list[dict], registry, cfg, all_rooms: bool = False) -> Discovered:
+    """``registry``: ``Registry`` (Entitäten, Geräte, Bereiche) oder nur die Entitätenliste.
+    ``all_rooms``: Vorschläge für die Einstellungen – jede climate-Entität mit Gerät (siehe ``_discover_rooms``)."""
     by_id = {s["entity_id"]: s for s in states}
     ids = list(by_id)
-    reg = {r["entity_id"]: r for r in registry}
+    idx = Registry.of(registry).lookup()
+    reg = idx.entity
     d = Discovered()
 
     for role, keys in BOILER_ROLES.items():
@@ -350,11 +555,10 @@ def discover(states: list[dict], registry: list[dict], cfg) -> Discovered:
             d.thermostat[role] = hit
 
     if cfg.rooms:
-        d.rooms = group_rooms(cfg.rooms, by_id, reg)
+        info = {r["climate"]: climate_info(r["climate"], idx, by_id) for r in cfg.rooms if r.get("climate")}
+        d.rooms = group_rooms(cfg.rooms, by_id, reg, info)
     else:
-        _discover_tado(d, ids, by_id, registry, reg)
-        for room in d.rooms:
-            room.platform = reg.get(room.climate, {}).get("platform")
+        _discover_rooms(d, ids, by_id, idx, all_rooms)
 
     all_persons = sorted(e for e in ids if e.startswith("person."))
     if cfg.persons:

@@ -207,6 +207,14 @@ class HAClient:
     async def entity_registry(self) -> list[dict]:
         return await self.call({"type": "config/entity_registry/list"})
 
+    async def device_registry(self) -> list[dict]:
+        """Geräte (seit 0.35): Name, Modell, Bereich – zu welchem Gerät/Raum eine Entität gehört."""
+        return await self.call({"type": "config/device_registry/list"})
+
+    async def area_registry(self) -> list[dict]:
+        """Bereiche von Home Assistant (seit 0.35): area_id -> Name, z. B. „Wohnzimmer“."""
+        return await self.call({"type": "config/area_registry/list"})
+
     async def history(
         self,
         entity_ids: list[str],

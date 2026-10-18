@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.35.0
+**Räume zuordnen, Hydraulik-Helfer** (abgesprochen)
+- **Einstellungen → Räume:** HeatPilot liest Bereiche und Geräte aus Home Assistant. Unter jeder Entität steht „Bereich: Wohnzimmer · Gerät: tado Smart Radiator Thermostat VA… (SRT01)“, die Zeilen sind nach Bereich und Name sortiert. Vorschläge füllen nur leere Felder: Bereich als Raum (Knopf „Bereiche übernehmen“), Sensoren des Geräts als Temperatur/Feuchte/Ventil, Raumregler-Vorschlag beim Wandthermostat. HomeKit-Ventile werden auch ohne Tado-Cloud gefunden; dasselbe Ventil wird nie doppelt (Cloud und HomeKit) gewählt. Nach dem Speichern nennt HeatPilot bei mehreren Geräten in einem Raum das Schlüsselgerät
+- **Hydraulischer Abgleich mit Stufen:** je Raum Voreinstellung und Stufenzahl des Ventils (leer = unbekannt, 0 = kein Voreinstellventil). Die Empfehlung sagt dann „von 5 auf 6 stellen (Skala 1–6)“, bei 6/6 „mehr geht am Ventil nicht“ mit Alternativen, bei Stufe 1 kein „zurück“. Dazu eine grobe Erwartung je Raum (Durchflussanteil ∝ (Stufe/Max)², Heizkörperleistung ∝ Durchfluss^0,3): „Flur ≈ −5 K Vorlauf, Wohnzimmer ≈ +2 K“. Nach einer Änderung 10 Tage keine neue Empfehlung für den Raum („misst neu“), ab 14 Tagen die Wirkung: „braucht jetzt X statt Y °C Vorlauf“
+- Doku: Räume (Bereiche, Gerätesensoren, Raumregler, Voreinstellung) und „Hydraulischer Abgleich“ erweitert; Planungspapier `docs/planung-vorlauf-ems.md` zum Vorlauf über EMS (nichts gebaut)
+
 ## 0.34.0
 **HeatPilot steuert** (abgesprochen; Standard bleibt „Beobachten“, es ändert sich nichts, bis du den Schalter umlegst)
 - **Schalter „Steuerung“** in den Einstellungen: „Beobachten“ (wie bisher: lernen, empfehlen, Tado nur auf Knopfdruck) oder „HeatPilot steuert“. Dann schreibt HeatPilot die Solltemperaturen der Räume mit Häkchen „macht mit“ selbst, je Raum mit eigener Komforttemperatur. Keine Rückfallebene: zurück zu Tado nur über den Schalter, danach in der Tado-App den Zeitplan fortsetzen. Fällt HeatPilot aus, bleibt das zuletzt geschriebene Soll stehen

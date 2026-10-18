@@ -38,6 +38,8 @@ DEFAULT_NIGHT_PLAN = [
     {"start": "21:00", "end": "06:30"},  # So
 ]
 COMFORT_MIN, COMFORT_MAX, COMFORT_DEFAULT = 5.0, 25.0, 21.0
+# Hydraulik (0.35): Voreinstellung am Ventilunterteil – höchstens so viele Stufen
+PRESET_MAX = 12
 
 # Feld -> (Typ, min, max). Typen: int, float, str, bool, choice, entity, entities, time, strings, rooms,
 # overrides, nightplan
@@ -125,6 +127,28 @@ def _clean_room(r: dict) -> dict:
         if not COMFORT_MIN <= comfort <= COMFORT_MAX:
             raise ValueError(f"{climate}: Komfort muss zwischen {COMFORT_MIN:g} und {COMFORT_MAX:g} liegen")
         room["comfort"] = comfort
+    # Hydraulik (0.35): preset = aktuelle Voreinstellung, preset_max = Zahl der Stufen.
+    # Leer = unbekannt (Schlüssel fehlt); preset_max 0 = kein Voreinstellventil (Rücklaufverschraubung)
+    steps: dict[str, int] = {}
+    for key, label in (("preset_max", "Stufen"), ("preset", "Voreinstellung")):
+        if r.get(key) in (None, ""):
+            continue
+        try:
+            v = int(str(r[key]).strip())
+        except ValueError:
+            raise ValueError(f"{climate}: {label} keine ganze Zahl") from None
+        if v < 0 or v > PRESET_MAX:
+            raise ValueError(f"{climate}: {label} muss zwischen 0 und {PRESET_MAX} liegen")
+        steps[key] = v
+    if steps.get("preset"):
+        if "preset_max" not in steps:
+            raise ValueError(f"{climate}: Voreinstellung {steps['preset']} braucht die Zahl der Stufen")
+        if steps["preset"] > steps["preset_max"]:
+            raise ValueError(f"{climate}: Voreinstellung {steps['preset']} liegt über den {steps['preset_max']} Stufen")
+    if "preset_max" in steps:
+        room["preset_max"] = steps["preset_max"]
+    if steps.get("preset"):
+        room["preset"] = steps["preset"]
     return room
 
 
@@ -225,9 +249,11 @@ class Config:
     statistics_backfill_days: int = 365
     outdoor_sensors: list[str] = field(default_factory=list)
     # Räume: [{name, climate, temperature?, heating_power?, humidity?,
-    #          group?, controller?, managed?, comfort?}], leer = Tado automatisch.
+    #          group?, controller?, managed?, comfort?, preset?, preset_max?}], leer = Tado automatisch.
     # group: gleicher Name = derselbe Raum (Mitläufer); controller: Wandthermostat (Raumregler);
-    # managed: „macht mit“ (HeatPilot schreibt); comfort: Komforttemperatur des Raums (°C)
+    # managed: „macht mit“ (HeatPilot schreibt); comfort: Komforttemperatur des Raums (°C);
+    # preset/preset_max (0.35): Voreinstellung am Ventilunterteil und Zahl der Stufen (fehlt = unbekannt,
+    # preset_max 0 = kein Voreinstellventil)
     rooms: list[dict] = field(default_factory=list)
     # Personen für die Anwesenheit; leer = automatisch (alle person.* mit Gerät/GPS)
     persons: list[str] = field(default_factory=list)

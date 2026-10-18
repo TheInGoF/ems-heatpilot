@@ -30,11 +30,24 @@ keine YAML-Optionen:
   Entitäten in Home Assistant
 - **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
   **„macht mit“** und **Komforttemperatur** (für „HeatPilot steuert“), **Raum** und
-  **Raumregler** (mehrere Thermostate als ein Raum), Fußbodenheizung, optionale
-  Ventil-/Temperatur-/Feuchtesensoren. Automatisch gewählt
-  werden nur Tado-Räume; was kein Raum ist (Klimaanlage im Auto, Heizkreis, Warmwasser),
+  **Raumregler** (mehrere Thermostate als ein Raum), Fußbodenheizung, **Voreinstellung**
+  und **Stufen** des Ventils (für den hydraulischen Abgleich), optionale
+  Ventil-/Temperatur-/Feuchtesensoren. Unter jeder Entität stehen **Bereich** und
+  **Gerät** aus Home Assistant (z. B. „Bereich: Wohnzimmer · Gerät: tado Smart Radiator
+  Thermostat VA… (SRT01)“), die Zeilen sind nach Bereich und Name sortiert. Vorschläge
+  füllen nur leere Felder: der Bereich als Raum (bei gespeicherten Räumen nur als
+  Platzhalter – „Bereiche übernehmen“ trägt ihn ein), die Sensoren des Geräts als
+  Temperatur/Feuchte/Ventil, das Raumregler-Häkchen bei Wandthermostaten (Modell
+  ST01/RU0x bzw. „Smart Thermostat“ ohne „Radiator“, als „Vorschlag“ markiert).
+  Gespeichertes wird nie überschrieben. Automatisch gewählt
+  werden Tado-Räume (Tado-Cloud, sonst die HomeKit-Ventile der Tado-Bridge – dasselbe Ventil nie
+  doppelt über beide Wege; ohne Cloud heißen zwei Ventile im selben Bereich „Wohnzimmer VA1“ und
+  „Wohnzimmer VA2“, bis sie als ein Raum gespeichert sind); was kein Raum ist
+  (Klimaanlage im Auto, Heizkreis, Warmwasser),
   bleibt abgewählt bzw. lässt sich abwählen. Ändern sich die Sensoren eines Raums oder kommt ein Raum
-  hinzu, liest HeatPilot die Historie automatisch neu ein (dauert einige Minuten)
+  hinzu, liest HeatPilot die Historie automatisch neu ein (dauert einige Minuten). Beim
+  Speichern mehrerer Geräte in einem Raum sagt HeatPilot, welches das Schlüsselgerät ist
+  (Raumregler, sonst das erste)
 - **Personen:** alle `person.*` mit Häkchen. Automatisch gewählt werden nur Personen
   mit Home-Assistant-Benutzer und Gerät. Fahrzeuge, die als Person angelegt sind
   (Bild, Abwesenheiten, aber kein Benutzer), sind als „Fahrzeug oder Gerät?“
@@ -65,7 +78,9 @@ was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten –
 Klartext mit Gütemaß (Fehler, gekappte und verworfene Punkte, plausibel ja/nein),
 dazu Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage (7, 14 oder
 30) – im Spaltenformat und auf 5 min verdichtet (14 Tage etwa 1–3 MB), dazu die
-erkannten Fremdwärme-Ereignisse je Raum (`fremdwaerme`: nur Zeiten und Kelvin). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
+erkannten Fremdwärme-Ereignisse je Raum (`fremdwaerme`: nur Zeiten und Kelvin) und die
+gemerkten Änderungen der Ventil-Voreinstellung (`abgleich_aenderungen`: Raum, Stufen,
+Vorlauf vorher). Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. Ohne
 GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten.
 
 Ob das Warmwasser-Modell passt, zeigt auch die Grafik „Was Warmhalten kostet“:
@@ -229,7 +244,7 @@ hilft nur begrenzt. Deshalb misst HeatPilot je Raum und schlägt im Feld
 | Geofencing bei jeder echten Heimkehr: wie lange vorher hebt Tado das Soll an, wie warm ist der Raum bei Ankunft? | „bei Ankunft zu kalt: Vorheiz-Einstellung einen Schritt Richtung Komfort“ · „lange vor Ankunft warm: Richtung Eco“ |
 | Soll bei Abwesenheit | „Abwesenheitstemperatur senken“ – nur, wenn der Raum laut Modell danach in ≤ 2 h wieder warm ist |
 | Raum über Stunden unter Soll, Ventil voll offen | „Soll senken oder Heizkörper/Ventil prüfen“ (mit Hinweis, ob der Vorlauf am Limit war) |
-| Hydraulischer Abgleich (siehe unten) | „bekommt zu wenig Heizwasser: Voreinstellung eine Stufe höher“ · „bekommt mehr als nötig: eine Stufe zurück“ |
+| Hydraulischer Abgleich (siehe unten) | „bekommt zu wenig Heizwasser: Voreinstellung von 5 auf 6 stellen (Skala 1–6)“ · „bekommt mehr als nötig: von 4 auf 3“ – mit grober Erwartung für die anderen Räume und Nachmessen |
 
 Leitplanken: erst ab 4 Beobachtungen in 3 Wochen, Urlaub zählt nicht, Schritte
 höchstens 30 min bzw. ein Reglerschritt, keine widersprüchlichen Ratschläge
@@ -257,6 +272,44 @@ Leitplanken: erst ab 3 Räumen mit plausiblem Modell und je mindestens 12 Stunde
 Heizbetrieb; Fußbodenheizungen zählen nicht mit; immer nur eine Stufe, danach
 misst HeatPilot 1–2 Wochen neu. Die Voreinstellung gehört zur Heizungsanlage –
 Änderungen am besten mit dem Heizungsbauer bzw. Eigentümer abstimmen.
+
+**Konkrete Stufen.** Trägst du unter Einstellungen → Räume die **Voreinstellung**
+(aktuelle Zahl am Ventilunterteil) und die **Stufen** (Skala, z. B. 6 oder 8) ein,
+sagt die Empfehlung genau, was zu tun ist: „Voreinstellung von 5 auf 6 stellen
+(Skala 1–6)“. Steht der Raum schon auf dem Maximum („6/6 – mehr geht am Ventil
+nicht“), nennt HeatPilot Alternativen: Heizkörper entlüften, den Raum mit dem
+größten Überschuss eine Stufe zurück (er wird genannt), Pumpenstufe oder Vorlauf
+prüfen. Bei Stufe 1 wird kein „zurück“ empfohlen. Stufen 0 heißt: kein
+Voreinstellventil – dann geht es um die Rücklaufverschraubung (Viertelumdrehung,
+am besten vom Fachbetrieb). Ohne Angabe bleibt es beim bisherigen „eine Stufe
+höher/zurück“ mit dem Hinweis, die Stufe einzutragen. Bei mehreren Geräten in einem
+Raum gilt der Wert des Schlüsselgeräts (Raumregler, sonst das erste); weitere Ventile
+dürfen eigene Werte haben, die Empfehlung nennt dann das Gerät.
+
+**Wirkung auf die anderen Räume (grobe Näherung).** Ein Voreinstellventil öffnet
+etwa quadratisch mit der Stufe: Durchflussbeiwert `kv ∝ (p / p_max)²`. Der
+Durchflussanteil eines Raums ist sein kv geteilt durch die Summe aller kv (die
+Anteile ergeben zusammen 1 – was ein Raum mehr bekommt, fehlt den anderen). Die
+Leistung eines Heizkörpers steigt bei sonst gleichen Bedingungen nur mit
+`Durchfluss^0,3`, deshalb skaliert der nötige Vorlauf eines Raums mit
+`(T_req − T_Raum) · (Anteil_alt / Anteil_neu)^0,3`. So entsteht der Satz in der
+Empfehlung: „Erwartung (grob): Flur ≈ −5 K, Wohnzimmer ≈ +2 K, Küche ≈ +1,0 K
+Vorlauf“ – der geänderte Raum braucht weniger, die anderen etwas mehr. In der
+Oberfläche stehen die Werte zusätzlich als Chips je Raum. Räume ohne eingetragene
+Stufe werden nicht simuliert; die Empfehlung nennt sie („Ohne Voreinstellung in den
+Einstellungen: Bad – eintragen, dann rechnet HeatPilot auch deren Wirkung“). Es
+ist eine Richtgröße, kein Messwert – Ventilkennlinie, Heizkörpergröße und
+Rohrnetz kennt HeatPilot nicht.
+
+**Nachmessen.** Änderst du die Voreinstellung in den Einstellungen (bekannte Stufe
+→ andere bekannte Stufe), merkt sich HeatPilot Zeitpunkt, Stufen und den nötigen
+Vorlauf des Raums laut Modell vor der Änderung (ohne Koordinaten; im Export als
+`abgleich_aenderungen`). Danach gibt es 10 Tage lang keine neue Abgleich-Empfehlung
+für diesen Raum, stattdessen eine Info-Karte „Voreinstellung geändert – HeatPilot
+misst neu“. Ab 14 Tagen bis 60 Tage nach der Änderung steht in der Empfehlung
+bzw. als eigene Info-Karte die Wirkung: „braucht jetzt 58 °C statt 64 °C Vorlauf am
+kältesten Tag (Voreinstellung am 18.10. von 5 auf 6)“. Info-Karten gelten nie als
+„behoben“. Das erste Eintragen einer Stufe (unbekannt → 5) ist keine Änderung.
 
 ## Zusatzdaten aus EMS-ESP
 
@@ -336,7 +389,9 @@ keinen Zwischenmodus und keinen automatischen Rückfall:
 - Mehrere Thermostate in einem Zimmer: gleicher Name im Feld **Raum** = derselbe Raum.
   Gibt es einen **Raumregler** (Wandthermostat), misst und schreibt HeatPilot nur ihn; sonst
   gilt das Mittel aller Geräte als Raumtemperatur und geschrieben wird auf alle Ventile.
-  Gelernt wird der Raum unter seinem Schlüsselgerät (Raumregler, sonst das erste Gerät).
+  Gelernt wird der Raum unter seinem Schlüsselgerät (Raumregler, sonst das erste Gerät);
+  auch Voreinstellung und Stufen des Raums sind die des Schlüsselgeräts. Nach dem Speichern
+  nennt die Oberfläche das Schlüsselgerät jeder Gruppe.
   Bestehende Einstellungen ohne „Raum“ bleiben wie bisher: jedes Thermostat ein Raum.
 - Die Tado-Bridge über HomeKit (`homekit_controller`) kennt nur „aus“ und „heizen“, keinen
   Zeitplan und keinen Timer. Vor dem ersten Schreiben stellt HeatPilot deshalb die
@@ -502,10 +557,16 @@ Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 Im Reiter Einstellungen → **Räume** stehen alle Thermostate (climate-Entitäten)
 als Tabelle. Häkchen = Raum wird gelernt. Je Raum optional: eigener Name,
 „macht mit“ und Komforttemperatur (für „HeatPilot steuert“), Raum und Raumregler
-(mehrere Thermostate als ein Raum, siehe „Steuerung“), Ventil-/Heizleistungs-Sensor (%),
-Temperatursensor (für die Langzeitstatistik) und Feuchtesensor. Ohne Angaben schlägt
-die automatische Erkennung die Tado-Räume samt Sensoren vor; „macht mit“ setzt nie
-ein Vorschlag, nur du.
+(mehrere Thermostate als ein Raum, siehe „Steuerung“), Voreinstellung und Stufen des
+Ventils (siehe „Hydraulischer Abgleich“), Ventil-/Heizleistungs-Sensor (%),
+Temperatursensor (für die Langzeitstatistik) und Feuchtesensor. Unter jeder Entität
+stehen Bereich und Gerät aus Home Assistant; die Tabelle ist nach Bereich und Name
+sortiert. Ohne Angaben schlägt die automatische Erkennung die Tado-Räume samt
+Sensoren vor – für jedes Thermostat mit Gerät in Home Assistant (Tado-Cloud, HomeKit,
+andere): Name und Raum aus dem Bereich, Temperatur/Feuchte/Heizleistung aus den
+Sensoren desselben Geräts, Raumregler bei Wandthermostaten. Vorschläge füllen nur
+leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder ein);
+„macht mit“ setzt nie ein Vorschlag, nur du.
 
 ## Wärmebedarf aus dem Tado-Soll
 

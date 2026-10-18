@@ -171,6 +171,12 @@ dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
 .warnbox { border-left: 3px solid var(--warn); background: rgba(201, 133, 0, .09); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin: 10px 0; color: var(--text-primary); }
 table.plan { width: auto; } table.plan td, table.plan th { padding: 3px 6px; } table.form.plan input { min-width: 0; width: 108px; }
 table.form input[type=checkbox] { min-width: 0; } table.form input.r-comfort { min-width: 72px; width: 72px; }
+/* Räume (0.35): Voreinstellung/Stufen klein; Empfehlungen: Erwartung je Raum als Chips, Wirkungszeile abgesetzt */
+table.form input.r-preset, table.form input.r-preset-max { min-width: 60px; width: 60px; }
+.adv-exp { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0 2px; font-size: 12px; color: var(--text-secondary); align-items: center; }
+.adv-exp span { padding: 1px 7px; border-radius: 99px; border: 1px solid var(--border); white-space: nowrap; }
+.adv-exp span.down { border-color: var(--good); color: var(--good); }
+.adv-effect { margin: 4px 0 2px; font-size: 13px; color: var(--text-primary); }
 .acts.four { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 520px) { .acts.four { grid-template-columns: repeat(2, 1fr); } }
 #heat-status { margin: 0 0 10px; } #heat-status .warn { color: #e34948; display: block; }
@@ -1103,16 +1109,7 @@ async function load() {
     tile("Vorlauf-Empfehlung", fmt(s.flow_recommendation, 0), "°C", `Kessel-Soll ${fmt(s.flow_current_setpoint, 0)} °C` + (s.flow_calculated !== null ? ` · Regler ${fmt(s.flow_calculated, 0)} °C` : "")),
   ].join("");
 
-  const adv = s.advice || { items: [], resolved: [] };
-  const dateOf = (ts) => new Date(ts * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
-  $("advice").innerHTML = `<h2>Empfehlungen</h2><p>Was du in Tado oder an den Heizkörper-Ventilen (hydraulischer Abgleich) einstellen kannst – je Raum, mit Beleg aus den letzten 3 Wochen. HeatPilot selbst ändert nichts.</p>` +
-    (adv.items.length ? `<ul style="margin:0;padding-left:0;list-style:none">${adv.items.map((a) => `<li style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <span class="badge" style="${a.impact === "Sparen" ? "border-color:var(--good);color:var(--good)" : "border-color:var(--series-1);color:var(--series-1)"}">${a.impact}</span> <b>${esc(a.title)}</b>
-      <div style="margin:4px 0 2px">${esc(a.text)}</div>
-      <div class="muted">${Object.entries(a.evidence).filter(([, v]) => v !== null).map(([k, v]) => `${esc(k)}: ${typeof v === "number" ? fmt(v, Number.isInteger(v) ? 0 : 1) : esc(v)}`).join(" · ")} · seit ${dateOf(a.since)}</div></li>`).join("")}</ul>`
-      : `<p class="muted">Keine Empfehlungen – alles passt, oder es liegen noch zu wenige Beobachtungen vor (mind. 4 in 3 Wochen).</p>`) +
-    (adv.resolved.length ? `<p class="muted" style="margin-top:8px">Behoben: ${adv.resolved.map((r) => `${esc(r.title)} (${dateOf(r.resolved)})`).join(" · ")}</p>` : "");
-  $("advice").hidden = !adv.items.length && !adv.resolved.length;
+  renderAdvice(s.advice || { items: [], resolved: [] });
   const g = s.guards;
   const status = (name, chk) => `<li><b>${name}:</b> ${chk.ok ? "plausibel – darf empfehlen" : "keine Empfehlung – " + chk.reasons.join("; ")}</li>`;
   $("guards").innerHTML = `<h2>Leitplanken</h2><p>Gespart wird nur bei gleichem Komfort und gemessen am Gaszähler für das ganze Haus. Feste Untergrenzen: Räume ${fmt(s.limits.away_floor)} °C bei Abwesenheit, ${fmt(s.limits.night_floor)} °C nachts, Warmwasser ${fmt(s.limits.dhw_min_temp)} °C` +
@@ -1203,7 +1200,7 @@ async function load() {
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
 }
 // ---------------------------------------------------------------- Einstellungen
-let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {};
+let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {};
 function sunText(g, updates) {
   if (!g || updates < 96) return '<span class="muted">lernt noch</span>';
   const names = ["Ost", "Süd", "West"], best = g.indexOf(Math.max(...g));
@@ -1375,6 +1372,37 @@ async function loadPresence() {
   });
 }
 // Zeitplan-Karte: bei „HeatPilot steuert“ der Wochenplan, sonst die aus Tado gelernten bzw. eingestellten Zeiten
+// Empfehlungen (0.35): Abgleich mit konkreter Stufe und Erwartung je Raum (Chips), nach einer Änderung der
+// Voreinstellung die Wirkungszeile abgesetzt; Info-Karten „misst neu“/„Wirkung“ (impact Info) ohne „seit“
+const dateOf = (ts) => new Date(ts * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" });
+// Kelvin wie _fmt_k im Backend (eine Regel für Satz und Chips): ab 2 K ganze Kelvin, darunter eine Nachkommastelle, ±0 unter 0,05
+const kelvin = (d) => `${d < 0 ? "−" : "+"}${Math.abs(d).toLocaleString("de-DE", { minimumFractionDigits: Math.abs(d) >= 2 ? 0 : 1, maximumFractionDigits: Math.abs(d) >= 2 ? 0 : 1 })} K`.replace(/^[+−]0,0 K$/, "±0 K");
+function adviceItem(a) {
+  const info = a.impact === "Info";
+  const style = a.impact === "Sparen" ? "border-color:var(--good);color:var(--good)" : info ? "" : "border-color:var(--series-1);color:var(--series-1)";
+  const m = info ? null : /^(.*?)\s(Wirkung(?::| der Voreinstellung).*)$/s.exec(a.text || "");
+  const main = m ? m[1] : a.text, effect = m ? m[2] : (a.kind === "abgleich_wirkung" ? a.text : "");
+  const p = a.preset;
+  const step = p && p.from !== null && p.from !== undefined ? ` <span class="badge">Voreinstellung ${esc(p.from)} → ${esc(p.to)}${p.max ? ` von ${esc(p.max)}` : ""}</span>` : "";
+  const exp = (a.expected || []).length
+    ? `<div class="adv-exp">Erwartung (grob), Vorlauf:${a.expected.map((e) => `<span class="${e.delta_k < 0 ? "down" : ""}">${esc(e.room_name)} ${esc(e.k || kelvin(e.delta_k))}</span>`).join("")}</div>` : "";
+  const ev = Object.entries(a.evidence || {}).filter(([, v]) => v !== null && v !== undefined)
+    .map(([k, v]) => `${esc(k)}: ${typeof v === "number" ? fmt(v, Number.isInteger(v) ? 0 : 1) : esc(v)}`);
+  if (!info && a.since) ev.push(`seit ${dateOf(a.since)}`);
+  return `<li style="padding:8px 0;border-bottom:1px solid var(--border)">
+      <span class="badge" style="${style}">${esc(a.impact)}</span> <b>${esc(a.title)}</b>${step}
+      ${main && main !== effect ? `<div style="margin:4px 0 2px">${esc(main)}</div>` : ""}${exp}
+      ${effect ? `<div class="adv-effect">${info ? "" : "↳ "}${esc(effect)}</div>` : ""}
+      <div class="muted">${ev.join(" · ")}</div></li>`;
+}
+function renderAdvice(adv) {
+  const items = adv.items || [], resolved = adv.resolved || [];
+  $("advice").innerHTML = `<h2>Empfehlungen</h2><p>Was du in Tado oder an den Heizkörper-Ventilen (hydraulischer Abgleich) einstellen kannst – je Raum, mit Beleg aus den letzten 3 Wochen. HeatPilot selbst ändert nichts. Voreinstellung und Stufen der Ventile stehen unter Einstellungen → Räume; nach einer Änderung misst HeatPilot nach und zeigt die Wirkung.</p>` +
+    (items.length ? `<ul style="margin:0;padding-left:0;list-style:none">${items.map(adviceItem).join("")}</ul>`
+      : `<p class="muted">Keine Empfehlungen – alles passt, oder es liegen noch zu wenige Beobachtungen vor (mind. 4 in 3 Wochen).</p>`) +
+    (resolved.length ? `<p class="muted" style="margin-top:8px">Behoben: ${resolved.map((r) => `${esc(r.title)} (${dateOf(r.resolved)})`).join(" · ")}</p>` : "");
+  $("advice").hidden = !items.length && !resolved.length;
+}
 function renderSchedule(s) {
   const box = $("sched"), sc = s.schedule;
   if (!sc || !sc.effective) { box.hidden = true; return; }
@@ -1575,31 +1603,64 @@ function personRows() {
   }).join("");
 }
 
+// Räume (0.35): Sensor am Gerät der climate-Entität (api/entities: siblings) – Rückfall, wenn kein Vorschlag da ist
+const sibling = (c, kind) => ((c.siblings || []).find((s) => s.kind === kind) || {}).id || "";
+const climateEntities = () => ENT.filter((e) => e.id.startsWith("climate.")).sort((a, b) =>
+  // nach Bereich (ohne Bereich zuletzt), dann Name – die Geräte eines Zimmers stehen untereinander
+  (a.area ? 0 : 1) - (b.area ? 0 : 1) || String(a.area || "").localeCompare(String(b.area || ""), "de")
+  || String(a.name || "").localeCompare(String(b.name || ""), "de"));
 function roomRows() {
-  const climates = ENT.filter((e) => e.id.startsWith("climate."));
+  const climates = climateEntities();
   const chosen = Object.fromEntries((SET.rooms || []).map((r) => [r.climate, r]));
   const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
   const auto = !(SET.rooms || []).length;
+  // Auto-Modus: vorab angehakt nur, was die Erkennung im Betrieb nutzt (SUG.auto_rooms: Tado-Cloud-Zonen vor HomeKit,
+  // keine Klimageräte fremder Plattformen) – die übrigen Vorschläge belegen nur die Felder vor
+  const pre = new Set(SUG.auto_rooms || []);
   const lim = CTRL.limits || { temp_min: 5, temp_max: 25 };
+  const pmax = lim.preset_max || 12;
   return climates.map((c) => {
-    const r = chosen[c.id] || {}, g = sug[c.id] || {};
-    const on = chosen[c.id] ? true : (auto && !!sug[c.id]);
+    const r = chosen[c.id] || {}, g = sug[c.id] || {}, isSet = !!chosen[c.id];
+    const on = isSet ? true : (auto && pre.has(c.id));
     // Komfort: gespeicherter Wert; schon gewählter Raum ohne Wert (Einstellungen vor 0.34) 21 °C wie im Backend;
     // neu gewählter Raum: das aktuelle Soll des Thermostats, sonst 21 °C
     const comfort = r.comfort ?? (chosen[c.id] ? 21 : (CT[c.id] ?? 21));
-    return `<tr class="room" data-climate="${esc(c.id)}">
+    // Bereich und Gerät aus Home Assistant: nur Vorschläge für leere Felder – Gespeichertes bleibt. Ein schon
+    // gewählter Raum ohne „Raum“ bekommt den Bereich als Platzhalter („Bereiche übernehmen“ trägt ihn ein),
+    // ein noch nicht gewählter den Bereich als Wert; Raumregler-Häkchen nur als Vorschlag bei Wandthermostaten
+    const area = c.area || g.area || "";
+    const device = c.device_name ? `${c.device_name}${c.device_model ? ` (${c.device_model})` : ""}` : "";
+    const where = [area ? `Bereich: ${esc(area)}` : "", device ? `Gerät: ${esc(device)}` : ""].filter(Boolean).join(" · ");
+    const group = isSet ? (r.group || "") : (g.group || area);
+    const wall = !!(g.controller || c.controller), controller = isSet ? !!r.controller : wall;
+    const wallHint = wall && !isSet ? "Vorschlag" : wall && !controller ? "Wandthermostat?" : "";
+    return `<tr class="room" data-climate="${esc(c.id)}" data-area="${esc(area)}">
       <td><input type="checkbox" class="r-on" ${on ? "checked" : ""}></td>
-      <td><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}"><div class="hint">${esc(c.id)} · in HA: ${esc(c.name)}</div></td>
+      <td><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}"><div class="hint">${esc(c.id)} · in HA: ${esc(c.name)}</div>${where ? `<div class="hint">${where}</div>` : ""}</td>
       <td style="text-align:center"><input type="checkbox" class="r-managed" ${r.managed ? "checked" : ""} onchange="modeHint()"></td>
       <td><input type="number" class="r-comfort" step="0.5" min="${lim.temp_min}" max="${lim.temp_max}" value="${esc(comfort)}"></td>
-      <td><input class="r-group" value="${esc(r.group || g.group || "")}" placeholder="z. B. Wohnzimmer"></td>
-      <td style="text-align:center"><input type="checkbox" class="r-controller" ${r.controller ? "checked" : ""}></td>
+      <td><input class="r-group" value="${esc(group)}" placeholder="${esc(area || "z. B. Wohnzimmer")}"></td>
+      <td style="text-align:center"><input type="checkbox" class="r-controller" ${controller ? "checked" : ""}>${wallHint ? `<div class="hint">${wallHint}</div>` : ""}</td>
       <td>${esc(c.platform || "–")}${c.platform && c.platform !== "tado" && c.platform !== "homekit_controller" ? '<div class="hint">kein Tado – wirklich ein Raum?</div>' : ""}</td>
       <td style="text-align:center"><input type="checkbox" class="r-floor" ${(SET.floor_heating_rooms || []).includes(c.id) ? "checked" : ""}></td>
-      <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || "")}" placeholder="Ventil % (optional)"></td>
-      <td><input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || "")}" placeholder="Temperatur (optional)"></td>
-      <td><input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || "")}" placeholder="Feuchte (optional)"></td></tr>`;
+      <td><input type="number" class="r-preset" min="0" max="${pmax}" step="1" value="${esc(r.preset ?? "")}" placeholder="–" title="Aktuelle Voreinstellung am Ventilunterteil, z. B. 5 – leer = unbekannt"></td>
+      <td><input type="number" class="r-preset-max" min="0" max="${pmax}" step="1" value="${esc(r.preset_max ?? "")}" placeholder="–" title="Zahl der Stufen, z. B. 6 – leer = unbekannt, 0 = kein Voreinstellventil (Rücklaufverschraubung)"></td>
+      <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || sibling(c, "heating_power"))}" placeholder="Ventil % (optional)"></td>
+      <td><input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || sibling(c, "temperature"))}" placeholder="Temperatur (optional)"></td>
+      <td><input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || sibling(c, "humidity"))}" placeholder="Feuchte (optional)"></td></tr>`;
   }).join("");
+}
+// „Bereiche übernehmen“: der Bereich aus Home Assistant in alle leeren Raum-Felder – gefüllte bleiben
+function applyAreas() {
+  let n = 0;
+  for (const tr of document.querySelectorAll("tr.room")) {
+    const inp = tr.querySelector(".r-group");
+    if (inp.value.trim() || !tr.dataset.area) continue;
+    inp.value = tr.dataset.area; n++;
+  }
+  $("save-msg").className = "";
+  $("save-msg").textContent = n ? `${n} Raum-Feld${n > 1 ? "er" : ""} mit dem Bereich gefüllt – prüfen und speichern.`
+    : "Nichts zu tun: alle Raum-Felder sind gefüllt, oder Home Assistant kennt für die Geräte keinen Bereich.";
 }
 
 function learnedHint(key, show) {
@@ -1654,8 +1715,11 @@ function renderSettings() {
       ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
     </div>`) +
     card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
-      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird. „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.</p>
-      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden</th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.
+      Unter jeder Entität stehen <b>Bereich</b> und <b>Gerät</b> aus Home Assistant; ein leeres Feld „Raum“ zeigt den Bereich als Platzhalter, „Bereiche übernehmen“ trägt ihn ein – Gespeichertes bleibt. Sensoren des Geräts (Temperatur, Feuchte, Heizleistung) sind vorbelegt.
+      <b>Voreinstellung</b> und <b>Stufen</b>: die Zahl am Ventilunterteil (Durchflussbegrenzer), z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil. Damit nennt der hydraulische Abgleich konkrete Stufen und rechnet die Wirkung auf die anderen Räume; bei mehreren Geräten in einem Raum gilt der Wert des <b>Schlüsselgeräts</b> (Raumregler, sonst das erste), weitere Ventile dürfen eigene Werte haben.</p>
+      ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
+      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden</th><th>Voreinstellung <span class="hint">(Stufe am Ventil)</span></th><th>Stufen <span class="hint">(Skala, 0 = ohne)</span></th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
     card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus z. B. als leer, wenn nur das Auto weg ist. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit HA-Benutzer und Gerät.</p>
       <div class="scroll"><table class="form"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`) +
     card("Gas & Kosten", `<div class="form-grid">
@@ -1729,7 +1793,9 @@ function collect() {
     out.rooms.push({ climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
                      temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim(),
                      group: tr.querySelector(".r-group").value.trim(), controller: tr.querySelector(".r-controller").checked,
-                     managed: tr.querySelector(".r-managed").checked, comfort: tr.querySelector(".r-comfort").value.trim() });
+                     managed: tr.querySelector(".r-managed").checked, comfort: tr.querySelector(".r-comfort").value.trim(),
+                     // Hydraulik (0.35): leer = unbekannt (wird nicht gespeichert), Stufen 0 = kein Voreinstellventil
+                     preset: tr.querySelector(".r-preset").value.trim(), preset_max: tr.querySelector(".r-preset-max").value.trim() });
     if (tr.querySelector(".r-floor").checked) out.floor_heating_rooms.push(c);
   }
   out.vacations = [...document.querySelectorAll(".vac")].map((r) => {
@@ -1748,8 +1814,19 @@ async function saveSettings() {
   const j = await readJSON(r);
   if (!j.ok) { msg.className = "msg-err"; msg.innerHTML = "Nicht gespeichert: " + j.errors.map(esc).join(" · "); return; }
   msg.className = "msg-ok"; msg.textContent = "Gespeichert und übernommen.";
+  const note = saveNote(j);
   SET = null; await loadSettings(); load().catch(() => {});
-  $("save-msg").className = "msg-ok"; $("save-msg").textContent = "Gespeichert und übernommen.";
+  $("save-msg").className = "msg-ok"; $("save-msg").innerHTML = "Gespeichert und übernommen." + note;
+}
+// Nach dem Speichern (0.35): bei mehreren Geräten in einem Raum, welches das Schlüsselgerät ist (Raumregler, sonst
+// das erste – es liefert Temperatur und Voreinstellung des Raums); gemerkte Änderungen der Voreinstellung
+function saveNote(j) {
+  const nameOf = (id) => { const e = ENT.find((x) => x.id === id); return esc(shortName(e ? e.name : id)); };
+  const parts = (j.rooms || []).filter((r) => (r.members || []).length).map((r) =>
+    `${esc(r.name)}: Schlüsselgerät ${nameOf(r.climate)}${r.controller ? " (Raumregler)" : " (erstes Gerät, kein Raumregler)"}, dazu ${r.members.map(nameOf).join(", ")}`);
+  const ch = (j.preset_changes || []).map((c) => `${nameOf(c.room)} ${esc(c.from)} → ${esc(c.to)}`);
+  if (ch.length) parts.push(`Voreinstellung geändert (${ch.join(", ")}) – ${BAL.pause_days ?? 10} Tage keine Abgleich-Empfehlung für den Raum, ab ${BAL.effect_days ?? 14} Tagen zeigt HeatPilot die Wirkung`);
+  return parts.length ? ` <span class="muted">${parts.join(". ")}.</span>` : "";
 }
 
 function applySuggestions() {
@@ -1757,11 +1834,13 @@ function applySuggestions() {
   if (SUG.weather) $("f-weather_entity").value = SUG.weather;
   if ((SUG.outdoor || []).length) { $("outdoor-list").innerHTML = ""; SUG.outdoor.forEach((o) => { addOutdoor(); $("outdoor-list").lastElementChild.querySelector("input").value = o; }); }
   const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
+  const pre = new Set(SUG.auto_rooms || []);  // angehakt nur die Betriebsauswahl (kein Ventil doppelt), Felder für alle
   for (const tr of document.querySelectorAll("tr.room")) {
     const g = sug[tr.dataset.climate];
-    tr.querySelector(".r-on").checked = !!g;
+    tr.querySelector(".r-on").checked = pre.has(tr.dataset.climate);
     if (g) { tr.querySelector(".r-valve").value = g.heating_power || ""; tr.querySelector(".r-temp").value = g.temp_sensor || ""; tr.querySelector(".r-hum").value = g.humidity || "";
-      if (g.group) tr.querySelector(".r-group").value = g.group; }  // „macht mit“ setzt nie ein Vorschlag – nur der Nutzer
+      if (g.group) tr.querySelector(".r-group").value = g.group;
+      if (g.controller) tr.querySelector(".r-controller").checked = true; }  // „macht mit“ setzt nie ein Vorschlag – nur der Nutzer
   }
   modeHint();
   $("save-msg").className = ""; $("save-msg").textContent = "Vorschläge eingetragen – prüfen und speichern.";
@@ -1799,7 +1878,7 @@ async function loadSettings() {
   }
   ENT = await getJSON("api/entities");
   SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
-  DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {};
+  DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
   renderSettings();
 }
 
