@@ -1,5 +1,54 @@
 # Changelog
 
+## 0.32.0
+Prüfung des Exports vom 18.10.: Warmwasser, Anwesenheit, Zeitplan und Woche. Dazu ein Hausmodell, das nicht nur zu diesem Haus passt (abgesprochen).
+
+**Hausmodell für jedes Haus**
+- **Wärmeverlust und Fremdwärme aus Tageswerten.** Getestet mit fünf künstlichen Häusern (Altbau, Neubau, Fußboden, durchgeheizt, schwere Wände). Aus Stundenwerten lag der Wärmeverlust bei trägen Häusern teils bei der Hälfte oder fast null, weil das Gas einer Stunde erst Stunden später als Raumwärme ankommt. Ab 21 Heiztagen mit genug unterschiedlichem Wetter rechnet HeatPilot mit Tagesmitteln: dem Tag selbst, dem Vortag und dem Mittel der Woche davor, weil die Wände länger als einen Tag nachwirken. In den Testhäusern (auch schwere Wände, Start im Oktober und im Dezember bei stark wechselndem Wetter) liegt der Wärmeverlust innerhalb von 3–7 %. Mit deinen Daten ändert sich kaum etwas (139 W/K, Normheizlast 3,6 kW)
+- Der Tageswert geht nicht mehr verloren, wenn die Stunde 00–01 Uhr fehlt (Neustart um Mitternacht): Der Tag wird mit der nächsten gelernten Stunde abgeschlossen. Ein Urlaubstag wird nicht gelernt, zählt aber als Vortag
+- **Auskühlen:** Die Übertemperatur ohne Heizung kommt jetzt aus der Gasbilanz (Heizgrenze), statt aus wenigen Nächten mitgeschätzt zu werden. Gelernt wird erst, wenn die Gasbilanz plausibel ist. Die Dauer der schnellen Phase nach dem Abschalten lernt jede Anlage selbst (0,5–4 h, bei dir 1,5 h)
+- Neue Raummodelle starten mit der gemessenen Trägheit des Hauses statt mit einem Pauschalwert
+- „Brenner ohne Wärmebedarf“: Eine erkannte Warmwasserladung zählt auch ohne Ladesignal vom Kessel nicht mehr dazu
+
+**Warmwasser**
+- **Legionellenwärme bewusst nutzen.** Die Legionellenschaltung macht der Regler, egal was HeatPilot empfiehlt. Der Vergleichsspeicher der Strategie bekommt diese Wärme jetzt genauso; vorher sparte die Strategie auf dem Papier Verluste ein, die sie gar nicht vermeiden kann. Eine große Zapfung, die üblicherweise auf die Sonderladung folgt (die Wanne am Sonntagabend), gilt als dadurch gedeckt: keine Empfehlung mehr, vorher auf 60 °C zu laden, und sie zählt nicht als „zu kalt“. Das gilt nur für Zapfungen, die der Speicher warm beginnt und die erst durch ihre Größe unter das Minimum ziehen, und höchstens 12 Stunden nach der Sonderladung. Fällt die Sonderladung weg, lernt HeatPilot die Zapfung nach zwei Wochen wieder als eigene
+- Warmwasser-Ladekosten zählen jetzt auch den Anstieg nach dem Ladeende (Restwärme): Bei dieser Anlage sinken sie von 0,21 auf etwa 0,17–0,18 kWh/K. Der Bereitschaftsverlust bei 55 °C sinkt dadurch von 147 W auf etwa 120 W. Die Ladegeschwindigkeit zählt den Nachlauf mit; der Vorheizplan rechnet die Ladung dadurch realistisch länger (hier etwa 31 statt 47 K/h)
+- Zapfungen werden über ein 20-Minuten-Fenster erkannt, auch wenn das Wasser über mehrere Minuten fällt, etwa beim Duschen. In der letzten Woche kommen so drei Zapfungen dazu, die vorher fehlten. Auch während einer Ladung werden Zapfungen bei jeder Abtastrate gleich erkannt, auch im Minutentakt
+- Die angezeigten Auskühl-Messpunkte sind sauberer, weil Zapfungen nicht mehr als Auskühlen zählen: bei 50 °C 0,59 statt 0,70 K/h. Kleine Zapfungen unter der Erkennungsschwelle fließen nicht mehr ins gelernte Auskühlen ein
+- Speicherfühler mit 0,5- oder 1-K-Stufen: Die Fühlerstufe wird aus den Messwerten geschätzt und hebt die Zapf-Schwellen entsprechend an. Vorher galt jede einzelne Stufe als kleine Zapfung, das Auskühlen wurde als 0 gelernt, und es gab nie eine Empfehlung. Bei 0,1 K (deine Anlage) ändert sich nichts
+- Der Nachlauf nach dem Ladesignal wird über ein 5-Minuten-Fenster geprüft statt je Messpunkt: Im Minutentakt beendete jede flache Fühlerstufe die Ladung zu früh, Ladekosten und Bereitschaftsverlust lagen bei trägem Fühler bis zu 20 % zu hoch. Das 20-Minuten-Zapffenster ist auch bei 15-Minuten-Abtastung 20 min lang
+- Beim Ladebeginn zählt nur die halbe Brennerleistung des ersten Messpunkts zur Ladung (Rampe ab 0, wie am Ladeende). Unterbricht die Warmwasserladung im Winter den Heizbetrieb, zählte sonst ein halber Schritt Heizleistung mit, und die Ladekosten lagen 10–20 % zu hoch
+- Eine große Zapfung kurz vor einer langen Abwesenheit (alle duschen vor der Abfahrt) wurde beim Zurücknehmen der leeren Stunden doppelt gezählt und galt dann 60 Tage als wiederkehrend. Behoben
+- Die Warmwasser-Reserve steigt nur noch einmal je Zapfereignis (eine Wanne zählt nicht mehr doppelt) und nur, wenn mehr Reserve das Ziel vorher wirklich angehoben hätte – auch dann, wenn gerade keine Zapfung erwartet wurde und jemand zu Hause ist, denn dann ist Minimum + Reserve die Untergrenze. Für Haushalte ohne feste Duschzeiten ist das die einzige Korrektur; ohne sie bliebe die Empfehlung dauerhaft auf dem Minimum und die Ersparnis würde zu hoch ausgewiesen. Mit deinen Daten: Reserve 5,8 K, Empfehlung bei Anwesenheit 31–37 °C, Ersparnis 13,5 statt 20,4 %. Eine volle Wanne, für die ohnehin das Maximum empfohlen wird, treibt sie nicht nach oben; ist niemand zu Hause, im Urlaub oder sind alle lange weg, bleibt sie unverändert. Kleine Zapfungen unter 1 K wie Händewaschen zählen nicht als „zu kalt“
+- „Nächste Ladung“ kennt das Warmwasser-Zeitprogramm des Reglers (z. B. nachts 45 statt 55 °C) aus den Messwerten. Abends sagt HeatPilot jetzt die Ladung um 04:35 voraus statt fast einen Tag später
+- Die Warmwasser-Ersparnis rechnet Ladeenergie und Verluste über denselben Zeitraum. Legionellenladungen aus der Zeit, bevor die Ladekosten gelernt waren, zählen nicht mehr mit
+
+**Anwesenheit**
+- Lange Abwesenheit ohne eingetragenen Urlaub (über 3 Tage, oder über 1 Tag bei mehr als 300 km) wird je Person erkannt: Die Gewohnheit lernt die Reise nicht mehr als „nie zu Hause“ und steht nach der Heimkehr wieder so da wie vor der Abfahrt. Regelmäßige lange Abwesenheit – Wochenpendeln, eine weite Wochenendfahrt alle 1–2 Wochen – wird dagegen ab der zweiten Wiederholung zur selben Uhrzeit als Gewohnheit gelernt, mit Gewohnheits-Ankunft; Raummodelle und Zapfprofil pausieren dabei nicht
+- Sind alle lange weg, lernen auch Zapfprofil und Raummodelle nicht – das Zapfprofil auch nicht die leeren Stunden seit dem Weggehen. Urlaubsanzeige und Rückkehrplan bleiben davon unberührt
+- Meldet Home Assistant für eine Person „unknown“ oder „unavailable“, zählt sie nicht mehr als weg. In dieser Zeit lernt HeatPilot für sie nichts, und ein ausgefallener Tracker löst keine lange Abwesenheit aus. Ist sonst niemand sicher zu Hause, gilt der Haushalt als offen statt als „niemand zu Hause“: Die Warmwasser-Empfehlung hält dann Minimum plus Reserve, statt bei jedem kurzen Ausfall der Companion-App auf das Minimum zu gehen
+- Beim Neuberechnen nach einem Update lernt die Anwesenheit zuerst aus den eigenen gespeicherten Messwerten, danach aus der HA-Historie. Gewohnheiten bleiben so erhalten, auch wenn Home Assistant nur 10 Tage Historie hat
+- Die Gewohnheit sagt erst dann eine Ankunft voraus, wenn eine Viertelstunde mindestens zweimal gelernt wurde und mehrheitlich „zu Hause“ zeigt. Wer weit weg ist, wird frühestens nach der Fahrzeit erwartet, nicht mehr „in 15 Minuten“ aus 1500 km
+- Ist offen, ob jemand heimkommt, weil die Gewohnheit noch lernt, bleibt die Warmwasser-Empfehlung beim heutigen Soll statt auf das Minimum zu gehen
+- Die GPS-Ankunft kommt nicht mehr zu spät, wenn es zu Beginn der Fahrt langsam vorangeht oder Stau ist. Eine bestätigte Heimfahrt zieht die Ankunft vor. GPS-Schwankung am Arbeitsplatz ergibt keine Scheinankunft „in 1 h“ mehr: Als Heimfahrt zählt nur, wer seit Beginn der Annäherung mindestens 2 km näher ist oder mindestens halb so schnell wie gewohnt näher kommt
+- Das Heimfahrt-Tempo lernt nur noch aus der durchgehenden Annäherung: Standzeiten und GPS-Sprünge am Arbeitsplatz zählen nicht mehr mit, unplausible Werte werden verworfen
+- Die Heimkehr-Kontrolle zeigt die Treffsicherheit getrennt nach GPS und Gewohnheit. Kurze Abstecher wie ein Spaziergang zählen nicht mehr in die Kennzahl
+- Der Vorheizplan zeigt, woher die erwartete Ankunft kommt und wie sicher sie ist
+- Im Export steht die Anwesenheit jetzt wie die anderen Messwerte im 5-Minuten-Raster, weiterhin nur als Entfernung ohne Koordinaten
+
+**Heizen (Bedienung)**
+- Der Reiter ist jetzt wie die Tado-App aufgebaut: oben drei kleine Kacheln **Boost**, **Zeitplan** und **Ausschalten** (alle Räume), darunter die Räume als quadratische Kacheln, zwei nebeneinander – Feuchte, Ist-Temperatur groß, Name und Zustand; heizt der Raum, ist die Kachel orange, aus ist grau. Die Bedienung (Boost-Einstellungen, Soll, Betriebsart) liegt in Dialogen, die sich beim Antippen öffnen. Geschaltet wird weiterhin nur auf Knopfdruck
+
+**Zeitplan und Woche**
+- **Nachtabsenkung erkannt, auch wenn Tado nachmittags aus ist.** Bezug ist das Soll der zwei Stunden davor, höchstens aber das Tagesniveau, wenn Tado nachmittags wirklich heizt – so wird die Nacht auch erkannt, wenn der Abend wärmer eingestellt ist als der Tag. Nachtende ist, wenn das Soll morgens den Großteil des Wegs zurück geschafft hat. Mit deinen Daten: 7 von 7 Nächten erkannt statt 4 (21:35–04:55, aus)
+- **Tado-Frühstart aus „aus“:** Tado setzt das Soll dann an kalten Tagen früher, statt vorher das Ventil zu öffnen. Das wird jetzt als Frühstart erkannt, und die Verspätung wird am Zeitplanblock gemessen, nicht am früheren Sprung. Der Block wird je Wochentag bestimmt, sobald jeder Wochentag mindestens zweimal vorkommt; getrennte Blöcke (Sa 07:30 und So 09:00) werden nicht zusammengelegt
+- Ein kurzer Aussetzer (bis 15 min „aus“, danach dasselbe Soll) gilt nicht mehr als neuer Zeitplanblock – nach Zeit geprüft, bei 60-Sekunden-Abtastung genauso wie bei 5 Minuten
+- Geofencing: Steht Tado bei der Heimkehr auf „aus“ und heizt in den 15 min danach nicht hoch, ist das keine Geofencing-Heimkehr und zählt nicht als „zu kalt bei Ankunft“
+- Woche: Gas gesamt, Heizen und Warmwasser kommen aus denselben Stunden. Stunden ohne Warmwasser-Angabe zählen nur, wenn die Anlage gar kein Warmwasser-Signal hat. Brennerstarts zählen erst ab dem ersten aufgezeichneten Brennerereignis (bei einer Erstinstallation mit 10 Tagen Recorder zeigte die Woche sonst wochenlang zu wenige Starts)
+- Woche „Tado-Soll“ zeigt nur eingeschaltete Räume; neu ist „Tado aus“ (Anteil der Räume auf „aus“)
+- Woche „Gas wetterbereinigt“: Heizgas im Verhältnis zum Bedarf laut Hausmodell. Durchgehend nach Modell geheizt ergibt das genau den Wärmeverlust; Absenken macht es kleiner, Aufheizen größer
+- Beim Update wird der Lernstand einmal neu berechnet, die Empfehlungen werden neu bewertet
+
 ## 0.31.1
 - Logo: Die linke Kante der Flammenspitze ist jetzt wie die rechte mit einer Linie verbunden (Symbol, Logo, Browser-Symbol und Zertifikat)
 

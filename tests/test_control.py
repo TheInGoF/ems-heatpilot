@@ -65,3 +65,16 @@ def test_schedule_ends_timer_and_errors_per_room(tmp_path):
     assert not res["ok"] and res["done"] == ["climate.bad"] and "climate.flur" in res["errors"][0]
     assert ha.calls[-1] == ("climate", "set_hvac_mode", "climate.bad", {"hvac_mode": "auto"})
     assert c.active() == {}
+
+
+def test_all_rooms_off_in_one_call(tmp_path):
+    """Dialog „Ausschalten“: Betriebsart für mehrere Räume, ein einzelner Raum weiter als Text."""
+    ha, c = make(tmp_path)
+    res = run(c.set_mode(["climate.bad", "climate.flur"], "off"))
+    assert res["ok"] and res["done"] == ["climate.bad", "climate.flur"]
+    assert [x[2] for x in ha.calls] == ["climate.bad", "climate.flur"]
+    assert all(x[:2] == ("climate", "set_hvac_mode") and x[3] == {"hvac_mode": "off"} for x in ha.calls)
+    run(c.set_mode("climate.bad", "auto"))
+    assert ha.calls[-1][2:] == ("climate.bad", {"hvac_mode": "auto"})
+    with pytest.raises(ControlError):
+        run(c.set_mode(["climate.bad", "climate.garage"], "off"))

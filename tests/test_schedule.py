@@ -53,3 +53,27 @@ def test_temperatures_capped_and_vacation_ignored(tmp_path):
     assert eff.night_temp == 21.0 and eff.away_temp == 22.0  # höchstens 3 K über der Einstellung
     vac = schedule.learn(fill(tmp_path, vacation=True), NOW)
     assert vac["nights"] == 0 and vac["night_start"] is None and vac["away_temp"] is None
+
+
+def test_night_after_afternoon_off(tmp_path):
+    """Nachmittags „aus“, abends geheizt, nachts „aus“, morgens in zwei Stufen zurück."""
+    store = Store(tmp_path / "s.db")
+    t0 = int(START.timestamp())
+    for i in range(26 * 288):
+        ts = t0 + i * 300
+        d = datetime.fromtimestamp(ts)
+        m = d.hour * 60 + d.minute
+        if 18 * 60 <= m < 21 * 60 + 30 or 6 * 60 + 30 <= m < 12 * 60:
+            sp = 21.0
+        elif 5 * 60 + 30 <= m < 6 * 60 + 30:
+            sp = 13.0
+        else:
+            sp = None  # Tado „aus“: nur die Raumtemperatur kommt
+        store.add_room_samples([(ts, f"climate.r{k}", 19.0, sp, 0.0, None) for k in range(3)])
+        store.add_person_samples([(ts, "person.a", 1, 0.0)])
+        store.add_sample(ts, {"vacation": 0})
+    store.commit()
+    learned = schedule.learn(store, NOW)
+    assert learned["nights"] >= 20
+    assert learned["night_start"] == "21:30" and learned["night_end"] == "06:30"
+    assert learned["night_temp"] == 5.0

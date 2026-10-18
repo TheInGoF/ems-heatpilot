@@ -100,6 +100,8 @@ def _arrivals(home: dict[int, bool], vacation: set[int]) -> list[int]:
 
 
 PREHEAT_VALVE = 20  # % Ventil: darunter heizt Tado praktisch nicht
+DROPOUT_MIN = 15    # so kurz „aus“ ist ein Aussetzer, kein Zeitplanblock – und so lange darf Tado bei der
+#                     Heimkehr noch „aus“ sein, bevor es das Soll anhebt (Geofencing). Nach Zeit, nicht Messpunkten
 
 
 def _first_warm(series, i0: int, target: float, horizon_s: int = 4 * 3600) -> int | None:
@@ -122,6 +124,17 @@ def schedule_events(series, home, vacation) -> list[dict]:
             continue
         if target - prev_target < RISE_K or not home.get(ts, True):
             continue
+        from_off = prev_target <= OFF_TEMP
+        if from_off:  # kurzer Aussetzer (≤ DROPOUT_MIN „aus“, danach dasselbe Soll): kein neuer Zeitplanblock
+            back = None
+            for tj, _, tg, _ in reversed(series[:i]):  # nach Zeit zurück, nicht nach Messpunkten (Abtastrate)
+                if ts - tj > DROPOUT_MIN * 60:
+                    break
+                if tg is not None and tg > OFF_TEMP:
+                    back = tg
+                    break
+            if back is not None and abs(back - target) < 0.1:
+                continue
         if target - temp < 0.8:  # war schon (fast) warm
             warm_since = None
             for j in range(i - 1, -1, -1):
@@ -137,7 +150,7 @@ def schedule_events(series, home, vacation) -> list[dict]:
                        and tempj is not None and tgtj is not None and tempj >= tgtj - WARM_MARGIN]
             heated = bool(preheat) and warm_since is not None
             events.append({"ts": ts, "late_min": 0.0, "early_open": heated, "reached": True,
-                           "warm_anyway": not heated,
+                           "warm_anyway": not heated, "from_off": from_off, "warm_at": ts,
                            "warm_ahead_min": (ts - max(warm_since, min(preheat))) / 60 if heated else 0.0})
             continue
         warm_at = _first_warm(series, i, target)
@@ -148,9 +161,57 @@ def schedule_events(series, home, vacation) -> list[dict]:
             v is not None and v >= 20 and tp is not None and tgt is not None and tp >= tgt - WARM_MARGIN
             for t, tp, tgt, v in series[max(0, i - 12):i] if ts - t <= 3600
         )
-        events.append({"ts": ts, "late_min": late, "early_open": early_open,
-                       "reached": warm_at is not None, "warm_ahead_min": 0.0})
+        events.append({"ts": ts, "late_min": late, "early_open": early_open, "from_off": from_off,
+                       "warm_at": warm_at, "reached": warm_at is not None, "warm_ahead_min": 0.0})
+    _early_start_from_off(events)
     return events
+
+
+def _early_start_from_off(events: list[dict]) -> None:
+    """Tado-Frühstart aus „aus“: Tado setzt dann das neue Soll früher, statt vorher das Ventil zu öffnen.
+
+    Der Zeitplanblock liegt deshalb beim spätesten Anstieg innerhalb von 90 min – je kälter der Raum,
+    desto früher springt das Soll. Verspätung und Frühstart werden an diesem Block gemessen, sonst
+    sähe der Frühstart wie ein zu spät beginnender Block aus.
+
+    Zusammengefasst wird je Wochentag, sobald jeder vorkommende Wochentag der Art (Werktag bzw.
+    Wochenende) mindestens zwei Anstiege hat – Tado erlaubt je Tag eigene Blöcke (Sa 07:30, So 09:00;
+    Fr später als Mo–Do), die sonst zu einem falschen Block verschmölzen. Mit weniger Daten wie
+    bisher Werktage bzw. Wochenende gemeinsam.
+    """
+    per_day: dict[int, list[dict]] = defaultdict(list)
+    for e in events:
+        if e["from_off"]:
+            per_day[_local(e["ts"]).weekday()].append(e)
+    groups: list[list[int]] = []
+    for weekday in (True, False):
+        days = [d for d in range(7) if (d < 5) == weekday]
+        if all(len(per_day[d]) >= 2 for d in days if per_day[d]):
+            groups += [[d] for d in days]
+        else:
+            groups.append(days)
+    for days in groups:
+        offs = sorted((e for d in days for e in per_day[d]), key=lambda e: _minute(e["ts"]))
+        cluster: list[dict] = []
+        for e in offs + [None]:
+            if e is not None and (not cluster or _minute(e["ts"]) - _minute(cluster[0]["ts"]) <= 90):
+                cluster.append(e)
+                continue
+            if len(cluster) >= 2:
+                nominal = max(_minute(c["ts"]) for c in cluster)
+                for c in cluster:
+                    shift = nominal - _minute(c["ts"])
+                    c["block_ts"] = c["ts"] + shift * 60
+                    if shift >= 10:
+                        c["early_open"] = True
+                    if c["warm_at"] is not None:
+                        c["late_min"] = max((c["warm_at"] - c["block_ts"]) / 60, 0.0)
+            cluster = [e] if e is not None else []
+
+
+def _minute(ts: int) -> int:
+    d = _local(ts)
+    return d.hour * 60 + d.minute
 
 
 def arrival_events(series, arrivals) -> list[dict]:
@@ -163,6 +224,18 @@ def arrival_events(series, arrivals) -> list[dict]:
         _, temp, target, _ = series[k]
         if temp is None or target is None:
             continue
+        if target <= OFF_TEMP:
+            # Tado bei der Ankunft (noch) aus: kurz nachschauen, sonst ist das keine Geofencing-Heimkehr
+            later = None
+            for s in series[k:]:
+                if s[0] - a > DROPOUT_MIN * 60:
+                    break
+                if s[2] is not None and s[2] > OFF_TEMP:
+                    later = s[2]
+                    break
+            if later is None:
+                continue
+            target = later
         lead = None
         for j in range(k, 0, -1):
             tj, _, tgt, _ = series[j]
@@ -346,7 +419,7 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
         # 1. Zeitplan / Frühstart – nach Uhrzeit-Block gruppiert (Werktag/Wochenende, halbe Stunde)
         groups: dict[tuple, list[dict]] = defaultdict(list)
         for ev in schedule_events(series, home, vacation):
-            d = _local(ev["ts"])
+            d = _local(ev.get("block_ts", ev["ts"]))
             groups[(d.weekday() < 5, d.hour * 2 + d.minute // 30)].append(ev)
         for (weekday, slot), evs in groups.items():
             if len(evs) < MIN_EVENTS:
@@ -430,7 +503,7 @@ def build(eng, now_ts: int | None = None) -> list[dict]:
     return out
 
 
-ADVICE_VERSION = 2  # 2 (0.25.4): „unnötig früh warm“ nur noch bei echtem Vorheizen
+ADVICE_VERSION = 3  # 2 (0.25.4): „unnötig früh warm“ nur noch bei echtem Vorheizen · 3 (0.32): Frühstart aus „aus“
 
 
 def track(store, advice: list[dict], now_ts: int | None = None) -> list[dict]:

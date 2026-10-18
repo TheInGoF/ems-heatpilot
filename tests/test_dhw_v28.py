@@ -25,7 +25,7 @@ def test_nominal_power_from_settings_is_used_for_charges():
     cfg.boiler_nominal_kw = 18.0
     eng = Engine(cfg, Store(Path(tempfile.mkdtemp()) / "n.db"), Discovered())  # Kessel liefert keine Nennleistung
     t0 = int(datetime(2026, 10, 5, 4, 0).timestamp())
-    temps = [44.0, 44.0, 47.5, 51.0, 54.5, 56.0, 56.0, 55.9]
+    temps = [44.0, 44.0, 47.5, 51.0, 54.5, 56.0, 56.0, 55.9, 55.9]  # 6 min ohne Anstieg: Nachlauf vorbei (0.32c)
     for i, temp in enumerate(temps):
         on = 2 <= i <= 5
         s = {"dhw_temp": temp, "burner_on": int(on), "burner_pow": 60.0 if on else 0.0, "flow": 70.0 if on else 40.0,

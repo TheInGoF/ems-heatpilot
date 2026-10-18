@@ -72,7 +72,7 @@ def test_arrival_logged_with_predictions():
     checks = {c["before_min"]: c for c in a["checks"]}
     assert checks[15]["source"] == "gps"
     assert abs(checks[15]["error_min"]) <= 10
-    assert p.arrival_quality()[15]["n"] == 1
+    assert p.arrival_quality()[15]["gps"]["n"] == 1  # seit 0.32 je Quelle
     assert p.status(t)["state"] == "zuhause"
     d = PersonLearner.from_dict(p.to_dict())
     assert d.arrivals == p.arrivals
@@ -100,3 +100,50 @@ def test_json_clean_drops_nan_and_infinity():
     data = {"a": float("nan"), "b": [1.0, float("inf")], "c": datetime(2026, 1, 1, 12, 0)}
     assert clean(data) == {"a": None, "b": [1.0, None], "c": "2026-01-01T12:00:00"}
     assert json.loads(json_response(data).text)["b"] == [1.0, None]
+
+
+def test_week_grids_use_the_same_hours_and_real_setpoints(tmp_path):
+    """Export 18.10.: Gas gesamt ≠ Heizen + Warmwasser, Starts halbiert, Soll 9 °C, gas_k aus gasfreien Stunden."""
+    store = Store(tmp_path / "x.db")
+    start = _monday_ts()
+    rows = []
+    for i in range(28 * 24):
+        ts = start + i * 3600
+        known = i >= 14 * 24  # erste zwei Wochen: Langzeitstatistik ohne Warmwasser-Angabe
+        rows.append((ts, 5.0, 21.0, 2.0, 0.25 if known else None, 1.0, 0.0, None, 0.25 if known else None))
+    store.add_hourly(rows)
+    store.put("history_start", start + 14 * 86400)
+    for week in range(4):  # montags 06 Uhr ein Start – aufgezeichnet erst ab der dritten Woche
+        if week >= 2:
+            store.add_burner_event(start + week * 7 * 86400 + 6 * 3600, True)
+            store.add_burner_event(start + week * 7 * 86400 + 6 * 3600 + 600, False)
+        mon5 = start + week * 7 * 86400 + 5 * 3600
+        for room in ("climate.a", "climate.b", "climate.c"):  # zwei Räume aus, einer 21 °C bzw. alle aus
+            target = 21.0 if (room == "climate.a" and week % 2) else None
+            store.add_room_samples([(mon5 + 60, room, 20.0, target, 0, None)])
+    store.commit()
+    out = weekly.collect(store, start + 28 * 86400, 28)
+    g, h, d = (out["metrics"][k]["per_day"][0] for k in ("gas", "heat", "dhw"))
+    assert abs(g - (h + d)) < 0.2 and out["metrics"]["gas"]["n"][0][0] == 2
+    assert out["metrics"]["starts"]["grid"][0][6] == 1.0
+    target = out["metrics"]["target"]["grid"][0][5]
+    assert target in (None, 21.0)  # nie ein Mischwert wie 9 °C
+    assert out["metrics"]["off"]["grid"][0][5] is not None
+
+
+def test_gas_k_counts_unheated_hours_as_saving():
+    from heatpilot.store import Store as S
+    import tempfile
+    from pathlib import Path
+    store = S(Path(tempfile.mkdtemp()) / "k.db")
+    start = _monday_ts()
+    rows = [(start + i * 3600, 5.0, 21.0, 0.0 if (i % 24) < 6 else 2.4 - 0.9, 0.0, 1.0, 0.0, None, 0.0)
+            for i in range(14 * 24)]
+    store.add_hourly(rows)
+    store.commit()
+    house = HouseModel()
+    house.rls.theta, house.rls.updates = [0.15, 3.0, -0.9], 500
+    out = weekly.collect(store, start + 14 * 86400, 14, house, house_ok=True)
+    gk = out["metrics"]["gas_k"]["grid"]
+    assert gk[0][3] == 0          # nachts aus: kein Gas, kein Schein-Wärmeverlust
+    assert gk[0][12] == round(150 * 1.5 / (0.15 * 16 - 0.9))

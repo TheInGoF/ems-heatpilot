@@ -419,8 +419,8 @@ def _table(rows: list, step: int | None = EXPORT_STEP_S, key: str | None = None)
 def export(app, days: int = 14) -> dict:
     """Gelernte Werte plus die Daten, aus denen sie gelernt wurden – zum Nachrechnen.
 
-    Ohne GPS-Koordinaten (nur Entfernungen), ohne Zugangsdaten. Tabellen im Spaltenformat
-    und auf 5 min verdichtet, damit die Datei klein bleibt.
+    Ohne GPS-Koordinaten (nur Entfernungen), ohne Zugangsdaten. Tabellen im Spaltenformat;
+    Messwerte, Räume und Anwesenheit auf 5 min verdichtet, damit die Datei klein bleibt.
     """
     eng = app.eng
     since = int(time.time()) - days * 86400
@@ -429,7 +429,8 @@ def export(app, days: int = 14) -> dict:
         "created": datetime.now().astimezone().isoformat(timespec="seconds"),
         "version": __version__,
         "hinweis": "Gelernte Werte von EMS HeatPilot mit Lerndaten der letzten Tage. Ohne GPS-Koordinaten. "
-                   "Tabellen: 'spalten' + 'zeilen', Messwerte auf 5 min verdichtet.",
+                   "Tabellen: 'spalten' + 'zeilen'; messwerte, raeume_messwerte und anwesenheit (nur Entfernungen) "
+                   "auf 5 min verdichtet, stundenwerte, tageswerte, lernkurve und brenner unverdichtet.",
         "tage": days,
         "settings": app.cfg.to_raw(),
         "discovered": eng.found.as_dict(private=False),
@@ -445,7 +446,7 @@ def export(app, days: int = 14) -> dict:
         "messwerte": _table(q("SELECT * FROM samples WHERE ts >= ? ORDER BY ts", (since,))),
         "raeume_messwerte": _table(q("SELECT * FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)), key="room"),
         "anwesenheit": _table(q("SELECT ts, person, home, dist_km FROM person_samples WHERE ts >= ? ORDER BY ts",
-                                (since,)), 900, key="person"),
+                                (since,)), key="person"),
         "brenner": _table(q("SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)), None),
         # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen
         "selbsttest": _safe(lambda: self_check(app)),
@@ -455,7 +456,8 @@ def export(app, days: int = 14) -> dict:
         "vorlauf_studie": _safe(eng.flow_study),
         "woche": _safe(eng.week),
         "personen": _safe(lambda: {p: {"heimfahrt_kmh": round(l.approach_speed_kmh, 1), "heimfahrten": l.arrivals_learned,
-                                       "gewohnheit_7x24": l.habit_hours(), "heimkehr_kontrolle": l.arrivals,
+                                       "gewohnheit_7x24": l.habit_hours(), "lange_weg": l.long_away,
+                                       "heimkehr_kontrolle": l.arrivals,
                                        "vorhersage_guete": l.arrival_quality()}
                                    for p, l in eng.persons.items()}),
     }
@@ -476,7 +478,7 @@ def export_estimate(app, days: int) -> int:
     n = lambda sql, *p: eng.store.query(sql, p)[0]["n"]  # noqa: E731
     samples = n("SELECT COUNT(DISTINCT ts - ts % 300) AS n FROM samples WHERE ts >= ?", since)
     rooms = n("SELECT COUNT(DISTINCT (ts - ts % 300) || room) AS n FROM room_samples WHERE ts >= ?", since)
-    persons = n("SELECT COUNT(DISTINCT (ts - ts % 900) || person) AS n FROM person_samples WHERE ts >= ?", since)
+    persons = n("SELECT COUNT(DISTINCT (ts - ts % 300) || person) AS n FROM person_samples WHERE ts >= ?", since)
     hourly = n("SELECT COUNT(*) AS n FROM hourly")
     return 60_000 + samples * 125 + rooms * 55 + persons * 40 + hourly * 50
 

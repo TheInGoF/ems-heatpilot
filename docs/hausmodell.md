@@ -21,6 +21,35 @@ Gas  =  H · (T_innen − T_außen)  +  C · ΔT_innen/Δt  +  b
 
 Alle drei Werte (H, C, b) lernt HeatPilot gleichzeitig aus den Stundenwerten.
 
+### Tageswerte für Wärmeverlust und Fremdwärme
+
+Aus Stundenwerten allein lassen sich H und C schlecht trennen: In einem Haus mit schweren Wänden
+oder Fußbodenheizung kommt das Gas einer Stunde erst Stunden später als Raumwärme an. In
+künstlichen Testhäusern lag H aus Stundenwerten deshalb teils bei der Hälfte oder fast null.
+Deshalb lernt HeatPilot **H und b zusätzlich aus Tagesmitteln**, mit dem Vortag und der Woche
+davor als weiteren Eingängen (die Wände nehmen Wärme über mehrere Tage auf und geben sie wieder ab):
+
+```
+Heizgas_Tag  =  H₀ · ΔT_Tag  +  H₁ · ΔT_Vortag  +  H₂ · Mittel(ΔT der Tage −2 bis −7)  +  b
+H = H₀ + H₁ + H₂     (Beharrung: alle Tage gleich)
+```
+
+Das Mittel bildet sich aus den vorhandenen Tagen (Lücken werden übersprungen); gelernt wird ein Tag,
+wenn der Vortag und mindestens einer der Tage −2 bis −7 vorliegen. Nur mit dem Vortag lag H bei
+trägen Häusern (Neubau, Fußboden) 20–25 % zu tief, wenn das Lernen im Dezember bei stark
+wechselndem Wetter beginnt – die Wände wirken länger als einen Tag nach.
+
+Die Tageswerte gelten, sobald **21 Heiztage** gelernt sind und der Unterschied innen–außen
+zwischen den Tagen um mindestens **2 K streut** (sonst ist H nicht bestimmt). Ab dann kommen
+Wärmeverlust und Fremdwärme daraus, vorher aus den Stundenwerten. Ein Tag zählt nur mit
+mindestens 20 Stunden und nur in der Heizperiode; ein Urlaubstag wird nicht gelernt, sein
+Unterschied innen–außen zählt aber als Zustand für die Folgetage. Ein Tag wird abgeschlossen,
+sobald eine Stunde des nächsten Tages gelernt wird – auch wenn die Stunde 00–01 Uhr fehlt
+(Neustart um Mitternacht). Die Tageswerte haben ein Gedächtnis von etwa einer Heizsaison
+(Vergessensfaktor 0,995). In den Testhäusern (Altbau, Neubau, Fußboden, durchgeheizt, schwere
+Wände) liegt H so innerhalb von 3 % bei Start im Oktober und innerhalb von 7 % bei Start im
+Dezember mit Tagesmitteln von ±6 K.
+
 ### Woher die Zahlen kommen
 
 - **Gas:** Zählerstand des gewählten Gaszählers. In m³ gemessen, rechnet HeatPilot mit
@@ -106,14 +135,26 @@ Direkt nach dem Abschalten geben Raumluft und Heizkörper ihre Wärme schnell ab
 kühlen nur noch die Wände langsam aus. Deshalb gilt mit t = Stunden seit der letzten Stunde mit Gas:
 
 ```
-ΔT_innen/Δt  =  −k · (T_innen − T_außen)  +  g  −  A · e^(−t / 1,5 h)
-Trägheit τ = 1/k (Wände)    Übertemperatur ohne Heizung = g/k    schneller Abfall = A · 1,5 h
+ΔT_innen/Δt  =  −k · (T_innen − T_außen − e)  −  A · e^(−t / τ_s)
+Trägheit τ = 1/k (Wände)    schneller Abfall = A · τ_s
 ```
+
+- **e – Übertemperatur ohne Heizung:** so viel wärmer als außen hält die Fremdwärme das Haus.
+  Sie wird nicht hier geschätzt, sondern kommt aus der Gasbilanz: `e = Heizgrenze = −b / H`
+  (höchstens 10 K). Aus wenigen Nächten lassen sich k und e nicht sauber trennen – ein zu großes
+  e ergab sonst eine viel zu lange Trägheit. Deshalb lernt das Auskühlen erst, wenn die
+  Gasbilanz in den Leitplanken liegt.
+- **τ_s – Dauer der schnellen Phase:** je Haus verschieden (leichte Heizkörper: Minuten,
+  Fußboden oder schwere Heizkörper: Stunden). HeatPilot rechnet fünf Kandidaten parallel
+  (0,5 / 1 / 1,5 / 2,5 / 4 h) und nimmt den mit dem kleinsten mittleren Fehler der letzten
+  Wochen; bis genug Nächte da sind, 1,5 h.
 
 An echten Daten (Herbst 2026) passte eine einzige Zeitkonstante schlecht: In den ersten
 Stunden kühlte das Haus schneller, nach einem Tag ohne Heizung nur noch halb so schnell, wie
-sie vorhersagte. Mit zwei Phasen ist der Fehler um 30 % kleiner. Die Übertemperatur ohne Heizung
-passt dann auch zur Heizgrenze aus der Gasbilanz.
+sie vorhersagte. Mit zwei Phasen ist der Fehler um 30 % kleiner.
+
+**Räume:** Ein neues Raummodell startet beim Auskühlen mit der Trägheit des Hauses (sofern
+schon gemessen), statt mit einem festen typischen Wert.
 
 Gültig ab 30 solchen Stunden. Bis dahin zeigt HeatPilot vorläufig `C/H` aus der Gasbilanz –
 das beschreibt aber eher die schnell reagierende Wärme der Heizkörper und der Luft und ist

@@ -3,7 +3,8 @@
 1. Langzeitstatistik (stündlich, bleibt in HA dauerhaft): Gas, Außen- und
    Raumtemperaturen -> Hausmodell lernt sofort aus Monaten an Daten.
 2. Recorder-Historie (Standard 10 Tage, je nach ``purge_keep_days``):
-   alle Einzelwerte -> Raummodelle, Takten, Anwesenheitsmuster.
+   alle Einzelwerte -> Raummodelle, Takten, Anwesenheitsmuster. Beim Neuberechnen
+   lernen die Personen davor aus den eigenen gespeicherten Messwerten (oft länger als 10 Tage).
 
 Kein Export nötig – das Add-on holt sich alles selbst.
 """
@@ -12,6 +13,7 @@ from __future__ import annotations
 
 import logging
 import time
+from itertools import groupby
 from datetime import datetime, timedelta, timezone
 
 from . import plausibility
@@ -115,6 +117,31 @@ class _Cursor:
         return self.s[self.i][1], self.s[self.i][2]
 
 
+def observe_stored_persons(eng: Engine, until: int | None = None) -> int:
+    """Neuberechnung: Personen aus den eigenen Messwerten vor ``until`` nachlernen (Gewohnheit, Reisen).
+
+    Gleicher Weg wie live (``observe_persons`` je Zeitpunkt, Personen in derselben Reihenfolge,
+    Urlaub wie damals gespeichert). Ab ``until`` liefert die HA-Historie die Werte – nichts doppelt.
+    """
+    eng._persons_from_store = True
+    where, params = ("WHERE ts < ?", (until,)) if until is not None else ("", ())
+    rows = eng.store.query(f"SELECT ts, person, home, dist_km FROM person_samples {where} ORDER BY ts", params)
+    if not rows:
+        return 0
+    vacation = {r["ts"] for r in eng.store.query(f"SELECT ts FROM samples {where} {'AND' if where else 'WHERE'} "
+                                                  "vacation = 1", params)}
+    order = {p: i for i, p in enumerate(eng.found.persons)}
+    count = 0
+    for ts, group in groupby(rows, key=lambda r: r["ts"]):
+        persons = sorted(((r["person"], r["home"], r["dist_km"]) for r in group if r["person"] in order),
+                         key=lambda x: order[x[0]])
+        if persons:
+            eng.observe_persons(ts, persons, ts in vacation)
+            count += 1
+    log.info("Anwesenheit: %d eigene Messpunkte vor der HA-Historie nachgelernt", count)
+    return count
+
+
 async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     if days <= 0:
         return 0
@@ -146,9 +173,11 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     # Was HA liefert, ersetzt die gespeicherten Werte desselben Zeitraums – sonst stünden nach
     # geändertem Abtastintervall zwei Raster nebeneinander und Brennerereignisse doppelt
     firsts = [ser[0][0] for ser in series.values() if ser]
+    data_start = None
     if firsts:
         data_start = max(int(min(firsts)), start_ts)
         eng.store.delete_range(data_start, end_ts)
+    observe_stored_persons(eng, data_start)  # ältere eigene Werte zuerst, wie live der Reihe nach
 
     # Brennerereignisse exakt aus der Historie
     burner = f.boiler.get("burner_on")
@@ -171,20 +200,19 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
                 eng.states[ent] = {"state": hit[0], "attributes": hit[1]}
         if not eng.states:
             continue  # vor Beginn der Historie: keine leeren Messpunkte anlegen
-        eng.update_live(ts, record_events=False)
         sample, rooms, persons = eng.snapshot()
         eng.count_rejected(ts)
         eng.infer_dhw(ts, sample)
+        eng._dhw_now = int(bool(sample.get("dhw")))
+        eng.update_live(ts, record_events=False)  # wie live: nach der Ladeerkennung
         eng.add_solar(ts, sample)
         rooms = eng.filter_room_spikes(ts, rooms)
         eng.track_vacation_return(ts, persons)
         sample["vacation"] = int(eng.on_vacation(ts))
+        sample["away_long"] = int(eng.observe_persons(ts, persons, bool(sample["vacation"])))  # wie live
         eng.store.add_sample(ts, sample)
         eng.store.add_room_samples((ts, *r) for r in rooms)
         eng.store.add_person_samples((ts, *p) for p in persons)
-        now = local(ts)
-        for p, is_home, dist in persons:
-            eng.persons[p].observe(now, bool(is_home), dist, learn=not sample["vacation"])
         eng.dhw_step(ts, sample)
         count += 1
     eng.store.commit()
@@ -206,6 +234,7 @@ def replay(eng: Engine) -> None:
     """
     eng.house = HouseModel()
     eng.__dict__.pop("_dhw_base", None)  # Warmwasser-Profil aus der frisch geladenen Langzeitstatistik
+    eng.__dict__.pop("_house_day_open", None)  # Tageswerte von vorn
     eng.store.db.execute("DELETE FROM snapshots")
     hist_start = eng.store.get("history_start")
     room_step = int(ROOM_STEP_H * 3600)
@@ -213,8 +242,12 @@ def replay(eng: Engine) -> None:
     if hist_start is not None:
         h0 = hist_start - hist_start % 3600 + 3600
         hours = sorted({h for h in hours if h < h0} | set(range(h0, eng._last_hour, 3600)))
+    seeded = False
     for h in hours:
         if hist_start is not None and h >= hist_start:
+            if not seeded:  # Hausmodell aus der Langzeitstatistik steht: Raum-Startwerte daraus
+                eng.seed_room_priors()
+                seeded = True
             for st in range(h, h + 3600, room_step):
                 eng.learn_rooms(st, st + room_step)
             eng.aggregate_hour(h, learn=True)
@@ -237,6 +270,8 @@ async def run_backfill(ha: HAClient, eng: Engine) -> None:
         await backfill_history(ha, eng, eng.cfg.backfill_days)
     except Exception as err:  # noqa: BLE001
         log.warning("Historie nicht geladen: %s", err)
+    if not eng.__dict__.get("_persons_from_store"):  # ohne HA-Historie: alle eigenen Werte
+        observe_stored_persons(eng)
     replay(eng)
     eng.save()
     eng.store.put("backfill_done", True)

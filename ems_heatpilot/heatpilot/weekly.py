@@ -7,14 +7,17 @@ Alles aus den gespeicherten Stunden der letzten Wochen, je Wochentag und Stunde 
   Gas in der Zeit, in der der Speicher lädt.
 * **Gas wetterbereinigt** (W je Kelvin innen–außen): Heizgas ohne den Einfluss kalter
   oder milder Wochen – zeigt, ob ein Wochentag wirklich mehr braucht oder nur kälter war.
-  Mit plausiblem Hausmodell wird der Achsabschnitt herausgerechnet (die Fremdwärme also wieder
-  hinzugezählt, der Wert entspricht dem Wärmeverlust) und nur Stunden deutlich unter der
-  Heizgrenze zählen – sonst sähen kalte Tage teurer aus.
+  Je Feld Heizgas im Verhältnis zum Bedarf laut Hausmodell (Summe zu Summe), mal Wärmeverlust:
+  gleich H, wenn genau nach Modell durchgeheizt wird; Absenkung macht es kleiner. Ohne
+  Hausmodell Heizgas je Grad-Stunde (Σ Gas / Σ ΔT).
 * **Abweichung vom Hausmodell** (kW): gemessen minus vom Modell erwartet. Das Hausmodell
   kennt keinen Wochentag; ein festes Muster hier (z. B. Sonntag mittags weniger, weil gekocht
   wird) erklärt es noch nicht.
-* **Brennerstarts**, **zu Hause** (Anteil der Zeit), **Tado-Soll** (Median der Räume, „aus“ =
-  5 °C) und **Ventile** (Mittel, auch je Raum).
+* **Brennerstarts** (nur Stunden mit aufgezeichneten Brennerdaten), **zu Hause** (Anteil der
+  Zeit), **Tado-Soll** (Median der eingeschalteten Räume, nur wirklich eingestellte Werte),
+  **Tado aus** (Anteil der Räume auf „aus“) und **Ventile** (Mittel, auch je Raum).
+* Gas, Heizen und Warmwasser beruhen auf denselben Stunden: Stunden aus der Langzeitstatistik
+  ohne Warmwasser-Angabe zählen nicht (außer die Anlage hat gar kein Warmwasser-Signal).
 """
 
 from __future__ import annotations
@@ -39,6 +42,7 @@ METRICS = {
     "starts": ("Brennerstarts", "je h"),
     "home": ("Jemand zu Hause", "%"),
     "target": ("Tado-Soll (Median)", "°C"),
+    "off": ("Tado aus", "%"),
     "valve": ("Ventile", "%"),
 }
 SUM_METRICS = ("gas", "heat", "dhw", "model", "starts")  # je Tag aufsummiert sinnvoll
@@ -49,14 +53,29 @@ def _cell(ts: int) -> tuple[int, int]:
     return d.weekday(), d.hour
 
 
-def _grid(values: dict[tuple[int, int], list[float]], digits: int) -> tuple[list, list]:
+def _grid(values: dict[tuple[int, int], list[float]], digits: int, agg=None) -> tuple[list, list]:
     grid, counts = [], []
     for d in range(7):
         row, nrow = [], []
         for h in range(24):
             v = values.get((d, h), [])
-            row.append(round(sum(v) / len(v), digits) if len(v) >= MIN_N else None)
+            x = (agg(sorted(v)) if agg else sum(v) / len(v)) if len(v) >= MIN_N else None
+            row.append(None if x is None else round(x, digits))
             nrow.append(len(v))
+        grid.append(row)
+        counts.append(nrow)
+    return grid, counts
+
+
+def _ratio_grid(sums: dict[tuple[int, int], list[float]], scale: float) -> tuple[list, list]:
+    """Je Feld Σ Zähler / Σ Nenner · scale (Gas wetterbereinigt) – gasfreie Stunden zählen mit 0 Gas mit."""
+    grid, counts = [], []
+    for d in range(7):
+        row, nrow = [], []
+        for h in range(24):
+            num, den, n = sums.get((d, h), (0.0, 0.0, 0))
+            row.append(round(scale * num / den) if n >= MIN_N and den > 1e-6 else None)
+            nrow.append(n)
         grid.append(row)
         counts.append(nrow)
     return grid, counts
@@ -74,8 +93,11 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         "WHERE ts >= ? ORDER BY ts",
         (since,))}
     vacation = {ts for ts, r in hourly.items() if (r["vacation_frac"] or 0) > 0.5}
-    offset = house.offset_kw if house is not None and house_ok else 0.0
-    min_dt = max(house.heating_limit_k or 0.0, 0.0) + 2 if house is not None and house_ok else 3.0
+    # ohne jedes Warmwasser-Signal gilt alles Gas als Heizgas (wie bei der Ersparnis)
+    track = any(r["dhw_energy_frac"] is not None or r["dhw_frac"] is not None for r in hourly.values())
+    use_model = house is not None and house_ok
+    gas_k_sum: dict[tuple[int, int], list[float]] = defaultdict(lambda: [0.0, 0.0, 0])  # Σ Gas, Σ Bedarf/ΔT, n
+    measured: set[int] = set()
     for ts, r in hourly.items():
         if ts in vacation:
             continue
@@ -85,20 +107,27 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         gas = r["gas_kwh"]
         if gas is None:
             continue
-        v["gas"][c].append(gas)
         # Warmwasser-Anteil nach Energie (Brennerleistung), ältere Stunden nach Zeit; ohne Angabe
-        # (Langzeitstatistik) lässt sich Heizen/Warmwasser nicht trennen
+        # (Langzeitstatistik) lässt sich Heizen/Warmwasser nicht trennen – dann zählt die Stunde nicht
         frac = r["dhw_energy_frac"] if r["dhw_energy_frac"] is not None else r["dhw_frac"]
         if frac is None:
-            continue
+            if track:
+                continue
+            frac = 0.0
+        measured.add(ts)
         frac = min(max(frac, 0.0), 1.0)
+        v["gas"][c].append(gas)
         v["heat"][c].append(gas * (1 - frac))
         v["dhw"][c].append(gas * frac)
         if r["t_in"] is None or r["t_out"] is None:
             continue
         dt = r["t_in"] - r["t_out"]
-        if dt >= max(min_dt, 3.0) and r["t_out"] <= 15:
-            v["gas_k"][c].append((gas * (1 - frac) - offset) * 1000 / dt)
+        if dt >= 3.0 and r["t_out"] <= 15:
+            acc = gas_k_sum[c]
+            acc[0] += gas * (1 - frac)
+            # Bedarf laut Modell (ohne Speicher) in kW, ohne Modell die Gradstunden in K
+            acc[1] += max(house.h_kw_per_k * dt + house.offset_kw, 0.0) if use_model else dt
+            acc[2] += 1
         before, after = hourly.get(ts - 3600), hourly.get(ts + 3600)
         if (house is not None and r["t_out"] <= house.max_learn_outdoor and before and after
                 and before["t_in"] is not None and after["t_in"] is not None):
@@ -112,32 +141,52 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         if r["state"] == 1 and prev != 1:
             starts[r["ts"] - r["ts"] % 3600] += 1
         prev = r["state"]
-    for ts in hourly:  # nur Stunden, die es gibt – sonst zählen Lücken als „0 Starts“
-        if ts not in vacation and hourly[ts]["gas_kwh"] is not None:
-            v["starts"][_cell(ts)].append(starts.get(ts, 0))
+    # nur Stunden mit aufgezeichneten Brennerdaten – Lücken und Stunden aus der Langzeitstatistik
+    # zählen sonst als „0 Starts“. Ab Beginn der Recorder-Historie, frühestens ab dem ersten
+    # Brennerereignis: history_start ist das angeforderte Fenster (z. B. 30 Tage), der HA-Recorder
+    # hält oft nur 10 Tage
+    hs = store.get("history_start")
+    first = store.query("SELECT MIN(ts) AS t FROM burner_events")[0]["t"]
+    if hs is not None and first is not None:
+        hs = max(hs, first)
+    for ts in hourly:
+        if ts in vacation or (ts < hs - hs % 3600 if hs is not None else ts not in measured):
+            continue
+        v["starts"][_cell(ts)].append(starts.get(ts, 0))
 
+    # Soll nur aus eingeschalteten Räumen (Mittel aus „aus“ = 5 °C und 21 °C ergäbe nie eingestellte Werte);
+    # wie oft Tado aus ist, steht getrennt
     per_hour_target: dict[int, list[float]] = defaultdict(list)
+    per_hour_off: dict[int, list[int]] = defaultdict(list)
     per_hour_valve: dict[int, list[float]] = defaultdict(list)
     for r in store.query(
-        "SELECT ts - ts % 3600 AS h, room, AVG(COALESCE(target, ?)) AS target, AVG(valve) AS valve, "
-        "COUNT(temp) AS n FROM room_samples WHERE ts >= ? GROUP BY h, room", (OFF_TEMP, since)
+        "SELECT ts - ts % 3600 AS h, room, AVG(target) AS target, AVG(valve) AS valve, COUNT(temp) AS n, "
+        "SUM(CASE WHEN target IS NULL THEN 1 ELSE 0 END) AS n_off, COUNT(*) AS n_all "
+        "FROM room_samples WHERE ts >= ? GROUP BY h, room", (since,)
     ):
         if rooms is not None and r["room"] not in rooms:
             continue
         if r["h"] in vacation:
             continue
         if r["n"]:  # „aus“ nur zählen, wenn der Raum überhaupt gemeldet hat
-            per_hour_target[r["h"]].append(r["target"])
+            off = 2 * r["n_off"] >= r["n_all"]
+            per_hour_off[r["h"]].append(int(off))
+            if not off and r["target"] is not None and r["target"] > OFF_TEMP:
+                per_hour_target[r["h"]].append(r["target"])
         if r["valve"] is not None and (room is None or r["room"] == room):
             per_hour_valve[r["h"]].append(r["valve"])
     for h, vals in per_hour_target.items():
-        v["target"][_cell(h)].append(statistics.median(vals))
+        v["target"][_cell(h)].append(statistics.median_low(sorted(vals)))
+    for h, vals in per_hour_off.items():
+        v["off"][_cell(h)].append(100 * sum(vals) / len(vals))
     for h, vals in per_hour_valve.items():
         v["valve"][_cell(h)].append(sum(vals) / len(vals))
+    special = {"gas_k": _ratio_grid(gas_k_sum, house.h_kw_per_k * 1000 if use_model else 1000.0),
+               "target": _grid(v["target"], 1, statistics.median_low)}
 
     out = {"days": days, "since": since, "hours": len(hourly) - len(vacation), "metrics": {}}
     for key, (label, unit) in METRICS.items():
-        grid, counts = _grid(v[key], 0 if key in ("home", "gas_k") else 1 if key == "target" else 2)
+        grid, counts = special.get(key) or _grid(v[key], 0 if key in ("home", "off") else 2)
         if not any(x is not None for row in grid for x in row):
             continue
         m = {"label": label, "unit": unit, "grid": grid, "n": counts}

@@ -3,8 +3,9 @@
 Gelernt wird aus dem, was Tado tatsächlich tut: das mittlere Soll aller Räume
 (Median) über die letzten ``WINDOW_DAYS`` Tage, ohne Urlaub.
 
-- **Nacht:** abends sinkt das Soll um mindestens ``DROP_K`` unter das Tagesniveau
-  (während jemand zu Hause ist), morgens steigt es wieder. Median über alle Nächte.
+- **Nacht:** abends sinkt das Soll um mindestens ``DROP_K`` unter das Niveau der zwei Stunden
+  davor (während jemand zu Hause ist; heizt Tado nachmittags wirklich, höchstens unter das
+  Tagesniveau), morgens steigt es wieder zum Großteil zurück. Median über alle Nächte.
 - **Nachttemperatur:** Median-Soll in der gelernten Nacht.
 - **Abwesenheit:** Median-Soll tagsüber, wenn niemand zu Hause ist (Geofencing).
 
@@ -31,6 +32,8 @@ MAX_SHIFT_H = 3.0
 MAX_RAISE_K = 3.0
 EVENING = (18 * 60, 27 * 60)  # 18:00 bis 03:00 (Minuten ab Mitternacht des Abends)
 MORNING = (3 * 60, 11 * 60)
+DAY_MIN_PTS = 12              # so viele Nachmittagswerte (12–18 Uhr, jemand da), bevor das Tagesniveau gilt
+DAY_REAL_C = OFF_TEMP + 5     # Tagesniveau darüber = Tado heizt nachmittags wirklich (nicht „aus“)
 
 
 def _local(ts: int) -> datetime:
@@ -67,6 +70,28 @@ def house_setpoints(store, since: int, skip: set[str] = frozenset(),
     return {ts: statistics.median(v) for ts, v in by_ts.items() if len(v) >= need}
 
 
+def _reference(pts: list[tuple[int, int, float]], i: int, day_vals: list[float], home: dict) -> float | None:
+    """Soll vor der möglichen Absenkung: Median der 2 h davor, solange jemand zu Hause ist.
+
+    Bezug ist der Abend selbst, nicht der Nachmittag – steht Tado nachmittags auf „aus“ und
+    heizt erst ab 18 Uhr, ist das Absenken danach trotzdem die Nacht. Heizt Tado nachmittags
+    aber wirklich, ist der Bezug höchstens das Tagesniveau: Ein Abendkomfort über dem Tag
+    (22 °C statt 20 °C) ist keine Absenkung, wenn es danach auf 20 °C zurückgeht, und morgens
+    muss das Soll nur zum Tagesniveau zurück, nicht zum Abendkomfort.
+    """
+    m = pts[i][1]
+    before = [v for ts, mm, v in pts[:i] if mm >= m - 120 and home.get(ts, True)]
+    ref = statistics.median(before) if len(before) >= 6 else None
+    if ref is None:
+        evening = [v for ts, mm, v in pts[:i] if home.get(ts, True)]
+        cands = [statistics.median(x) for x in (day_vals, evening) if len(x) >= 6]
+        ref = max(cands) if cands else None
+    day = statistics.median(day_vals) if len(day_vals) >= DAY_MIN_PTS else None
+    if ref is not None and day is not None and day > DAY_REAL_C:
+        ref = min(ref, day)
+    return ref
+
+
 def learn(store, now_ts: int, skip_rooms: set[str] = frozenset(), rooms: set[str] | None = None,
           persons: list[str] | None = None) -> dict:
     since = now_ts - WINDOW_DAYS * 86400
@@ -84,7 +109,7 @@ def learn(store, now_ts: int, skip_rooms: set[str] = frozenset(), rooms: set[str
         m = d.hour * 60 + d.minute
         if 12 * 60 <= m < 18 * 60 and home.get(ts, True):
             days[d.date().isoformat()].append(v)
-        if m >= EVENING[0]:
+        if m >= EVENING[0] - 120:  # zwei Stunden davor als Bezug fürs Absenken
             evenings[d.date().isoformat()].append((ts, m, v))
         elif m < MORNING[1]:
             key = (d - timedelta(days=1)).date().isoformat()
@@ -92,28 +117,31 @@ def learn(store, now_ts: int, skip_rooms: set[str] = frozenset(), rooms: set[str
 
     starts, ends, night_vals = [], [], []
     for day, pts in evenings.items():
-        if len(days.get(day, [])) < 12:
-            continue
-        level = statistics.median(days[day])
         pts.sort()
-        start_i = None
+        start_i = ref = None
         for i, (ts, m, v) in enumerate(pts):
-            if not EVENING[0] <= m < EVENING[1] or v > level - DROP_K or not home.get(ts, True):
+            if not EVENING[0] <= m < EVENING[1] or not home.get(ts, True):
+                continue
+            ref = _reference(pts, i, days.get(day, []), home)
+            if ref is None or v > ref - DROP_K:
                 continue
             hold = [p for p in pts[i:] if p[1] < m + HOLD_MIN]
-            if hold and all(p[2] <= level - DROP_K for p in hold) and hold[-1][1] >= m + HOLD_MIN - 10:
+            if hold and all(p[2] <= ref - DROP_K for p in hold) and hold[-1][1] >= m + HOLD_MIN - 10:
                 start_i = i
                 break
         if start_i is None:
             continue
+        start = pts[start_i][1]
+        night_med = statistics.median(v for _, m, v in pts[start_i:] if m < MORNING[0] + 24 * 60)
+        # morgens: zurück, sobald das Soll den Großteil des Wegs zum Bezug (Abend bzw. Tagesniveau) geschafft hat
+        rise = night_med + 0.75 * (max(ref, night_med + DROP_K) - night_med)
         end = None
         for ts, m, v in pts[start_i:]:
-            if MORNING[0] + 24 * 60 <= m < MORNING[1] + 24 * 60 and v >= level - 0.5:
+            if MORNING[0] + 24 * 60 <= m < MORNING[1] + 24 * 60 and v >= rise:
                 end = m
                 break
         if end is None:
             continue
-        start = pts[start_i][1]
         starts.append(start)
         ends.append(end - 24 * 60)
         night_vals.extend(v for _, m, v in pts if start <= m < end)

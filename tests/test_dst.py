@@ -41,6 +41,7 @@ def test_habit_arrival_keeps_wall_clock(berlin):
     p = PersonLearner("person.a")
     p.week = [0.0] * (7 * SLOTS_PER_DAY)
     p.week[6 * SLOTS_PER_DAY + 17 * 60 // SLOT_MIN] = 0.9    # sonntags 17:00 zu Hause
+    p.visits = [5] * (7 * SLOTS_PER_DAY)                     # seit 0.32: nur gelernte Felder zählen
     sat = local(datetime(2026, 10, 24, 20, 0).timestamp())
     eta, conf = p.next_home_by_habit(sat)
     assert (eta.hour, eta.minute, eta.weekday()) == (17, 0, 6) and conf == 0.9
