@@ -60,12 +60,15 @@ def test_vacation_ranges_parse_and_end_is_arrival():
 
 def test_vacation_freezes_habits_but_not_physics(tmp_path):
     cfg = Config()
-    cfg.vacations = ["2026-10-12 - 2026-10-18"]
+    # Urlaub um „jetzt“ herum: summary() rechnet mit der echten Uhr. Endet die Reise vor dem Test,
+    # wäre der Urlaub vorbei; endete sie heute vor der Rückkehrzeit, liefe der Nachlauf (until = None).
+    today = datetime.now().date()
+    cfg.vacations = [f"{today - timedelta(days=2)} - {today + timedelta(days=2)}"]
     found = Discovered(rooms=[Room("Wz", "climate.wz")], persons=["person.a"])
     eng = Engine(cfg, Store(tmp_path / "v.db"), found)
     eng.states["person.a"] = {"state": "not_home", "attributes": {}}
     week_before = list(eng.persons["person.a"].week)
-    start = int(datetime(2026, 10, 13, 8, 0).timestamp())
+    start = int(datetime.combine(today - timedelta(days=1), datetime.min.time()).timestamp()) + 8 * 3600
     for i in range(48):
         eng.tick(start + i * 300)
     assert eng.persons["person.a"].week == week_before  # Gewohnheiten unverändert

@@ -123,14 +123,22 @@ def test_settings_api_roundtrip_control_fields(tmp_path):
             assert validate(s)[1] == []  # was die Oberfläche bekommt, kann sie unverändert speichern
             eff = j["schedule"]["effective"]
             assert eff["plan"][0] == {"day": "Mo", "start": "20:30", "end": "04:30"} and eff["source"]["night_start"] == "wochenplan"
-            assert j["control"]["limits"] == {"temp_min": 5.0, "temp_max": 25.0} and j["climate_targets"]["climate.wz"] == 19.0
+            assert j["control"]["limits"] == {"temp_min": 5.0, "temp_max": 25.0, "preset_max": 12}
+            assert j["climate_targets"]["climate.wz"] == 19.0
+            assert j["balance"] == {"changes": [], "pause_days": 10, "effect_days": 14, "forget_days": 60}
             # Fehler kommen als 400 mit Klartext, nichts wird übernommen
             for bad, text in (({"rooms": [{"climate": "climate.wz", "comfort": "30"}]}, "Komfort muss zwischen 5 und 25"),
                               ({"rooms": [{"climate": "climate.wz", "comfort": "warm"}]}, "Komforttemperatur keine Zahl"),
                               ({"night_plan": [{"start": "10:00", "end": "04:30"}] + plan[1:]}, "Mo: Beginn der Nacht liegt am Abend"),
                               ({"night_plan": plan[:6]}, "7 Einträge"),
                               ({"control_mode": "auto"}, "control_mode: erlaubt"),
-                              ({"preheat_max_h": 9}, "preheat_max_h")):
+                              ({"preheat_max_h": 9}, "preheat_max_h"),
+                              # Hydraulik (0.35): Voreinstellung und Stufen
+                              ({"rooms": [{"climate": "climate.wz", "preset": 7, "preset_max": 6}]}, "liegt über den 6 Stufen"),
+                              ({"rooms": [{"climate": "climate.wz", "preset": 5}]}, "braucht die Zahl der Stufen"),
+                              ({"rooms": [{"climate": "climate.wz", "preset_max": 13}]}, "zwischen 0 und 12"),
+                              ({"rooms": [{"climate": "climate.wz", "preset": -1, "preset_max": 6}]}, "zwischen 0 und 12"),
+                              ({"rooms": [{"climate": "climate.wz", "preset": "fünf", "preset_max": 6}]}, "keine ganze Zahl")):
                 r = await client.post("/api/settings", json=bad)
                 assert r.status == 400, bad
                 errs = (await r.json())["errors"]
@@ -147,3 +155,29 @@ def test_settings_api_roundtrip_control_fields(tmp_path):
             await client.close()
 
     asyncio.run(go())
+
+
+def test_rooms_preset_roundtrip_and_validation(tmp_path):
+    """0.35: Voreinstellung/Stufen je Raum speichern; leer = unbekannt, Stufen 0 = kein Voreinstellventil."""
+    clean, errors = validate({"rooms": [
+        {"climate": "climate.a", "preset": "5", "preset_max": "6"},
+        {"climate": "climate.b", "preset": "", "preset_max": ""},      # unbekannt: keine Schlüssel
+        {"climate": "climate.c", "preset": "0", "preset_max": "0"},    # kein Voreinstellventil
+        {"climate": "climate.d", "preset_max": 8},                     # Stufen bekannt, Stufe nicht
+    ]})
+    assert errors == []
+    assert clean["rooms"][0] == {"name": "", "climate": "climate.a", "preset": 5, "preset_max": 6}
+    assert clean["rooms"][1] == {"name": "", "climate": "climate.b"}
+    assert clean["rooms"][2] == {"name": "", "climate": "climate.c", "preset_max": 0}
+    assert clean["rooms"][3] == {"name": "", "climate": "climate.d", "preset_max": 8}
+    save_settings(clean, tmp_path)
+    cfg = Config.load(tmp_path / "options.json")
+    assert cfg.rooms[0]["preset"] == 5 and cfg.rooms[0]["preset_max"] == 6
+    assert validate(cfg.to_raw())[1] == []
+    for bad, text in (({"preset": 7, "preset_max": 6}, "liegt über den 6 Stufen"),
+                      ({"preset": 13, "preset_max": 13}, "zwischen 0 und 12"),
+                      ({"preset": -1, "preset_max": 6}, "zwischen 0 und 12"),
+                      ({"preset": 3}, "braucht die Zahl der Stufen"),
+                      ({"preset": 2, "preset_max": 0}, "liegt über den 0 Stufen")):
+        _, errors = validate({"rooms": [{"climate": "climate.a", **bad}]})
+        assert errors and text in errors[0], (bad, errors)

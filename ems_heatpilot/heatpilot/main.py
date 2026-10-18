@@ -15,7 +15,7 @@ from .control import Control
 from .controlloop import ControlLoop
 from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
 from .diagnostics import set_debug, setup_logging
-from .discovery import discover
+from .discovery import Registry, discover
 from .emsesp import EmsEsp
 from .engine import Engine
 from .ha_client import HAClient
@@ -55,7 +55,7 @@ class App:
         self.pending: dict[str, dict | None] = {}
         self._ems_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
-        self._registry: tuple[float, list[dict]] | None = None
+        self._registry: tuple[float, Registry] | None = None
         self._reset = False
         # neuer Datenstand (Ausreißer-Schutz 0.14, Warmwasser 0.17.1): älteren Lernstand einmal neu berechnen
         if self.store.get("data_version", 0) < DATA_VERSION:
@@ -82,9 +82,19 @@ class App:
         else:
             self.pending[entity_id] = state
 
-    async def registry(self) -> list[dict]:
+    async def registry(self) -> Registry:
+        """Entitäten, Geräte und Bereiche von HA (Cache 60 s). Fehlen Geräte/Bereiche (alte HA, Fehler):
+        leer – HeatPilot arbeitet dann wie bisher nur mit der Entitätenregistry."""
         if self._registry is None or time.time() - self._registry[0] > 60:
-            self._registry = (time.time(), await self.ha.entity_registry())
+            entities = await self.ha.entity_registry()
+            parts = []
+            for name, call in (("Geräte", self.ha.device_registry), ("Bereiche", self.ha.area_registry)):
+                try:
+                    parts.append(await call() or [])
+                except Exception as err:  # noqa: BLE001 – ohne Registry weiterarbeiten
+                    log.warning("%s-Registry nicht lesbar (%s) – Räume ohne Bereich/Gerät", name, err)
+                    parts.append([])
+            self._registry = (time.time(), Registry(entities, *parts))
         return self._registry[1]
 
     async def build(self, backfill: bool = True) -> None:
@@ -175,7 +185,7 @@ class App:
 
     async def suggestions(self) -> dict:
         """Was die automatische Erkennung ohne eigene Vorgaben finden würde."""
-        found = discover(await self.ha.get_states(), await self.registry(), Config.from_raw({}))
+        found = discover(await self.ha.get_states(), await self.registry(), Config.from_raw({}), all_rooms=True)
         return found.as_dict(private=False)
 
 
