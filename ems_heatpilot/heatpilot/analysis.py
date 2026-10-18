@@ -233,11 +233,15 @@ def estimate_savings(
         prev_in = prev.get("t_in") if prev and prev["ts"] == row["ts"] - 3600 else None
         gas = row.get("gas_kwh")
         gas_free = gas is not None and gas <= GAS_FREE_KWH and not row.get("dhw_frac")
-        if gas_free and prev_in is not None and prev_in - t_out - excess >= 0.5:
-            # Die Heizung war auch in Wirklichkeit aus: die Absenkung wird nicht tiefer, der Rückstand
-            # klingt ab – so wie das Haus tatsächlich abkühlt, aber mindestens mit der Trägheit
-            # (hält Sonne das echte Haus warm, wärmt sie das abgesenkte genauso)
-            ratio = min(max((t_in - t_out - excess) / (prev_in - t_out - excess), 0.0), 1.0, math.exp(-1.0 / tau))
+        if gas_free and prev_in is not None:
+            # Die Heizung war auch in Wirklichkeit aus: beide Häuser sind ungeheizt und bekommen dieselbe
+            # Sonne und Fremdwärme. Die Absenkung wird nicht tiefer, der Rückstand klingt mindestens mit
+            # der Trägheit ab – kühlt das echte Haus schneller aus, so schnell wie dieses. Wärmt die Sonne
+            # das echte Haus, wärmt sie das abgesenkte genauso (kein „Einfrieren“ des Rückstands).
+            ratio = math.exp(-1.0 / tau)
+            den = prev_in - t_out - excess
+            if den >= 0.5 and t_in <= prev_in:
+                ratio = min(max((t_in - t_out - excess) / den, 0.0), ratio)
             t_sim = t_in - max(prev_in - t_sim, 0.0) * ratio
             if t_sim < target:
                 t_sim = heat_up(t_sim)
@@ -261,7 +265,8 @@ def estimate_savings(
                 continue
             frac = 0.0
         gas = (row.get("gas_kwh") or 0.0) * (1.0 - min(max(frac, 0.0), 1.0))
-        diff = h * (t_in - t_sim)
+        # weniger als gar kein Gas geht nicht: aufsummiert nie mehr Ersparnis als echtes Heizgas
+        diff = max(min(h * (t_in - t_sim), actual + gas - saved), 0.0)
         saved += diff
         actual += gas
         hours += 1

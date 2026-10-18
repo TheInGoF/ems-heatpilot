@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.30.2
+Hausmodell aus der Prüfung des Exports vom 18.10. Das Modell selbst passt zu den Daten: Normheizlast 3,9 kW, an den Tagesmitteln 2–5 % Abweichung. Korrigiert wurden:
+- **Ersparnis-Schätzung zeigte 71 % statt 2 %.** Während der 19 Tage Abwesenheit im September war die Heizung aus. Wärmte die Sonne das echte Haus, blieb das simulierte abgesenkte Haus kalt, und der Unterschied wurde als Ersparnis gutgeschrieben. Jetzt bekommen beide Häuser in gasfreien Stunden dieselbe Sonne. Außerdem kann aufsummiert nie mehr gespart werden, als wirklich Heizgas verbraucht wurde
+- **Neuberechnung beim Update:** Ältere Stunden, die HeatPilot schon aus eigenen Messwerten gebildet hatte, wurden mit der Langzeitstatistik überschrieben. Damit gingen Warmwasser-Anteil, Anwesenheit und Urlaub verloren. Diese Stunden bleiben jetzt erhalten
+- Woche „Gas wetterbereinigt“: Erklärtext präzisiert (je Stunde nachts niedriger, morgens höher)
+
 ## 0.30.1
 Zeitumstellung (25.10.) geprüft. Gelernt und gespeichert wird in absoluter Zeit (Unix-Sekunden), das Lernen bleibt also unberührt. Drei Anzeigen lagen am Umstellungstag bzw. über die Umstellung hinweg eine Stunde daneben:
 - **Tagesgrenzen** (Brennerstarts heute, Tagesbalken): Mitternacht wird jetzt je Kalendertag bestimmt. Der 25-Stunden-Tag zählt also vollständig
