@@ -242,7 +242,9 @@ class PersonLearner:
             p = self.week[(start + i) % len(self.week)]
             if p >= 0.5:
                 minutes = i * SLOT_MIN - (now.minute % SLOT_MIN)
-                return now + timedelta(minutes=minutes), p
+                # Gewohnheit gilt nach Wanduhr: über die Zeitumstellung hinweg nicht in absoluter Zeit rechnen
+                wall = now.replace(tzinfo=None) + timedelta(minutes=minutes)
+                return (wall.astimezone() if now.tzinfo else wall), p
         return None
 
     def eta(self, now: datetime) -> dict:
