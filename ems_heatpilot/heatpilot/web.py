@@ -11,9 +11,9 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .config import Config
+from .config import CONTROL_MODES, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
-from . import certificate, control as control_mod, diagnostics, live
+from . import certificate, control as control_mod, controlloop, diagnostics, live
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -91,6 +91,13 @@ def make_app(app) -> web.Application:
             "suggested": await app.suggestions(),
             "roles": roles,
             "schedule": {"learned": app.eng.schedule_learned, "effective": app.eng.eff.as_dict()},
+            # Steuerung (0.34): erlaubte Schalterstellungen, Wochentage des Nachtplans, aktuelles Soll je
+            # Thermostat (Startwert der Komforttemperatur eines neu gewählten Raums)
+            "control": {"modes": list(CONTROL_MODES), "weekdays": list(WEEKDAYS),
+                        "limits": {"temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX}},
+            "climate_targets": {eid: st.get("attributes", {}).get("temperature")
+                                for eid, st in app.eng.states.items()
+                                if eid.startswith("climate.") and st.get("state") != "off"},
         })
 
     async def entities(_req):
@@ -189,23 +196,45 @@ def make_app(app) -> web.Application:
         return json_response(app.eng.presence(hours))
 
     def heat_state() -> dict:
-        eng, ctl = app.eng, app.control
+        eng, ctl, loop = app.eng, app.control, app.eng.control_loop
         targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
                    for r in eng.found.rooms}
         boosts = ctl.active(targets) if ctl else {}
+        ctl_rooms = loop.rooms if loop else {}
         rooms = []
         for r in eng.found.rooms:
             st = eng.states.get(r.climate) or {}
             a = st.get("attributes", {})
+            reading = eng.room_reading(r)  # Raumtemperatur/Ventil als Mittel der Gruppe (Raumregler: nur er)
+            devices = []
+            for d in r.devices:
+                ds = eng.states.get(d["climate"]) or {}
+                da = ds.get("attributes", {})
+                devices.append({"climate": d["climate"], "name": da.get("friendly_name", d["climate"]),
+                                "mode": ds.get("state"), "action": da.get("hvac_action"),
+                                "temp": da.get("current_temperature"), "target": da.get("temperature"),
+                                "valve": eng._val(d.get("heating_power")), "platform": d.get("platform"),
+                                "controller": bool(r.controller and d["climate"] == r.climate)})
             rooms.append({
                 "climate": r.climate, "name": r.name, "mode": st.get("state"),
-                "action": a.get("hvac_action"), "temp": a.get("current_temperature"),
-                "target": a.get("temperature"), "valve": eng._val(r.heating_power),
+                "action": a.get("hvac_action"),
+                "temp": reading[1] if reading else a.get("current_temperature"),
+                "target": a.get("temperature"),
+                "valve": reading[3] if reading else eng._val(r.heating_power),
                 "humidity": eng._val(r.humidity) or a.get("current_humidity"),
                 "modes": a.get("hvac_modes") or [], "boost": boosts.get(r.climate),
+                # seit 0.34: Gruppe, Steuerung
+                "group": r.group, "controller": r.controller, "managed": r.managed, "comfort": r.comfort,
+                "platform": r.platform, "tado_cloud": bool(ctl and ctl.is_tado(r.climate)),
+                "climates": r.climates, "devices": devices,
+                "control": ctl_rooms.get(r.climate),
             })
         return {"rooms": rooms, "limits": {"temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX,
-                                           "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX}}
+                                           "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX,
+                                           "pause_max_h": controlloop.PAUSE_MAX_H},
+                "control": loop.as_dict() if loop else {"mode": app.cfg.control_mode, "active": False,
+                                                        "paused_until": None, "rooms": {}, "log": [],
+                                                        "warnings": [], "status_text": "Beobachten"}}
 
     async def heat_get(_req):
         if app.eng is None:
@@ -220,12 +249,28 @@ def make_app(app) -> web.Application:
             body = await req.json()
         except Exception:  # noqa: BLE001
             return json_response({"error": "Ungültige Daten"}, status=400)
-        action, ctl = req.match_info["action"], app.control
+        action, ctl, loop = req.match_info["action"], app.control, app.eng.control_loop
         try:
             if action == "boost":
                 res = await ctl.boost(body.get("rooms"), body.get("temp"), body.get("minutes"))
             elif action == "schedule":
-                res = await ctl.schedule(body.get("rooms"))
+                # Tado-Cloud: zurück in den Tado-Zeitplan; andere Entitäten: Wunschzustand (heatpilot) bzw. Hinweis
+                res = await ctl.schedule(body.get("rooms"), loop.desired_setpoints() if loop else None)
+                if loop:
+                    for r in res.get("done", []):
+                        st = loop.state.get(r)
+                        if st is not None and r in loop.desired_setpoints():
+                            st["last_written"] = loop.desired_setpoints()[r]
+            elif action == "pause":
+                # Steuerung anhalten: {"hours": 2} · {"hours": 0} = weiter
+                if loop is None:
+                    return json_response({"error": "Steuerung noch nicht bereit"}, status=503)
+                try:
+                    until = loop.pause(body.get("hours", 0))
+                except (TypeError, ValueError) as err:
+                    return json_response({"error": str(err) or "Stunden fehlen"}, status=400)
+                return json_response({"ok": True, "paused_until": until and
+                                      datetime.fromtimestamp(until).astimezone().isoformat(), **heat_state()})
             elif action == "temp":
                 res = await ctl.set_temp(body.get("room"), body.get("temp"))
             elif action == "mode":

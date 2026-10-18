@@ -309,7 +309,7 @@ def bundle(app, hours: int = 48) -> dict:
               "attributes": {k: v for k, v in st.get("attributes", {}).items()
                              if k not in ("latitude", "longitude", "gps_accuracy", "entity_picture")}}
         for eid, st in eng.states.items()
-        if eid in set(eng.found.all_sensor_ids()) | {r.climate for r in eng.found.rooms}
+        if eid in set(eng.found.all_sensor_ids()) | set(eng.found.climate_ids())
         | set(eng.found.persons) | {eng.found.weather}
     }
     data["summary"] = eng.summary()
@@ -328,6 +328,8 @@ def bundle(app, hours: int = 48) -> dict:
     data["person_samples"] = _rows(eng, "SELECT * FROM person_samples WHERE ts >= ? ORDER BY ts", (since,))
     data["hourly"] = _rows(eng, "SELECT * FROM hourly WHERE ts >= ? ORDER BY ts", (since - 5 * 86400,))
     data["burner_events"] = _rows(eng, "SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,))
+    data["control_log"] = eng.store.control_log(200)  # Steuerung (0.34): Schreibvorgänge
+    data["control"] = eng.control_loop.as_dict() if eng.control_loop else None
     data["daily"] = _rows(eng, "SELECT * FROM daily ORDER BY day DESC LIMIT 400")
     data["kv"] = {r["key"]: r["value"] for r in _rows(eng, "SELECT key, value FROM kv")
                   if not r["key"].startswith("model.")}
@@ -451,6 +453,11 @@ def export(app, days: int = 14) -> dict:
         "brenner": _table(q("SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,)), None),
         # seit 0.33: Fremdwärme-Ereignisse je Raum (Kamin, Ofen) – alle, sie sind klein
         "fremdwaerme": _table(q("SELECT * FROM room_events ORDER BY start_ts"), None),
+        # seit 0.34: Steuerung – Schreibvorgänge (Raum, Dienst, Wert, Grund) und Zustand je Raum
+        "steuerung": _safe(lambda: {
+            "schalter": app.cfg.control_mode,
+            "protokoll": _table(q("SELECT * FROM control_log WHERE ts >= ? ORDER BY ts", (since,)), None),
+            "zustand": eng.control_loop.as_dict() if eng.control_loop else None}),
         # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen
         "selbsttest": _safe(lambda: self_check(app)),
         "ems_werte": getattr(eng, "ems", None),

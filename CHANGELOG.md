@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.34.0
+**HeatPilot steuert** (abgesprochen; Standard bleibt „Beobachten“, es ändert sich nichts, bis du den Schalter umlegst)
+- **Schalter „Steuerung“** in den Einstellungen: „Beobachten“ (wie bisher: lernen, empfehlen, Tado nur auf Knopfdruck) oder „HeatPilot steuert“. Dann schreibt HeatPilot die Solltemperaturen der Räume mit Häkchen „macht mit“ selbst, je Raum mit eigener Komforttemperatur. Keine Rückfallebene: zurück zu Tado nur über den Schalter, danach in der Tado-App den Zeitplan fortsetzen. Fällt HeatPilot aus, bleibt das zuletzt geschriebene Soll stehen
+- **Phasen:** Komfort · Nacht nach Wochenplan (je Wochentag Beginn/Ende; Standard So–Do 21:00, Fr+Sa 22:00, Ende Mo–Fr 04:30, Sa+So 06:30; Nacht 18 °C) · Abwesenheit (niemand zu Hause) · Vorheizen vor Ankunft bzw. Nachtende aus der Aufheizzeit des Raums, gedeckelt (Standard 3 h) · Urlaub. Ankunft unbekannt oder Tracker ausgefallen → Komfort. Räume, die ihr Ziel nicht erreichen, werden akzeptiert („erreicht ≈ 19,5 °C“), nichts wird hochgedreht
+- **Sicherheit:** geschrieben wird nur bei Phasenwechsel, nur über die erlaubten Dienste auf gewählte Räume, 5–25 °C, nie über Komfort. Eine Änderung von Hand (Ventil, App) bleibt bis zum nächsten Phasenwechsel. Pause-Kachel im Heizen-Reiter (1 h / 2 h / 4 h / bis morgen früh). Jeder Schreibvorgang im Protokoll (Heizen, Diagnose, Export). Fehler: nach 15 min erneut, ab 3 Fehlschlägen Hinweis. Beim Zurückschalten auf „Beobachten“ schreibt nichts mehr nach
+- **Räume als Gruppen:** mehrere Thermostate (z. B. HomeKit-Ventile) zu einem Raum zusammenfassen (gleicher Raumname); ein Wandthermostat als Raumregler wird allein gemessen und beschrieben, sonst alle Ventile mit gemittelter Raumtemperatur. Alte Einstellungen bleiben wie bisher
+- **Boost ohne Tado-Cloud:** Für HomeKit-Entitäten läuft der Boost als eigener Timer; danach stellt HeatPilot den Wunschzustand bzw. das vorherige Soll wieder her, nur wenn das Boost-Soll noch steht. „Zeitplan“ schreibt bei „HeatPilot steuert“ den Wunschzustand, sonst Hinweis auf die Tado-App
+- Bei „HeatPilot steuert“ gilt der Wochenplan statt der aus Tado gelernten Nachtzeiten; aus den eigenen Schreibvorgängen wird nichts gelernt
+- Oberfläche: Karte „Steuerung“ (Schalter, Warnhinweis, Wochenplan, Nacht-/Abwesenheitstemperatur, Vorheizdeckel), Räume-Tabelle mit „macht mit“/Komfort/Raum/Raumregler, Heizen-Statuszeile und Kachelzustände („HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell bis …“), Übersicht zeigt den Wochenplan. Doku: Abschnitt „Steuerung“
+
 ## 0.33.0
 **Fremdwärme je Raum: Kamin, Backofen, Gäste** (abgesprochen)
 - Wird ein Raum deutlich wärmer, ohne dass der Heizkörper es erklären kann (Ventil zu, keine Sonne auf den Fassaden, Anstieg mindestens 0,4 K und 0,8 K/h über dem, was das Raummodell erwartet), gilt das als Fremdwärme-Ereignis. Das Raummodell lernt diese Zeit nicht mehr als Fremdwärme oder Auskühlen des Raums. Heizkörperbetrieb gilt nie als Fremdwärme, Sonne nur, wenn die Sonnenparameter des Raums schon gelernt sind – das Modell verwirft nie seine eigenen Lernchancen

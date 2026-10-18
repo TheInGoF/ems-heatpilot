@@ -35,9 +35,15 @@ CREATE TABLE IF NOT EXISTS room_events(
     start_ts INTEGER, end_ts INTEGER, room TEXT, rise_k REAL,
     PRIMARY KEY(start_ts, room)
 );
+CREATE TABLE IF NOT EXISTS control_log(
+    ts INTEGER, room TEXT, action TEXT, value REAL, reason TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
+CREATE INDEX IF NOT EXISTS idx_control_ts ON control_log(ts);
 CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 """
+
+CONTROL_LOG_KEEP_DAYS = 90  # Schreibprotokoll (0.34) so lange aufheben
 
 SAMPLE_COLS = (
     "t_out", "flow", "sel_flow", "ret", "burner_pow", "burner_on",
@@ -171,6 +177,21 @@ class Store:
         """Abgeschlossenes Fremdwärme-Ereignis eines Raums (nur Zeiten und Kelvin)."""
         self.db.execute("INSERT OR REPLACE INTO room_events VALUES(?, ?, ?, ?)",
                         (int(start_ts), int(end_ts), room, round(rise_k, 2)))
+
+    def add_control_log(self, ts: int, room: str, action: str, value: float | None, reason: str) -> None:
+        """Ein Schreibvorgang an ein Thermostat (seit 0.34) – nur Raum, Dienst, Wert, Grund."""
+        self.db.execute("INSERT INTO control_log VALUES(?, ?, ?, ?, ?)",
+                        (int(ts), room, action, None if value is None else float(value), reason))
+        self.db.execute("DELETE FROM control_log WHERE ts < ?", (int(ts) - CONTROL_LOG_KEEP_DAYS * 86400,))
+        self.db.commit()
+
+    def control_log(self, limit: int = 50, since: int | None = None) -> list[dict]:
+        """Die letzten Schreibvorgänge, neueste zuerst."""
+        sql, params = "SELECT ts, room, action, value, reason FROM control_log", []
+        if since is not None:
+            sql, params = sql + " WHERE ts >= ?", [since]
+        rows = self.db.execute(sql + " ORDER BY ts DESC, rowid DESC LIMIT ?", (*params, int(limit))).fetchall()
+        return [dict(r) for r in rows]
 
     def add_burner_event(self, ts: int, state: bool) -> None:
         self.db.execute("INSERT INTO burner_events VALUES(?, ?)", (ts, int(state)))

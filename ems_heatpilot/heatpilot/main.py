@@ -12,6 +12,7 @@ from aiohttp import web
 from . import __version__
 from .backfill import run_backfill
 from .control import Control
+from .controlloop import ControlLoop
 from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
 from .diagnostics import set_debug, setup_logging
 from .discovery import discover
@@ -114,7 +115,11 @@ class App:
                 eng.forecast = old.forecast
                 eng.live = old.live
             self.eng = eng
-            self.control = Control(self.ha, self.store, [r.climate for r in found.rooms])
+            # Steuerung (0.34): Control kennt die Gruppen (Raumregler/Mitläufer) und die HA-Zustände
+            self.control = Control(self.ha, self.store, found.rooms, states=eng.states)
+            eng.control_loop = ControlLoop(eng, self.control)
+            if old is not None and old.control_loop is not None:
+                old.control_loop.stop()  # ein noch laufendes apply() der alten Schleife schreibt nichts mehr
             self._restart_emsesp()
             self.status = "läuft"
 
@@ -151,7 +156,8 @@ class App:
     def _room_inputs(self) -> dict[str, tuple] | None:
         if self.eng is None:
             return None
-        return {r.climate: (r.heating_power, r.temp_sensor) for r in self.eng.found.rooms}
+        return {r.climate: (r.heating_power, r.temp_sensor, tuple(sorted(d["climate"] for d in r.members)))
+                for r in self.eng.found.rooms}
 
     async def reload_history(self) -> None:
         """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers)."""
@@ -162,7 +168,7 @@ class App:
         """Nach einer Bedienung: Thermostate sofort neu lesen (nicht erst beim nächsten Ereignis)."""
         if self.eng is None:
             return
-        rooms = {r.climate for r in self.eng.found.rooms}
+        rooms = set(self.eng.found.climate_ids())
         for s in await self.ha.get_states():
             if s["entity_id"] in rooms:
                 self.eng.on_state(s["entity_id"], s)
@@ -222,6 +228,8 @@ async def run(app: App) -> None:
         try:
             started = time.monotonic()
             eng.tick()
+            if eng.control_loop is not None:  # Steuerung (0.34): vorgemerkte Schreibvorgänge ausführen
+                await eng.control_loop.apply()
             summary = eng.summary()
             eng.note_changes(summary)
             await publish(app.ha, summary)

@@ -11,7 +11,7 @@ import json
 import os
 import re
 from dataclasses import dataclass, field
-from datetime import time
+from datetime import datetime, time, timedelta
 from pathlib import Path
 
 DATA_DIR = Path(os.environ.get("HEATPILOT_DATA", "/data"))
@@ -23,8 +23,26 @@ BACKUP_NAME = "heatpilot-einstellungen.json"
 _ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
 _TIME = re.compile(r"^(\d{1,2}):(\d{2})$")
 
-# Feld -> (Typ, min, max). Typen: int, float, str, entity, entities, time, strings, rooms, overrides
+# Steuerung (seit 0.34): „beobachten“ = lernen und empfehlen, Tado nur auf Knopfdruck;
+# „heatpilot“ = HeatPilot schreibt die Raum-Solltemperaturen der Räume mit „macht mit“ selbst
+CONTROL_MODES = ("beobachten", "heatpilot")
+WEEKDAYS = ("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So")
+# Nachtabsenkung nach Wochenplan: Beginn am Abend des Tages, Ende am Morgen desselben Tages
+DEFAULT_NIGHT_PLAN = [
+    {"start": "21:00", "end": "04:30"},  # Mo
+    {"start": "21:00", "end": "04:30"},  # Di
+    {"start": "21:00", "end": "04:30"},  # Mi
+    {"start": "21:00", "end": "04:30"},  # Do
+    {"start": "22:00", "end": "04:30"},  # Fr
+    {"start": "22:00", "end": "06:30"},  # Sa
+    {"start": "21:00", "end": "06:30"},  # So
+]
+COMFORT_MIN, COMFORT_MAX, COMFORT_DEFAULT = 5.0, 25.0, 21.0
+
+# Feld -> (Typ, min, max). Typen: int, float, str, bool, choice, entity, entities, time, strings, rooms,
+# overrides, nightplan
 FIELDS: dict[str, tuple] = {
+    "control_mode": ("choice", CONTROL_MODES),
     "sample_interval_s": ("int", 60, 900),
     "backfill_days": ("int", 0, 365),
     "statistics_backfill_days": ("int", 0, 1095),
@@ -51,6 +69,8 @@ FIELDS: dict[str, tuple] = {
     "night_temp": ("float", 10, 24),
     "night_start": ("time",),
     "night_end": ("time",),
+    "night_plan": ("nightplan",),
+    "preheat_max_h": ("float", 0.5, 6),
     "learn_schedule": ("bool",),
     "floor_heating_rooms": ("entities",),
     "vacations": ("strings",),
@@ -64,6 +84,63 @@ FIELDS: dict[str, tuple] = {
 def _parse_time(value: str) -> time:
     hours, minutes = value.split(":")
     return time(int(hours), int(minutes))
+
+
+def _at(day: datetime, t: time, like: datetime) -> datetime:
+    """Wanduhrzeit ``t`` am Tag von ``day`` – mit der Zeitzone von ``like`` (Ortszeit auch über die Umstellung)."""
+    naive = datetime.combine(day.date(), t)
+    return naive.astimezone() if like.tzinfo is not None else naive
+
+
+def _clean_time(value) -> str:
+    m = _TIME.match(str(value).strip())
+    if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
+        raise ValueError("Uhrzeit als HH:MM")
+    return f"{int(m.group(1)):02d}:{m.group(2)}"
+
+
+def _clean_room(r: dict) -> dict:
+    """Ein Raum-Eintrag aus der Oberfläche; neue Felder (0.34) nur, wenn sie gesetzt sind."""
+    climate = str(r.get("climate", "")).strip()
+    if not _ENTITY.match(climate):
+        raise ValueError(f"Raum ohne gültige climate-Entität: {climate or '(leer)'}")
+    room = {"name": str(r.get("name") or "").strip(), "climate": climate}
+    for opt in ("temperature", "heating_power", "humidity"):
+        v = str(r.get(opt) or "").strip()
+        if v:
+            if not _ENTITY.match(v):
+                raise ValueError(f"{climate}: {opt} ungültig")
+            room[opt] = v
+    group = str(r.get("group") or "").strip()
+    if group:
+        room["group"] = group
+    for key in ("controller", "managed"):
+        if key in r:
+            room[key] = r[key] is True or str(r[key]).lower() in ("true", "1", "on", "ja")
+    if r.get("comfort") not in (None, ""):
+        try:
+            comfort = round(float(str(r["comfort"]).replace(",", ".")) * 2) / 2
+        except ValueError:
+            raise ValueError(f"{climate}: Komforttemperatur keine Zahl") from None
+        if not COMFORT_MIN <= comfort <= COMFORT_MAX:
+            raise ValueError(f"{climate}: Komfort muss zwischen {COMFORT_MIN:g} und {COMFORT_MAX:g} liegen")
+        room["comfort"] = comfort
+    return room
+
+
+def _clean_night_plan(value) -> list[dict]:
+    """7 Einträge Mo..So {start, end}; Beginn abends (ab 12:00), Ende morgens (vor 12:00)."""
+    if not isinstance(value, (list, tuple)) or len(value) != 7:
+        raise ValueError("7 Einträge (Mo bis So) mit Beginn und Ende")
+    plan = []
+    for i, item in enumerate(value):
+        start, end = _clean_time((item or {}).get("start", "")), _clean_time((item or {}).get("end", ""))
+        if start < "12:00":
+            raise ValueError(f"{WEEKDAYS[i]}: Beginn der Nacht liegt am Abend (ab 12:00)")
+        if end >= "12:00":
+            raise ValueError(f"{WEEKDAYS[i]}: Ende der Nacht liegt am Morgen (vor 12:00)")
+        plan.append({"start": start, "end": end})
+    return plan
 
 
 def validate(raw: dict) -> tuple[dict, list[str]]:
@@ -87,6 +164,11 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                 clean[key] = str(value or "").strip()
             elif kind == "bool":
                 clean[key] = value is True or str(value).lower() in ("true", "1", "on", "ja")
+            elif kind == "choice":
+                v = str(value or "").strip()
+                if v not in FIELDS[key][1]:
+                    raise ValueError(f"erlaubt: {', '.join(FIELDS[key][1])}")
+                clean[key] = v
             elif kind == "entity":
                 v = str(value or "").strip()
                 if v and not _ENTITY.match(v):
@@ -99,10 +181,9 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                     raise ValueError(f"ungültig: {', '.join(bad)}")
                 clean[key] = list(dict.fromkeys(items))
             elif kind == "time":
-                m = _TIME.match(str(value).strip())
-                if not m or int(m.group(1)) > 23 or int(m.group(2)) > 59:
-                    raise ValueError("Uhrzeit als HH:MM")
-                clean[key] = f"{int(m.group(1)):02d}:{m.group(2)}"
+                clean[key] = _clean_time(value)
+            elif kind == "nightplan":
+                clean[key] = _clean_night_plan(value)
             elif kind == "strings":
                 items = [str(v).strip() for v in (value or []) if str(v).strip()]
                 if key == "vacations":
@@ -111,20 +192,7 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                         raise ValueError(f"Format JJJJ-MM-TT [HH:MM] - JJJJ-MM-TT [HH:MM]: {', '.join(bad)}")
                 clean[key] = items
             elif kind == "rooms":
-                rooms = []
-                for r in value or []:
-                    climate = str(r.get("climate", "")).strip()
-                    if not _ENTITY.match(climate):
-                        raise ValueError(f"Raum ohne gültige climate-Entität: {climate or '(leer)'}")
-                    room = {"name": str(r.get("name") or "").strip(), "climate": climate}
-                    for opt in ("temperature", "heating_power", "humidity"):
-                        v = str(r.get(opt) or "").strip()
-                        if v:
-                            if not _ENTITY.match(v):
-                                raise ValueError(f"{climate}: {opt} ungültig")
-                            room[opt] = v
-                    rooms.append(room)
-                clean[key] = rooms
+                clean[key] = [_clean_room(r) for r in value or []]
             elif kind == "overrides":
                 items = []
                 for item in value or []:
@@ -150,11 +218,16 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
 @dataclass
 class Config:
     mode: str = "observe"
+    # Steuerung (0.34): beobachten (Standard) oder heatpilot – siehe CONTROL_MODES
+    control_mode: str = "beobachten"
     sample_interval_s: int = 300
     backfill_days: int = 30
     statistics_backfill_days: int = 365
     outdoor_sensors: list[str] = field(default_factory=list)
-    # Räume: [{name, climate, temperature?, heating_power?, humidity?}], leer = Tado automatisch
+    # Räume: [{name, climate, temperature?, heating_power?, humidity?,
+    #          group?, controller?, managed?, comfort?}], leer = Tado automatisch.
+    # group: gleicher Name = derselbe Raum (Mitläufer); controller: Wandthermostat (Raumregler);
+    # managed: „macht mit“ (HeatPilot schreibt); comfort: Komforttemperatur des Raums (°C)
     rooms: list[dict] = field(default_factory=list)
     # Personen für die Anwesenheit; leer = automatisch (alle person.* mit Gerät/GPS)
     persons: list[str] = field(default_factory=list)
@@ -182,6 +255,10 @@ class Config:
     night_temp: float = 18.0
     night_start: time = time(22, 30)
     night_end: time = time(6, 0)
+    # Nachtabsenkung nach Wochenplan (Steuerung heatpilot): Mo..So {start, end} als "HH:MM"
+    night_plan: list[dict] = field(default_factory=lambda: [dict(d) for d in DEFAULT_NIGHT_PLAN])
+    # so früh höchstens vorheizen (h) – Räume, die es nicht schaffen, werden akzeptiert
+    preheat_max_h: float = 3.0
     # Nachtzeiten/-temperatur und Abwesenheit aus Tado weiterlernen (Einstellungen = Startwerte)
     learn_schedule: bool = True
     # Räume mit Fußbodenheizung ohne Stellventil (z. B. festes RTL), climate-Entitäten
@@ -220,6 +297,12 @@ class Config:
             if getattr(cfg, key) == "":
                 setattr(cfg, key, None)
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
+        if cfg.control_mode not in CONTROL_MODES:
+            cfg.control_mode = "beobachten"
+        try:
+            cfg.night_plan = _clean_night_plan(cfg.night_plan)
+        except (TypeError, ValueError, AttributeError):
+            cfg.night_plan = [dict(d) for d in DEFAULT_NIGHT_PLAN]
         return cfg
 
     def to_raw(self) -> dict:
@@ -241,9 +324,38 @@ class Config:
         return self.gas_calorific_value * self.gas_z_number
 
     def is_night(self, t: time) -> bool:
+        """Nacht nach den festen Zeiten night_start/night_end (ältere Aufrufer, Ersparnis-Schätzung)."""
         if self.night_start <= self.night_end:
             return self.night_start <= t < self.night_end
         return t >= self.night_start or t < self.night_end
+
+    # --- Wochenplan der Nachtabsenkung (0.34) ---
+    def night_times(self, weekday: int) -> tuple[time, time]:
+        """(Beginn am Abend, Ende am Morgen) des Wochentags 0 = Mo … 6 = So."""
+        d = self.night_plan[weekday % 7]
+        return _parse_time(d["start"]), _parse_time(d["end"])
+
+    def is_night_at(self, dt: datetime) -> bool:
+        """Nacht laut Wochenplan: ab dem Beginn dieses Wochentags (abends) bzw. vor dessen Ende (morgens)."""
+        start, end = self.night_times(dt.weekday())
+        return dt.time() >= start or dt.time() < end
+
+    def night_end_at(self, dt: datetime) -> datetime:
+        """Ende der Nacht, in der ``dt`` liegt (nur sinnvoll, wenn is_night_at(dt))."""
+        start, _ = self.night_times(dt.weekday())
+        day = dt if dt.time() < start else dt + timedelta(days=1)
+        _, end = self.night_times(day.weekday())
+        return _at(day, end, dt)
+
+    def night_start_after(self, dt: datetime) -> datetime:
+        """Nächster Nachtbeginn ab ``dt`` (nur sinnvoll, wenn nicht is_night_at(dt))."""
+        start, _ = self.night_times(dt.weekday())
+        day = dt if dt.time() < start else dt + timedelta(days=1)
+        start, _ = self.night_times(day.weekday())
+        return _at(day, start, dt)
+
+    def is_managing(self) -> bool:
+        return self.control_mode == "heatpilot"
 
 
 def save_settings(clean: dict, data_dir: Path | None = None) -> Path:

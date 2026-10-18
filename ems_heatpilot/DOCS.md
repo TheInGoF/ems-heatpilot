@@ -4,8 +4,9 @@ Lokale, selbstlernende Heizungsoptimierung für Kessel mit
 [EMS-ESP](https://github.com/emsesp/EMS-ESP32) ([Doku](https://emsesp.org)),
 Tado und Anwesenheit.
 
-> **Beta (0.x): Raumregelung nur mit Tado.** Offene, direkt mit Home Assistant
-> verbundene Thermostate sollen später unterstützt werden.
+> **Beta (0.x): Raumregelung mit Tado** – über die Tado-Cloud-Integration oder lokal
+> über die Tado-Bridge in HomeKit (`homekit_controller`). Andere, direkt mit Home
+> Assistant verbundene Thermostate sollen später unterstützt werden.
 
 ## Einrichten
 
@@ -13,6 +14,11 @@ Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
 Reiter **Einstellungen**. Eingerichtet wird ausschließlich dort – das Add-on hat
 keine YAML-Optionen:
 
+- **Steuerung:** der Hauptschalter **Beobachten** (Standard: lernen, empfehlen, Tado
+  nur auf Knopfdruck) oder **HeatPilot steuert** (HeatPilot schreibt die
+  Raum-Solltemperaturen selbst – siehe [Steuerung](#steuerung-beobachten-oder-heatpilot-steuert)),
+  dazu der Wochenplan der Nachtabsenkung, Nacht- und Abwesenheitstemperatur und der
+  Vorheizdeckel
 - **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Passwort/Token).
   Gelesen werden Kessel und Regler alle 30 s und alle weiteren Geräte, die EMS-ESP
   kennt (Mischer, Solar, Sensoren …), alle 5 min. Fehlen Werte, die die
@@ -23,7 +29,9 @@ keine YAML-Optionen:
   Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
   Entitäten in Home Assistant
 - **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
-  Fußbodenheizung, optionale Ventil-/Temperatur-/Feuchtesensoren. Automatisch gewählt
+  **„macht mit“** und **Komforttemperatur** (für „HeatPilot steuert“), **Raum** und
+  **Raumregler** (mehrere Thermostate als ein Raum), Fußbodenheizung, optionale
+  Ventil-/Temperatur-/Feuchtesensoren. Automatisch gewählt
   werden nur Tado-Räume; was kein Raum ist (Klimaanlage im Auto, Heizkreis, Warmwasser),
   bleibt abgewählt bzw. lässt sich abwählen. Ändern sich die Sensoren eines Raums oder kommt ein Raum
   hinzu, liest HeatPilot die Historie automatisch neu ein (dauert einige Minuten)
@@ -273,32 +281,143 @@ da lässt sich nichts freischalten.
 
 ## Heizen (Bedienung)
 
-Der Reiter **Heizen** bedient Tado – nur auf Knopfdruck, HeatPilot schaltet nie von selbst.
+Der Reiter **Heizen** bedient Tado. Im Modus **Beobachten** nur auf Knopfdruck – HeatPilot
+schaltet dann nie von selbst; bei **HeatPilot steuert** schreibt HeatPilot die Solltemperaturen
+der Räume mit „macht mit“ selbst (siehe „Steuerung“), die Knöpfe gelten dann bis zum nächsten
+Phasenwechsel.
 
-- **Oben drei kleine Kacheln** (wie in der Tado-App), jede öffnet einen Dialog:
+- **Statuszeile** oben: „Beobachten“ oder „HeatPilot steuert · Nacht bis 04:30 · nächste
+  Änderung 03:30 Vorheizen“, bei Pause „HeatPilot pausiert · bis 23:00“, dazu Warnungen
+  (z. B. „Küche: 3 Schreibfehler in Folge – Thermostat prüfen“).
+- **Oben kleine Kacheln** (wie in der Tado-App), jede öffnet einen Dialog:
   **Boost** – Räume antippen (oder „Alle“), Temperatur mit −/+ und Dauer (15 min bis 12 h)
-  wählen, **Starten**. Das setzt in Tado einen Timer (`tado.set_climate_timer`); nach Ablauf
-  kehrt Tado selbst zum Zeitplan zurück, auch wenn das Add-on gerade neu startet. Läuft ein
-  Timer, zeigt die Kachel die Restzeit. **Zeitplan** – alle Räume zurück in den Tado-Zeitplan
-  (beendet laufende Timer sofort). **Ausschalten** – alle Räume aus, Tado hält dann nur den
-  Frostschutz.
+  wählen, **Starten**. Bei Räumen der Tado-Cloud-Integration setzt das in Tado einen Timer
+  (`tado.set_climate_timer`); nach Ablauf kehrt Tado selbst zum Zeitplan zurück, auch wenn das
+  Add-on gerade neu startet. Bei allen anderen Räumen (HomeKit) läuft der Timer in HeatPilot:
+  nach Ablauf stellt es den Wunschzustand (HeatPilot steuert) bzw. das Soll von vorher
+  (Beobachten) wieder her – aber nur, wenn das Boost-Soll noch steht; wurde inzwischen von
+  Hand gedreht, bleibt das stehen. Läuft ein Timer, zeigt die Kachel die Restzeit.
+  **Zeitplan** – Tado-Cloud-Räume zurück in den Tado-Zeitplan (beendet laufende Timer sofort);
+  andere Räume bekommen bei „HeatPilot steuert“ den Wunschzustand, bei „Beobachten“ erscheint
+  der Hinweis, den Zeitplan in der Tado-App fortzusetzen. **Ausschalten** – alle Räume aus,
+  Tado hält dann nur den Frostschutz. **Pause** (nur bei „HeatPilot steuert“) – 1 h, 2 h, 4 h
+  oder bis morgen früh (06:00) schreibt HeatPilot nichts; „Weiter“ hebt die Pause auf.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
-  Zustand („Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“). Heizt der Raum
-  gerade, ist die Kachel orange; aus = grau mit Ausschalt-Symbol. Antippen öffnet den Dialog
-  mit Soll (−/+), Betriebsart Zeitplan / Manuell / Aus, Ventil und Restzeit eines Timers.
+  Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
+  HeatPilot steuert: „HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell 22° bis 21:00“
+  (jemand hat von Hand gedreht), „erreicht ≈ 19,5°“ (Ziel laut Raummodell nicht erreichbar),
+  „Pause · 21°“. Heizt der Raum gerade, ist die Kachel orange; aus = grau mit
+  Ausschalt-Symbol. Antippen öffnet den Dialog mit Soll (−/+), Betriebsart, Ventil, Restzeit
+  eines Timers, den Geräten des Raums und – bei „HeatPilot steuert“ – Phase, Wunschsoll,
+  Grund und nächster Änderung.
+- **Protokoll** (aufklappbar unter den Kacheln): die letzten 20 Schreibvorgänge mit Zeit,
+  Raum, Aktion, Wert und Grund – egal ob Regelschleife oder Knopfdruck.
 
-Erlaubt sind nur diese drei Aufrufe und nur auf die Thermostate der in den
-Einstellungen gewählten Räume, Temperaturen 5–25 °C. Raumauswahl, Temperatur und Dauer
-merkt sich das Gerät. Jede Bedienung steht im Protokoll.
+Erlaubt sind nur drei Aufrufe (`climate.set_temperature`, `climate.set_hvac_mode`,
+`tado.set_climate_timer`) und nur auf die Thermostate der in den Einstellungen gewählten
+Räume, Temperaturen 5–25 °C. Raumauswahl, Temperatur und Dauer merkt sich das Gerät.
 
-## Was das Add-on in Version 0.23 macht
+## Steuerung: Beobachten oder HeatPilot steuert
 
-**Nur beobachten und lernen.** Es greift nicht von selbst in die Heizung ein:
-- An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt.
+Unter **Einstellungen → Steuerung** steht der Hauptschalter. Es gibt genau zwei Stellungen,
+keinen Zwischenmodus und keinen automatischen Rückfall:
+
+- **Beobachten** (Standard): wie bisher – lernen, empfehlen, Tado nur auf Knopfdruck.
+- **HeatPilot steuert**: HeatPilot schreibt die Solltemperaturen der Räume mit Häkchen
+  **„macht mit“** selbst. Zurück zu Tado geht es nur über diesen Schalter; danach den
+  Zeitplan in der Tado-App selbst fortsetzen (HeatPilot stellt ihn nicht wieder her). Fällt
+  HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt
+  geschriebene Soll stehen.
+
+### Räume und Geräte
+
+- Je Raum: **„macht mit“** (nur dann wird geschrieben) und die **Komforttemperatur**
+  (Startwert beim Anlegen: aktuelles Soll des Thermostats, sonst 21 °C; 5–25 °C, halbe Grad).
+- Mehrere Thermostate in einem Zimmer: gleicher Name im Feld **Raum** = derselbe Raum.
+  Gibt es einen **Raumregler** (Wandthermostat), misst und schreibt HeatPilot nur ihn; sonst
+  gilt das Mittel aller Geräte als Raumtemperatur und geschrieben wird auf alle Ventile.
+  Gelernt wird der Raum unter seinem Schlüsselgerät (Raumregler, sonst das erste Gerät).
+  Bestehende Einstellungen ohne „Raum“ bleiben wie bisher: jedes Thermostat ein Raum.
+- Die Tado-Bridge über HomeKit (`homekit_controller`) kennt nur „aus“ und „heizen“, keinen
+  Zeitplan und keinen Timer. Vor dem ersten Schreiben stellt HeatPilot deshalb die
+  Betriebsart auf „heizen“. Räume der Tado-Cloud-Integration behalten Timer und Zeitplan.
+- Der Vorlauf am Regler (EMS-ESP) bleibt außen vor: EMS-ESP wird weiterhin nur gelesen.
+
+### Wunschzustand (jeder Takt, nur bei „HeatPilot steuert“)
+
+Für jeden Raum mit „macht mit“ bestimmt HeatPilot eine Phase und das dazugehörige Soll:
+
+1. **Urlaub** → Abwesenheitstemperatur; vor der erwarteten Rückkehr (siehe „Urlaub“)
+   rechtzeitig vorheizen auf Komfort.
+2. **Nacht** laut Wochenplan → Nachttemperatur (Standard 18 °C). Je Wochentag gilt ein Beginn am
+   Abend dieses Tages und ein Ende am Morgen dieses Tages; Standard: Beginn So–Do 21:00, Fr und
+   Sa 22:00; Ende Mo–Fr 04:30, Sa und So 06:30. Vor dem Nachtende wird so früh **vorgeheizt**,
+   wie der Raum laut Raummodell braucht (Aufheizzeit bei maximalem Vorlauf und aktueller
+   Außentemperatur), mindestens 15 min, höchstens der **Vorheizdeckel** (Standard 3 h). Ohne
+   plausibles Raummodell pauschal 1 h. Folgt nach der Nacht Abwesenheit, wird nicht vorgeheizt.
+3. **Niemand zu Hause** (alle gewählten Personen sicher weg) → Abwesenheitstemperatur; liegt die
+   erwartete Ankunft (GPS-Heimfahrt oder Gewohnheit) innerhalb der Aufheizzeit, wird auf Komfort
+   vorgeheizt. Ist die Ankunft offen (Gewohnheit lernt noch) oder die Anwesenheit unbekannt
+   (Tracker meldet nichts), bleibt es bei Komfort – im Zweifel warm.
+4. Sonst **Komfort**.
+
+Feste Grenzen: nie unter der kleineren von Abwesenheits- und Nachttemperatur, nie über der
+Komforttemperatur des Raums (außer Boost auf Knopfdruck), immer 5–25 °C im 0,5-°C-Raster.
+
+### Räume, die das Ziel nicht erreichen
+
+Räume mit zu kleinem Heizkörper (Ventil dauernd offen, Temperatur bleibt darunter) werden
+akzeptiert: Die Vorheizzeit ist gedeckelt, es wird nichts hochgedreht und der Raum nicht
+„aus Angst“ dauerhaft auf Komfort gehalten. Im Heizen-Reiter steht „erreicht ≈ 19,5°“ – die
+Temperatur, die der Raum laut Modell bei maximalem Vorlauf schafft.
+
+### Schreiben, Hand, Pause, Fehler
+
+- Geschrieben wird **nur beim Wechsel** des Wunsch-Solls (Phasenwechsel), nicht alle 5 Minuten,
+  und nur über die drei erlaubten Dienste auf die gewählten Räume. Bei „Beobachten“ oder ohne
+  „macht mit“ schreibt HeatPilot nie von selbst – das ist im Code hart abgesichert und getestet.
+- **Von Hand** gedreht (Soll weicht vom zuletzt geschriebenen ab, egal ob am Ventil, in der
+  Tado-App oder im Heizen-Reiter, auch „aus“): HeatPilot lässt es stehen bis zum nächsten
+  Phasenwechsel („manuell bis …“) und schreibt dann den Wunschzustand – auch, wenn der sich beim
+  Wechsel nicht ändert (Vorheizen → Komfort). Ob ein Soll wirklich angekommen ist, prüft HeatPilot
+  nicht nach; meldet Home Assistant danach etwas anderes, gilt das als Handänderung.
+- **Boost** läuft immer zu Ende, HeatPilot greift währenddessen nicht ein; danach gilt wieder der
+  Wunschzustand.
+- **Pause** (Heizen → Pause, bis 48 h) hält alle Schreibvorgänge an; der Schalter bleibt dabei
+  auf „HeatPilot steuert“. Ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher.
+- **Fehler** beim Schreiben werden protokolliert und nach 15 min erneut versucht; ab drei
+  Fehlschlägen in Folge steht eine Warnung im Heizen-Reiter.
+- **Protokoll:** jeder Schreibvorgang (Zeit, Raum, Aktion, Wert, Grund) wird 90 Tage gespeichert
+  – die letzten 20 im Heizen-Reiter, 200 in der Diagnose-Datei, alle im Export der gelernten
+  Werte (`steuerung`), ohne Koordinaten.
+- Der Zustand der Regelschleife überlebt einen Neustart; beim Zurückschalten auf „Beobachten“
+  wird er gelöscht.
+
+### Lernen bei „HeatPilot steuert“
+
+Nachtzeiten und Temperaturen aus Tado zu lernen wäre dann zirkulär – HeatPilot schreibt sie
+ja selbst. Deshalb gilt der Wochenplan, „gelernt“ entfällt, und die Übersicht zeigt in der
+Zeitplan-Karte den Wochenplan; auch gespeichert wird nichts, und nach dem Zurückschalten auf
+„Beobachten“ zählen nur Nächte, in denen wieder Tado gesteuert hat. Raum- und Hausmodell lernen
+unverändert weiter; die
+Ersparnis-Schätzung rechnet weiter mit Abwesenheits-/Nachttemperatur und dem Mo–Fr-Mittel des
+Plans.
+
+Später (0.35+): Schlafenszeit aus dem Hausverbrauch und Soll nach Ventilstellung – jetzt bewusst
+nicht enthalten.
+
+## Was das Add-on macht
+
+**Beobachten und lernen.** Im Standard greift es nicht von selbst in die Heizung ein:
+- An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt –
+  auch bei „HeatPilot steuert“.
 - In Home Assistant schreibt es von selbst nur seine eigenen `sensor.heatpilot_*`.
 - Ausnahme, nur auf deinen Knopfdruck im Reiter „Heizen“: Tado-Timer, Soll und
-  Betriebsart der gewählten Räume (siehe unten). Jeder andere Schreibversuch wird im
+  Betriebsart der gewählten Räume (siehe oben). Jeder andere Schreibversuch wird im
   Code hart abgewiesen.
+- Erst mit dem Schalter **HeatPilot steuert** (Einstellungen → Steuerung) schreibt es die
+  Raum-Solltemperaturen der Räume mit „macht mit“ selbst – mit denselben drei Diensten,
+  denselben Räumen und 5–25 °C (siehe „Steuerung“).
 
 1. **Daten übernehmen:** Beim ersten Start holt sich das Add-on selbst die
    vorhandenen Daten aus Home Assistant. Ein Export ist nicht nötig.
@@ -382,9 +501,11 @@ Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 
 Im Reiter Einstellungen → **Räume** stehen alle Thermostate (climate-Entitäten)
 als Tabelle. Häkchen = Raum wird gelernt. Je Raum optional: eigener Name,
-Ventil-/Heizleistungs-Sensor (%), Temperatursensor (für die Langzeitstatistik)
-und Feuchtesensor. Ohne Angaben schlägt die automatische Erkennung die
-Tado-Räume samt Sensoren vor.
+„macht mit“ und Komforttemperatur (für „HeatPilot steuert“), Raum und Raumregler
+(mehrere Thermostate als ein Raum, siehe „Steuerung“), Ventil-/Heizleistungs-Sensor (%),
+Temperatursensor (für die Langzeitstatistik) und Feuchtesensor. Ohne Angaben schlägt
+die automatische Erkennung die Tado-Räume samt Sensoren vor; „macht mit“ setzt nie
+ein Vorschlag, nur du.
 
 ## Wärmebedarf aus dem Tado-Soll
 

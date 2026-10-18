@@ -46,6 +46,7 @@ DHW_BASE_MIN_CELL = 4         # so viele Sommerstunden je Wochentag/Stunde, sons
 ON_STATES = {"on", "true", "1", "heat", "heating",
              "an", "ein", "ja", "wahr", "aktiv"}  # EMS-ESP mit deutscher Sprache: „an“/„aus“
 STALE_S = 12 * 3600
+KV_MANAGED_UNTIL = "schedule.managed_until"  # bis dahin hat HeatPilot selbst gesteuert: nicht aus Tado lernen
 # Fremdwärme je Raum (Kamin, Ofen, viele Gäste): der Raum wird deutlich wärmer, ohne dass der
 # Heizkörper es erklären kann – solche Schritte lernt das Raummodell nicht, solche Stunden das Haus nicht
 EXT_RATE_KH = 0.8        # unerklärter Anstieg ab so viel K/h …
@@ -155,8 +156,9 @@ class Engine:
         self._last_enabled: int | None = None
         off = store.query("SELECT MAX(ts) AS t FROM burner_events WHERE state = 0")
         self._last_off_ts: float | None = off[0]["t"] if off else None
+        self.control_loop = None  # controlloop.ControlLoop, von main gesetzt (Steuerung seit 0.34)
         self._live_entities = {
-            *(r.climate for r in found.rooms),
+            *found.climate_ids(),
             *(found.boiler.get(k) for k in ("burner_on", "burner_power", "dhw_active", "min_period")),
             found.thermostat.get("hc_mode"),
         }
@@ -403,21 +405,40 @@ class Engine:
             "pump_on": (int(num(self._boiler("pump_mod")) > 0) if num(self._boiler("pump_mod")) is not None
                         else flag(self._boiler("heating_pump"))),
         }
-        rooms = []
-        for r in self.found.rooms:
-            st = self.states.get(r.climate)
-            if not st:
-                continue
-            a = st.get("attributes", {})
-            valve = num(self._val(r.heating_power))
-            if valve is None:
-                valve = 100.0 if a.get("hvac_action") == "heating" else 0.0
-            hum = num(self._val(r.humidity))
-            if hum is None:
-                hum = num(a.get("current_humidity"))
-            target = num(a.get("temperature")) if st.get("state") != "off" else None
-            rooms.append((r.climate, num(a.get("current_temperature")), target, valve, hum))
+        rooms = [row for row in (self.room_reading(r) for r in self.found.rooms) if row is not None]
         return self._check_ranges(sample, rooms, persons)
+
+    def _device_reading(self, dev: dict) -> tuple | None:
+        """(Temperatur, Soll, Ventil, Feuchte) eines Thermostats; None, wenn es keinen Zustand hat."""
+        st = self.states.get(dev["climate"])
+        if not st:
+            return None
+        a = st.get("attributes", {})
+        valve = num(self._val(dev.get("heating_power")))
+        if valve is None:
+            valve = 100.0 if a.get("hvac_action") == "heating" else 0.0
+        hum = num(self._val(dev.get("humidity")))
+        if hum is None:
+            hum = num(a.get("current_humidity"))
+        target = num(a.get("temperature")) if st.get("state") != "off" else None
+        return num(a.get("current_temperature")), target, valve, hum
+
+    def room_reading(self, r) -> tuple | None:
+        """(climate, Temperatur, Soll, Ventil, Feuchte) eines logischen Raums.
+
+        Mit Raumregler zählen dessen Temperatur und Soll; sonst ist die Raumtemperatur das Mittel
+        aller Geräte der Gruppe, das Soll das des Schlüssels. Das Ventil ist immer das Mittel aller
+        Geräte (Fehlt der Schlüssel, fehlt der Raum – wie bisher.)
+        """
+        head = self._device_reading(r.devices[0])
+        if head is None:
+            return None
+        others = [x for x in (self._device_reading(d) for d in r.members) if x is not None]
+        temps = [head[0]] if r.controller else [x[0] for x in (head, *others) if x[0] is not None]
+        valves = [x[2] for x in (head, *others) if x[2] is not None]
+        hums = [x[3] for x in (head, *others) if x[3] is not None]
+        return (r.climate, sum(temps) / len(temps) if temps else None, head[1],
+                sum(valves) / len(valves) if valves else None, hums[0] if hums else None)
 
     def _check_ranges(self, sample: dict, rooms: list[tuple], persons: list[tuple]):
         """Werte außerhalb physikalischer Grenzen verwerfen (z. B. EMS-Platzhalter 3276,7)."""
@@ -535,6 +556,8 @@ class Engine:
         self.store.add_room_samples((ts, *r) for r in rooms)
         self.store.add_person_samples((ts, *p) for p in persons)
         self.dhw_step(ts, sample)
+        if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
+            self.control_loop.plan(ts, sample, rooms)
         self.store.commit()
 
         step = ts - ts % int(ROOM_STEP_H * 3600)
@@ -578,13 +601,22 @@ class Engine:
         self.live.add(now_ts or int(time.time()), sample, rooms)
 
     def update_schedule(self, now_ts: int | None = None, max_age_s: int = 3600) -> None:
-        """Nachtzeiten und Temperaturen aus Tado neu lernen (stündlich)."""
+        """Nachtzeiten und Temperaturen aus Tado neu lernen (stündlich).
+
+        Bei Steuerung ``heatpilot`` schreibt HeatPilot die Zeiten selbst – daraus zu lernen wäre
+        zirkulär: nichts lernen, nur merken, bis wann gesteuert wurde (``KV_MANAGED_UNTIL``); nach dem
+        Zurückschalten zählen erst Nächte danach.
+        """
         now_ts = now_ts or int(time.time())
         if now_ts - self._schedule_ts < max_age_s:
             return
         self._schedule_ts = now_ts
+        if self.cfg.is_managing():
+            self.store.put(KV_MANAGED_UNTIL, now_ts)
+            return
         learned = schedule.learn(self.store, now_ts, set(self.cfg.floor_heating_rooms),
-                                 {r.climate for r in self.found.rooms}, self.found.persons)
+                                 {r.climate for r in self.found.rooms}, self.found.persons,
+                                 since_ts=self.store.get(KV_MANAGED_UNTIL))
         eff = schedule.effective(self.cfg, learned)
         if eff.as_dict() != self.eff.as_dict():
             log.info("Zeiten/Temperaturen: %s (gelernt aus %d Nächten)", eff.as_dict(), learned["nights"])
@@ -1287,7 +1319,9 @@ class Engine:
             "ignored": self.ignored(),
             "flow_study": self.flow_study(),
             "schedule": {"learned": self.schedule_learned, "effective": self.eff.as_dict(),
-                         "learning": self.cfg.learn_schedule},
+                         # bei Steuerung heatpilot wäre Lernen aus Tado zirkulär: der Wochenplan gilt
+                         "learning": self.cfg.learn_schedule and not self.cfg.is_managing()},
+            "control_mode": self.cfg.control_mode,
             "limits": {
                 "away_temp": self.eff.away_temp,      # damit rechnet die Ersparnis (gelernt, nie darunter)
                 "night_temp": self.eff.night_temp,
