@@ -66,6 +66,23 @@ Regler wie den ES73 oder die Tado-Erweiterung nachbilden. Weg C entfällt.
 2. **Weg B** erst nach einer Heizsaison mit A, wenn klar ist, dass der ES73 im Weg steht, und mit
    Wächter in HA (HeatPilot-Sensor älter als 1 h → Kessel auf festen Vorlauf 45 °C).
 
+## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
+
+1. **Takt-Boost** (Idee Ingo): Taktet der Kessel stark (z. B. mehr als 3 Starts je Stunde, Brennerläufe
+   unter 5 min) und wartet dabei ein Raum mit offenem Ventil unter Soll, den Vorlauf in 2-K-Schritten um
+   bis zu +10 K anheben. Mehr Energie je Brennerlauf, längere Läufe, wartende Räume bekommen Leistung.
+   Zurück, sobald der Raum warm ist oder das Takten aufhört. Preis: etwas weniger Brennwert, deshalb nur
+   bei Bedarf. Die Taktsperre selbst wird nie umgangen.
+2. **Beharrung tief:** Sind alle Räume am Soll und die Ventile wenig offen, Vorlauf senken, bis der
+   erste Raum sein Soll nicht mehr hält (Raummodelle: nötiger Vorlauf je Raum, Maximum plus Reserve).
+3. **Aufheizen hoch:** Vor dem Nachtende bzw. der Ankunft Vorlauf anheben, damit die Aufheizzeit kurz
+   wird (aus dem Vorheizplan), danach wieder auf Beharrung.
+4. **Nacht/Abwesenheit:** Heizkreis über den Regler in Nacht/Absenkbetrieb, nicht nur die Ventile zu.
+
+Hebel ohne Vorlauf-Zugriff, schon über die Ventile möglich (0.37 „Soll nach Ventilstellung“): Räume
+gemeinsam anfordern lassen statt nacheinander – fordert nur der Flur Wärme an, taktet der Kessel immer;
+fordern drei Räume zusammen an, läuft er durch.
+
 ## Schutzregeln, falls geschrieben wird
 
 - Weiße Liste der erlaubten Befehle und Werte (wie heute bei Tado in `control.py`), Grenzen 30 °C bis
