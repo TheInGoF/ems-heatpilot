@@ -229,6 +229,15 @@ class RoomModel:
 
 
 COOL_MIN_UPDATES = 30   # so viele gasfreie Nachtstunden, bevor die gemessene Auskühlzeit gilt
+# Auskühlen in zwei Phasen: kurz nach dem Abschalten geben Luft und Heizkörper ihre Wärme schnell
+# ab (Zeitkonstante ~1,5 h), danach kühlen die Wände langsam aus. Am Export 10/2026 nachgerechnet:
+# eine einzige Zeitkonstante überschätzt später das Auskühlen um das 2,4-Fache.
+FAST_TAU_H = 1.5
+
+
+def fast_decay(hours_off: float) -> float:
+    """Anteil der schnellen Auskühlphase in der Stunde ``hours_off`` nach dem Abschalten (Stundenmitte)."""
+    return math.exp(-max(hours_off - 0.5, 0.0) / FAST_TAU_H)
 
 
 @dataclass
@@ -245,9 +254,10 @@ class HouseModel:
     rls: RLS = field(
         default_factory=lambda: RLS(n=3, lam=0.999, delta=10.0, theta=[0.2, 2.0, 0.3], min_sigma=0.2)
     )
-    # Auskühlen ohne Heizung: dT/h = −k·(innen − außen) + g  →  τ = 1/k, Fremdwärme-Übertemperatur g/k
+    # Auskühlen ohne Heizung: dT/h = −k·(innen − außen) + g − A·e^(−t/τ_schnell), t = Stunden seit
+    # dem letzten Gas  →  τ = 1/k (Wände), Fremdwärme-Übertemperatur g/k, schneller Abfall A·τ_schnell
     cool: RLS = field(
-        default_factory=lambda: RLS(n=2, lam=0.999, delta=1.0, theta=[0.03, 0.0], min_sigma=0.03)
+        default_factory=lambda: RLS(n=3, lam=0.999, delta=1.0, theta=[0.03, 0.0, 0.0], min_sigma=0.03)
     )
     # nur in der Heizperiode lernen, sonst verzerrt der Sommer das Bild
     max_learn_outdoor: float = 15.0
@@ -297,6 +307,20 @@ class HouseModel:
         return min(max(self.cool.theta[1] / k, 0.0), 10.0)
 
     @property
+    def cool_fast_k(self) -> float:
+        """Zusätzlicher schneller Abfall nach dem Abschalten (K, Luft und Heizkörper), nie negativ."""
+        if self.tau_cool_h is None or self.cool.n < 3:
+            return 0.0
+        return min(max(self.cool.theta[2], 0.0) * FAST_TAU_H, 5.0)
+
+    def fast_drop(self, hours_off: float) -> float:
+        """Schneller Abfall (K) in der Stunde ``hours_off`` → ``hours_off + 1`` nach dem Abschalten."""
+        a = self.cool_fast_k
+        if a <= 0:
+            return 0.0
+        return a * (math.exp(-hours_off / FAST_TAU_H) - math.exp(-(hours_off + 1) / FAST_TAU_H))
+
+    @property
     def tau_balance_h(self) -> float | None:
         if self.h_kw_per_k <= 1e-3:
             return None
@@ -312,11 +336,14 @@ class HouseModel:
             return None
         return self.rls.update([t_in - t_out, dt_in_per_h, 1.0], gas_kw)
 
-    def learn_cooling(self, t_in: float, t_out: float, dt_in_per_h: float) -> float | None:
-        """Eine gasfreie Stunde: wie schnell kühlt das Haus bei diesem Unterschied aus?"""
+    def learn_cooling(self, t_in: float, t_out: float, dt_in_per_h: float, hours_off: float = 99.0) -> float | None:
+        """Eine gasfreie Stunde: wie schnell kühlt das Haus bei diesem Unterschied aus?
+
+        ``hours_off``: Stunden seit der letzten Stunde mit Gas (für die schnelle Phase).
+        """
         if t_out > self.max_learn_outdoor or t_in - t_out < 3 or abs(dt_in_per_h) > 1.0:
             return None
-        return self.cool.update([-(t_in - t_out), 1.0], dt_in_per_h)
+        return self.cool.update([-(t_in - t_out), 1.0, -fast_decay(hours_off)], dt_in_per_h)
 
     def demand_kw(self, t_in: float, t_out: float) -> float:
         """Benötigte Gasleistung, um t_in bei t_out zu halten (Fremdwärme abgezogen)."""
@@ -338,6 +365,7 @@ class HouseModel:
             "tau_h": None if self.tau_h is None else round(self.tau_h, 1),
             "tau_source": "abkuehlung" if self.tau_cool_h is not None else "bilanz",
             "cool_updates": self.cool.updates,
+            "cool_fast_k": round(self.cool_fast_k, 2),
             "design_load_kw": round(self.demand_kw(20.0, design_outdoor), 2),
             "demand_now_kw": now,
         }
@@ -350,4 +378,6 @@ class HouseModel:
         m = cls(rls=RLS.from_dict(d["rls"]))
         if d.get("cool"):
             m.cool = RLS.from_dict(d["cool"])
+            if m.cool.n == 2:
+                m.cool.extend(1)  # Modell von vor 0.31: schnelle Auskühlphase ergänzen
         return m

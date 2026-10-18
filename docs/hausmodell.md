@@ -44,13 +44,18 @@ Gelernt wird eine Stunde **nur**, wenn
 
 - die **Heizperiode** läuft: das 24-Stunden-Mittel draußen liegt bei höchstens 15 °C und die
   Stunde selbst auch (warme Sommertage mit kühler Nacht zählen nicht),
-- **kein Warmwasser** geladen wurde (sonst steckt Speicherwärme im Gas),
+- **kein Warmwasser** geladen wurde (sonst steckt Speicherwärme im Gas). Für Stunden aus der
+  Langzeitstatistik von Home Assistant (vor HeatPilot) ist das unbekannt. Dort zieht HeatPilot
+  den üblichen Warmwasserbedarf dieser Wochentags-Stunde ab, gemessen in Sommerstunden
+  (24-h-Mittel draußen ab 17 °C, dann ist alles Gas Warmwasser – inklusive einer
+  Legionellenschaltung zur festen Stunde). Ohne mindestens 14 Tage Sommerdaten wird nichts abgezogen.
 - der **Gaszähler plausibel** ist – keine Nachträge/Sprünge, keine verpassten Zählungen,
   kein gesunkener Zählerstand (siehe „Ausreißer“ in der Dokumentation),
 - Vor- und Folgestunde Messwerte haben (für die mittige Temperaturänderung).
 
 Robust gegen Ausreißer: nach einer Einlernphase von 50 Stunden zählt ein Fehler über dem
-4-Fachen des üblichen Fehlers nur gedeckelt, über dem 15-Fachen gar nicht.
+4-Fachen des erwarteten Fehlers nur gedeckelt, über dem 15-Fachen gar nicht. Der erwartete Fehler
+ist der übliche, erweitert um die Unsicherheit der Vorhersage für diese Stunde.
 
 ## Fremdwärme und Heizgrenze
 
@@ -96,12 +101,19 @@ was das Haus im Betrieb wirklich braucht – genau das, woran sich die Kesselgr�
 
 Wie schnell das Haus ohne Heizung auskühlt, lernt ein **eigenes kleines Modell** – nur aus
 gasfreien Nachtstunden (22–6 Uhr, in der Stunde und den Nachbarstunden kein Gas, kein
-Warmwasser, mindestens 3 K Unterschied innen–außen):
+Warmwasser, mindestens 3 K Unterschied innen–außen). Ein Haus kühlt in **zwei Phasen** aus:
+Direkt nach dem Abschalten geben Raumluft und Heizkörper ihre Wärme schnell ab, danach
+kühlen nur noch die Wände langsam aus. Deshalb gilt mit t = Stunden seit der letzten Stunde mit Gas:
 
 ```
-ΔT_innen/Δt  =  −k · (T_innen − T_außen)  +  g
-Trägheit τ = 1/k        Übertemperatur ohne Heizung = g/k
+ΔT_innen/Δt  =  −k · (T_innen − T_außen)  +  g  −  A · e^(−t / 1,5 h)
+Trägheit τ = 1/k (Wände)    Übertemperatur ohne Heizung = g/k    schneller Abfall = A · 1,5 h
 ```
+
+An echten Daten (Herbst 2026) passte eine einzige Zeitkonstante schlecht: In den ersten
+Stunden kühlte das Haus schneller, nach einem Tag ohne Heizung nur noch halb so schnell, wie
+sie vorhersagte. Mit zwei Phasen ist der Fehler um 30 % kleiner. Die Übertemperatur ohne Heizung
+passt dann auch zur Heizgrenze aus der Gasbilanz.
 
 Gültig ab 30 solchen Stunden. Bis dahin zeigt HeatPilot vorläufig `C/H` aus der Gasbilanz –
 das beschreibt aber eher die schnell reagierende Wärme der Heizkörper und der Luft und ist
@@ -141,7 +153,8 @@ Sonst steht in der Übersicht unter „Leitplanken“, was noch fehlt.
 - **Gas, nicht Wärme:** ein besserer oder schlechterer Kesselwirkungsgrad verschiebt H.
 - **Nicht witterungsbereinigt:** Sonne und Wind wirken nur im Mittel (über b), nicht je Stunde.
 - **Warmwasser vor Beginn der Messung:** Für Stunden aus der Langzeitstatistik von Home
-  Assistant (vor HeatPilot) ist nicht bekannt, wann Warmwasser geladen wurde; sie lernen nur
-  in der Heizperiode mit.
+  Assistant (vor HeatPilot) ist nicht bekannt, wann Warmwasser geladen wurde. Abgezogen wird
+  der Sommer-Durchschnitt dieser Wochentags-Stunde. Im Winter braucht Warmwasser etwas mehr
+  (kälteres Leitungswasser), ein kleiner Rest bleibt also im Wärmeverlust.
 - **Taktender Kessel:** einzelne Stunden streuen stark (mal läuft der Brenner 15 min, mal gar
   nicht). Erst über viele Stunden mittelt sich das heraus – deshalb zeigt der Graf auch Tageswerte.

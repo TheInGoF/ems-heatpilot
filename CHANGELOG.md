@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.31.0
+Hausmodell genauer, nachgerechnet mit dem Export vom 18.10. (abgesprochen):
+- **Auskühlen in zwei Phasen.** Direkt nach dem Abschalten geben Luft und Heizkörper ihre Wärme schnell ab, mit deinen Daten zusätzlich ≈ 0,8 K in den ersten Stunden. Danach kühlen nur noch die Wände langsam aus. Mit einer einzigen Zeitkonstante kühlte das Haus in der Rechnung nach einem Tag ohne Heizung doppelt so schnell aus wie in Wirklichkeit. Mit zwei Phasen ist der Fehler um 30 % kleiner. Die „Haus-Trägheit“ zeigt jetzt die der Wände, die Ersparnis-Schätzung rechnet mit beiden Phasen
+- **Warmwasser aus den Altdaten herausgerechnet.** Die Stunden aus der Home-Assistant-Statistik vor HeatPilot enthielten auch das Warmwasser-Gas, zum Beispiel die Legionellenschaltung sonntags um 13 Uhr. Jetzt wird vor dem Lernen der übliche Sommerbedarf dieser Wochentags-Stunde abgezogen. Mit deinen Daten: Wärmeverlust 145 statt 153 W/K, Normheizlast 3,7 statt 3,9 kW, kleinerer Modellfehler. Der Wärmebedarf-Graf rechnet genauso
+- Beim Update wird der Lernstand einmal neu berechnet
+
 ## 0.30.2
 Hausmodell aus der Prüfung des Exports vom 18.10. Das Modell selbst passt zu den Daten: Normheizlast 3,9 kW, an den Tagesmitteln 2–5 % Abweichung. Korrigiert wurden:
 - **Ersparnis-Schätzung zeigte 71 % statt 2 %.** Während der 19 Tage Abwesenheit im September war die Heizung aus. Wärmte die Sonne das echte Haus, blieb das simulierte abgesenkte Haus kalt, und der Unterschied wurde als Ersparnis gutgeschrieben. Jetzt bekommen beide Häuser in gasfreien Stunden dieselbe Sonne. Außerdem kann aufsummiert nie mehr gespart werden, als wirklich Heizgas verbraucht wurde

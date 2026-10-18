@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import time
+from collections import deque
 from datetime import datetime, timedelta
 
 from . import advice, analysis, flowstudy, guards, plausibility, schedule, solar, weekly
@@ -30,6 +31,11 @@ ENABLE_DELAY_MAX_MIN = 15
 HEAT_SEASON_24H = 15.0          # darüber (24-h-Mittel außen) lernt das Hausmodell nicht
 GAS_FREE_KWH = 0.05             # Stunde gilt als gasfrei (Auskühlen lernen)
 NIGHT_HOURS = (22, 23, 0, 1, 2, 3, 4, 5)  # ohne Sonne
+# Warmwasser-Grundbedarf aus Sommerstunden (24-h-Mittel draußen so warm: sicher keine Heizung,
+# das Gas ist Warmwasser) – für Langzeitstunden ohne Warmwasser-Angabe vor dem Hauslernen abgezogen
+DHW_BASE_SUMMER_24H = 17.0
+DHW_BASE_MIN_HOURS = 14 * 24
+DHW_BASE_MIN_CELL = 4         # so viele Sommerstunden je Wochentag/Stunde, sonst Mittel der Stunde
 ON_STATES = {"on", "true", "1", "heat", "heating",
              "an", "ein", "ja", "wahr", "aktiv"}  # EMS-ESP mit deutscher Sprache: „an“/„aus“
 STALE_S = 12 * 3600
@@ -706,10 +712,60 @@ class Engine:
         dhw = cur["dhw_frac"]
         gas_free = all(r["gas_kwh"] is not None and r["gas_kwh"] <= GAS_FREE_KWH for r in (prev, cur, nxt))
         if gas_free and not dhw and local(h).hour in NIGHT_HOURS:
-            self.house.learn_cooling(cur["t_in"], cur["t_out"], d_in)
+            last = self.store.query("SELECT MAX(ts) AS t FROM hourly WHERE ts < ? AND (gas_kwh IS NULL OR gas_kwh > ?)",
+                                    (h, GAS_FREE_KWH))[0]["t"]
+            self.house.learn_cooling(cur["t_in"], cur["t_out"], d_in, 99.0 if last is None else (h - last) / 3600)
         if dhw is not None and dhw > 0:
             return  # Warmwasserladung verfälscht die Heizbilanz (auch eine kurze verschiebt kWh)
-        self.house.learn(cur["gas_kwh"], cur["t_in"], cur["t_out"], d_in)
+        self.house.learn(self.heating_gas(cur), cur["t_in"], cur["t_out"], d_in)
+
+    def heating_gas(self, row) -> float:
+        """Heizgas einer Stunde: bei Langzeitstunden (Warmwasser unbekannt) ohne den üblichen Warmwasserbedarf."""
+        gas = row["gas_kwh"]
+        if row["dhw_frac"] is None and row["dhw_energy_frac"] is None:
+            base = self.dhw_base()
+            if base:
+                d = local(row["ts"])
+                gas = max(gas - base[(d.weekday(), d.hour)], 0.0)
+        return gas
+
+    def dhw_base(self) -> dict[tuple[int, int], float] | None:
+        """Warmwasser-Gas je Wochentag und Stunde (kWh) aus den Sommerstunden – täglich neu berechnet.
+
+        Vor HeatPilot weiß die Langzeitstatistik nicht, wann Warmwasser geladen wurde. Im Sommer
+        ist alles Gas Warmwasser (inkl. Legionellenschaltung zur festen Stunde) – dieses Profil
+        wird im Winter von den Langzeitstunden abgezogen, sonst lernt das Haus das Warmwasser mit.
+        """
+        cached = self.__dict__.get("_dhw_base")
+        if cached is not None and time.time() - cached[0] < 86400:
+            return cached[1]
+        rows = self.store.query("SELECT ts, t_out, gas_kwh FROM hourly ORDER BY ts")
+        cells: dict[tuple[int, int], list[float]] = {}
+        window: deque[tuple[int, float]] = deque()
+        total, n = 0.0, 0
+        for r in rows:
+            if r["t_out"] is not None:
+                window.append((r["ts"], r["t_out"]))
+                total += r["t_out"]
+            while window and window[0][0] <= r["ts"] - 86400:
+                total -= window.popleft()[1]
+            if r["gas_kwh"] is None or len(window) < 12 or total / len(window) < DHW_BASE_SUMMER_24H:
+                continue
+            d = local(r["ts"])
+            cells.setdefault((d.weekday(), d.hour), []).append(r["gas_kwh"])
+            n += 1
+        base = None
+        if n >= DHW_BASE_MIN_HOURS:
+            by_hour = {hr: [v for (wd, h2), vals in cells.items() if h2 == hr for v in vals] for hr in range(24)}
+            base = {}
+            for wd in range(7):
+                for hr in range(24):
+                    v = cells.get((wd, hr), [])
+                    if len(v) < DHW_BASE_MIN_CELL:
+                        v = by_hour[hr]
+                    base[(wd, hr)] = sum(v) / len(v) if v else 0.0
+        self._dhw_base = (time.time(), base)
+        return base
 
     def take_snapshot(self, ts: int) -> None:
         t_out = self.outdoor_now()
@@ -1091,12 +1147,13 @@ class Engine:
         since = int(time.time()) - days * 86400
         by_day: dict[str, list[tuple[float, float]]] = {}
         for r in self.store.query(
-            "SELECT ts, t_in, t_out, gas_kwh, dhw_frac FROM hourly WHERE ts >= ? AND gas_kwh IS NOT NULL "
-            "AND t_in IS NOT NULL AND t_out IS NOT NULL", (since,)
+            "SELECT ts, t_in, t_out, gas_kwh, dhw_frac, dhw_energy_frac FROM hourly WHERE ts >= ? "
+            "AND gas_kwh IS NOT NULL AND t_in IS NOT NULL AND t_out IS NOT NULL", (since,)
         ):
             if r["t_out"] > 15 or (r["dhw_frac"] or 0) > 0:  # wie beim Lernen
                 continue
-            by_day.setdefault(local(r["ts"]).date().isoformat(), []).append((r["t_in"] - r["t_out"], r["gas_kwh"]))
+            by_day.setdefault(local(r["ts"]).date().isoformat(), []).append(
+                (r["t_in"] - r["t_out"], self.heating_gas(r)))
         out = []
         for day, vals in sorted(by_day.items()):
             if len(vals) >= 12:

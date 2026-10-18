@@ -49,3 +49,56 @@ def test_statistics_backfill_keeps_hours_built_from_own_samples(tmp_path):
     rows = {r["ts"]: r for r in eng.store.query("SELECT * FROM hourly")}
     assert rows[own]["dhw_frac"] == 0.3 and rows[own]["gas_kwh"] == 1.5   # eigene Stunde bleibt
     assert rows[other]["dhw_frac"] is None and rows[other]["gas_kwh"] > 0  # Statistik-Stunde kommt dazu
+
+
+def test_long_term_hours_learn_without_summer_hot_water(tmp_path):
+    """Langzeitstatistik kennt kein Warmwasser: das Sommerprofil (z. B. Legionellen So 13 Uhr) wird abgezogen."""
+    eng = Engine(Config(), Store(tmp_path / "w.db"), Discovered())
+    start = int(datetime(2026, 6, 1, 0, 0).timestamp())
+    rows = []
+    for i in range(5 * 7 * 24):  # fünf Sommerwochen
+        ts = start + i * 3600
+        d = datetime.fromtimestamp(ts)
+        gas = 5.0 if (d.weekday(), d.hour) == (6, 13) else 0.1
+        rows.append((ts, 20.0, 22.0, gas, None, None, None, None, None))
+    eng.store.add_hourly(rows)
+    eng.store.commit()
+    sunday_13 = int(datetime(2026, 12, 6, 13, 0).timestamp())
+    monday_9 = int(datetime(2026, 12, 7, 9, 0).timestamp())
+    winter = lambda ts, frac=None: {"ts": ts, "gas_kwh": 6.0, "dhw_frac": frac, "dhw_energy_frac": None}
+    assert eng.heating_gas(winter(sunday_13)) == 1.0
+    assert abs(eng.heating_gas(winter(monday_9)) - 5.9) < 1e-9
+    assert eng.heating_gas(winter(sunday_13, frac=0.0)) == 6.0  # eigene Messung: nichts abziehen
+
+
+def test_no_hot_water_profile_without_enough_summer():
+    eng = Engine(Config(), Store(":memory:"), Discovered())
+    assert eng.dhw_base() is None
+
+
+def test_cooling_learns_fast_and_slow_phase():
+    """Abschalten um 22 Uhr: erst schnell (Luft, Heizkörper), dann langsam (Wände)."""
+    import random
+    from heatpilot.models import FAST_TAU_H, HouseModel, fast_decay
+    rng = random.Random(3)
+    m = HouseModel()
+    k, g, a = 1 / 120, 0.05, 0.6
+    for night in range(60):
+        t_in, t_out = 21.0, 2.0 + rng.uniform(-3, 3)
+        for n in range(1, 9):  # 8 gasfreie Stunden nach dem Abschalten
+            rate = -k * (t_in - t_out) + g - a * fast_decay(n) + rng.gauss(0, 0.01)
+            m.learn_cooling(t_in, t_out, rate, n)
+            t_in += rate
+    assert 90 < m.tau_cool_h < 160
+    assert abs(m.cool_fast_k - a * FAST_TAU_H) < 0.25
+    assert m.fast_drop(0) > m.fast_drop(3) > 0
+
+
+def test_old_cooling_model_is_extended():
+    from heatpilot.models import HouseModel
+    old = HouseModel()
+    d = old.to_dict()
+    d["cool"]["n"], d["cool"]["theta"] = 2, [0.02, 0.1]
+    d["cool"]["P"] = [[1.0, 0.0], [0.0, 1.0]]
+    m = HouseModel.from_dict(d)
+    assert m.cool.n == 3 and m.cool.theta[:2] == [0.02, 0.1] and m.cool_fast_k == 0.0

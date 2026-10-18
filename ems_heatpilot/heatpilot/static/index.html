@@ -898,7 +898,7 @@ async function load() {
       tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
       tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
       tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
-      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", h.tau_source === "abkuehlung" ? `gemessen in ${h.cool_updates} gasfreien Nachtstunden` : "vorläufig aus der Gasbilanz – misst noch gasfreie Nächte"),
+      tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", h.tau_source === "abkuehlung" ? `Wände, gemessen in ${h.cool_updates} gasfreien Nachtstunden` + (h.cool_fast_k >= 0.1 ? ` · direkt nach dem Abschalten zusätzlich ≈ ${fmt(h.cool_fast_k, 1)} K schneller (Luft, Heizkörper)` : "") : "vorläufig aus der Gasbilanz – misst noch gasfreie Nächte"),
       h.free_heat_kw > 0.05 ? tile("Fremdwärme", fmt(h.free_heat_kw, 1), "kW", `Sonne, Personen, Geräte – bei 20 °C innen heizt das Haus erst unter ${fmt(20 - h.heating_limit_k, 0)} °C außen`) : ""] : []),
     tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
     tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
