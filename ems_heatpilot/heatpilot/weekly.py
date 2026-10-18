@@ -15,7 +15,8 @@ Alles aus den gespeicherten Stunden der letzten Wochen, je Wochentag und Stunde 
   wird) erklärt es noch nicht.
 * **Brennerstarts** (nur Stunden mit aufgezeichneten Brennerdaten), **zu Hause** (Anteil der
   Zeit), **Tado-Soll** (Median der eingeschalteten Räume, nur wirklich eingestellte Werte),
-  **Tado aus** (Anteil der Räume auf „aus“) und **Ventile** (Mittel, auch je Raum).
+  **Tado aus** (Anteil der Räume auf „aus“), **Ventile** (Mittel, auch je Raum) und
+  **Fremdwärme** (Anteil der Stunde, in dem ein Raum ohne Heizkörper deutlich wärmer wurde).
 * Gas, Heizen und Warmwasser beruhen auf denselben Stunden: Stunden aus der Langzeitstatistik
   ohne Warmwasser-Angabe zählen nicht (außer die Anlage hat gar kein Warmwasser-Signal).
 """
@@ -44,6 +45,7 @@ METRICS = {
     "target": ("Tado-Soll (Median)", "°C"),
     "off": ("Tado aus", "%"),
     "valve": ("Ventile", "%"),
+    "ext": ("Fremdwärme", "%"),
 }
 SUM_METRICS = ("gas", "heat", "dhw", "model", "starts")  # je Tag aufsummiert sinnvoll
 
@@ -89,7 +91,7 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
     v: dict[str, dict] = {k: defaultdict(list) for k in METRICS}
 
     hourly = {r["ts"]: r for r in store.query(
-        "SELECT ts, t_out, t_in, gas_kwh, dhw_frac, dhw_energy_frac, home_frac, vacation_frac FROM hourly "
+        "SELECT ts, t_out, t_in, gas_kwh, dhw_frac, dhw_energy_frac, home_frac, vacation_frac, ext_frac FROM hourly "
         "WHERE ts >= ? ORDER BY ts",
         (since,))}
     vacation = {ts for ts, r in hourly.items() if (r["vacation_frac"] or 0) > 0.5}
@@ -104,6 +106,8 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
         c = _cell(ts)
         if r["home_frac"] is not None:
             v["home"][c].append(r["home_frac"] * 100)
+        if r["ext_frac"] is not None:  # erst ab 0.33 gefüllt (Kamin, Ofen, Gäste)
+            v["ext"][c].append(r["ext_frac"] * 100)
         gas = r["gas_kwh"]
         if gas is None:
             continue
@@ -186,7 +190,7 @@ def collect(store, now_ts: int | None = None, days: int = WINDOW_DAYS, house=Non
 
     out = {"days": days, "since": since, "hours": len(hourly) - len(vacation), "metrics": {}}
     for key, (label, unit) in METRICS.items():
-        grid, counts = special.get(key) or _grid(v[key], 0 if key in ("home", "off") else 2)
+        grid, counts = special.get(key) or _grid(v[key], 0 if key in ("home", "off", "ext") else 2)
         if not any(x is not None for row in grid for x in row):
             continue
         m = {"label": label, "unit": unit, "grid": grid, "n": counts}
@@ -240,6 +244,10 @@ def findings(key: str, m: dict) -> list[str]:
             diff = (sum(we) / len(we)) / (sum(wk) / len(wk)) - 1
             out.append("Wochenende gegenüber Werktagen: " + (
                 "kein Unterschied" if abs(diff) < 0.005 else f"{diff * 100:+.0f} %"))
+    if key == "ext":
+        top = [c for c in sorted(cells, reverse=True) if c[0] > 0][:3]
+        out.append("Am häufigsten: " + " · ".join(f"{DAYS[d]} {h:02d} Uhr ({x:.0f} %)" for x, d, h in top)
+                   if top else "In diesem Zeitraum wurde in keinem Raum Fremdwärme erkannt.")
     if key == "home":
         low = sorted(cells)[:3]
         out.append("Am seltensten jemand da: " + " · ".join(f"{DAYS[d]} {h:02d} Uhr ({x:.0f} %)" for x, d, h in low))

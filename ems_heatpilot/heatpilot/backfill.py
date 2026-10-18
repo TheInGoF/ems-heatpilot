@@ -237,6 +237,10 @@ def replay(eng: Engine) -> None:
     eng.__dict__.pop("_house_day_open", None)  # Tageswerte von vorn
     eng.store.db.execute("DELETE FROM snapshots")
     hist_start = eng.store.get("history_start")
+    # Fremdwärme-Ereignisse werden beim Nachlernen der Raumschritte neu erkannt (vor dem Stundenwert)
+    eng.room_ext = {}
+    eng._room_temp_hist = {}  # Bezugsniveau der Fremdwärme-Erkennung nicht aus der Gegenwart
+    eng.store.db.execute("DELETE FROM room_events WHERE start_ts >= ?", (hist_start if hist_start is not None else 0,))
     room_step = int(ROOM_STEP_H * 3600)
     hours = [r["ts"] for r in eng.store.query("SELECT ts FROM hourly ORDER BY ts")]
     if hist_start is not None:

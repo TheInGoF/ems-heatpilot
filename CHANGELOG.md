@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.33.0
+**Fremdwärme je Raum: Kamin, Backofen, Gäste** (abgesprochen)
+- Wird ein Raum deutlich wärmer, ohne dass der Heizkörper es erklären kann (Ventil zu, keine Sonne auf den Fassaden, Anstieg mindestens 0,4 K und 0,8 K/h über dem, was das Raummodell erwartet), gilt das als Fremdwärme-Ereignis. Das Raummodell lernt diese Zeit nicht mehr als Fremdwärme oder Auskühlen des Raums. Heizkörperbetrieb gilt nie als Fremdwärme, Sonne nur, wenn die Sonnenparameter des Raums schon gelernt sind – das Modell verwirft nie seine eigenen Lernchancen
+- Das Hausmodell lässt Stunden mit einem Ereignis aus; ein Tag mit 3 h oder mehr zählt nur als Vortag, wie ein Urlaubstag
+- Die Wiedererwärmung nach dem Stoßlüften ist kein Ereignis: Ein Anstieg zählt nur über das höchste Niveau der letzten 2 Stunden hinaus. Nachwärme des Heizkörpers direkt nach dem Schließen auch nicht
+- Ohne Standort (keine Sonnenwerte) wird tagsüber (7–20 Uhr) nicht erkannt; Räume ohne Ventilwert gar nicht
+- Übersicht: laufendes Ereignis als Hinweis in der Raumtabelle („Fremdwärme seit 19:10, +2,8 K“) mit Zähler der letzten 7 Tage; Woche: neue Ansicht „Fremdwärme“; Vorheizplan: ein Raum mit laufender Fremdwärme gilt als warm und wird nicht eingeplant
+- Export enthält die Ereignisse (nur Zeiten und Kelvin). Mit deinen 7 Export-Tagen: 0 Ereignisse, Raum- und Hausmodell unverändert
+- Beim Update wird der Lernstand einmal neu berechnet, dabei werden Ereignisse rückwirkend erkannt
+
 ## 0.32.0
 Prüfung des Exports vom 18.10.: Warmwasser, Anwesenheit, Zeitplan und Woche. Dazu ein Hausmodell, das nicht nur zu diesem Haus passt (abgesprochen).
 

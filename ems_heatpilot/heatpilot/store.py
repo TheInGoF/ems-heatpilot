@@ -31,6 +31,10 @@ CREATE TABLE IF NOT EXISTS burner_events(ts INTEGER, state INTEGER);
 CREATE TABLE IF NOT EXISTS snapshots(ts INTEGER, kind TEXT, key TEXT, data TEXT);
 CREATE TABLE IF NOT EXISTS kv(key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE IF NOT EXISTS daily(day TEXT, key TEXT, value REAL, PRIMARY KEY(day, key));
+CREATE TABLE IF NOT EXISTS room_events(
+    start_ts INTEGER, end_ts INTEGER, room TEXT, rise_k REAL,
+    PRIMARY KEY(start_ts, room)
+);
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
 CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 """
@@ -57,7 +61,9 @@ SAMPLE_COLS = (
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",
                # seit 0.26: Anteil des Gases fürs Warmwasser (nach Brennerleistung, nicht nach Zeit)
-               "dhw_energy_frac")
+               "dhw_energy_frac",
+               # seit 0.33: Anteil der Stunde, in dem ein Raum Fremdwärme hatte (Kamin, Ofen) – nicht gelernt
+               "ext_frac")
 
 
 class Store:
@@ -102,6 +108,7 @@ class Store:
                         "('last_room_step', 'last_hour', 'schedule.learned', 'backfill_done')")
         self.db.execute("DELETE FROM daily WHERE day >= ?", (since_day,))
         self.db.execute("DELETE FROM snapshots")
+        self.db.execute("DELETE FROM room_events")  # Fremdwärme-Ereignisse werden beim Nachlernen neu erkannt
         self.db.commit()
 
     # --- Messwerte ---
@@ -159,6 +166,11 @@ class Store:
             f"INSERT OR REPLACE INTO hourly({cols}) VALUES({marks})",
             (tuple(r) + (None,) * (len(HOURLY_COLS) - len(r)) for r in rows),
         )
+
+    def add_room_event(self, start_ts: int, end_ts: int, room: str, rise_k: float) -> None:
+        """Abgeschlossenes Fremdwärme-Ereignis eines Raums (nur Zeiten und Kelvin)."""
+        self.db.execute("INSERT OR REPLACE INTO room_events VALUES(?, ?, ?, ?)",
+                        (int(start_ts), int(end_ts), room, round(rise_k, 2)))
 
     def add_burner_event(self, ts: int, state: bool) -> None:
         self.db.execute("INSERT INTO burner_events VALUES(?, ?)", (ts, int(state)))
