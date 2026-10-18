@@ -295,7 +295,12 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
      Modell in gasfreien Nächten (wie schnell das Haus ohne Heizung auskühlt).
      Ausführlich mit Formeln: [docs/hausmodell.md](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/hausmodell.md)
    - *Raummodell* (je Tado-Raum, halbstündlich): wie schnell der Raum bei
-     welcher Vorlauftemperatur warm wird und wie schnell er auskühlt.
+     welcher Vorlauftemperatur warm wird und wie schnell er auskühlt. Es startet
+     mit Werten eines typischen Hauses (Auskühlen ≈ 55 h) und einer Unsicherheit je
+     Parameter, damit ein einzelner auffälliger Schritt nichts umwirft. Das Gedächtnis
+     reicht etwa 6 Wochen zurück. Im Herbst, bei kleinem Abstand innen–außen, lässt
+     sich das Auskühlen kaum von Fremdwärme (Nachbarräume, Rohre) trennen. Räume, die
+     die Leitplanken nicht bestehen, zeigen deshalb „lernt noch“.
    - *Anwesenheit* (je Person): Wochenraster der Gewohnheiten und
      Heimfahrt-Geschwindigkeit. Annäherung und Ankunftszeit berechnet das
      Add-on selbst aus den GPS-Daten der `person.*`-Entitäten.

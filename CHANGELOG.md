@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.30.0
+Raummodelle aus der Prüfung des Exports vom 18.10. Jeder Punkt wurde mit den echten Daten nachgerechnet und gegengeprüft:
+- **Ein einzelner Schritt warf ein Raummodell um.** Alle Parameter starteten mit derselben, viel zu großen Unsicherheit. Im Arbeitszimmer genügte ein Schritt mit kurz offenem Ventil (+0,4 K beim Start des Tagbetriebs): Die Heizwirkung stieg dadurch von 0,02 auf 0,24 und blieb dort. Jetzt hat jeder Parameter eine eigene Startunsicherheit. Das Auskühlen startet beim Wert eines typischen Hauses (≈ 55 h).
+- **Seltene Heizschritte galten als Ausreißer.** In selten beheizten Räumen wurde ausgerechnet der informative Heizschritt gekappt. Im Bad lag die Heizwirkung deshalb etwa beim Drittel. Die Ausreißer-Schwelle berücksichtigt jetzt, wie unsicher die Vorhersage für diesen Schritt ist. Auf das Hausmodell wirkt sich das nicht aus, das wurde an den echten Daten nachgerechnet.
+- **Gedächtnis der Raummodelle von ~10 Tagen auf ~6 Wochen.** Die Auskühlrate ist eine Gebäudegröße und lässt sich im Herbst nur langsam von der Fremdwärme trennen.
+- **Ergebnis mit deinen Daten:** Kein Raum kühlt mehr rechnerisch unter die Außentemperatur (vorher bis −14 K). Die Zeitkonstanten liegen bei 47–139 h (Haus 56 h). Flur und Wohnzimmer bestehen die Leitplanken. Die übrigen Räume zeigen weiter „lernt noch“ mit Grund: zu wenig Heizbetrieb, ein für Tados kleine Ventilöffnungen unrealistisch hohes Verhältnis von Heizwirkung zu Auskühlen, oder Fremdwärme unter außen.
+- Beim Update wird der Lernstand einmal neu berechnet.
+
 ## 0.29.1
 Nachbesserungen aus der Gegenprüfung von 0.29.0:
 - **Vorlauf-Studie:** Mit Hausmodell zählen nur Stunden mindestens 2 K über der Heizgrenze. Darunter sagt das Modell kein Gas voraus, und das Herausrechnen der Fremdwärme hätte das Urteil zu „lohnt“ gekippt

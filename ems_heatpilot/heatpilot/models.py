@@ -27,6 +27,16 @@ from .rls import RLS
 
 ROOM_STEP_H = 0.5
 FLOOR_MAX_H = 48   # länger rechnet der Fußboden-Aufheizlauf nicht
+# Raum-Lernen: Gedächtnis ~6 Wochen – die Auskühlrate ist eine Gebäudegröße und im Herbst
+# (kleiner Abstand innen–außen) nur langsam von der Fremdwärme zu trennen
+ROOM_LAM = 0.9995
+ROOM_GATE = 6.0          # Ausreißer-Kappung (× erwarteter Fehler, siehe rls.py)
+EXCITATION_DECAY = 0.998  # „gesehener Heizbetrieb“ klingt unabhängig vom Lern-Gedächtnis ab
+# Startwerte und Startunsicherheit je Parameter (Wurzel der P-Diagonale, wie das RLS sie führt –
+# relativ zum Messfehler): Heizwirkung a, Fußboden f, Auskühlen b (≈ 1/55 h wie ein typisches
+# Haus), Fremdwärme c, Sonne Ost/Süd/West. Mit gleicher Unsicherheit für alles verschob ein
+# einziger Schritt a um das Zehnfache; an echten Daten nachgerechnet (Export 10/2026).
+ROOM_PRIOR = {"a": (0.02, 0.05), "f": (0.01, 0.02), "b": (0.018, 0.03), "c": (0.0, 0.3), "sun": (0.0, 1.0)}
 
 
 @dataclass
@@ -45,15 +55,18 @@ class RoomModel:
     floor_lag_h: float = 3.0
     floor_u: float = 0.0  # geglätteter Fußboden-Eingang (K über Raumtemperatur)
     rls: RLS | None = None
-    # wie viel Heizbetrieb das Modell gesehen hat (K·h, klingt mit dem Vergessen ab)
+    # wie viel Heizbetrieb das Modell gesehen hat (K·h, klingt langsam ab)
     excitation: float = 0.0
 
     def __post_init__(self) -> None:
         if self.rls is None:
-            theta = [0.02, 0.01, 0.05, 0.0] if self.floor else [0.02, 0.05, 0.0]
-            self.rls = RLS(n=len(theta) + 3, lam=0.998, delta=1.0, theta=theta + [0.0, 0.0, 0.0], min_sigma=0.03)
+            keys = ["a"] + (["f"] if self.floor else []) + ["b", "c"] + ["sun"] * 3
+            theta = [ROOM_PRIOR[k][0] for k in keys]
+            P = [[ROOM_PRIOR[k][1] ** 2 if i == j else 0.0 for j in range(len(keys))] for i, k in enumerate(keys)]
+            self.rls = RLS(n=len(keys), lam=ROOM_LAM, theta=theta, P=P, min_sigma=0.03)
         elif self.rls.n == self._base_n:
             self.rls.extend(3)  # Modell von vor 0.20: Sonnen-Parameter ergänzen
+        self.rls.gate = ROOM_GATE
 
     @property
     def _base_n(self) -> int:
@@ -116,7 +129,7 @@ class RoomModel:
         if self.floor and abs(x[1]) < 0.05 * dt_h:
             idle.append(1)
         err = self.rls.update(x, t_end - t_start, idle=idle)
-        self.excitation = self.rls.lam * self.excitation + x[0]
+        self.excitation = EXCITATION_DECAY * self.excitation + x[0]
         self._sun_not_negative()
         return err
 
