@@ -84,6 +84,12 @@ gemeinsam anfordern lassen statt nacheinander – gezählt werden Räume (Raumgr
 Ventile; das Wohnzimmer mit zwei Ventilen ist ein Raum – fordert nur der Flur Wärme an, taktet der Kessel immer;
 fordern drei Räume zusammen an, läuft er durch.
 
+## Anzeigen, die mit Weg A/B entfallen
+
+- „Startverzögerung“ und „Tag/Nacht-Wechsel“ (Übersicht): messen das Warten auf den Nachtbetrieb des
+  ES73. Schaltet HeatPilot Tag/Nacht selbst oder ist der ES73 weg, ausblenden.
+- Vorlauf-Studie „Vorlauf gegen Takten“: wird vom Takt-Boost abgelöst bzw. zur Erfolgskontrolle.
+
 ## Schutzregeln, falls geschrieben wird
 
 - Weiße Liste der erlaubten Befehle und Werte (wie heute bei Tado in `control.py`), Grenzen 30 °C bis
