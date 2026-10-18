@@ -6,8 +6,11 @@ Damit passt sich das Modell laufend an (Jahreszeit, Sonne, neue Fenster ...).
 Bewusst ohne numpy, die Matrizen sind winzig (3-4 Parameter).
 
 Robust gegen Ausreißer: Nach der Einlernphase (``warmup``) wird ein Fehler über
-``gate`` × üblichem Fehler gekappt – der Punkt zählt nur begrenzt – und über
-``hard`` × üblichem Fehler gar nicht gelernt. Ändert sich das Haus wirklich,
+``gate`` × erwartetem Fehler gekappt – der Punkt zählt nur begrenzt – und über
+``hard`` × erwartetem Fehler gar nicht gelernt. Der erwartete Fehler ist der übliche
+Fehler, erweitert um die Unsicherheit der Vorhersage (x'Px): ein Schritt, der einen noch
+kaum gelernten Parameter stark anregt (z. B. der seltene Heizschritt eines Raums), darf
+weiter danebenliegen, ohne als Ausreißer zu gelten. Ändert sich das Haus wirklich,
 zieht das Modell über gekappte Schritte trotzdem nach, nur langsamer.
 """
 
@@ -65,7 +68,8 @@ class RLS:
             self.rejected += 1
             return 0.0
         err = raw
-        sigma = max(self.rmse or 0.0, self.min_sigma)
+        # Streuung der Vorhersage: üblicher Fehler mal sqrt(1 + x'Px/λ)
+        sigma = max(self.rmse or 0.0, self.min_sigma) * math.sqrt(max(denom / self.lam, 1.0))
         if self.updates >= self.warmup and sigma > 0:
             if abs(raw) > self.hard * sigma:
                 self.rejected += 1  # grober Fehler (z. B. Zählernachtrag): gar nicht lernen
