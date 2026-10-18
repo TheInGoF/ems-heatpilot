@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.31.1
+- Logo: Die linke Kante der Flammenspitze ist jetzt wie die rechte mit einer Linie verbunden (Symbol, Logo, Browser-Symbol und Zertifikat)
+
 ## 0.31.0
 Hausmodell genauer, nachgerechnet mit dem Export vom 18.10. (abgesprochen):
 - **Auskühlen in zwei Phasen.** Direkt nach dem Abschalten geben Luft und Heizkörper ihre Wärme schnell ab, mit deinen Daten zusätzlich ≈ 0,8 K in den ersten Stunden. Danach kühlen nur noch die Wände langsam aus. Mit einer einzigen Zeitkonstante kühlte das Haus in der Rechnung nach einem Tag ohne Heizung doppelt so schnell aus wie in Wirklichkeit. Mit zwei Phasen ist der Fehler um 30 % kleiner. Die „Haus-Trägheit“ zeigt jetzt die der Wände, die Ersparnis-Schätzung rechnet mit beiden Phasen
