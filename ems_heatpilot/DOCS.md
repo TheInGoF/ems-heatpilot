@@ -160,7 +160,22 @@ Unter den Grafen steht je gewählter Person:
 - **Deutung jetzt:** zu Hause · *Heimfahrt erkannt* (lückenlos näher, mind. 30 min,
   15 km und 20 km/h – erst dann zählt eine Urlaubsrückkehr) · *kommt näher* ·
   *entfernt sich* · *steht* (bleibt in der Gegend, z. B. Arbeit) – mit Entfernung und
-  erwarteter Ankunft samt Quelle (GPS-Annäherung oder Gewohnheit).
+  erwarteter Ankunft samt Quelle (GPS-Annäherung oder Gewohnheit). Als
+  GPS-Annäherung zählt nur, wer mindestens halb so schnell wie das gelernte
+  Heimfahrt-Tempo näher kommt oder seit Beginn der Annäherung mindestens 2 km
+  näher ist – GPS-Schwankung am Arbeitsplatz ergibt keine Ankunft.
+- **Lange weg:** Wer länger als 72 h weg ist (oder länger als 24 h und dabei über
+  300 km entfernt), gilt als verreist: Die Gewohnheit lernt das nicht, das Raster
+  bleibt auf dem Stand bei der Abfahrt. Ausnahme regelmäßige Abwesenheit
+  (Wochenpendler, Wochenendfahrt alle 1–2 Wochen): Begann vor 7 oder 14 Tagen zur
+  selben Uhrzeit (±90 min) schon eine solche Abwesenheit, lernt die Gewohnheit
+  normal weiter – ab der zweiten Wiederholung. Dauert sie über 12 h länger als
+  damals, zählt sie doch als Reise. Meldet Home Assistant für eine Person
+  „unknown“/„unavailable“, zählt sie weder als zu Hause noch als weg und wird in
+  dieser Zeit nicht gelernt. Ist dann niemand sicher zu Hause, gilt die Anwesenheit
+  des Haushalts als offen: Die Warmwasser-Empfehlung geht nicht auf „niemand zu
+  Hause“, sondern hält das Minimum plus Reserve, und das Zapfprofil wird weder
+  gesichert noch zurückgenommen.
 - **Entfernung im Verlauf** (12 h bis 7 Tage, grün hinterlegt: zu Hause).
 - **Gewohnheit (gelernt):** Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde.
   Ohne GPS-Annäherung gilt das erste Feld ab 50 % als erwartete Ankunft.
@@ -182,11 +197,12 @@ Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
 | Ansicht | Was sie zeigt |
 | --- | --- |
 | Gas gesamt / Heizen / Warmwasser | Verbrauch in kW (= kWh je Stunde); Warmwasser = Gas, während der Speicher lädt |
-| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell ohne den Achsabschnitt (Fremdwärme wieder hinzugezählt; über den Tag gemittelt der Wärmeverlust, je Stunde nachts niedriger und morgens höher) und nur aus Stunden deutlich unter der Heizgrenze – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
+| Gas wetterbereinigt | Heizgas je Kelvin innen–außen (W/K); mit plausiblem Hausmodell: Heizgas im Verhältnis zum Bedarf laut Modell, mal Wärmeverlust (durchgehend nach Modell geheizt = genau der Wärmeverlust; Absenken macht es kleiner, Aufheizen größer) – ist ein Tag hier höher, braucht das Haus dann wirklich mehr und war nicht nur kälter |
 | Abweichung vom Hausmodell | gemessen minus erwartet. Das Hausmodell kennt keine Wochentage; feste Muster (Kochen, Lüften, Aufheizen nach der Absenkung) sieht man hier |
-| Brennerstarts | wann der Kessel am meisten taktet |
+| Brennerstarts | wann der Kessel am meisten taktet – nur Stunden mit aufgezeichneten Brennerdaten (ab dem ersten Brennerereignis, nicht ab dem angeforderten Historienfenster) |
 | Jemand zu Hause | gemessener Anteil der Zeit |
-| Tado-Soll | Median aller Räume („aus“ = 5 °C) – so sieht HeatPilot den Zeitplan |
+| Tado-Soll | Median der eingeschalteten Räume (nur wirklich eingestellte Werte) |
+| Tado aus | Anteil der Räume, die Tado auf „aus“ hat – so sieht HeatPilot den Zeitplan |
 | Ventile | mittlere Öffnung, auch je Raum |
 
 ## Empfehlungen für Tado
@@ -199,7 +215,7 @@ hilft nur begrenzt. Deshalb misst HeatPilot je Raum und schlägt im Feld
 
 | Was gemessen wird | Mögliche Empfehlung |
 |---|---|
-| Zeitplanblock: wie lange nach dem Soll-Anstieg ist der Raum warm? Öffnet das Ventil schon vorher (Frühstart je Raum erkannt)? | „Frühstart für den Raum einschalten“ · „Frühstart aktiv, reicht nicht: Block X min vorziehen“ · „unnötig früh warm: Block später / Frühstart aus“ |
+| Zeitplanblock: wie lange nach dem Soll-Anstieg ist der Raum warm? Öffnet das Ventil schon vorher (Frühstart je Raum erkannt)? Springt Tado aus „aus“ an kalten Tagen früher auf das Soll, liegt der Block beim spätesten Anstieg – je Wochentag, sobald jeder Wochentag mindestens zweimal vorkommt (Sa 07:30 und So 09:00 bleiben getrennt), vorher Werktage bzw. Wochenende gemeinsam. Kurze Aussetzer (bis 15 min „aus“) zählen nicht, bei jeder Abtastrate | „Frühstart für den Raum einschalten“ · „Frühstart aktiv, reicht nicht: Block X min vorziehen“ · „unnötig früh warm: Block später / Frühstart aus“ |
 | Geofencing bei jeder echten Heimkehr: wie lange vorher hebt Tado das Soll an, wie warm ist der Raum bei Ankunft? | „bei Ankunft zu kalt: Vorheiz-Einstellung einen Schritt Richtung Komfort“ · „lange vor Ankunft warm: Richtung Eco“ |
 | Soll bei Abwesenheit | „Abwesenheitstemperatur senken“ – nur, wenn der Raum laut Modell danach in ≤ 2 h wieder warm ist |
 | Raum über Stunden unter Soll, Ventil voll offen | „Soll senken oder Heizkörper/Ventil prüfen“ (mit Hinweis, ob der Vorlauf am Limit war) |
@@ -239,7 +255,10 @@ Liefert der Kessel sie (Diagnose → Alle Sensoren), nutzt HeatPilot außerdem:
 - **Warmwasser-Ladezähler** – jede Ladung exakt statt nur über den Temperaturanstieg;
   ohne Ladesignal zählt auch die Speicherladepumpe.
 - **Legionellenschaltung und Einmalladung** – werden geladen, aber nicht gelernt
-  (Ladekosten und Zapfprofil bleiben sauber).
+  (Ladekosten und Zapfprofil bleiben sauber). Im Vergleich bekommt die Strategie diese Wärme
+  genauso (verhindern kann sie sie nicht). Eine große Zapfung, die üblicherweise darauf folgt –
+  die Wanne nach der Legionellenschaltung –, gilt als dadurch gedeckt: HeatPilot empfiehlt dafür
+  nicht, vorher höher zu laden, und zählt sie nicht als „zu kalt“.
 - **Einschalt-Hysterese** – daraus die Kachel „Nächste Ladung“.
 - **Heizkurve des Reglers** (Auslegungstemperatur, Offset) – „Vorlauf gegen Takten“ nennt
   den Versuch als konkreten Wert am Regler.
@@ -254,14 +273,17 @@ da lässt sich nichts freischalten.
 
 Der Reiter **Heizen** bedient Tado – nur auf Knopfdruck, HeatPilot schaltet nie von selbst.
 
-- **Heiz-Boost:** Räume antippen (oder „Alle“), Temperatur mit −/+ und Dauer (15 min
-  bis 12 h) wählen, **Starten**. Das setzt in Tado einen Timer
-  (`tado.set_climate_timer`); nach Ablauf kehrt Tado selbst zum Zeitplan zurück – auch
-  wenn das Add-on gerade neu startet. **Zeitplan** beendet den Timer der gewählten Räume
-  sofort.
-- **Raumkacheln:** Ist-Temperatur, Ventil, Feuchte, Soll mit −/+ und die Betriebsart
-  Zeitplan / Manuell / Aus. Ein laufender Timer zeigt „noch …“. Farbe nach Soll: grau =
-  aus, türkis = kühl, ab 19 °C bernstein bis orange.
+- **Oben drei kleine Kacheln** (wie in der Tado-App), jede öffnet einen Dialog:
+  **Boost** – Räume antippen (oder „Alle“), Temperatur mit −/+ und Dauer (15 min bis 12 h)
+  wählen, **Starten**. Das setzt in Tado einen Timer (`tado.set_climate_timer`); nach Ablauf
+  kehrt Tado selbst zum Zeitplan zurück, auch wenn das Add-on gerade neu startet. Läuft ein
+  Timer, zeigt die Kachel die Restzeit. **Zeitplan** – alle Räume zurück in den Tado-Zeitplan
+  (beendet laufende Timer sofort). **Ausschalten** – alle Räume aus, Tado hält dann nur den
+  Frostschutz.
+- **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
+  Zustand („Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“). Heizt der Raum
+  gerade, ist die Kachel orange; aus = grau mit Ausschalt-Symbol. Antippen öffnet den Dialog
+  mit Soll (−/+), Betriebsart Zeitplan / Manuell / Aus, Ventil und Restzeit eines Timers.
 
 Erlaubt sind nur diese drei Aufrufe und nur auf die Thermostate der in den
 Einstellungen gewählten Räume, Temperaturen 5–25 °C. Raumauswahl, Temperatur und Dauer
@@ -283,6 +305,9 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
      Monaten an Daten lernen.
    - Recorder-Historie (Standard 10 Tage, siehe `purge_keep_days`): alle
      Einzelwerte → Raummodelle, Brennertakte, Anwesenheitsmuster.
+   - Wird der Lernstand nach einem Update neu berechnet, lernen die
+     Anwesenheitsgewohnheiten zuerst aus den eigenen gespeicherten Messwerten
+     (auch älter als die Recorder-Historie), danach aus der HA-Historie.
 2. **Laufend sammeln:** alle 5 Minuten ein kompakter Datensatz in
    `/data/heatpilot.db` (SQLite, wenige MB pro Jahr).
 3. **Lernen (maschinelles Lernen, online):** Die Modelle passen sich mit
@@ -291,12 +316,17 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
    - *Hausmodell* (stündlich): Wärmeverlust in W/K, Wärmespeicher, **Fremdwärme**
      (Sonne, Personen, Geräte – darunter liegt die Heizgrenze), Heizlast jetzt und bei
      Auslegungstemperatur. Gelernt wird nur in der Heizperiode (24-h-Mittel außen bis
-     15 °C) und nur aus Stunden ohne Warmwasserladung. Die **Trägheit** misst ein eigenes
-     Modell in gasfreien Nächten (wie schnell das Haus ohne Heizung auskühlt).
+     15 °C) und nur aus Stunden ohne Warmwasserladung. Wärmeverlust und Fremdwärme kommen
+     ab 21 Heiztagen aus Tagesmitteln (mit dem Vortag und dem Mittel der Woche davor), weil
+     sich Wärmeverlust und Speicher in Stundenwerten bei trägen Häusern (Fußboden, schwere
+     Wände) kaum trennen lassen und die Wände über Tage nachwirken. Die
+     **Trägheit** misst ein eigenes Modell in gasfreien Nächten (wie schnell das Haus ohne
+     Heizung auskühlt); die schnelle Phase direkt nach dem Abschalten lernt es je Anlage.
      Ausführlich mit Formeln: [docs/hausmodell.md](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/hausmodell.md)
    - *Raummodell* (je Tado-Raum, halbstündlich): wie schnell der Raum bei
      welcher Vorlauftemperatur warm wird und wie schnell er auskühlt. Es startet
-     mit Werten eines typischen Hauses (Auskühlen ≈ 55 h) und einer Unsicherheit je
+     mit der gemessenen Trägheit des Hauses, sonst mit Werten eines typischen Hauses
+     (Auskühlen ≈ 55 h), und einer Unsicherheit je
      Parameter, damit ein einzelner auffälliger Schritt nichts umwirft. Das Gedächtnis
      reicht etwa 6 Wochen zurück. Im Herbst, bei kleinem Abstand innen–außen, lässt
      sich das Auskühlen kaum von Fremdwärme (Nachbarräume, Rohre) trennen. Räume, die
@@ -305,7 +335,10 @@ merkt sich das Gerät. Jede Bedienung steht im Protokoll.
      Heimfahrt-Geschwindigkeit. Annäherung und Ankunftszeit berechnet das
      Add-on selbst aus den GPS-Daten der `person.*`-Entitäten.
    - *Zeiten und Temperaturen* (stündlich, letzte 4 Wochen ohne Urlaub): wann
-     Tado abends absenkt und morgens wieder hochheizt, Nacht- und
+     Tado abends absenkt (gemessen an den zwei Stunden davor – so zählt auch ein
+     Zeitplan, der nachmittags aus ist und erst abends heizt; heizt Tado nachmittags
+     wirklich, höchstens am Tagesniveau – ein Abendkomfort über dem Tag ist keine
+     Absenkung) und morgens wieder weitgehend zu diesem Niveau hochheizt, Nacht- und
      Abwesenheits-Soll. Die Werte unter „Komfort & Strategie“ sind nur Startwerte;
      gelernte Zeiten gelten ab 7 erkannten Nächten (höchstens 3 h vom Startwert
      entfernt), Temperaturen nie kälter als eingestellt und höchstens 3 K wärmer.
@@ -384,7 +417,13 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
    physikalischer Grenzen (z. B. Wärmeverlust, Trägheit, Grundlast, Speicher-
    Umgebung) oder ist zu wenig gelernt, gibt es keine Empfehlung.
 5. **Kleine, gedeckelte Selbstkorrektur:** Nach einer zu kalten Zapfung +2 K
-   Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag.
+   Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag. Nur, wenn mehr
+   Reserve das Ziel davor angehoben hätte – das gilt auch für „keine Zapfung
+   erwartet“ mit jemandem zu Hause, denn dort ist Minimum + Reserve der Boden
+   (für Haushalte ohne feste Zeiten die einzige Korrektur). Lag das Ziel schon am
+   Maximum, war die Zapfung größer als Maximum minus Minimum (z. B. die volle
+   Wanne) oder war niemand zu Hause, wird sie nur gezählt. Im Urlaub und wenn
+   alle lange weg sind, bleibt die Reserve eingefroren.
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 
@@ -518,11 +557,23 @@ der Heizkreis während Warmwasserladungen keine Leistung bekommt.
 
 Gelernt wird aus Speichertemperatur, Ladestatus und Brennerleistung:
 
-- **Auskühlen** des Speichers und daraus der Bereitschaftsverlust je Temperatur
+- **Auskühlen** des Speichers und daraus der Bereitschaftsverlust je Temperatur –
+  aus ruhigen Abschnitten ohne Ladung und ohne Zapfung. Die Stufe des Speicher-
+  fühlers (0,1 K, 0,5 K oder 1 K) wird aus den Messwerten geschätzt; bei gröberen
+  Fühlern liegen die Zapf-Schwellen entsprechend höher, damit eine einzelne Stufe
+  nicht als Zapfung gilt und das Auskühlen trotzdem gelernt wird
 - **Ladekosten** in Gas-kWh je Kelvin, getrennt nach Ladestart unter/über 47 °C
-  (zeigt, ob Laden aus kälterem Speicher wirklich effizienter ist)
-- **Zapfprofil:** wann im Tages-/Wochenverlauf Warmwasser gebraucht wird
-- **Nachladegeschwindigkeit** in K/h
+  (zeigt, ob Laden aus kälterem Speicher wirklich effizienter ist). Die Energie
+  wird als Trapez gerechnet: beim Ladebeginn Rampe ab 0 (was der Brenner davor
+  für die Heizung leistete, zählt nicht), am Ladeende Rampe auf 0. Der Anstieg
+  nach dem Ladesignal (Restwärme) zählt zur Ladung, solange der Speicher in den
+  letzten 5 Minuten noch gestiegen ist – bei jeder Abtastrate gleich
+- **Zapfprofil:** wann im Tages-/Wochenverlauf Warmwasser gebraucht wird.
+  Zapfungen werden über ein 20-Minuten-Fenster erkannt, bei 60 bis 900 s
+  Abtastung gleich (sind alle lange weg, zählen auch die leeren Stunden seit dem
+  Weggehen nicht, und eine große Zapfung kurz vor der Abfahrt zählt nur einmal)
+- **Nachladegeschwindigkeit** in K/h, bis der Speicher nach dem Ladesignal nicht
+  mehr steigt (mit Nachlauf, ohne die flachen Schritte danach)
 
 Strategie (läuft im Schatten mit, setzt nichts): Niemand zu Hause und keine
 Ankunft absehbar → Minimum. Zapfung in Kürze erwartet → Komfort
@@ -530,8 +581,12 @@ Ankunft absehbar → Minimum. Zapfung in Kürze erwartet → Komfort
 Minimum fällt). Sonst → Minimum. Nachgeladen wird rechtzeitig, weil die
 Ladegeschwindigkeit bekannt ist. Die Ersparnis ist der eingesparte
 Bereitschaftsverlust bei denselben Zapfungen; Zapfungen, bei denen der
-Speicher unter der Komforttemperatur gewesen wäre, werden als „zu kalt“ gezählt.
-Die wöchentliche Desinfektion des Reglers bleibt unberührt.
+Speicher unter der Komforttemperatur gewesen wäre, werden als „zu kalt“ gezählt –
+nicht aber solche, die er nur dank der Legionellenschaltung bedient (deren Wärme
+bekommt die Strategie genauso): die Wanne danach, die warm beginnt und erst durch
+ihre Größe unter das Minimum zieht, höchstens 12 Stunden nach der Sonderladung.
+Eine Zapfung, die der Vergleichsspeicher schon unter dem Komfortwert bedient,
+zählt auch dann. Die wöchentliche Desinfektion des Reglers bleibt unberührt.
 
 ## Entitätsnamen
 

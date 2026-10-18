@@ -76,29 +76,65 @@ def test_no_hot_water_profile_without_enough_summer():
     assert eng.dhw_base() is None
 
 
-def test_cooling_learns_fast_and_slow_phase():
-    """Abschalten um 22 Uhr: erst schnell (Luft, Heizkörper), dann langsam (Wände)."""
+def _cool_nights(m, k, g, a, tau_f, nights=80, seed=3):
+    """Gasfreie Nächte; die Gasbilanz des Modells wird passend gesetzt (Heizgrenze = g/k)."""
     import random
-    from heatpilot.models import FAST_TAU_H, HouseModel, fast_decay
-    rng = random.Random(3)
-    m = HouseModel()
-    k, g, a = 1 / 120, 0.05, 0.6
-    for night in range(60):
+    from heatpilot.models import fast_decay
+    rng = random.Random(seed)
+    m.rls.theta, m.rls.updates = [0.15, 3.0, -0.15 * g / k], 500
+    for _ in range(nights):
         t_in, t_out = 21.0, 2.0 + rng.uniform(-3, 3)
         for n in range(1, 9):  # 8 gasfreie Stunden nach dem Abschalten
-            rate = -k * (t_in - t_out) + g - a * fast_decay(n) + rng.gauss(0, 0.01)
+            rate = -k * (t_in - t_out) + g - a * fast_decay(n, tau_f) + rng.gauss(0, 0.01)
             m.learn_cooling(t_in, t_out, rate, n)
             t_in += rate
+
+
+def test_cooling_learns_fast_and_slow_phase():
+    """Abschalten um 22 Uhr: erst schnell (Luft, Heizkörper), dann langsam (Wände)."""
+    from heatpilot.models import HouseModel
+    m = HouseModel()
+    _cool_nights(m, 1 / 120, 0.05, 0.6, 1.5)
     assert 90 < m.tau_cool_h < 160
-    assert abs(m.cool_fast_k - a * FAST_TAU_H) < 0.25
+    assert m.fast_tau_h == 1.5 and abs(m.cool_fast_k - 0.9) < 0.25
     assert m.fast_drop(0) > m.fast_drop(3) > 0
 
 
-def test_old_cooling_model_is_extended():
+def test_fast_phase_time_constant_is_learned_per_house():
+    """Nicht auf ein Haus zugeschnitten: Fußboden/Guss (träge) und Leichtbau (schnell) finden ihr τ selbst."""
     from heatpilot.models import HouseModel
-    old = HouseModel()
-    d = old.to_dict()
-    d["cool"]["n"], d["cool"]["theta"] = 2, [0.02, 0.1]
-    d["cool"]["P"] = [[1.0, 0.0], [0.0, 1.0]]
+    for tau_f in (0.5, 4.0):
+        m = HouseModel()
+        _cool_nights(m, 1 / 80, 0.03, 0.5 if tau_f < 1 else 0.2, tau_f, nights=120)
+        assert m.fast_tau_h == tau_f, (tau_f, m.cool_sse)
+        assert 60 < m.tau_cool_h < 110
+
+
+def test_old_cooling_model_is_relearned():
+    """Vor 0.32 wurde die Übertemperatur frei mitgeschätzt – diese Modelle passen nicht und lernen neu."""
+    from heatpilot.models import HouseModel
+    d = HouseModel().to_dict()
+    del d["cools"], d["cool_sse"], d["cool_w"]
+    d["cool"] = {"n": 3, "lam": 0.999, "theta": [0.02, 0.1, 0.5], "P": [[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]], "updates": 500}
     m = HouseModel.from_dict(d)
-    assert m.cool.n == 3 and m.cool.theta[:2] == [0.02, 0.1] and m.cool_fast_k == 0.0
+    assert m.cool.n == 2 and m.cool.updates == 0 and m.tau_cool_h is None
+    back = HouseModel.from_dict(m.to_dict())
+    assert back.cool.theta == m.cool.theta and len(back.cools) == len(m.cools)
+
+
+def test_detected_hot_water_charge_is_not_burner_without_demand(tmp_path):
+    """Kessel ohne Ladesignal: eine über Ladezähler/Temperatur erkannte Ladung ist kein „Brenner ohne Bedarf“."""
+    eng = Engine(Config(), Store(tmp_path / "o.db"), Discovered())
+    eng.burner_on = lambda: 1
+    eng.setpoint_demand = lambda: False
+    eng.heat_enabled = lambda: 1
+    t0 = int(datetime(2026, 10, 12, 4, 30).timestamp())
+    eng._dhw_now = 1
+    eng.update_live(t0)
+    eng.update_live(t0 + 300)
+    day = datetime.fromtimestamp(t0).date().isoformat()
+    assert not eng.store.daily(day).get(day, {}).get("overrun_min")
+    eng._dhw_now = 0
+    eng.update_live(t0 + 600)
+    eng.update_live(t0 + 900)
+    assert eng.store.daily(day)[day]["overrun_min"] > 0

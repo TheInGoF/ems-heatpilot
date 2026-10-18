@@ -229,7 +229,7 @@ def make_app(app) -> web.Application:
             elif action == "temp":
                 res = await ctl.set_temp(body.get("room"), body.get("temp"))
             elif action == "mode":
-                res = await ctl.set_mode(body.get("room"), body.get("mode"))
+                res = await ctl.set_mode(body.get("rooms") or body.get("room"), body.get("mode"))
             else:
                 return json_response({"error": "Unbekannte Aktion"}, status=404)
         except control_mod.ControlError as err:

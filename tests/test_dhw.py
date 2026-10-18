@@ -27,11 +27,12 @@ def simulate(days=28, start=datetime(2026, 10, 5, 0, 0)):
             t -= 8
         if not charging and t < 45:
             charging = True
+        heated = charging  # in diesem Schritt lief der Brenner (auch wenn die Ladung jetzt endet)
         if charging:
             t += CHARGE_KW / KWH_PER_K * dt_h
             if t >= 55:
                 charging = False
-        res = m.step(now, dt_h, round(t_prev, 1), round(t, 1), charging, CHARGE_KW if charging else None)
+        res = m.step(now, dt_h, round(t_prev, 1), round(t, 1), heated, CHARGE_KW if heated else None)
         rec = m.recommend(now, True, None, cfg)
         sh = shadow.step(m, round(t, 1), rec["target"], res["draw_k"], dt_h, cfg.dhw_comfort_temp)
         if i > 14 * 288:  # nach zwei Wochen Lernen vergleichen
@@ -119,7 +120,7 @@ def test_rare_big_draw_does_not_dominate_profile():
         new = t - drop - 0.01
         m.step(now, 5 / 60, t, new, False, None)
         t = new if new > 40 else 55.0
-    assert len(m.big_draws) == 2 and all(k >= 20 for _, k in m.big_draws)  # Duschen zählen nicht dazu
+    assert len(m.big_draws) == 2 and all(b[1] >= 20 for b in m.big_draws)  # Duschen zählen nicht dazu
     assert m.daily[18] < m.daily[7]  # Profil: Duschen morgens bleibt sichtbar
     assert m.daily[18] <= 3.0
 

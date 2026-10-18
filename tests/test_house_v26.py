@@ -53,12 +53,24 @@ def test_free_heat_is_kept_not_clamped():
 
 def test_cooling_time_constant_is_learned_from_gas_free_nights():
     eng = _engine(_synthetic())
-    for r in eng.store.query("SELECT ts FROM hourly ORDER BY ts"):
-        eng.learn_house_hour(r["ts"])
+    # Gasbilanz wie gelernt und plausibel (die stufige Morgen-Aufheizung dieser Testdaten ist zu grob,
+    # um sie aus 40 Tagen gleichen Wetters selbst zu lernen); das Auskühlen übernimmt deren Heizgrenze
+    eng.house.rls.theta, eng.house.rls.updates = [0.15, 4.0, -0.9], 500
+    rows = [dict(r) for r in eng.store.query("SELECT * FROM hourly ORDER BY ts")]
+    for prev, cur, nxt in zip(rows, rows[1:], rows[2:]):
+        if datetime.fromtimestamp(cur["ts"]).hour in (23, 0, 1, 2, 3, 4) and prev["gas_kwh"] == cur["gas_kwh"] == nxt["gas_kwh"] == 0:
+            hours_off = (datetime.fromtimestamp(cur["ts"]).hour - 21) % 24
+            eng.house.learn_cooling(cur["t_in"], cur["t_out"], (nxt["t_in"] - prev["t_in"]) / 2, hours_off)
     h = eng.house
     assert h.tau_cool_h is not None and 45 <= h.tau_h <= 80, h.tau_h
-    # H/Offset nur grob: die stufige Morgen-Aufheizung der Testdaten ist gröber als echte Stundenmittel
-    assert 0.1 <= h.h_kw_per_k <= 0.3 and h.offset_kw < 0
+
+
+def test_cooling_waits_for_a_plausible_balance():
+    """Ist die Gasbilanz noch unplausibel, wäre auch die Übertemperatur falsch – dann nichts lernen."""
+    eng = _engine(_synthetic())
+    eng.house.rls.theta, eng.house.rls.updates = [0.3, 4.0, -3.5], 500   # Fremdwärme 3,5 kW: unplausibel
+    assert eng.house.learn_cooling(20.0, 5.0, -0.2, 5) is None
+    assert eng.house.cool.updates == 0
 
 
 def test_summer_hours_are_not_learned():

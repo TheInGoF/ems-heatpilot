@@ -9,6 +9,7 @@
 :root {
   color-scheme: light;
   --bg: #f6f6f4; --surface-1: #fcfcfb; --border: #e3e2de;
+  --heat-bg: #f8e1c2; --heat-fg: #9a4e00; --off-bg: #ecebe8;
   --text-primary: #0b0b0b; --text-secondary: #52514e; --text-muted: #7a7974;
   --grid: #ecebe7;
   --series-1: #2a78d6; --series-2: #eb6834;
@@ -21,6 +22,8 @@
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+    --heat-bg: #4a2d0c; --heat-fg: #f5a729; --off-bg: #161615;
+  --heat-bg: #4a2d0c; --heat-fg: #f5a729; --off-bg: #161615;
     --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
     --grid: #262624;
     --series-1: #3987e5; --series-2: #d95926;
@@ -29,6 +32,7 @@
 :root[data-theme="dark"] {
   color-scheme: dark;
   --bg: #111110; --surface-1: #1a1a19; --border: #2e2e2c;
+  --heat-bg: #4a2d0c; --heat-fg: #f5a729; --off-bg: #161615;
   --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
   --grid: #262624;
   --series-1: #3987e5; --series-2: #d95926;
@@ -120,12 +124,38 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
 #boost-start { background: var(--tile-fg); border-color: transparent; color: #111; }
 #boost-start:disabled { opacity: .45; cursor: default; }
 .boost-sum { font-weight: 700; color: var(--text-primary); }
-.boost, .rtile { background: var(--tile-bg, var(--surface-1)); border-left: 4px solid var(--tile-fg, var(--border)); }
-.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(230px, 100%), 1fr)); gap: 12px; }
-.rtile { position: relative; padding: 14px; border-radius: 12px; border-top: 1px solid var(--border); border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); }
-.rtile h3 { margin: 0; font-size: 15px; }
-.rtile .big { font-size: 30px; font-weight: 700; color: var(--text-primary); line-height: 1.2; }
-.rtile .left { position: absolute; top: 10px; right: 12px; font-size: 12px; font-weight: 700; padding: 2px 9px; border-radius: 10px; background: var(--tile-fg); color: #111; }
+/* Heizen: kleine Aktionskacheln oben (wie in der Tado-App), Räume als quadratische Kacheln, Bedienung im Dialog */
+.acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 10px; }
+.act { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);
+  cursor: pointer; user-select: none; text-align: left; color: var(--text-primary); font: inherit; min-width: 0; }
+.act svg { width: 22px; height: 22px; flex: none; }
+.act > span { min-width: 0; }
+.act b { display: block; font-size: 14px; }
+.act .muted { display: block; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act.on { color: var(--heat-fg); border-color: var(--heat-fg); }
+@media (max-width: 440px) { .act { flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px; } .act .muted { white-space: normal; } }
+.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, calc(50% - 6px)), 1fr)); gap: 12px; }
+.rtile { position: relative; display: flex; flex-direction: column; justify-content: space-between; aspect-ratio: 1 / 1; padding: 12px 14px; border-radius: 16px;
+  border: 1px solid var(--border); background: var(--surface-1); cursor: pointer; user-select: none; text-align: left; color: var(--text-primary); font: inherit; min-width: 0; }
+.rtile .top { display: flex; justify-content: space-between; align-items: flex-start; min-height: 30px; }
+.rtile .hum { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 10px; background: rgba(127,127,127,.16); color: var(--text-secondary); }
+.rtile .pw { color: var(--text-muted); opacity: .6; } .rtile .pw svg { width: 30px; height: 30px; }
+.rtile .big { font-size: 42px; font-weight: 700; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.rtile .big small { font-size: 22px; font-weight: 600; }
+.rtile h3 { margin: 6px 0 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rtile .state { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.rtile.heating { background: var(--heat-bg); border-color: transparent; color: var(--heat-fg); }
+.rtile.heating h3, .rtile.heating .state { color: var(--heat-fg); }
+.rtile.heating .hum { background: rgba(255,255,255,.16); color: var(--heat-fg); }
+.rtile.off { background: var(--off-bg); color: var(--text-secondary); }
+.rtile.off h3 { color: var(--text-secondary); }
+.rtile .left { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 10px; background: var(--heat-fg); color: #111; }
+dialog.hp { border: 1px solid var(--border); border-radius: 16px; background: var(--surface-1); color: var(--text-primary); padding: 0; width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
+dialog.hp::backdrop { background: rgba(0,0,0,.55); }
+dialog.hp #heat-dlg-body { position: relative; padding: 16px; }
+dialog.hp h2 { margin: 0 32px 10px 0; font-size: 17px; }
+dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
+.dlg-x { position: absolute; top: 10px; right: 10px; padding: 3px 9px; }
 .tile-ctl { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
 .tile-ctl b { font-size: 17px; }
 .modes { display: flex; gap: 4px; margin-top: 8px; }
@@ -181,23 +211,11 @@ select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); 
     </div>
   </section>
   <section id="view-heat">
-    <div class="card boost" id="boost" style="margin-bottom:12px">
-      <div class="row" style="justify-content:space-between"><h2 style="font-size:17px">Heiz-Boost</h2><span id="boost-sum" class="boost-sum"></span></div>
-      <div class="chips" id="boost-rooms"></div>
-      <div class="boost-grid">
-        <div><div class="muted">Temperatur</div>
-          <div class="stepper"><button class="btn" onclick="boostTemp(-0.5)">−</button><b id="boost-temp"></b><button class="btn" onclick="boostTemp(0.5)">+</button></div></div>
-        <div><div class="muted">Dauer <b id="boost-dur-text"></b></div>
-          <input type="range" id="boost-dur" min="15" max="720" step="15" oninput="boostDur(this.value)" style="width:100%"></div>
-      </div>
-      <div class="row" style="gap:8px;margin-top:10px">
-        <button class="btn primary big" id="boost-start" onclick="heatAction('boost')">▶ Starten</button>
-        <button class="btn big" onclick="heatAction('schedule')">↻ Zeitplan</button>
-        <span id="heat-msg" class="muted"></span>
-      </div>
-      <p class="muted" style="margin:8px 0 0">Schaltet Tado nur auf Knopfdruck – HeatPilot schaltet nie von selbst. Der Timer läuft in Tado; danach gilt dort wieder der Zeitplan, auch wenn das Add-on neu startet. „Zeitplan“ beendet den Timer für die gewählten Räume sofort.</p>
-    </div>
+    <div class="acts" id="heat-acts"></div>
+    <p class="muted" id="heat-msg" style="margin:0 0 10px;min-height:15px"></p>
     <div class="room-tiles" id="heat-rooms"></div>
+    <p class="muted" style="margin:10px 0 0">Antippen öffnet die Bedienung. Geschaltet wird nur auf Knopfdruck – HeatPilot schaltet nie von selbst.</p>
+    <dialog class="hp" id="heat-dlg" onclose="DLG=null" onclick="if(event.target===this)closeDlg()"><div id="heat-dlg-body"></div></dialog>
   </section>
   <section id="view-settings" hidden></section>
   <section id="view-diag" hidden>
@@ -703,7 +721,7 @@ async function loadLive() {
 }
 
 // ---------------------------------------------------------------- Heizen (Bedienung von Tado auf Knopfdruck)
-// Farbe nach Soll wie im eigenen Dashboard: aus = grau, kühl = türkis, ab 19 °C bernstein bis orange
+// Farbe nach Soll (in den Dialogen): aus = grau, kühl = türkis, ab 19 °C bernstein bis orange
 function tileColors(target, mode) {
   if (mode === "off" || target === null || target === undefined || target < 5) return { fg: "#8f9aa6", bg: "rgba(143,154,166,.10)" };
   if (target < 19) { const h = 175 - (target - 5) * 1.2; return { fg: `hsl(${h},70%,45%)`, bg: `hsla(${h},70%,45%,.12)` }; }
@@ -712,61 +730,127 @@ function tileColors(target, mode) {
 }
 const store = { get(k, d) { try { const v = localStorage.getItem(k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} } };
-let HEAT = null, heatTimer = null;
+let HEAT = null, heatTimer = null, DLG = null;  // DLG: offener Dialog { kind, room, built }
 const BOOST = { rooms: store.get("hp-boost-rooms", []), temp: store.get("hp-boost-temp", 21), minutes: store.get("hp-boost-min", 60) };
 const hm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} h`;
+const leftText = (m) => m >= 60 ? hm(m) : m + " min";
+const ICON = {
+  boost: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c4 0 7-3 7-7 0-5-5-8-5-12-2 2-3 4-3 6-1-1-2-3-2-5-3 3-4 7-4 11 0 4 3 7 7 7z"/></svg>',
+  sched: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15.5-6.4L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15.5 6.4L3 16"/><path d="M3 21v-5h5"/></svg>',
+  off: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/></svg>',
+  drop: '<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><path d="M12 2.5s6 7 6 11.5a6 6 0 0 1-12 0C6 9.5 12 2.5 12 2.5z"/></svg>',
+};
 async function loadHeat() {
   clearTimeout(heatTimer);
   const j = await getJSON("api/heat");
-  if (j.starting) { $("heat-msg").textContent = "Startet noch …"; heatTimer = setTimeout(() => loadHeat().catch(heatError), 5000); return; }
+  if (j.starting) { heatMsg("Startet noch …"); heatTimer = setTimeout(() => loadHeat().catch(heatError), 5000); return; }
   HEAT = j; renderHeat();
   if (!$("view-heat").hidden) heatTimer = setTimeout(() => loadHeat().catch(heatError), 30000);
 }
-function heatError(e) { $("heat-msg").innerHTML = `<span class="msg-err">${esc(e.message || e)}</span>`; }
+function heatError(e) { heatMsg(`<span class="msg-err">${esc(e.message || e)}</span>`); }
+function heatMsg(html) { $("heat-msg").innerHTML = html; const d = $("dlg-msg"); if (d) d.innerHTML = html; }
+function allRooms() { return HEAT ? HEAT.rooms.map((r) => r.climate) : []; }
 function renderHeat() {
   const j = HEAT; if (!j) return;
-  const ids = j.rooms.map((r) => r.climate);
+  const ids = allRooms();
   BOOST.rooms = BOOST.rooms.filter((c) => ids.includes(c));
-  const c = tileColors(BOOST.temp, "heat"), box = $("boost");
-  box.style.setProperty("--tile-fg", c.fg); box.style.setProperty("--tile-bg", c.bg);
-  const n = BOOST.rooms.length, names = j.rooms.filter((r) => BOOST.rooms.includes(r.climate)).map((r) => shortName(r.name));
-  $("boost-sum").textContent = (n === 0 ? "Kein Raum gewählt" : n === ids.length ? "Alle Räume" : n <= 2 ? names.join(", ") : `${n} Räume`) +
-    ` · ${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`;
+  const n = j.rooms.length, running = j.rooms.filter((r) => r.boost), offN = j.rooms.filter((r) => r.mode === "off").length;
+  const autoN = j.rooms.filter((r) => r.mode === "auto" && !r.boost).length;
+  const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
+  $("heat-acts").innerHTML =
+    act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
+    act("sched", "Zeitplan", autoN === n ? "alle Räume" : `${autoN} von ${n} Räumen`, false) +
+    act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false);
+  $("heat-rooms").innerHTML = j.rooms.map(roomTile).join("");
+  if (DLG) renderDlg();  // offener Dialog zeigt den neuen Stand
+}
+function act(kind, title, sub, on) {
+  return `<button class="act${on ? " on" : ""}" onclick="openDlg('${kind}')">${ICON[kind]}<span><b>${title}</b><span class="muted">${sub}</span></span></button>`;
+}
+function roomState(r) {
+  if (r.mode === "off") return "Frostschutz";
+  const t = fmt(r.target) + "°";
+  return r.boost ? `Timer · ${t}` : r.mode === "heat" ? `Eingestellt auf ${t}` : `Zeitplan · ${t}`;
+}
+function roomTile(r) {
+  const off = r.mode === "off", heating = !off && (r.action === "heating" || (r.valve || 0) > 0);
+  const s = fmt(r.temp), i = s.indexOf(",");
+  const big = i < 0 ? `${s}<small>°</small>` : `${s.slice(0, i)}<small>${s.slice(i)}°</small>`;
+  const hum = r.humidity !== null && r.humidity !== undefined ? `<span class="hum">${ICON.drop}${fmt(r.humidity, 0)} %</span>` : "<span></span>";
+  const right = r.boost ? `<span class="left">noch ${leftText(r.boost.left_min)}</span>` : off ? `<span class="pw">${ICON.off}</span>` : "";
+  return `<button class="rtile ${off ? "off" : heating ? "heating" : "idle"}" onclick="openDlg('room','${esc(r.climate)}')">` +
+    `<div class="top">${hum}${right}</div>` +
+    `<div><div class="big">${big}</div><h3>${esc(shortName(r.name))}</h3><div class="state">${roomState(r)}</div></div></button>`;
+}
+// Dialoge: Boost, Zeitplan, Ausschalten, Raum – geschaltet wird erst mit dem Knopf im Dialog
+function openDlg(kind, room) { DLG = { kind, room, built: null }; renderDlg(); const d = $("heat-dlg"); if (!d.open) d.showModal(); }
+function closeDlg() { DLG = null; const d = $("heat-dlg"); if (d.open) d.close(); }
+function renderDlg() {
+  const j = HEAT, d = DLG; if (!j || !d) return;
+  const room = d.kind === "room" ? j.rooms.find((r) => r.climate === d.room) : null;
+  const key = d.kind + ":" + (d.room || "") + (room ? JSON.stringify(room) : "");
+  if (d.built !== key) {  // der Boost-Dialog wird nur einmal gebaut (Schieberegler), die anderen bei jeder Änderung
+    let h = "";
+    if (d.kind === "boost") h = boostDlg(j);
+    else if (d.kind === "sched") h = `<h2>Zeitplan fortsetzen</h2><p>Alle Räume zurück in den Tado-Zeitplan. Ein laufender Timer endet sofort.</p>` +
+      `<button class="btn primary big" onclick="heatPost('schedule', { rooms: allRooms() }, 'Zurück zum Zeitplan …')">↻ Alle Räume in den Zeitplan</button>`;
+    else if (d.kind === "off") h = `<h2>Ausschalten</h2><p>Alle Räume auf „Aus“ – Tado hält dann nur den Frostschutz (5 °C). Zurück geht es über „Zeitplan“.</p>` +
+      `<button class="btn big" onclick="heatPost('mode', { rooms: allRooms(), mode: 'off' }, 'Schalte aus …')">⏻ Alle Räume aus</button>`;
+    else h = roomDlg(room);
+    $("heat-dlg-body").innerHTML = `<button class="btn dlg-x" onclick="closeDlg()" aria-label="Schließen">✕</button>${h}` +
+      `<p class="muted" id="dlg-msg" style="margin:10px 0 0;min-height:15px">${$("heat-msg").innerHTML}</p>`;
+    d.built = key;
+  }
+  if (d.kind === "boost") syncBoost(j);
+}
+function boostDlg(j) {
+  return `<h2>Heiz-Boost</h2><div class="chips" id="boost-rooms"></div>` +
+    `<div class="boost-grid"><div><div class="muted">Temperatur</div><div class="stepper"><button class="btn" onclick="boostTemp(-0.5)">−</button><b id="boost-temp"></b><button class="btn" onclick="boostTemp(0.5)">+</button></div></div>` +
+    `<div><div class="muted">Dauer <b id="boost-dur-text"></b></div><input type="range" id="boost-dur" min="${j.limits.dur_min}" max="${j.limits.dur_max}" step="15" oninput="boostDur(this.value)" style="width:100%"></div></div>` +
+    `<div class="row" style="gap:10px;margin-top:12px"><button class="btn primary big" id="boost-start" onclick="heatAction('boost')">▶ Starten</button><span id="boost-sum" class="boost-sum"></span></div>` +
+    `<p class="muted" style="margin:8px 0 0">Setzt in Tado einen Timer. Danach gilt dort wieder der Zeitplan, auch wenn das Add-on neu startet.</p>`;
+}
+function syncBoost(j) {
+  const ids = allRooms(), n = BOOST.rooms.length, c = tileColors(BOOST.temp, "heat");
+  $("heat-dlg").style.setProperty("--tile-fg", c.fg);
+  const names = j.rooms.filter((r) => BOOST.rooms.includes(r.climate)).map((r) => shortName(r.name));
+  $("boost-sum").textContent = n === 0 ? "Kein Raum gewählt" : n === ids.length ? "Alle Räume" : n <= 2 ? names.join(", ") : `${n} Räume`;
   $("boost-rooms").innerHTML = j.rooms.map((r) => `<span class="chip ${BOOST.rooms.includes(r.climate) ? "on" : ""}" onclick="boostRoom('${esc(r.climate)}')">${BOOST.rooms.includes(r.climate) ? "✓ " : ""}${esc(shortName(r.name))}</span>`).join("") +
     `<span class="chip" onclick="boostAll()">${n === ids.length ? "Keine" : "Alle"}</span>`;
   $("boost-temp").textContent = fmt(BOOST.temp) + " °C";
-  $("boost-dur").min = j.limits.dur_min; $("boost-dur").max = j.limits.dur_max; $("boost-dur").value = BOOST.minutes;
+  const dur = $("boost-dur"); if (String(dur.value) !== String(BOOST.minutes)) dur.value = BOOST.minutes;
   $("boost-dur-text").textContent = hm(BOOST.minutes);
   $("boost-start").disabled = !n;
-  const modeName = { auto: "Zeitplan", heat: "Manuell", off: "Aus" };
-  $("heat-rooms").innerHTML = j.rooms.map((r) => {
-    const t = r.mode === "off" ? null : r.target, col = tileColors(t, r.mode);
-    const modes = ["auto", "heat", "off"].filter((m) => !r.modes.length || r.modes.includes(m));
-    return `<div class="rtile" style="--tile-fg:${col.fg};--tile-bg:${col.bg}">` +
-      (r.boost ? `<span class="left">noch ${r.boost.left_min >= 60 ? hm(r.boost.left_min) : r.boost.left_min + " min"}</span>` : "") +
-      `<h3>${esc(shortName(r.name))}</h3><div class="big">${fmt(r.temp)} <span style="font-size:15px">°C</span></div>` +
-      `<div class="muted">${r.action === "heating" ? "heizt · " : ""}Ventil ${fmt(r.valve, 0)} %${r.humidity !== null && r.humidity !== undefined ? ` · Feuchte ${fmt(r.humidity, 0)} %` : ""}</div>` +
-      `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${r.mode === "off" ? "disabled" : ""}>−</button>` +
-      `<span>Soll <b>${r.mode === "off" ? "aus" : fmt(r.target) + " °C"}</b></span>` +
-      `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${r.mode === "off" ? "disabled" : ""}>+</button></div>` +
-      `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')">${modeName[m]}</button>`).join("")}</div></div>`;
-  }).join("");
+}
+function roomDlg(r) {
+  if (!r) return "<h2>Raum</h2><p>Nicht mehr vorhanden.</p>";
+  const off = r.mode === "off", modeName = { auto: "Zeitplan", heat: "Manuell", off: "Aus" };
+  const modes = ["auto", "heat", "off"].filter((m) => !r.modes.length || r.modes.includes(m));
+  $("heat-dlg").style.setProperty("--tile-fg", tileColors(off ? null : r.target, r.mode).fg);
+  return `<h2>${esc(shortName(r.name))}</h2>` +
+    `<div class="row" style="gap:14px"><span style="font-size:32px;font-weight:700">${fmt(r.temp)} °C</span>` +
+    `<span class="muted">${r.action === "heating" ? "heizt · " : ""}Ventil ${fmt(r.valve, 0)} %${r.humidity !== null && r.humidity !== undefined ? ` · Feuchte ${fmt(r.humidity, 0)} %` : ""}</span></div>` +
+    `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${off ? "disabled" : ""}>−</button>` +
+    `<span>Soll <b>${off ? "aus" : fmt(r.target) + " °C"}</b></span>` +
+    `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${off ? "disabled" : ""}>+</button></div>` +
+    `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')">${modeName[m]}</button>`).join("")}</div>` +
+    (r.boost ? `<p class="muted" style="margin:8px 0 0">Timer läuft noch ${leftText(r.boost.left_min)} – „Zeitplan“ beendet ihn sofort.</p>` : "");
 }
 function boostRoom(c) { BOOST.rooms = BOOST.rooms.includes(c) ? BOOST.rooms.filter((x) => x !== c) : [...BOOST.rooms, c]; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
-function boostAll() { const ids = HEAT.rooms.map((r) => r.climate); BOOST.rooms = BOOST.rooms.length === ids.length ? [] : ids; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
+function boostAll() { const ids = allRooms(); BOOST.rooms = BOOST.rooms.length === ids.length ? [] : ids; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
 function boostTemp(d) { const l = HEAT ? HEAT.limits : { temp_min: 5, temp_max: 25 }; BOOST.temp = Math.min(Math.max(BOOST.temp + d, l.temp_min), l.temp_max); store.set("hp-boost-temp", BOOST.temp); renderHeat(); }
 function boostDur(v) { BOOST.minutes = Number(v); store.set("hp-boost-min", BOOST.minutes); renderHeat(); }
 async function heatPost(action, body, busy) {
-  $("heat-msg").textContent = busy;
+  heatMsg(busy);
   try {
     const j = await getJSON("api/heat/" + action, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
     HEAT = { rooms: j.rooms, limits: j.limits }; renderHeat();
-    $("heat-msg").innerHTML = j.ok ? `<span class="msg-ok">Erledigt.</span>` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc(j.errors.join(" · "))}</span>`;
+    heatMsg(j.ok ? `<span class="msg-ok">Erledigt.</span>` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc(j.errors.join(" · "))}</span>`);
   } catch (e) { heatError(e); }
 }
 function heatAction(a) {
   if (a === "boost") heatPost("boost", { rooms: BOOST.rooms, temp: BOOST.temp, minutes: BOOST.minutes }, "Starte Tado-Timer …");
-  else heatPost("schedule", { rooms: BOOST.rooms.length ? BOOST.rooms : HEAT.rooms.map((r) => r.climate) }, "Zurück zum Zeitplan …");
+  else heatPost("schedule", { rooms: BOOST.rooms.length ? BOOST.rooms : allRooms() }, "Zurück zum Zeitplan …");
 }
 function roomTemp(c, d) {
   const r = HEAT.rooms.find((x) => x.climate === c); if (!r) return;
@@ -941,7 +1025,8 @@ async function load() {
     tile("Ladekosten", fmt(kpk.kalt ?? kpk.warm, 3), "kWh/K", `Start unter 47 °C: ${fmt(kpk.kalt, 3)} (${w.kwh_per_k_n.kalt}×) · darüber: ${fmt(kpk.warm, 3)} (${w.kwh_per_k_n.warm}×)`),
     tile(dok ? "Ersparnis-Schätzung" : "Ersparnis (Modell lernt noch)", fmt(w.saved_pct), "%", `≈ ${fmt(w.saved_kwh, 0)} kWh / ${fmt(w.saved_eur, 0)} € in ${w.period_days} Tagen · ${w.cold_draws}× wäre es zu kalt gewesen`),
     w.next_charge ? tile("Nächste Ladung", w.next_charge.now ? "jetzt" : w.next_charge.eta ? timeOf(w.next_charge.eta) : "> 2 Tage", "",
-      prelim + `Kessel lädt ab ${fmt(w.next_charge.trigger, 0)} °C nach (Soll − Hysterese)` + (w.next_charge.hours ? ` · in ≈ ${fmt(w.next_charge.hours, 1)} h` : "")) : "",
+      prelim + `Kessel lädt ab ${fmt(w.next_charge.trigger, 0)} °C nach (Soll − Hysterese)` + (w.next_charge.hours ? ` · in ≈ ${fmt(w.next_charge.hours, 1)} h` : "") +
+      (w.next_charge.by_schedule ? " · ausgelöst vom Soll-Zeitprogramm" : w.next_charge.trigger_at_eta != null && w.next_charge.trigger_at_eta !== w.next_charge.trigger ? ` · dann ab ${fmt(w.next_charge.trigger_at_eta, 0)} °C (Zeitprogramm)` : "")) : "",
     w.disinfect ? tile("Legionellenschaltung", esc(w.disinfect.day ?? (w.disinfect.hour !== null ? `${w.disinfect.hour}:00` : "–")), w.disinfect.day && w.disinfect.hour !== null ? `${w.disinfect.hour}:00` : "",
       `Wird nicht gelernt · bisher ${w.disinfect.special_charges} Sonderladungen ausgeklammert`) : "",
   ].join("");
@@ -949,8 +1034,8 @@ async function load() {
   drawDhwProfile();
   const big = w.big_draws || [];
   $("dhw-big").innerHTML = big.length
-    ? `<b>Große Zapfungen</b> (z. B. Badewanne, letzte 60 Tage, im Profil nur gedeckelt): ` + big.slice(-8).reverse().map(([t, k]) =>
-        `${new Date(t).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} (${fmt(k, 0)} K)`).join(" · ") +
+    ? `<b>Große Zapfungen</b> (z. B. Badewanne, letzte 60 Tage, im Profil nur gedeckelt; „nach Sonderladung“ = durch die Legionellenschaltung gedeckt, dafür wird nicht vorgeladen): ` + big.slice(-8).reverse().map(([t, k, covered]) =>
+        `${new Date(t).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })} (${fmt(k, 0)} K${covered ? ", nach Sonderladung" : ""})`).join(" · ") +
       (big.length > 8 ? ` · insgesamt ${big.length}×` : "")
     : "Keine großen Zapfungen in den letzten 60 Tagen.";
   dhwChart($("chart-dhw-loss"), w);
@@ -992,7 +1077,8 @@ async function load() {
   if (!s.arrival) $("plan").innerHTML = "";
   else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – ` +
     (plan && plan.unreachable ? `${esc(plan.unreachable)} wird laut Modell selbst mit dem höchsten Vorlauf (${fmt(maxFlow, 0)} °C) nicht warm genug – kein machbarer Plan.</p>` : `noch kein machbarer Plan (Modell lernt noch).</p>`);
-  else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${src[s.arrival.source] || s.arrival.source || ""}). Start <b>${timeOf(plan.best.start)}</b>` +
+  else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${esc(src[plan.arrival_source || s.arrival.source] || plan.arrival_source || s.arrival.source || "")}` +
+    `${(plan.arrival_confidence ?? s.arrival.confidence) ? `, Konfidenz ${fmt((plan.arrival_confidence ?? s.arrival.confidence) * 100, 0)} %` : ""}). Start <b>${timeOf(plan.best.start)}</b>` +
     (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:13px">` +
     plan.best.steps.map((st) => st.what === "Warmwasser"
       ? `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Warmwasser ${fmt(st.from, 0)} → ${fmt(st.to, 0)} °C</li>`
@@ -1084,11 +1170,12 @@ const WEEK_INFO = {
   gas: "Mittlerer Gasverbrauch (kW = kWh je Stunde), Heizen und Warmwasser zusammen. Rechts: Summe je Tag.",
   heat: "Nur Heizen: Gas außerhalb der Warmwasser-Ladezeiten. Rechts: Summe je Tag.",
   dhw: "Nur Warmwasser: Gas, während der Speicher lädt. Rechts: Summe je Tag.",
-  gas_k: "Heizgas je Kelvin Unterschied innen–außen (W/K, nur Stunden bis 15 °C außen). Mit plausiblem Hausmodell ist die Fremdwärme wieder hinzugezählt und es zählen nur Stunden deutlich unter der Heizgrenze. Über den Tag gemittelt entspricht das dem Wärmeverlust; je Stunde ist es nachts (Absenkung, das Haus zehrt vom Speicher) niedriger und morgens (Aufheizen) höher. Ist ein ganzer Tag hier höher, braucht das Haus an diesem Tag wirklich mehr, nicht nur, weil die Woche kälter war. Ohne Hausmodell sehen kalte Stunden noch etwas teurer aus.",
+  gas_k: "Heizgas je Kelvin Unterschied innen–außen (W/K, Stunden bis 15 °C außen). Mit plausiblem Hausmodell: Heizgas im Verhältnis zu dem, was das Haus bei diesem Wetter laut Modell braucht, mal Wärmeverlust – genau dem Wärmeverlust gleich, wenn durchgehend nach Modell geheizt wird; Absenken macht es kleiner, Aufheizen größer. Ist ein ganzer Tag hier höher, braucht das Haus an diesem Tag wirklich mehr, nicht nur, weil die Woche kälter war. Ohne Hausmodell: Heizgas je Grad-Stunde.",
   model: "Gemessen minus das, was das Hausmodell erwartet (kW). Das Modell kennt keine Wochentage – wiederkehrende Flecken zeigen, was es noch nicht erklärt. Blau: weniger als erwartet (Kochen, Sonne, viele Leute im Haus), orange: mehr (Lüften, Aufheizen nach der Absenkung).",
   starts: "Brennerstarts je Stunde im Mittel – wann der Kessel am meisten taktet. Rechts: Starts je Tag.",
   home: "Anteil der Zeit, in der mindestens eine gewählte Person zu Hause war (gemessen). Die gelernte Gewohnheit je Person steht im Live-Tab unter „Anwesenheit“.",
-  target: "Median-Soll aller Räume aus Tado („aus“ = 5 °C) – so sieht HeatPilot deinen Zeitplan.",
+  target: "Median-Soll der eingeschalteten Räume aus Tado – nur wirklich eingestellte Werte. Wie oft Tado aus ist, zeigt „Tado aus“.",
+  off: "Anteil der Räume, die Tado auf „aus“ hat (Zeitplan, Abwesenheit) – so sieht HeatPilot deinen Zeitplan.",
   valve: "Mittlere Ventilöffnung – wann die Räume Wärme wollen. Ein Raum lässt sich einzeln wählen.",
 };
 let WEEK = null, WEEK_METRIC = "gas";
@@ -1111,7 +1198,7 @@ function drawWeek() {
   const m = WEEK.metrics[WEEK_METRIC]; if (!m) return;
   $("week-room").hidden = WEEK_METRIC !== "valve";
   const sum = ["gas", "heat", "dhw", "starts"].includes(WEEK_METRIC);
-  const digits = { gas: 2, heat: 2, dhw: 2, gas_k: 0, model: 2, starts: 1, home: 0, target: 1, valve: 0 }[WEEK_METRIC];
+  const digits = { gas: 2, heat: 2, dhw: 2, gas_k: 0, model: 2, starts: 1, home: 0, target: 1, off: 0, valve: 0 }[WEEK_METRIC];
   const tot = sum ? (WEEK_METRIC === "starts" ? "" : "kWh") : WEEK_METRIC === "model" ? "" : m.unit;
   $("week-text").textContent = `${WEEK_INFO[WEEK_METRIC] || ""} Zeitraum: ${WEEK.days} Tage, ${WEEK.hours} Stunden.` +
     (WEEK_METRIC === "model" && !WEEK.house_ok ? " Das Hausmodell ist noch nicht plausibel – die Abweichung ist vorläufig." : "");
@@ -1138,24 +1225,28 @@ async function loadPresence() {
   $("pres-text").innerHTML = (j.vacation ? "Urlaub aktiv. " : "") + (j.anyone_home
     ? "Jemand ist zu Hause – HeatPilot plant gerade keine Ankunft."
     : a ? `HeatPilot erwartet die nächste Ankunft <b>${timeOf(a.eta)}</b> (${esc(String(a.person || "").replace("person.", ""))}, ${esc(SRC[a.source] || a.source)}${a.confidence ? `, ${fmt(a.confidence * 100, 0)} %` : ""}) – danach richtet sich der Vorheizplan.`
+    : j.unknown_from ? `Niemand zu Hause; ab ${timeOf(j.unknown_from)} ist offen, ob jemand heimkommt (Gewohnheit dort noch nicht oft genug gelernt) – Warmwasser bleibt dann beim heutigen Soll.`
     : "Niemand zu Hause und keine Ankunft absehbar – HeatPilot rechnet mit Abwesenheit.") +
+    (j.persons.every((p) => p.long_away) ? " Alle sind lange weg: Gewohnheit, Zapfprofil und Raummodelle lernen bis zur Heimkehr nicht." : "") +
     " Entfernungen werden aus Home Assistant berechnet; Koordinaten speichert HeatPilot nicht.";
   const err = (c) => c ? `${c.error_min > 0 ? "+" : c.error_min < 0 ? "−" : "±"}${Math.abs(c.error_min)}′ <span class="muted">${c.source === "gps" ? "GPS" : c.source === "gewohnheit" ? "Gew." : esc(c.source || "")}</span>` : "–";
   const dt = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";
   const dur = (a) => { if (!a.left) return "–"; const m = (new Date(a.ts) - new Date(a.left)) / 60000; return m < 120 ? `${fmt(m, 0)} min` : `${fmt(m / 60, 1)} h`; };
   $("live-persons").innerHTML = j.persons.map((p, i) => {
     const st = p.status || {}, q = p.quality || {};
-    const qual = [60, 30, 15].filter((b) => q[b]).map((b) => `${b} min vorher Ø ${q[b].mean_abs_min} min daneben (${fmt(q[b].within_15 * 100, 0)} % innerhalb ±15 min, ${q[b].n}×)`).join(" · ");
+    const SRC_SHORT = { gps: "GPS", gewohnheit: "Gewohnheit" };
+    const qual = [60, 30, 15].filter((b) => q[b]).map((b) => `${b} min vorher: ` + Object.entries(q[b]).map(([k, v]) =>
+      `${esc(SRC_SHORT[k] || k)} Ø ${v.mean_abs_min} min daneben (${fmt(v.within_15 * 100, 0)} % innerhalb ±15 min, ${v.n}×)`).join(", ")).join(" · ");
     const rows = (p.arrivals || []).slice(0, 6).map((a) => { const c = Object.fromEntries(a.checks.map((x) => [x.before_min, x]));
-      return `<tr><td>${dt(a.ts)}</td><td>${dur(a)}</td><td>${a.max_km === null ? "–" : fmt(a.max_km) + " km"}</td><td style="white-space:nowrap">${err(c[60])}</td><td style="white-space:nowrap">${err(c[30])}</td><td style="white-space:nowrap">${err(c[15])}</td></tr>`; }).join("");
+      return `<tr${a.short ? ' class="muted" title="kurzer Abstecher – zählt nicht in der Güte"' : ""}><td>${dt(a.ts)}${a.short ? " (Abstecher)" : ""}</td><td>${dur(a)}</td><td>${a.max_km === null ? "–" : fmt(a.max_km) + " km"}</td><td style="white-space:nowrap">${err(c[60])}</td><td style="white-space:nowrap">${err(c[30])}</td><td style="white-space:nowrap">${err(c[15])}</td></tr>`; }).join("");
     return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(p.name)}</h2>` +
       `<span class="badge" style="border-color:${STATE_COL[st.state]};color:${STATE_COL[st.state]}">${STATE_LABEL[st.state] || "–"}</span></div>` +
       `<p style="margin:2px 0 6px">${esc(st.text || "")}${p.dist_km !== null && !p.home ? ` · <b>${fmt(p.dist_km)} km</b> entfernt` : ""}` +
       `${!p.home && p.eta ? ` · erwartet <b>${timeOf(p.eta)}</b> (${esc(SRC[p.source] || p.source)}${p.confidence ? `, ${fmt(p.confidence * 100, 0)} %` : ""})` : ""}</p>` +
       `<div class="legend"><span><i style="background:var(--series-1)"></i>Entfernung (km)</span><span><i style="background:var(--band-home)"></i>zu Hause</span></div>` +
       `<div id="ch-pers-${i}"></div>` +
-      `<h3>Gewohnheit (gelernt)</h3><p class="muted" style="margin:0 0 4px">Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde, wie HeatPilot sie ohne GPS-Annäherung nutzt (ab 50 % gilt „kommt heim“). Rahmen = jetzt.</p><div id="hm-pers-${i}"></div>` +
-      `<h3>Heimkehr-Kontrolle</h3><p class="muted" style="margin:0 0 4px">Was HeatPilot 60, 30 und 15 min vor der tatsächlichen Ankunft erwartet hatte: + zu spät erwartet, − zu früh. Gelerntes Heimfahrt-Tempo ${fmt(p.approach_speed_kmh, 0)} km/h aus ${p.arrivals_learned} Fahrten.${qual ? "<br>" + qual : ""}</p>` +
+      `<h3>Gewohnheit (gelernt)</h3><p class="muted" style="margin:0 0 4px">Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde, wie HeatPilot sie ohne GPS-Annäherung nutzt (über 50 % und mindestens 2× gelernt gilt „kommt heim“, frühestens nach der Fahrzeit aus der Entfernung; bei langer Abwesenheit pausiert das Lernen). Rahmen = jetzt.</p><div id="hm-pers-${i}"></div>` +
+      `<h3>Heimkehr-Kontrolle</h3><p class="muted" style="margin:0 0 4px">Was HeatPilot 60, 30 und 15 min vor der tatsächlichen Ankunft erwartet hatte: + zu spät erwartet, − zu früh; Güte getrennt nach Quelle, kurze Abstecher (unter 60 min und 1 km) zählen nicht. Gelerntes Heimfahrt-Tempo ${fmt(p.approach_speed_kmh, 0)} km/h aus ${p.arrivals_learned} Fahrten.${qual ? "<br>" + qual : ""}</p>` +
       (rows ? `<div class="scroll"><table><tr><th>Angekommen</th><th>weg</th><th>max.</th><th>60 min</th><th>30 min</th><th>15 min</th></tr>${rows}</table></div>` : `<p class="muted">Noch keine Heimkehr seit dem Update aufgezeichnet.</p>`) + `</div>`;
   }).join("");
   j.persons.forEach((p, i) => {

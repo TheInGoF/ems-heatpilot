@@ -6,7 +6,9 @@ Zwei Quellen, beide aus den ``person.*``-Entitäten von Home Assistant:
    selbst, ob sich jemand nähert und wann er ankommt. Keine extra Sensoren.
    Die typische Heimfahrt-Geschwindigkeit wird pro Person gelernt.
 2. Gewohnheit: Pro Person ein Wochenraster (7 Tage x 96 Viertelstunden) mit
-   der gelernten Wahrscheinlichkeit, zu Hause zu sein.
+   der gelernten Wahrscheinlichkeit, zu Hause zu sein. Lange Abwesenheit (Reise
+   ohne eingetragenen Urlaub) wird erkannt und nicht als Gewohnheit gelernt –
+   außer sie wiederholt sich regelmäßig (Wochenpendler, Wochenendfahrt).
 """
 
 from __future__ import annotations
@@ -28,12 +30,42 @@ REVERSAL_KM = 3.0        # danach wieder so viel weiter weg = Kehrtwende, Abbruc
 STALL_MIN = 45           # so lange ohne Fortschritt (Rast) = Abbruch
 MAX_GAP_MIN = 20         # größere Lücken in den GPS-Daten unterbrechen die Serie
 MOVE_KMH = 3.0           # darunter gilt man als „steht“ (GPS-Schwankung)
+SPEED_WINDOW_S = 900     # Annäherungstempo: Regression über so viele Sekunden
+# GPS-Ankunft nur bei echter Annäherung: seit Beginn so viel näher (deutlich über der GPS-Schwankung)
+# oder mindestens so schnell im Verhältnis zum gelernten Heimfahrt-Tempo
+APPROACH_MIN_KM = 4 * JITTER_KM
+APPROACH_MIN_FRAC = 0.5
 
 # Kontrolle der Vorhersage: was wurde so lange vor der tatsächlichen Ankunft erwartet?
 CHECK_BEFORE_MIN = (60, 30, 15)
 MIN_AWAY_MIN = 30        # kürzere Abwesenheit (GPS-Flattern, Mülltonne) zählt nicht als Heimkehr
 KEEP_ARRIVALS = 30
 PRED_EVERY_S = 300       # Vorhersage höchstens alle 5 min festhalten
+SHORT_TRIP_MIN = 60      # kürzer weg UND …
+SHORT_TRIP_KM = 1.0      # … nicht weiter weg (Spaziergang): zählt nicht in der Vorhersage-Güte
+
+# Gewohnheit: Startwert 0,5 heißt „unbekannt“, nicht „zu Hause“
+HABIT_MIN_P = 0.5        # Feld zählt als „kommt heim“ nur strikt darüber …
+HABIT_MIN_VISITS = 2     # … und wenn es so oft gelernt wurde
+VISITS_MAX = 99
+EARLIEST_MIN_KM = 1.0    # weiter weg: frühestens nach der Fahrzeit (Entfernung / gelerntes Tempo)
+
+# Lange Abwesenheit (Reise ohne eingetragenen Urlaub): Raster beim Verlassen sichern,
+# danach auf die Sicherung zurück und bis zur Heimkehr nicht mehr lernen
+LONG_AWAY_H = 72         # länger weg (Wochenenden in der Nähe bleiben gelernt)
+LONG_AWAY_FAR_H = 24     # oder so lange weg …
+LONG_AWAY_FAR_KM = 300.0  # … und dabei weiter weg als das
+# Regelmäßige lange Abwesenheit (Wochenpendler, Wochenendfahrt) ist Gewohnheit, keine Reise:
+# eine frühere begann so viele Tage vorher zur selben Wanduhrzeit (± Toleranz) …
+REGULAR_EVERY_D = (7, 14)
+REGULAR_TOL_MIN = 90
+REGULAR_EXTRA_H = 12     # … und die jetzige dauert höchstens so viel länger, sonst doch Reise
+KEEP_AWAY_TRIPS = 8      # gemerkte Abwesenheiten über LONG_AWAY_FAR_H je Person (Abfahrt, Dauer)
+
+# Heimfahrt-Tempo lernen
+STILL_RESET_MIN = 10     # so lange stehen: Annäherung beginnt neu (Ampel nicht)
+LEARN_MIN_KMH = 3.0      # beobachtetes Tempo außerhalb: unplausibel, verworfen (nicht begrenzt)
+LEARN_MAX_KMH = 200.0
 
 
 def haversine_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -49,10 +81,19 @@ def slot_of(ts: datetime) -> int:
     return ts.weekday() * SLOTS_PER_DAY + (ts.hour * 60 + ts.minute) // SLOT_MIN
 
 
+def short_trip(a: dict) -> bool:
+    """Kurzer Abstecher (Spaziergang, Mülltonne): Zeile bleibt, zählt aber nicht in der Güte."""
+    if not a.get("left") or a.get("max_km") is None:
+        return False  # ohne GPS oder Startzeit nicht entscheidbar: zählt mit
+    mins = (datetime.fromisoformat(a["ts"]) - datetime.fromisoformat(a["left"])).total_seconds() / 60
+    return mins < SHORT_TRIP_MIN and a["max_km"] < SHORT_TRIP_KM
+
+
 @dataclass
 class PersonLearner:
     person: str
     week: list[float] = field(default_factory=lambda: [0.5] * (7 * SLOTS_PER_DAY))
+    visits: list[int] = field(default_factory=lambda: [0] * (7 * SLOTS_PER_DAY))  # Lernschritte je Feld
     alpha: float = 0.1
     approach_speed_kmh: float = 35.0
     arrivals_learned: int = 0
@@ -67,12 +108,27 @@ class PersonLearner:
     _left_at: datetime | None = None
     _max_dist: float | None = None
     arrivals: list = field(default_factory=list)
+    # lange Abwesenheit: seit wann weg, größte Entfernung, Sicherung des Rasters beim Verlassen
+    long_away: bool = False
+    _away_since: datetime | None = None
+    _away_km: float | None = None
+    _backup: tuple[list[float], list[int]] | None = None
+    away_regular: bool = False  # laufende lange Abwesenheit wiederholt sich: lernt normal weiter
+    away_trips: list = field(default_factory=list)  # [(Abfahrt, Stunden)] der letzten langen Abwesenheiten
+    _still_since: datetime | None = None
 
     def observe(self, ts: datetime, home: bool, dist_km: float | None, learn: bool = True) -> None:
-        """Position verfolgen; ``learn=False`` (Urlaub): Gewohnheiten nicht anpassen."""
+        """Position verfolgen; ``learn=False`` (Urlaub): Gewohnheiten nicht anpassen.
+
+        Lange weg (``long_away``): Raster zurück auf den Stand beim Verlassen, bis zur Heimkehr
+        kein Lernen – das Heimfahrt-Tempo lernt bei der Heimkehr trotzdem. Regelmäßige lange
+        Abwesenheit (``away_regular``) lernt normal weiter.
+        """
+        self._track_away(ts, home, dist_km)
         slot = slot_of(ts)
-        if learn and slot != self._last_slot_learned:
+        if learn and not self.long_away and slot != self._last_slot_learned:
             self.week[slot] += self.alpha * ((1.0 if home else 0.0) - self.week[slot])
+            self.visits[slot] = min(self.visits[slot] + 1, VISITS_MAX)
             self._last_slot_learned = slot
 
         if dist_km is not None:
@@ -80,11 +136,17 @@ class PersonLearner:
             self.dist_km = dist_km
 
         speed = self.approach_speed_now(ts)
-        if not home and speed is not None and speed > 3 and self._approach_start is None:
-            if dist_km is not None and dist_km > 1.0:
+        if not home and speed is not None:
+            if abs(speed) <= MOVE_KMH:  # steht / GPS-Schwankung: nach einer Weile keine laufende Annäherung
+                self._still_since = self._still_since or ts
+                if (ts - self._still_since).total_seconds() >= STILL_RESET_MIN * 60:
+                    self._approach_start = None
+            else:
+                self._still_since = None
+            if speed < -MOVE_KMH:
+                self._approach_start = None
+            elif speed > MOVE_KMH and self._approach_start is None and dist_km is not None and dist_km > 1.0:
                 self._approach_start = (ts, dist_km)
-        if not home and speed is not None and speed < -3:
-            self._approach_start = None
 
         if home and self.home is False:
             self._log_arrival(ts)
@@ -96,13 +158,14 @@ class PersonLearner:
         if home and self.home is False and self._approach_start is not None:
             start_ts, start_dist = self._approach_start
             hours = (ts - start_ts).total_seconds() / 3600
-            if learn and 0.05 < hours < 4:
-                observed = start_dist / hours
+            observed = start_dist / hours if hours > 0 else 0.0
+            if learn and 0.05 < hours < 4 and LEARN_MIN_KMH <= observed <= LEARN_MAX_KMH:
                 self.approach_speed_kmh += 0.2 * (observed - self.approach_speed_kmh)
                 self.arrivals_learned += 1
             self._approach_start = None
         if home:
             self._approach_start = None
+            self._still_since = None
             self._return = None
             self.track.clear()
         self.home = home
@@ -113,6 +176,45 @@ class PersonLearner:
             e = self.eta(ts) if last is None or (ts - last).total_seconds() >= PRED_EVERY_S else {"eta": None}
             if e["eta"] is not None:
                 self._preds.append((ts, e["eta"], e["source"]))
+
+    def _track_away(self, ts: datetime, home: bool, dist_km: float | None) -> None:
+        """Lange Abwesenheit erkennen (je Person, live und bei der Neuberechnung gleich)."""
+        if home:
+            if self._away_since is not None:
+                hours = (ts - self._away_since).total_seconds() / 3600
+                if hours >= LONG_AWAY_FAR_H:  # für die Erkennung regelmäßiger Abwesenheit merken
+                    self.away_trips = [*self.away_trips, (self._away_since, round(hours, 2))][-KEEP_AWAY_TRIPS:]
+            self.long_away, self._away_since, self._away_km, self._backup = False, None, None, None
+            self.away_regular = False
+            return
+        if self._away_since is None:  # gerade los (oder erster Wert nach Neuberechnung): Raster sichern
+            self._away_since = ts
+            self._backup = (list(self.week), list(self.visits))
+        if dist_km is not None:
+            self._away_km = dist_km if self._away_km is None else max(self._away_km, dist_km)
+        if self.long_away:
+            return
+        hours = (ts - self._away_since).total_seconds() / 3600
+        if hours > LONG_AWAY_H or (hours > LONG_AWAY_FAR_H and (self._away_km or 0.0) > LONG_AWAY_FAR_KM):
+            limit = self._regular_limit_h(self._away_since)
+            self.away_regular = limit is not None and hours <= limit
+            if self.away_regular:
+                return  # wie vor 1–2 Wochen: Gewohnheit, Sicherung bleibt für den Fall „doch länger“
+            self.long_away = True
+            if self._backup is not None:  # seitdem nur „weg“ gelernt: Zurücksetzen ist exakt
+                self.week, self.visits = list(self._backup[0]), list(self._backup[1])
+            self._backup = None
+
+    def _regular_limit_h(self, since: datetime) -> float | None:
+        """Begann vor 7 oder 14 Tagen (Wanduhr ± Toleranz) eine lange Abwesenheit?
+
+        Dann: bis zu wie vielen Stunden die jetzige als regelmäßig gilt, sonst None.
+        """
+        wall = since.replace(tzinfo=None)
+        hours = [h for start, h in self.away_trips
+                 if any(abs((wall - start.replace(tzinfo=None)).total_seconds() / 60 - d * 1440) <= REGULAR_TOL_MIN
+                        for d in REGULAR_EVERY_D)]
+        return max(hours) + REGULAR_EXTRA_H if hours else None
 
     def _log_arrival(self, ts: datetime) -> None:
         """Heimkehr festhalten – mit dem, was HeatPilot 60/30/15 min vorher erwartet hatte."""
@@ -137,6 +239,16 @@ class PersonLearner:
 
     def status(self, now: datetime) -> dict:
         """Wie HeatPilot die Lage gerade deutet – zum Nachprüfen in der Oberfläche."""
+        st = self._status(now)
+        if self.long_away and not self.home:
+            st["long_away"] = True
+            st["since"] = st.get("since") or (self._away_since.isoformat() if self._away_since else None)
+            st["text"] += " · lange weg – Gewohnheit lernt bis zur Heimkehr nicht"
+        elif self.away_regular and not self.home:
+            st["text"] += " · regelmäßig lange weg – Gewohnheit lernt weiter"
+        return st
+
+    def _status(self, now: datetime) -> dict:
         if self.home:
             return {"state": "zuhause", "text": "zu Hause"}
         if self.home is None:
@@ -165,13 +277,23 @@ class PersonLearner:
                  for h in range(24)] for d in range(7)]
 
     def arrival_quality(self) -> dict:
-        """Mittlerer Fehler der Vorhersage je Vorlauf (Minuten, positiv = zu spät erwartet)."""
-        out = {}
+        """Mittlerer Fehler der Vorhersage je Vorlauf und Quelle (Minuten, positiv = zu spät erwartet).
+
+        ``{60: {"gps": {...}, "gewohnheit": {...}}, …}`` – kurze Abstecher zählen nicht.
+        """
+        out: dict = {}
         for before in CHECK_BEFORE_MIN:
-            errs = [c["error_min"] for a in self.arrivals for c in a["checks"] if c["before_min"] == before]
-            if errs:
-                out[before] = {"n": len(errs), "mean_abs_min": round(sum(abs(e) for e in errs) / len(errs)),
-                               "within_15": round(sum(1 for e in errs if abs(e) <= 15) / len(errs), 2)}
+            by_src: dict[str, list[int]] = {}
+            for a in self.arrivals:
+                if short_trip(a):
+                    continue
+                for c in a["checks"]:
+                    if c["before_min"] == before:
+                        by_src.setdefault(c.get("source") or "?", []).append(c["error_min"])
+            if by_src:
+                out[before] = {src: {"n": len(errs), "mean_abs_min": round(sum(abs(e) for e in errs) / len(errs)),
+                                     "within_15": round(sum(1 for e in errs if abs(e) <= 15) / len(errs), 2)}
+                               for src, errs in by_src.items()}
         return out
 
     def steady_return(self, now: datetime) -> dict | None:
@@ -223,7 +345,7 @@ class PersonLearner:
 
     def approach_speed_now(self, now: datetime) -> float | None:
         """Annäherungsgeschwindigkeit km/h (positiv = kommt näher)."""
-        pts = [(t, d) for t, d in self.track if (now - t).total_seconds() <= 900]
+        pts = [(t, d) for t, d in self.track if (now - t).total_seconds() <= SPEED_WINDOW_S]
         if len(pts) < 2:
             return None
         t0 = pts[0][0]
@@ -236,15 +358,57 @@ class PersonLearner:
         slope = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / var
         return -slope
 
-    def next_home_by_habit(self, now: datetime, horizon_h: int = 24) -> tuple[datetime, float] | None:
+    def _approaching(self, speed: float) -> bool:
+        """Echte Annäherung statt GPS-Schwankung: schnell genug oder seit Beginn deutlich näher.
+
+        Ein einzelner GPS-Sprung zählt nicht: die Annäherung beginnt erst am gesprungenen Punkt.
+        """
+        if speed >= APPROACH_MIN_FRAC * self.approach_speed_kmh:
+            return True
+        start = self._approach_start
+        return start is not None and self.dist_km is not None and start[1] - self.dist_km >= APPROACH_MIN_KM
+
+    def _habit_slots(self, now: datetime, horizon_h: int, earliest: datetime | None):
+        """Kommende Felder (Zeitpunkt nach Wanduhr, Index), frühestens ``earliest``."""
         start = slot_of(now)
         for i in range(1, horizon_h * 60 // SLOT_MIN + 1):
-            p = self.week[(start + i) % len(self.week)]
-            if p >= 0.5:
-                minutes = i * SLOT_MIN - (now.minute % SLOT_MIN)
-                # Gewohnheit gilt nach Wanduhr: über die Zeitumstellung hinweg nicht in absoluter Zeit rechnen
-                wall = now.replace(tzinfo=None) + timedelta(minutes=minutes)
-                return (wall.astimezone() if now.tzinfo else wall), p
+            minutes = i * SLOT_MIN - (now.minute % SLOT_MIN)
+            # Gewohnheit gilt nach Wanduhr: über die Zeitumstellung hinweg nicht in absoluter Zeit rechnen
+            wall = now.replace(tzinfo=None) + timedelta(minutes=minutes)
+            at = wall.astimezone() if now.tzinfo else wall
+            if earliest is None or at >= earliest:
+                yield at, (start + i) % len(self.week)
+
+    def habit_reliable(self, slot: int) -> bool:
+        return self.visits[slot] >= HABIT_MIN_VISITS
+
+    def next_home_by_habit(self, now: datetime, horizon_h: int = 24,
+                           earliest: datetime | None = None) -> tuple[datetime, float] | None:
+        """Erstes verlässlich gelerntes Feld „zu Hause“ – unbesuchte Felder (0,5) liefern keine Ankunft."""
+        for at, slot in self._habit_slots(now, horizon_h, earliest):
+            p = self.week[slot]
+            if p > HABIT_MIN_P and self.habit_reliable(slot):
+                return at, p
+        return None
+
+    def earliest_arrival(self, now: datetime) -> datetime | None:
+        """Frühestmögliche Ankunft aus der Entfernung – nur Untergrenze für die Gewohnheit."""
+        if self.dist_km is None or self.dist_km <= EARLIEST_MIN_KM:
+            return None
+        return now + timedelta(hours=self.dist_km / max(self.approach_speed_kmh, 5.0))
+
+    def unknown_from(self, now: datetime, horizon_h: int = 24) -> datetime | None:
+        """Ab wann die Ankunft offen ist: erstes noch nicht verlässlich gelerntes Feld (sonst None).
+
+        None auch, wenn die Person zu Hause, lange weg oder per GPS auf dem Heimweg ist.
+        """
+        if self.home or self.long_away:
+            return None
+        if self.eta(now)["source"] == "gps":
+            return None
+        for at, slot in self._habit_slots(now, horizon_h, self.earliest_arrival(now)):
+            if not self.habit_reliable(slot):
+                return at
         return None
 
     def eta(self, now: datetime) -> dict:
@@ -264,40 +428,65 @@ class PersonLearner:
         speed = self.approach_speed_now(now)
         if speed is not None:
             info["speed_kmh"] = round(speed, 1)
-        if speed is not None and speed > 3 and self.dist_km:
-            v = 0.5 * speed + 0.5 * self.approach_speed_kmh
-            info["eta"] = now + timedelta(hours=self.dist_km / max(v, 5))
-            info["source"] = "gps"
-            info["confidence"] = 0.8
-            return info
         ret = self.steady_return(now)
+        if speed is not None and speed > MOVE_KMH and self.dist_km and self._approaching(speed):
+            vl = self.approach_speed_kmh
+            v = 0.5 * max(speed, vl) + 0.5 * vl  # Momenttempo (Stau, Anfahrt) darf nur verfrühen, nie verspäten
+            eta = now + timedelta(hours=self.dist_km / max(v, 5))
+            if ret and ret["eta"] > now:  # bestätigte Heimfahrt: deren Schnitt mitnehmen
+                eta = min(eta, ret["eta"])
+            info["eta"], info["source"], info["confidence"] = eta, "gps", 0.8
+            return info
         if ret:  # bestätigte Heimfahrt, gerade kurz Rast/Stau: deren Ankunft gilt weiter
             info["eta"], info["source"], info["confidence"] = ret["eta"], "gps", 0.7
             return info
-        habit = self.next_home_by_habit(now)
+        if self.long_away:
+            return info  # lange weg: die Gewohnheit sagt über die Rückkehr nichts
+        habit = self.next_home_by_habit(now, earliest=self.earliest_arrival(now))
         if habit:
             info["eta"], info["confidence"] = habit[0], round(habit[1], 2)
             info["source"] = "gewohnheit"
         return info
 
     def to_dict(self) -> dict:
-        return {
+        d = {
             "person": self.person,
             "week": self.week,
+            "visits": self.visits,
             "approach_speed_kmh": self.approach_speed_kmh,
             "arrivals_learned": self.arrivals_learned,
             "arrivals": self.arrivals,
         }
+        if self.away_trips:
+            d["away_trips"] = [[t.isoformat(), h] for t, h in self.away_trips]
+        if self._away_since is not None:  # laufende Abwesenheit übersteht einen Neustart
+            d["away"] = {"since": self._away_since.isoformat(), "max_km": self._away_km,
+                         "long": self.long_away, "regular": self.away_regular,
+                         "backup": None if self._backup is None else list(self._backup)}
+        return d
 
     @classmethod
     def from_dict(cls, d: dict) -> "PersonLearner":
-        return cls(
+        n = len(d["week"])
+        p = cls(
             person=d["person"],
             week=d["week"],
+            # alte Stände ohne Zähler gelten als gelernt
+            visits=list(d.get("visits") or [HABIT_MIN_VISITS] * n),
             approach_speed_kmh=d.get("approach_speed_kmh", 35.0),
             arrivals_learned=d.get("arrivals_learned", 0),
             arrivals=list(d.get("arrivals", []))[-KEEP_ARRIVALS:],
+            away_trips=[(datetime.fromisoformat(t), h) for t, h in d.get("away_trips", [])][-KEEP_AWAY_TRIPS:],
         )
+        away = d.get("away")
+        if away and away.get("since"):
+            p._away_since = datetime.fromisoformat(away["since"])
+            p._away_km = away.get("max_km")
+            p.long_away = bool(away.get("long"))
+            p.away_regular = bool(away.get("regular"))
+            b = away.get("backup")
+            p._backup = (list(b[0]), list(b[1])) if b else None
+        return p
 
 
 def next_arrival(learners: list[PersonLearner], now: datetime) -> dict | None:
@@ -309,3 +498,19 @@ def next_arrival(learners: list[PersonLearner], now: datetime) -> dict | None:
     if not etas:
         return None
     return min(etas, key=lambda e: e["eta"])
+
+
+def arrival_unknown(learners: list[PersonLearner], now: datetime) -> datetime | None:
+    """Ab wann offen ist, ob jemand heimkommt (Gewohnheit lernt dort noch) – None: niemand offen."""
+    if any(p.home for p in learners):
+        return None
+    times = [t for t in (p.unknown_from(now) for p in learners) if t is not None]
+    return min(times, default=None)
+
+
+def household_long_away(learners: list[PersonLearner]) -> bool:
+    """Alle Personen lange weg: Zapfprofil und Raummodelle lernen nicht (eigenes Flag, kein Urlaub).
+
+    Regelmäßige lange Abwesenheit (Pendeln) zählt nicht – sie gehört zum Alltag des Hauses.
+    """
+    return bool(learners) and all(p.long_away and p.home is False for p in learners)

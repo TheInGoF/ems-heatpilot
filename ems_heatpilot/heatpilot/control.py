@@ -117,8 +117,9 @@ class Control:
 
         return await self._each([r], f"Soll {t:g} °C", one)
 
-    async def set_mode(self, room, mode) -> dict:
-        r = self._check_rooms([room])[0]
+    async def set_mode(self, rooms, mode) -> dict:
+        """Betriebsart eines Raums oder mehrerer („alle aus“ im Dialog)."""
+        rs = self._check_rooms([rooms] if isinstance(rooms, str) else rooms)
         if mode not in MODES:
             raise ControlError("Unbekannte Betriebsart")
 
@@ -126,7 +127,7 @@ class Control:
             await self._call("climate", "set_hvac_mode", r, {"hvac_mode": mode})
             self.boosts.pop(r, None)
 
-        return await self._each([r], f"Betriebsart {mode}", one)
+        return await self._each(rs, f"Betriebsart {mode}", one)
 
     def active(self, targets: dict | None = None, now: float | None = None) -> dict:
         """Laufende Timer mit Restzeit – nur solange das Soll noch dem Timer entspricht."""

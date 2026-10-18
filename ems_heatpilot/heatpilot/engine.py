@@ -9,16 +9,16 @@ from __future__ import annotations
 import json
 import logging
 import time
-from collections import deque
+from collections import Counter, deque
 from datetime import datetime, timedelta
 
 from . import advice, analysis, flowstudy, guards, plausibility, schedule, solar, weekly
 from .config import Config
-from .dhw import SEGMENT_H, DhwModel, DhwShadow, cooling_sample
+from .dhw import AFTER_CHARGE_H, DhwModel, DhwShadow, DrawWatch, tail_rising
 from .live import LiveBuffer
 from .discovery import BOILER_ROLES, HEAT_MODES, THERMOSTAT_ROLES, Discovered
-from .models import ROOM_STEP_H, HouseModel, RoomModel
-from .presence import PersonLearner, haversine_km, next_arrival
+from .models import DAILY_MIN_HOURS, ROOM_STEP_H, HouseModel, RoomModel
+from .presence import PersonLearner, arrival_unknown, haversine_km, household_long_away, next_arrival, short_trip
 from .store import Store
 from .vacation import Vacation
 
@@ -26,9 +26,16 @@ log = logging.getLogger(__name__)
 
 DHW_RISE_KH = 6.0  # so schnell steigt der Speicher nur beim Laden (Auskühlen: < 2 K/h)
 DHW_HOLD_MAX_S = 90 * 60  # nach dem Ladezähler höchstens so lange „lädt“ annehmen
+# Warmwasser-Soll-Zeitprogramm des Reglers (z. B. nachts 45 statt 55 °C) aus den Messwerten
+DHW_SET_DAYS = 14         # so weit zurück
+DHW_SET_SLOT_MIN = 5      # Raster nach Wanduhr
+DHW_SET_SHARE = 0.7       # so viele Tage müssen im Slot denselben Wert zeigen
+DHW_SET_MIN_DAYS = 3
+DHW_SET_CACHE_S = 3600
 
 ENABLE_DELAY_MAX_MIN = 15
 HEAT_SEASON_24H = 15.0          # darüber (24-h-Mittel außen) lernt das Hausmodell nicht
+HOUSE_DAYS_CATCH_UP = 31        # so viele offene Tage holt das Tagesmodell höchstens nach
 GAS_FREE_KWH = 0.05             # Stunde gilt als gasfrei (Auskühlen lernen)
 NIGHT_HOURS = (22, 23, 0, 1, 2, 3, 4, 5)  # ohne Sonne
 # Warmwasser-Grundbedarf aus Sommerstunden (24-h-Mittel draußen so warm: sicher keine Heizung,
@@ -39,6 +46,7 @@ DHW_BASE_MIN_CELL = 4         # so viele Sommerstunden je Wochentag/Stunde, sons
 ON_STATES = {"on", "true", "1", "heat", "heating",
              "an", "ein", "ja", "wahr", "aktiv"}  # EMS-ESP mit deutscher Sprache: „an“/„aus“
 STALE_S = 12 * 3600
+PERSON_UNKNOWN = {None, "", "unknown", "unavailable"}  # Tracker ohne Wert: weder zu Hause noch weg
 
 
 def num(value) -> float | None:
@@ -94,6 +102,7 @@ class Engine:
                 fresh_rooms.add(room.climate)
             model.room = room.name  # Umbenennen in den Einstellungen gilt auch für gelernte Modelle
             self.rooms[room.climate] = model
+        self.seed_room_priors()
         self.vacation = Vacation(cfg.vacations, cfg.vacation_entity, cfg.vacation_arrival_time)
         self.vacation.returned = set(store.get("vacation_returned", []))
         self.persons: dict[str, PersonLearner] = {}
@@ -113,7 +122,7 @@ class Engine:
         self.dhw_inferred = 0      # Messpunkte, in denen die Ladung nur aus dem Temperaturanstieg erkannt wurde
         self.dhw_flag_seen = False  # kam jemals ein Ladesignal?
         self._rejected: set[str] = set()  # zuletzt verworfene Messwerte (außerhalb der Grenzen)
-        self._prev_dhw: tuple[int, float | None] | None = None
+        self._prev_dhw: tuple[int, float | None, float | None] | None = None  # (ts, Speicher-T, Brenner-kW)
         self.dhw_rec: dict | None = None
         self._advice: tuple[float, list, list] | None = None
         self.forecast: list[dict] = []
@@ -122,6 +131,7 @@ class Engine:
         # Live-Zähler (Nachlauf, Taktsperre) – ereignisgenau statt 5-min-Raster
         self._live_ts: float | None = None
         self._live_prev: dict = {}
+        self._dhw_now = 0  # zuletzt erkannte Warmwasserladung (Ladezähler, Temperaturanstieg), nicht nur das Signal
         self._demand: bool | None = None
         self._mode_wait_start: float | None = None  # Beginn der aktuellen Wartephase
         self._last_enabled: int | None = None
@@ -231,7 +241,11 @@ class Engine:
         return self._demand
 
     def update_live(self, now: float | None = None, record_events: bool = True) -> None:
-        """Zeit seit dem letzten Aufruf den passenden Tageszählern gutschreiben."""
+        """Zeit seit dem letzten Aufruf den passenden Tageszählern gutschreiben.
+
+        Warmwasser gilt nach der erkannten Ladung (infer_dhw), nicht nur nach dem Ladesignal – viele
+        Kessel melden keins, dann zählte jede Speicherladung als „Brenner ohne Wärmebedarf“.
+        """
         now = time.time() if now is None else now
         burner = self.burner_on()
         if burner is not None and burner != self._last_burner:
@@ -257,7 +271,7 @@ class Engine:
                 if prev["mode_wait"]:
                     self.store.add_daily(day, "mode_wait_min", dt / 60)
 
-        dhw = flag(self._boiler("dhw_active")) or 0
+        dhw = flag(self._boiler("dhw_active")) or self._dhw_now or 0
         demand = self.setpoint_demand()
         enabled = self.heat_enabled()
         period = num(self._boiler("min_period"))
@@ -311,19 +325,25 @@ class Engine:
         heating = flag(self._boiler("heating_pump"))
         if heating is None and burner_on is not None:
             heating = int(burner_on and not dhw)
-        home = 0
+        home, unknown = 0, False  # bekannte Anwesende; irgendeine Person ohne Zustand?
         persons = []
         for p in self.found.persons:
             st = self.states.get(p)
             if not st:
+                unknown = True
                 continue
-            is_home = st.get("state") == "home"
-            home += is_home
+            state = st.get("state")
+            # Tracker ohne Wert: nicht „weg“, sondern unbekannt (gespeichert als leer, nicht gelernt)
+            is_home = None if state in PERSON_UNKNOWN else int(state == "home")
+            if is_home is None:
+                unknown = True
+            else:
+                home += is_home
             attrs = st.get("attributes", {})
             dist = None
             if self.found.home_zone and "latitude" in attrs:
                 dist = haversine_km(*self.found.home_zone, attrs["latitude"], attrs["longitude"])
-            persons.append((p, int(is_home), dist))
+            persons.append((p, is_home, dist))
         sample = {
             "t_out": self.outdoor_now(),
             "flow": num(self._boiler("flow_temp")),
@@ -335,7 +355,9 @@ class Engine:
             "dhw": dhw,
             "gas": num(self._val(self.found.gas)),
             "min_period": num(self._boiler("min_period")),
-            "home_count": home if self.found.persons else None,
+            # Zahl der bekannten Anwesenden; ist niemand bekannt zu Hause und eine Person unbekannt,
+            # bleibt offen, ob jemand da ist (None: Warmwasser hält den Boden mit Reserve, nicht das Minimum)
+            "home_count": (None if home == 0 and unknown else home) if self.found.persons else None,
             "boiler_temp": num(self._boiler("boiler_temp")),
             "calc_flow": num(self._thermo("hc_calc_flow")),
             "heating_off": flag(self._boiler("heating_off")),
@@ -472,7 +494,6 @@ class Engine:
     def tick(self, now_ts: int | None = None) -> None:
         now_ts = now_ts or int(time.time())
         ts = now_ts - now_ts % self.cfg.sample_interval_s
-        self.update_live(now_ts)
         sample, rooms, persons = self.snapshot()
         log.debug("Messwerte %s: %s | Räume %s | Personen %s", local(ts).strftime("%H:%M"),
                   {k: v for k, v in sample.items() if v is not None},
@@ -480,17 +501,17 @@ class Engine:
                                                             for p, h, d in persons])
         self.count_rejected(ts)
         self.infer_dhw(ts, sample)
+        self._dhw_now = int(bool(sample.get("dhw")))
+        self.update_live(now_ts)  # nach der Ladeerkennung: weiß, ob gerade Warmwasser lädt
         self.add_solar(ts, sample)
         rooms = self.filter_room_spikes(ts, rooms)
         self.track_vacation_return(ts, persons)
         vacation = self.on_vacation(ts)
         sample["vacation"] = int(vacation)
+        sample["away_long"] = int(self.observe_persons(ts, persons, vacation))
         self.store.add_sample(ts, sample)
         self.store.add_room_samples((ts, *r) for r in rooms)
         self.store.add_person_samples((ts, *p) for p in persons)
-        now = local(ts)
-        for p, is_home, dist in persons:  # Position immer, Gewohnheiten nicht im Urlaub
-            self.persons[p].observe(now, bool(is_home), dist, learn=not vacation)
         self.dhw_step(ts, sample)
         self.store.commit()
 
@@ -512,6 +533,24 @@ class Engine:
         self.update_schedule(now_ts)
         self.save()
 
+    def observe_persons(self, ts: int, persons: list[tuple], vacation: bool) -> bool:
+        """Personen verfolgen (live und bei der Neuberechnung gleich); True = alle lange weg.
+
+        Position immer, Gewohnheiten nicht im Urlaub. Sind alle lange weg (Reise ohne
+        eingetragenen Urlaub), lernen Zapfprofil und Raummodelle nicht – eigenes Flag
+        ``away_long``, der Urlaubsmodus (Anzeige, Rückkehrplan) bleibt davon unberührt.
+        Person ohne Zustand (fehlt, 'unknown', 'unavailable'): in diesem Schritt nicht
+        beobachten und nicht als lange weg zählen.
+        """
+        now = local(ts)
+        known = 0
+        for p, is_home, dist in persons:
+            if is_home is None:
+                continue
+            self.persons[p].observe(now, bool(is_home), dist, learn=not vacation)
+            known += 1
+        return known == len(self.persons) and household_long_away(list(self.persons.values()))
+
     def record_live(self, now_ts: int | None = None) -> None:
         sample, rooms, _ = self.snapshot()
         self.live.add(now_ts or int(time.time()), sample, rooms)
@@ -531,6 +570,12 @@ class Engine:
         self.store.put("schedule.learned", learned)
 
     # ------------------------------------------------------------------ Lernen
+    def seed_room_priors(self) -> None:
+        """Noch ungelernte Raummodelle starten mit der gemessenen Auskühlzeit dieses Hauses statt einem Pauschalwert."""
+        if self.house.balance_plausible:
+            for m in self.rooms.values():
+                m.adopt_house_tau(self.house.tau_cool_h)
+
     def relearn_rooms(self, climates: set[str]) -> None:
         """Neue/umgestellte Raummodelle sofort aus der gespeicherten Historie lernen."""
         first = self.store.query("SELECT MIN(ts) AS t FROM room_samples")[0]["t"]
@@ -545,8 +590,8 @@ class Engine:
         sys_rows = {
             r["ts"]: r
             for r in self.store.query(
-                "SELECT ts, flow, heating, burner_on, dhw, pump_mod, t_out, vacation, sun_e, sun_s, sun_w FROM samples "
-                "WHERE ts BETWEEN ? AND ?",
+                "SELECT ts, flow, heating, burner_on, dhw, pump_mod, t_out, vacation, away_long, sun_e, sun_s, sun_w "
+                "FROM samples WHERE ts BETWEEN ? AND ?",
                 (start, end),
             )
         }
@@ -566,7 +611,7 @@ class Engine:
                 s = sys_rows.get(r["ts"])
                 if not s or s["flow"] is None or s["t_out"] is None:
                     continue
-                vacation = vacation or bool(s["vacation"])
+                vacation = vacation or bool(s["vacation"]) or bool(s["away_long"])  # Urlaub oder alle lange weg
                 # Wärme kommt an, solange die Heizungspumpe Wasser umwälzt – auch nach dem
                 # Brennerlauf (Nachlauf, Taktpausen). Fehlt die Pumpendrehzahl: Pumpen-, sonst Brennersignal.
                 if s["pump_mod"] is not None:
@@ -585,7 +630,7 @@ class Engine:
                 continue
             t0, t1 = rows[0]["temp"], rows[-1]["temp"]
             dt_h = (rows[-1]["ts"] - rows[0]["ts"]) / 3600
-            # Fenster offen o. ä. oder Urlaub: Estrich nachführen, aber nicht lernen
+            # Fenster offen o. ä., Urlaub oder alle lange weg: Estrich nachführen, aber nicht lernen
             update = abs(t1 - t0) <= 2.0 and not vacation
             model.learn(
                 t0, t1, sum(inputs) / len(inputs), sum(outs) / len(outs), dt_h,
@@ -601,6 +646,8 @@ class Engine:
             "SELECT * FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts", (hour, hour + 3600)
         )
         if len(rows) < 2:
+            if learn:
+                self.learn_house_days(hour - 3600)  # Stunde fehlt (Neustart): offene Tage trotzdem abschließen
             return
         # Gas bis zum ersten Wert der nächsten Stunde – sonst fehlen die letzten 5 min jeder Stunde
         gas_rows = self.store.query(
@@ -696,6 +743,7 @@ class Engine:
         nicht zur Differenz der Stundenmittel h und h−1 (die läge eine halbe Stunde früher).
         """
         h = hour - 3600
+        self.learn_house_days(h)
         rows = self.store.query("SELECT * FROM hourly WHERE ts IN (?, ?, ?)", (h - 3600, h, hour))
         by = {r["ts"]: r for r in rows}
         prev, cur, nxt = by.get(h - 3600), by.get(h), by.get(hour)
@@ -718,6 +766,43 @@ class Engine:
         if dhw is not None and dhw > 0:
             return  # Warmwasserladung verfälscht die Heizbilanz (auch eine kurze verschiebt kWh)
         self.house.learn(self.heating_gas(cur), cur["t_in"], cur["t_out"], d_in)
+
+    def learn_house_days(self, h: int) -> None:
+        """Alle Kalendertage vor dem der Stunde ``h`` abschließen (Tageswerte lernen), die noch offen sind.
+
+        Nicht an die Stunde 00 gebunden: Fehlt sie (Add-on oder HA um Mitternacht neu gestartet),
+        schließt die nächste gelernte Stunde den Tag ab. Ist ``h`` die Stunde 23, ist ihr Tag schon
+        vollständig. Ein schon gelernter Tag wird vom Hausmodell nicht noch einmal gezählt, deshalb
+        beginnt es nach einem Neustart gefahrlos beim Vortag.
+        """
+        d = local(h)
+        end = d.date() + timedelta(days=1 if d.hour == 23 else 0)  # erster noch nicht abgeschlossener Tag
+        open_day = self.__dict__.get("_house_day_open") or end - timedelta(days=1)
+        open_day = max(open_day, end - timedelta(days=HOUSE_DAYS_CATCH_UP))
+        while open_day < end:
+            self.learn_house_day(midnight(datetime.combine(open_day, datetime.min.time())))
+            open_day += timedelta(days=1)
+        self._house_day_open = end
+
+    def learn_house_day(self, ts: int) -> None:
+        """Tagesmittel (Heizgas, innen–außen) des Kalendertags von ``ts`` lernen – siehe HouseModel.learn_day.
+
+        Ein Urlaubstag zählt nur als Zustand für die Folgetage (sein Unterschied innen–außen), nicht als Lerntag.
+        """
+        day = local(ts)
+        rows = self.store.query("SELECT * FROM hourly WHERE ts >= ? AND ts < ? AND gas_kwh IS NOT NULL "
+                                "AND t_in IS NOT NULL AND t_out IS NOT NULL",
+                                (midnight(day), midnight(day + timedelta(days=1))))
+        if len(rows) < DAILY_MIN_HOURS:
+            return
+        vacation = any((r["vacation_frac"] or 0) > 0.5 for r in rows)
+        gas = []
+        for r in rows:
+            frac = r["dhw_energy_frac"] if r["dhw_energy_frac"] is not None else r["dhw_frac"]
+            gas.append(self.heating_gas(r) if frac is None else r["gas_kwh"] * (1 - min(max(frac, 0.0), 1.0)))
+        n = len(rows)
+        self.house.learn_day(day.date().isoformat(), sum(r["t_in"] - r["t_out"] for r in rows) / n,
+                             sum(r["t_out"] for r in rows) / n, sum(gas) / n, learn=not vacation)
 
     def heating_gas(self, row) -> float:
         """Heizgas einer Stunde: bei Langzeitstunden (Warmwasser unbekannt) ohne den üblichen Warmwasserbedarf."""
@@ -828,16 +913,19 @@ class Engine:
                 "eta": e["eta"].isoformat() if e["eta"] else None, "source": e["source"],
                 "confidence": e["confidence"], "status": learner.status(now),
                 "approach_speed_kmh": round(learner.approach_speed_kmh, 1),
-                "arrivals_learned": learner.arrivals_learned,
-                "habit": learner.habit_hours(), "arrivals": learner.arrivals[-10:][::-1],
+                "arrivals_learned": learner.arrivals_learned, "long_away": learner.long_away,
+                "habit": learner.habit_hours(),
+                "arrivals": [{**a, "short": short_trip(a)} for a in learner.arrivals[-10:][::-1]],
                 "quality": learner.arrival_quality(), "series": rows[p],
             })
         if self.on_vacation(now_ts):
             arrival = self.vacation.arrival(now, list(self.persons.values()))
         else:
             arrival = next_arrival(list(self.persons.values()), now)
+        unknown = None if self.on_vacation(now_ts) else arrival_unknown(list(self.persons.values()), now)
         return {"now": now.isoformat(), "hours": hours, "persons": out,
                 "anyone_home": any(p.home for p in self.persons.values()),
+                "unknown_from": unknown.isoformat() if unknown else None,
                 "vacation": self.on_vacation(now_ts),
                 "arrival": None if not arrival else {k: (v.isoformat() if isinstance(v, datetime) else v)
                                                       for k, v in arrival.items()}}
@@ -876,16 +964,19 @@ class Engine:
         """Empfehlung für den Speicher jetzt; gibt (Prüfung, Ziel für den Schatten) zurück."""
         now = local(ts)
         home = sample.get("home_count")
-        arrival = None
+        arrival = unknown = None
         if sample.get("vacation"):
             ret = self.vacation.arrival(now, list(self.persons.values()))
             home, arrival = 0, ret["eta"] if ret else None
         elif home == 0:
-            nxt = next_arrival(list(self.persons.values()), now)
+            learners = list(self.persons.values())
+            nxt = next_arrival(learners, now)
             arrival = nxt["eta"] if nxt else None
+            unknown = arrival_unknown(learners, now)  # Gewohnheit lernt noch: nicht auf Minimum
         check = guards.check_dhw(self.dhw)
         if check["ok"]:
-            self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg)
+            self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg,
+                                              unknown_from=unknown, current_set=num(sample.get("dhw_set")))
             return check, self.dhw_rec["target"]
         # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll
         self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
@@ -894,26 +985,36 @@ class Engine:
     def dhw_step(self, ts: int, sample: dict) -> None:
         """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
         t_cur = sample.get("dhw_temp")
-        prev, self._prev_dhw = self._prev_dhw, (ts, t_cur)
+        nom = self.nominal_kw()  # Einstellung vor Kessel-Sensor (der liefert oft keine Zahl)
+        kw = None
+        if sample.get("burner_pow") is not None and nom:
+            kw = sample["burner_pow"] / 100 * nom
+        prev, self._prev_dhw = self._prev_dhw, (ts, t_cur, kw)
+        # Haushalt leer: Zapfprofil sichern; wird daraus „alle lange weg“, die leeren Stunden davor
+        # zurücknehmen (wie bei den Personen)
+        self.dhw.note_household(sample.get("home_count"), bool(sample.get("away_long")))
         if prev is None:
             # erst ab dem zweiten Messpunkt lernen – die Empfehlung gibt es aber sofort
             self.dhw_recommend(ts, sample)
             return
         dt_h = (ts - prev[0]) / 3600
-        nom = self.nominal_kw()  # Einstellung vor Kessel-Sensor (der liefert oft keine Zahl)
-        kw = None
-        if sample.get("burner_pow") is not None and nom:
-            kw = sample["burner_pow"] / 100 * nom
         now = local(ts)
         vacation = bool(sample.get("vacation"))
+        frozen = vacation or bool(sample.get("away_long"))  # Urlaub oder alle lange weg: Zapfprofil nicht lernen
+        # hätte mehr Reserve das Ziel der Strategie bis eben angehoben? Nur dann hilft sie bei zu
+        # kaltem Wasser (Stand vor dem Schritt; auch der Boden „keine Zapfung erwartet“ mit jemandem
+        # zu Hause ist Minimum + Reserve)
+        bound = bool((self.dhw_rec or {}).get("margin_bound"))
         res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
-                            learn_usage=not vacation, special=bool(sample.get("dhw_special")),
-                            dhw_set=num(sample.get("dhw_set")))
+                            learn_usage=not frozen, special=bool(sample.get("dhw_special")),
+                            dhw_set=num(sample.get("dhw_set")), burner_kw_prev=prev[2] if len(prev) > 2 else None)
         check, shadow_target = self.dhw_recommend(ts, sample)
         sh = self.dhw_shadow.step(
-            self.dhw, t_cur, shadow_target, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp
+            self.dhw, t_cur, shadow_target, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp,
+            dhw_min=self.cfg.dhw_min_temp, margin_bound=bound, dhw_max=self.cfg.dhw_max_temp,
+            mirror=t_cur if res.get("special") else None,  # Sonderladung des Reglers trifft beide Speicher
         )
-        if sh["cold_draw"] and check["ok"]:
+        if sh["raise_margin"] and check["ok"] and not frozen:  # Urlaub / lange weg: Reserve bleibt eingefroren
             self.dhw.note_cold_draw()
         day = now.date().isoformat()
         for key, val in (
@@ -925,6 +1026,10 @@ class Engine:
         ):
             if val:
                 self.store.add_daily(day, key, val)
+        if self.dhw.kwh_per_kelvin() is not None:
+            # Ladeenergie nur, solange auch Verluste berechnet werden (Nenner der Ersparnis) –
+            # auch 0 schreiben: markiert den Tag als so gezählt
+            self.store.add_daily(day, "dhw_charge_cmp_kwh", res["charge_kwh"])
 
     def save(self) -> None:
         self.store.put("model.dhw", self.dhw.to_dict())
@@ -1010,7 +1115,8 @@ class Engine:
             "full_year": year_span >= 360,
         }
 
-        persons = [{**p.eta(now), "status": p.status(now)["text"]} for p in self.persons.values()]
+        persons = [{**p.eta(now), "status": p.status(now)["text"], "long_away": p.long_away}
+                   for p in self.persons.values()]
         vacation = self.on_vacation(now_ts)
         if vacation:  # Rückkehr: schnelle GPS-Annäherung vor geplantem Ende vor Datum
             arrival = self.vacation.arrival(now, list(self.persons.values()))
@@ -1029,6 +1135,9 @@ class Engine:
                 t_out if t_out_arrival is None else t_out_arrival, self.cfg.max_flow_temp,
                 dhw=self.dhw_for_arrival(arrival["eta"], now),
             )
+            if plan is not None:  # worauf der Plan sich verlässt
+                plan = {**plan, "arrival_source": arrival.get("source"),
+                        "arrival_confidence": arrival.get("confidence"), "arrival_person": arrival.get("person")}
         self.last_plan = plan
 
         flow_needed = None
@@ -1164,32 +1273,36 @@ class Engine:
     def dhw_points(self, days: int = 14, now_ts: int | None = None) -> list[dict]:
         """Gemessenes Auskühlen des Speichers (ohne Ladung, ohne Zapfung), je 1 K gemittelt.
 
-        Dieselbe Auswahl wie beim Lernen – so lässt sich prüfen, ob die gelernte Kurve passt.
+        Dieselbe Auswahl wie beim Lernen (DrawWatch, Nachlauf nach der Ladung) – so lässt sich
+        prüfen, ob die gelernte Kurve passt.
         """
         now_ts = now_ts or int(time.time())
         rows = self.store.query(
             "SELECT ts, dhw_temp, dhw FROM samples WHERE ts >= ? AND dhw_temp IS NOT NULL ORDER BY ts",
             (now_ts - days * 86400,))
         bins: dict[int, list[float]] = {}
-        last_charge = None
-        seg = None  # [Start-ts, Start-T] eines ruhigen Abschnitts – wie beim Lernen über 30 min gemittelt
+        watch = DrawWatch(self.dhw.sensor_step)  # dieselbe Fühlerstufe wie beim Lernen
+        last_charge = None  # Ende der letzten Ladung (nach dem Nachlauf)
+        tail = tail_ts = None  # Nachlauf nach dem Ladesignal: [(Stunden seit Ladeende, Temperatur)], Ladeende
         for a, b in zip(rows, rows[1:]):
-            if a["dhw"]:
-                last_charge = a["ts"]
             dt_h = (b["ts"] - a["ts"]) / 3600
-            d_t = b["dhw_temp"] - a["dhw_temp"]
-            since = 99.0 if last_charge is None else (b["ts"] - last_charge) / 3600
-            quiet = (0 < dt_h <= 0.5 and not a["dhw"] and not b["dhw"]
-                     and d_t >= -self.dhw.cooling_kh(a["dhw_temp"]) * dt_h - 1.0 and cooling_sample(d_t, since))
-            if not quiet:
-                seg = None  # Zapfung, Ladung, Nachlauf oder Aufheizen – lernt das Modell auch nicht
+            if not 0 < dt_h <= 0.5:
+                watch.reset()
                 continue
-            if seg is None:
-                seg = [a["ts"], a["dhw_temp"]]
-            hours = (b["ts"] - seg[0]) / 3600
-            if hours >= SEGMENT_H - 1e-6:
-                bins.setdefault(round((seg[1] + b["dhw_temp"]) / 2), []).append((seg[1] - b["dhw_temp"]) / hours)
-                seg = [b["ts"], b["dhw_temp"]]
+            if b["dhw"]:
+                watch.reset()
+                tail, tail_ts = [(0.0, b["dhw_temp"])], b["ts"]
+                continue
+            if tail is not None:
+                tail.append(((b["ts"] - tail_ts) / 3600, b["dhw_temp"]))
+                if tail[-1][0] <= AFTER_CHARGE_H + 1e-6 and tail_rising(tail):
+                    continue  # Nachlauf zählt noch zur Ladung
+                tail, last_charge = None, a["ts"]
+            since = 99.0 if last_charge is None else (b["ts"] - last_charge) / 3600
+            seg = watch.step(local(b["ts"]), dt_h, a["dhw_temp"], b["dhw_temp"], self.dhw.cooling_kh, since)["segment"]
+            if seg:
+                t0, hours, t1 = seg
+                bins.setdefault(round((t0 + t1) / 2), []).append((t0 - t1) / hours)
         return [{"t": t, "kh": round(sum(v) / len(v), 3), "n": len(v)}
                 for t, v in sorted(bins.items()) if len(v) >= 3]
 
@@ -1200,9 +1313,9 @@ class Engine:
             "WHERE key LIKE 'dhw_%' GROUP BY key"
         )
         tot = {r["key"]: r["v"] for r in rows}
-        days = max((r["days"] for r in rows), default=0)
+        days = next((r["days"] for r in rows if r["key"] == "dhw_loss_kwh"), 0)  # Zeitraum der Verluste
         loss, loss_s = tot.get("dhw_loss_kwh", 0.0), tot.get("dhw_loss_strategy_kwh", 0.0)
-        charge = tot.get("dhw_charge_kwh", 0.0)
+        charge = self.dhw_charge_compared()
         today = local(time.time()).date().isoformat()
         return {
             **self.dhw.summary(t_now),
@@ -1213,6 +1326,7 @@ class Engine:
                       if k.startswith("dhw_")},
             "period_days": days,
             "charge_kwh": round(charge, 1),
+            "charge_total_kwh": round(tot.get("dhw_charge_kwh", 0.0), 1),
             "loss_kwh": round(loss, 1),
             "loss_strategy_kwh": round(loss_s, 1),
             "saved_kwh": round(loss - loss_s, 1),
@@ -1227,18 +1341,89 @@ class Engine:
             "disinfect": self.disinfect_schedule(),
         }
 
+    def dhw_charge_compared(self) -> float:
+        """Ladeenergie über denselben Zeitraum wie die Verluste (Nenner der Warmwasser-Ersparnis).
+
+        Tage mit ``dhw_charge_cmp_kwh`` (zählt erst ab dem Schritt, in dem die Ladekosten gelernt
+        sind) nehmen diesen Wert; ältere Tage ohne ihn zählen nur, wenn an ihnen Verluste berechnet wurden.
+        """
+        rows = self.store.query("SELECT day, key, SUM(value) AS v FROM daily WHERE key IN "
+                                "('dhw_charge_kwh', 'dhw_charge_cmp_kwh', 'dhw_loss_kwh') GROUP BY day, key")
+        by_day: dict[str, dict] = {}
+        for r in rows:
+            by_day.setdefault(r["day"], {})[r["key"]] = r["v"]
+        total = 0.0
+        for v in by_day.values():
+            if "dhw_charge_cmp_kwh" in v:
+                total += v["dhw_charge_cmp_kwh"]
+            elif "dhw_loss_kwh" in v:
+                total += v.get("dhw_charge_kwh", 0.0)
+        return total
+
+    def dhw_set_profile(self) -> list[float | None] | None:
+        """Warmwasser-Soll-Zeitprogramm des Reglers, gelernt aus den Messwerten (je 5 min nach Wanduhr).
+
+        Je Slot der häufigste Wert der letzten 14 Tage, nur wenn ≥ 70 % der Tage ihn zeigen –
+        sonst None (dann gilt das aktuelle Soll). dhw_switchtime von EMS-ESP enthält nur einen
+        Eintrag und passt nicht zu den gemessenen Umschaltzeiten, deshalb nicht verwendet.
+        """
+        cached = self.__dict__.get("_dhw_set_prof")
+        if cached and time.time() - cached[0] < DHW_SET_CACHE_S:
+            return cached[1]
+        rows = self.store.query("SELECT ts, dhw_set FROM samples WHERE ts >= ? AND dhw_set IS NOT NULL",
+                                (int(time.time()) - DHW_SET_DAYS * 86400,))
+        per_day: dict[tuple[str, int], float] = {}
+        for r in rows:
+            w = local(r["ts"])
+            per_day[(w.date().isoformat(), self._set_slot(w))] = round(r["dhw_set"] * 2) / 2
+        counts: dict[int, Counter] = {}
+        for (_, slot), v in per_day.items():
+            counts.setdefault(slot, Counter())[v] += 1
+        prof: list[float | None] = [None] * (24 * 60 // DHW_SET_SLOT_MIN)
+        for slot, c in counts.items():
+            v, n = c.most_common(1)[0]
+            total = sum(c.values())
+            if total >= DHW_SET_MIN_DAYS and n >= DHW_SET_SHARE * total:
+                prof[slot] = v
+        prof = prof if any(v is not None for v in prof) else None
+        self._dhw_set_prof = (time.time(), prof)
+        return prof
+
+    @staticmethod
+    def _set_slot(when: datetime) -> int:
+        w = when.astimezone() if when.tzinfo else when  # Wanduhr, auch über die Zeitumstellung
+        return (w.hour * 60 + w.minute) // DHW_SET_SLOT_MIN
+
     def dhw_next_charge(self, t_now: float | None) -> dict | None:
-        """Nächste Speicherladung aus Soll und Einschalt-Hysterese des Kessels (z. B. 55 − 10 = 45 °C)."""
+        """Nächste Speicherladung aus Soll und Einschalt-Hysterese des Kessels (z. B. 55 − 10 = 45 °C).
+
+        Mit gelerntem Soll-Zeitprogramm gilt je Uhrzeit dessen Grenze (nachts z. B. 45 − 10 = 35 °C);
+        springt das Soll morgens über den Speicher, ist das die Ladung.
+        """
         set_t, hyst = num(self._boiler("dhw_seltemp")), num(self._boiler("dhw_hyst_on"))
         if t_now is None or set_t is None or hyst is None:
             return None
-        trigger = set_t - abs(hyst)
+        hyst = abs(hyst)
+        trigger = set_t - hyst
         if flag(self._boiler("dhw_active")) or t_now <= trigger:
             return {"trigger": trigger, "eta": None, "now": True}
         now = local(time.time())
-        eta = self.dhw.next_charge(now, t_now, trigger)
-        return {"trigger": trigger, "eta": eta.isoformat() if eta else None,
-                "hours": None if eta is None else round((eta - now).total_seconds() / 3600, 1), "now": False}
+        prof = self.dhw_set_profile()
+        v_now = None if prof is None else prof[self._set_slot(now)]
+        if v_now is not None and abs(v_now - set_t) > 0.5:
+            prof = None  # Programm passt nicht zum heutigen Soll (umgestellt?): wie bisher fest rechnen
+
+        def trig(when: datetime) -> float:
+            v = prof[self._set_slot(when)] if prof else None
+            return (set_t if v is None else v) - hyst
+
+        eta = self.dhw.next_charge(now, t_now, trig if prof else trigger)
+        out = {"trigger": trigger, "eta": eta.isoformat() if eta else None,
+               "hours": None if eta is None else round((eta - now).total_seconds() / 3600, 1), "now": False}
+        if eta is not None and prof:
+            out["trigger_at_eta"] = trig(eta)
+            out["by_schedule"] = trig(eta) > trig(eta - timedelta(minutes=DHW_SET_SLOT_MIN)) + 0.1
+        return out
 
     def disinfect_schedule(self) -> dict | None:
         """Legionellenschaltung laut Regler (Tag/Uhrzeit) – diese Ladungen lernt das Modell nicht."""

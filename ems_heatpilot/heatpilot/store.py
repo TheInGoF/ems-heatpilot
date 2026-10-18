@@ -51,6 +51,8 @@ SAMPLE_COLS = (
     "sun_e", "sun_s", "sun_w",
     # seit 0.25: Warmwasser-Ladezähler, Sonderladung, Anlagendruck
     "dhw_starts", "dhw_special", "syspress",
+    # seit 0.32: alle Personen lange weg (Reise ohne Urlaubseintrag) – kein Urlaub, nur nicht lernen
+    "away_long",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",
@@ -127,10 +129,14 @@ class Store:
         return {r["ts"]: bool(r["h"]) for r in self.db.execute(sql + " GROUP BY ts", params)}
 
     def recount_home(self, persons: list[str]) -> None:
-        """Nach geänderter Personenauswahl: Anwesenheit in Messwerten und Stundenwerten neu zählen."""
+        """Nach geänderter Personenauswahl: Anwesenheit in Messwerten und Stundenwerten neu zählen.
+
+        Gleiche Regel wie ``Engine.snapshot``: Zahl der bekannten Anwesenden; ist niemand bekannt
+        zu Hause und eine Person unbekannt (home NULL), bleibt home_count NULL statt 0."""
         marks = ",".join("?" * len(persons)) or "NULL"
         self.db.execute(
-            f"UPDATE samples SET home_count = (SELECT COALESCE(SUM(home), 0) FROM person_samples p "
+            f"UPDATE samples SET home_count = (SELECT CASE WHEN COALESCE(SUM(home), 0) > 0 THEN SUM(home) "
+            f"WHEN SUM(home IS NULL) > 0 THEN NULL ELSE 0 END FROM person_samples p "
             f"WHERE p.ts = samples.ts AND p.person IN ({marks})) "
             "WHERE ts IN (SELECT DISTINCT ts FROM person_samples)", list(persons))
         self.db.execute(
