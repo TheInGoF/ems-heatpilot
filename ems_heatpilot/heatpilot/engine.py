@@ -14,7 +14,8 @@ Takt das Ventilverhalten je Raum (``valve_model``/``valve_learn``) und protokoll
 den Thermostaten verstellen würde (``valve_dry`` – schreibt nichts). Seit 0.40 führt die Regelschleife mit eigenem
 Schalter die Ventile wirklich (``valve_control``); diese Räume lässt der Trockenlauf aus. Seit 0.41 führt
 ``boiler_control`` (Weg B, eigener Schalter) Vorlauf-Soll und Heizbetrieb des Kessels – im 30-s-Takt von ``main``,
-nicht im Messtakt.
+nicht im Messtakt. Seit 0.42 löst ``disinfect_control`` (mit Weg W „HeatPilot setzt“, ohne Regler am Bus) die
+Desinfektion zum Termin aus – ebenfalls im 30-s-Takt.
 """
 
 from __future__ import annotations
@@ -138,6 +139,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.dhw_control = None   # dhw_control.DhwControl, von main gesetzt (Weg W seit 0.38)
         self.notifier = None      # notify.Notifier, von main gesetzt (Meldungen, Problem-Sensor seit 0.38)
         self.boiler_control = None  # boiler_control.BoilerControl, von main gesetzt (Weg B seit 0.41)
+        self.disinfect_control = None  # disinfect_control.DisinfectControl, von main gesetzt (Desinfektion seit 0.42)
         self.watchdog: dict = {}    # Wächter-Automationen in HA (watchdog.scan, main alle 10 min) – nur gelesen
         self.heartbeat_ts: float | None = None  # zuletzt gesetzter sensor.heatpilot_heartbeat (0.41)
         self._live_entities = {

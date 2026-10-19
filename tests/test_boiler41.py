@@ -658,10 +658,9 @@ def test_api_boiler_resume_heat_entities(tmp_path):
 def test_version_changelog_docs():
     from heatpilot import __version__
 
-    assert __version__ == "0.41.0"
-    assert 'version: "0.41.0"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1].split("\n## ")[0]
-    assert head.startswith("0.41.0") and "Kessel über HeatPilot" in head and "Standard aus" in head
+    assert __version__ >= "0.41.0"  # seit 0.42 prüft test_disinfect42 die genaue Version
+    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.41.0")[1].split("\n## ")[0]
+    assert head.startswith("\n") and "Kessel über HeatPilot" in head and "Standard aus" in head
     for personal in ("Ingo", "BK15", "ES73", "Sieger", "18 kW", "Tado-App"):  # keine persönlichen Werte
         assert personal not in head, personal
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
@@ -669,7 +668,7 @@ def test_version_changelog_docs():
                  "Regler am Bus – er überschreibt alle 60 s", "„Anleitung Wächter“", "kein YAML nötig"):
         assert text in docs, text
     plan = (ROOT / "docs" / "planung-vorlauf-ems.md").read_text(encoding="utf-8")
-    assert "## Weg B – gebaut (0.41)" in plan and "folgt 0.42" in plan
+    assert "## Weg B – gebaut (0.41)" in plan and "## Desinfektion – gebaut (0.42)" in plan  # seit 0.42 gebaut
     row = next(line for line in (ROOT / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 6 |"))
     assert "0.41 – Weg B gebaut" in row
 

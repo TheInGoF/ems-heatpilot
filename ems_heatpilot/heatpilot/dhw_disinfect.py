@@ -1,13 +1,15 @@
 """Warmwasser-Desinfektion (seit 0.36.3): Termin einplanen, Zeit vorschlagen, große Zapfungen danach decken.
 
 Die Legionellenschaltung kam bisher vom Regler (z. B. ES73 sonntags 13:00); der Kessel selbst hat dafür keinen
-Timer. Den Termin stellt man jetzt in HeatPilot ein (``Config.dhw_disinfect_day``/``_time``). HeatPilot löst
-die Desinfektion noch nicht aus – EMS-ESP bleibt nur lesend. Darum zählt der Termin im Modell nur, wenn er
-bestätigt ist (``plan_counts``): In den letzten ``DETECTED_DAYS`` Tagen hat der Regler zu dieser Zeit
-desinfiziert (``is_disinfection`` – eine Einmalladung zählt nicht). Dann behandeln Empfehlung und Schatten der
-Strategie die Stunden danach wie nach einer erkannten Sonderladung (große Zapfungen höchstens
-``SPECIAL_COVER_H`` nach der Ladung sind gedeckt), ohne auf die Erkennung dieser Woche zu warten. Desinfiziert
-zu dieser Zeit niemand, zählt der Termin nicht – sonst rechnete die Strategie mit Wärme, die nicht kommt.
+Timer. Den Termin stellt man in HeatPilot ein (``Config.dhw_disinfect_day``/``_time``). Seit 0.42 löst HeatPilot ihn
+selbst aus, wenn kein Regler am Bus ist und das Warmwasser-Soll auf „HeatPilot setzt“ steht (``disinfect_control``,
+geschrieben über Home Assistant – EMS-ESP bleibt nur lesend). Im Modell zählt der Termin (``plan_counts``), wenn
+HeatPilot ihn auslöst (``Config.disinfect_triggered``, gesetzt von ``disinfect_control``) – oder wenn er bestätigt ist:
+In den letzten ``DETECTED_DAYS`` Tagen hat der Regler zu dieser Zeit desinfiziert (``is_disinfection`` – eine
+Einmalladung zählt nicht). Dann behandeln Empfehlung und Schatten der Strategie die Stunden danach wie nach einer
+erkannten Sonderladung (große Zapfungen höchstens ``SPECIAL_COVER_H`` nach der Ladung sind gedeckt), ohne auf die
+Erkennung dieser Woche zu warten. Desinfiziert zu dieser Zeit niemand, zählt der Termin nicht – sonst rechnete die
+Strategie mit Wärme, die nicht kommt.
 
 ``suggestion`` schlägt einen Termin vor: kurz vor der größten regelmäßigen Zapfung der Woche, damit deren
 Wärme ins Wasser geht statt auszukühlen. Alles hier rechnet nur und merkt sich nichts.
@@ -43,7 +45,10 @@ KEEP = 10                # so viele erkannte Desinfektionen merkt sich das Model
 SOURCE_BOILER, SOURCE_SET = "laut Kessel", "eingestellt"
 # „7 von 8 Sonntagen“
 DAYS_PLURAL = ("Montagen", "Dienstagen", "Mittwochen", "Donnerstagen", "Freitagen", "Samstagen", "Sonntagen")
-NOT_YET = "HeatPilot löst sie noch nicht aus – solange der Regler (z. B. ES73) sie macht, dessen Termin eintragen"
+# Hinweis, solange HeatPilot nicht auslöst (Warmwasser-Soll nicht „HeatPilot setzt“); die Kachel zeigt den Teil vor
+# „ – “
+NOT_YET = ("HeatPilot löst sie nicht aus – nur bei „Warmwasser-Soll: HeatPilot setzt“ ohne Regler am Bus; solange der "
+           "Regler (z. B. ES73) sie macht, dessen Termin eintragen")
 NOT_CONFIRMED = "Termin noch nicht bestätigt – kein Regler desinfiziert zu dieser Zeit"
 
 
@@ -115,14 +120,17 @@ def _same_time(cfg, ended: datetime) -> bool:
 
 
 def plan_counts(model: DhwModel, cfg, now: datetime) -> bool:
-    """Zählt der eingestellte Termin im Modell? Solange HeatPilot nicht selbst auslöst, nur bestätigt.
+    """Zählt der eingestellte Termin im Modell? Löst HeatPilot ihn aus (seit 0.42, ``cfg.disinfect_triggered``), immer;
+    sonst nur bestätigt.
 
     Bestätigt: In den letzten ``DETECTED_DAYS`` Tagen hat der Regler zur Zeit des Termins desinfiziert – dann gilt
     er diese Woche schon vor der Erkennung. Ohne Desinfektion zu dieser Zeit (kein Regler, oder er desinfiziert
     zu anderer Zeit – dann zählt seine Zeit über die erkannte Sonderladung) zählt der Termin nicht. Einmalladungen
     zählen weder dafür noch dagegen (``is_disinfection``).
     """
-    return _planned(cfg) and any(_same_time(cfg, d) for d in recent(model, now))
+    if not _planned(cfg):
+        return False
+    return bool(getattr(cfg, "disinfect_triggered", False)) or any(_same_time(cfg, d) for d in recent(model, now))
 
 
 def counts_text(model: DhwModel, cfg, now: datetime) -> str | None:

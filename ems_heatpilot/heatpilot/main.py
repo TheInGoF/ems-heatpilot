@@ -3,7 +3,8 @@
 Seit 0.41 läuft im 30-s-Takt der Live-Werte auch Weg B (``boiler_step``: Kessel über HeatPilot rechnen, prüfen,
 schreiben), der Heartbeat ``sensor.heatpilot_heartbeat`` (jede Minute) und das Lesen der Wächter-Automationen
 (alle 10 min, nur lesen). Beim Zurückschalten von „heatpilot“ schreibt die alte Schreibstelle einmal den
-Rückfall-Vorlauf (``App._boiler_back``).
+Rückfall-Vorlauf (``App._boiler_back``). Seit 0.42 läuft im selben Takt das Auslösen der Desinfektion zum Termin
+(``disinfect_step``: nur mit Warmwasser-Soll „HeatPilot setzt“, ohne Regler am Bus).
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from datetime import datetime, timedelta
 from aiohttp import web
 
 from . import __version__
-from . import boiler_status, floor_limit, watchdog
+from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, watchdog
 from .backfill import run_backfill
 from .boiler_control import BoilerControl
 from .boiler_entity import flow_target, heat_target, regulator_block, same_entity
@@ -24,6 +25,7 @@ from .control import Control
 from .controlloop import ControlLoop
 from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
 from .dhw_control import DhwControl, target_entity
+from .disinfect_control import DisinfectControl
 from .diagnostics import set_debug, setup_logging
 from .discovery import Registry, discover
 from .emsesp import EmsEsp
@@ -182,18 +184,21 @@ class App:
 
     def _build_control(self, eng: Engine, found, old: Engine | None) -> None:
         """Schreibstellen neu aufbauen: Control (Gruppen, HA-Zustände; seit 0.38 die eine Entität des
-        Warmwasser-Solls – nur mit Schalter „heatpilot“ – und die Benachrichtigungsziele), Regelschleife, Weg W und
-        Meldungen. Stand von Weg W und Meldungen geht von der alten Engine über; die alten Schleifen schreiben nichts
-        mehr."""
+        Warmwasser-Solls – nur mit Schalter „heatpilot“ – und die Benachrichtigungsziele), Regelschleife, Weg W, Weg B,
+        Desinfektion (0.42: der Schalter nur mit Termin und „HeatPilot setzt“) und Meldungen. Stand von Weg W, Weg B,
+        Desinfektion und Meldungen geht von der alten Engine über; die alten Schleifen schreiben nichts mehr."""
         cfg = self.cfg
         entity = target_entity(cfg, found, eng.states)
         boiler = {"flow": flow_target(cfg, found, eng.states), "heating": heat_target(cfg, found, eng.states)}
         writes = {"flow": boiler["flow"][0], "heating": boiler["heating"][0], "max": cfg.max_flow_temp,
                   "floors": floor_limit.floor_rooms(cfg, found.rooms)} if cfg.writes_boiler() else None
+        dis = disinfect_entity.target(cfg, found, eng.states)
         self.control = Control(self.ha, self.store, found.rooms, states=eng.states,
                                dhw_entity=entity[0] if cfg.writes_dhw() else None,
                                dhw_limits=(cfg.dhw_min_temp, cfg.dhw_max_temp), notify_targets=cfg.notify_targets,
-                               boiler=writes, boiler_lock=lambda: regulator_block(eng))
+                               boiler=writes, boiler_lock=lambda: regulator_block(eng),
+                               disinfect=dis[0] if disinfect_rule.writes(cfg) else None,
+                               disinfect_lock=lambda: disinfect_rule.lock(eng))
         eng.notifier = Notifier(self.store, self.control, cfg.notify_targets,
                                 carry=old.notifier if old is not None else None)
         eng.control_loop = ControlLoop(eng, self.control)
@@ -201,6 +206,11 @@ class App:
                                      carry=old.dhw_control if old is not None else None)
         eng.boiler_control = BoilerControl(eng, self.control, eng.notifier, boiler,
                                            carry=old.boiler_control if old is not None else None)
+        eng.disinfect_control = DisinfectControl(eng, self.control, eng.notifier, dis,
+                                                 carry=getattr(old, "disinfect_control", None))
+        # zählt der Termin im Warmwasser-Modell (HeatPilot löst ihn aus, der letzte ist nicht eben gescheitert)? Gleich,
+        # nicht erst im nächsten 30-s-Schritt
+        cfg.disinfect_triggered = eng.disinfect_control.triggered(time.time())
         if old is not None:
             eng.watchdog, eng.heartbeat_ts = old.watchdog, old.heartbeat_ts
         if old is not None and old.control_loop is not None:
@@ -209,6 +219,8 @@ class App:
             old.dhw_control.stop()
         if old is not None and old.boiler_control is not None:
             old.boiler_control.stop()
+        if old is not None and getattr(old, "disinfect_control", None) is not None:
+            old.disinfect_control.stop()
 
     def _restart_emsesp(self) -> None:
         if self._ems_task:
@@ -305,7 +317,7 @@ async def main() -> None:
 
 async def live_loop(app: App) -> None:
     """Alle 30 s die Live-Werte merken (Reiter „Live“), eine fällige Prüfung des Warmwasser-Solls (0.38), Weg B,
-    Heartbeat und Wächter (0.41) – jedes für sich, ein Fehler hält die anderen nicht auf."""
+    Heartbeat und Wächter (0.41), Desinfektion (0.42) – jedes für sich, ein Fehler hält die anderen nicht auf."""
     while True:
         try:
             if app.eng is not None:
@@ -313,7 +325,8 @@ async def live_loop(app: App) -> None:
         except Exception:  # noqa: BLE001
             log.exception("Live-Werte nicht erfasst")
         for name, step in (("Prüfung des Warmwasser-Solls", check_dhw), ("Kessel über HeatPilot", boiler_step),
-                           ("Heartbeat", heartbeat), ("Wächter lesen", scan_watchdog)):
+                           ("Desinfektion", disinfect_step), ("Heartbeat", heartbeat),
+                           ("Wächter lesen", scan_watchdog)):
             try:
                 await step(app)
             except Exception:  # noqa: BLE001
@@ -336,6 +349,23 @@ async def boiler_step(app: App, now: float | None = None) -> int:
     n = await ctl.apply(now)
     await send_notes(app, eng)
     return n
+
+
+async def disinfect_step(app: App, now: float | None = None) -> bool:
+    """Desinfektion auslösen (0.42) im 30-s-Takt: Termin fällig, prüfen, beobachten (``plan``), schalten (``apply``),
+    danach Meldungen und Problem-Sensor. True, wenn geschaltet wurde."""
+    eng = app.eng
+    ctl = getattr(eng, "disinfect_control", None) if eng is not None else None
+    if ctl is None:
+        return False
+    try:
+        ctl.plan(now)
+    except Exception:  # noqa: BLE001 – Lernen, Raumsteuerung und Kessel laufen weiter, es wird nichts geschaltet
+        ctl.pending = None
+        log.exception("Desinfektion: Schritt fehlgeschlagen – nichts geschaltet")
+    done = await ctl.apply(now)
+    await send_notes(app, eng)
+    return done
 
 
 async def heartbeat(app: App, now: float | None = None) -> bool:

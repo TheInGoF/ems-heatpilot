@@ -15,11 +15,13 @@ import re
 import subprocess
 import time
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
 from heatpilot import dhw_control as dc_mod, notify, preview as pv, readiness
 from heatpilot.config import DHW_MODES, Config
+from heatpilot.disinfect_status import ACTIONS as DISINFECT_ACTIONS
 from heatpilot.controlloop import ControlLoop
 from heatpilot.dhw_control import DhwControl
 from heatpilot.web import clean
@@ -160,7 +162,8 @@ def test_texts_match_backend(tmp_path):
                          " labels: Object.values(DHW_LABEL) });")
     assert r["modes"] == list(DHW_MODES) and r["labels"] == ["Aus", "Trockenlauf", "HeatPilot setzt"]
     assert r["notes"] == [dc_mod.HINT_AUTOMATION, dc_mod.HINT_FAILSAFE]
-    assert set(r["actions"]) == set(dc_mod.ACTIONS)
+    # seit 0.42 auch die Zeilen der Desinfektion (kind „dhw“, disinfect_status.ACTIONS)
+    assert set(r["actions"]) == set(dc_mod.ACTIONS) | set(DISINFECT_ACTIONS)
     # die Doku nennt die Stellen in der Oberfläche
     docs = re.sub(r"\s+", " ", (ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8"))
     for text in ("Einstellungen → Warmwasser, Schalter „Warmwasser-Soll“", "**Trockenlauf**", "**HeatPilot setzt**",
@@ -325,7 +328,8 @@ def notify_json(tmp_path, targets, services, fail=()):
     n = eng.notifier
     n.problem(dc_mod.K_PAUSED, "Warmwasser über HeatPilot pausiert", t0())
     ha.fail = list(fail)
-    run(n.flush())
+    with mock.patch("time.time", return_value=float(t0() + 60)):  # gesendet kurz danach – nicht zur echten Uhrzeit
+        run(n.flush())
     return as_json({**n.as_dict(), "available": notify.available(eng.states, services, n.targets),
                     "services_error": None if services is not None else "Dienste nicht lesbar (alt) – nur notify-Entitäten zur Auswahl"})
 

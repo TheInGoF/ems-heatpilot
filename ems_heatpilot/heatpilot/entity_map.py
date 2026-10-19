@@ -4,8 +4,8 @@ Je Rolle steht hier, wofür HeatPilot sie braucht (ein Satz), ob sie nötig ist,
 (Domäne, Einheit, Geräteklasse – für die gefilterte Auswahl) und wo die Wahl gespeichert wird. ``build`` setzt daneben,
 was gerade gilt: gewählt, automatisch erkannt, direkt von EMS-ESP gelesen oder fehlt – mit Zustand, Einheit, Bereich
 und ob die Entität verfügbar ist. Gruppen: Kessel und Regler (EMS-ESP-Rollen aus ``discovery_roles``), Warmwasser über
-HeatPilot, Kessel über HeatPilot (seit 0.41: Vorlauf-Soll und Heizbetrieb, Weg B), Außen & Wetter, Gas & Bedarf, Strom,
-Räume, Personen & Urlaub, Benachrichtigungen.
+HeatPilot (seit 0.42 mit dem Schalter der Desinfektion), Kessel über HeatPilot (seit 0.41: Vorlauf-Soll und
+Heizbetrieb, Weg B), Außen & Wetter, Gas & Bedarf, Strom, Räume, Personen & Urlaub, Benachrichtigungen.
 
 Nur lesen (``GET api/entity_map``). Gespeichert wird über die bestehenden Einstellungen (``POST api/settings``), es gibt
 keine zweite Speicherstelle: Kessel- und Regler-Rollen als ``overrides`` (``rolle=entity_id``, leer = Erkennung), alles
@@ -19,8 +19,8 @@ keine Koordinaten.
 * Warmwasser lädt oder Speichertemperatur: eines genügt (eine Ladung erkennt HeatPilot auch am Temperaturanstieg und
   hält sie aus dem Heizmodell heraus); ohne Speichertemperatur gibt es kein Warmwasser-Modell.
 * Außentemperatur: Außenfühler, sonst der Außenfühler am Kessel (als Entität in Home Assistant), sonst das Wetter.
-* je Raum das Thermostat; die Warmwasser-Soll-Entität nur bei „HeatPilot setzt“; Vorlauf-Soll und Heizbetrieb nur bei
-  „Kessel über HeatPilot: heatpilot“.
+* je Raum das Thermostat; die Warmwasser-Soll-Entität nur bei „HeatPilot setzt“, der Schalter der Desinfektion nur bei
+  „HeatPilot setzt“ mit Desinfektionstermin; Vorlauf-Soll und Heizbetrieb nur bei „Kessel über HeatPilot: heatpilot“.
 
 Der Rücklauf ist optional: Er dient nur der Vorlauf-Auswertung und der Live-Anzeige. Liest EMS-ESP einen Kessel- oder
 Regler-Wert direkt (REST), fehlt er nicht – auch ohne Entität in Home Assistant. Ausnahme ist der Außenfühler am
@@ -33,6 +33,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .boiler_entity import suggest_flow, suggest_heat
+from .disinfect_entity import suggest as suggest_disinfect
 from .dhw_entity import suggest_entity
 from .discovery import device_sensors
 from .discovery_roles import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
@@ -48,8 +49,9 @@ GROUPS: dict[str, tuple[str, str]] = {
     "kessel": ("Kessel (EMS-ESP)", "Werte des Kessels über Home Assistant bzw. direkt von EMS-ESP – meist findet "
                                    "HeatPilot sie selbst."),
     "regler": ("Regler (EMS-ESP)", "Werte des Reglers, Heizkreis 1 – alle optional: Vergleich, Heizkurve, Termine."),
-    "warmwasser": ("Warmwasser über HeatPilot", "Die eine Entität, auf die HeatPilot das Warmwasser-Soll schreiben "
-                                                "darf (Weg W)."),
+    "warmwasser": ("Warmwasser über HeatPilot", "Die Entitäten, auf die HeatPilot fürs Warmwasser schreiben darf "
+                                                "(Weg W): das Warmwasser-Soll und – zum Desinfektionstermin – der "
+                                                "Schalter „Desinfizieren“."),
     "kessel_hp": ("Kessel über HeatPilot", "Die zwei Entitäten, auf die HeatPilot am Kessel schreiben darf (Weg B): "
                                            "Vorlauf-Soll und Heizbetrieb."),
     "aussen": ("Außen & Wetter", "Außentemperatur und Vorhersage."),
@@ -79,6 +81,7 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "dhw": (("number",), ("°C",), ()),
     "flow_set": (("number",), ("°C",), ()),
     "heat_switch": (("switch",), (), ()),
+    "disinfect_switch": (("switch",), (), ()),
     "weather": (("weather",), (), ()),
     "gas": (("sensor",), ("m³", "m3", "kWh"), ("gas", "energy")),
     "demand": (("sensor",), ("%",), ()),
@@ -90,8 +93,9 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "humidity": (("sensor",), ("%",), ("humidity",)),
 }
 # Auswahl in der Oberfläche mit eigener Regel (PICKERS): Warmwasser-Soll nur, was laut dhw_entity taugt; Vorlauf-Soll
-# und Heizbetrieb (0.41) nur, was laut boiler_entity taugt (``api/entities`` → ``flow`` bzw. ``heating``)
-PICKER = {"dhw": "dhw", "flow_set": "flow", "heat_switch": "heating"}
+# und Heizbetrieb (0.41) nur, was laut boiler_entity taugt (``api/entities`` → ``flow`` bzw. ``heating``); der Schalter
+# der Desinfektion (0.42) nur, was laut disinfect_entity taugt (``disinfect``)
+PICKER = {"dhw": "dhw", "flow_set": "flow", "heat_switch": "heating", "disinfect_switch": "disinfect"}
 
 # EMS-ESP-Rolle -> (Art, wofür HeatPilot sie braucht)
 ROLES: dict[str, tuple[str, str]] = {
@@ -127,7 +131,8 @@ ROLES: dict[str, tuple[str, str]] = {
     "nrg_total": ("kwh", "Ersatz, wenn kein Gaszähler da ist (Energie-Schätzung)."),
     "nrg_heat": ("kwh", "Zweiter Ersatz für den Gaszähler."),
     "dhw_starts": ("count", "Warmwasser-Ladungen sicher erkennen."),
-    "dhw_disinfecting": ("flag", "Solche Ladungen lernt das Modell nicht; bestätigt den Desinfektionstermin."),
+    "dhw_disinfecting": ("flag", "Solche Ladungen lernt das Modell nicht; bestätigt den Termin; Vorschlag für "
+                                 "„Desinfektion auslösen“."),
     "dhw_disinfect_temp": ("temp", "Desinfektionstemperatur – sonst gilt der eingestellte Wert."),
     "dhw_onetime": ("flag", "Einmalladungen lernt das Modell nicht."),
     "dhw_hyst_on": ("delta", "Wann der Speicher wieder lädt – Warmwasser-Modell."),
@@ -162,6 +167,10 @@ NEED: dict[str, tuple[str, ...]] = {"flow_temp": (), "burner_on": ("burner_power
 FIELD_ENTRIES: dict[str, tuple[str, str, str, bool, bool, str]] = {
     "dhw_set_entity": ("warmwasser", "Warmwasser-Soll (Entität)", "dhw", False, True,
                        "Nur hierhin schreibt HeatPilot bei „HeatPilot setzt“; leer = Vorschlag aus der Erkennung."),
+    "disinfect_entity": ("warmwasser", "Desinfektion auslösen (Schalter)", "disinfect_switch", False, True,
+                         "Nur diesen Schalter schaltet HeatPilot zum Desinfektionstermin (switch „Desinfizieren“, "
+                         "wwdisinfecting) – bei „HeatPilot setzt“ ohne Regler am Bus; leer = Vorschlag aus der "
+                         "Erkennung."),
     "flow_set_entity": ("kessel_hp", "Vorlauf-Soll (Entität)", "flow_set", False, True,
                         "Nur hierhin schreibt HeatPilot das Vorlauf-Soll bei „Kessel über HeatPilot“ (number, °C); leer "
                         "= Vorschlag aus der Erkennung."),
@@ -351,6 +360,7 @@ def _field_values(c: _Ctx) -> dict:
 
     return {
         "dhw_set_entity": (cfg.dhw_set_entity, suggest_entity(f, c.states)),
+        "disinfect_entity": (cfg.disinfect_entity, suggest_disinfect(f, c.states)),
         "flow_set_entity": (cfg.flow_set_entity, suggest_flow(f, c.states)),
         "heating_switch_entity": (cfg.heating_switch_entity, suggest_heat(f, c.states)),
         "outdoor_sensors": (cfg.outdoor_sensors, auto("outdoor", cfg.outdoor_sensors, f.outdoor)),
@@ -368,7 +378,8 @@ def _field_entries(c: _Ctx) -> list[dict]:
     values, out = _field_values(c), []
     for key, (group, label, kind, multi, auto, purpose) in FIELD_ENTRIES.items():
         required = key == "outdoor_sensors" or (key == "dhw_set_entity" and c.cfg.dhw_control == "heatpilot") or (
-            key in ("flow_set_entity", "heating_switch_entity") and c.cfg.boiler_control == "heatpilot")
+            key in ("flow_set_entity", "heating_switch_entity") and c.cfg.boiler_control == "heatpilot") or (
+            key == "disinfect_entity" and c.cfg.dhw_control == "heatpilot" and bool(c.cfg.dhw_disinfect_day))
         e = _base(key, group, label, kind, purpose, {"kind": "field", "name": key}, multi=multi, auto=auto,
                   required=required, alt=("weather_entity",) if key == "outdoor_sensors" else ())
         _fill(e, c, *values[key])

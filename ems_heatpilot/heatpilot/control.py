@@ -27,6 +27,11 @@ wenn das Vorlauf-Soll am Kessel laut Home Assistant höchstens bei der Grenze li
 darunter geschrieben hat (``_flow_safe``). Sind Vorlauf-Soll und Warmwasser-Soll dieselbe Entität, sind beide
 Schreibwege gesperrt (``conflict``). Die Antipendelzeit und alle anderen Kesselwerte bleiben unberührt.
 
+Seit 0.42 (Desinfektion auslösen) genau ein weiterer: ``switch.turn_on``/``turn_off`` auf die eine Entität des Schalters
+„Desinfizieren“ (``set_disinfect``; ``disinfect_entity.check_call``: nur diese, ohne Daten, tauglich) – nur mit Termin
+und Warmwasser-Soll „HeatPilot setzt“ gesetzt, und nur, solange nichts sperrt (``disinfect_lock``: kein Regler am Bus,
+keine Pause von Weg W). Nie dieselbe Entität wie der Heizbetrieb.
+
 Alles andere – andere Dienste, andere ``number``-Entitäten, Werte außerhalb der Grenzen, Entitäten außerhalb der
 gewählten Räume – wird hart abgewiesen (``PermissionError``).
 Ebenso seit 0.36.3 jeder Schreibvorgang auf den Heizkreis von EMS-ESP (``climate.…_thermostat_hc1``),
@@ -51,7 +56,7 @@ import logging
 import math
 import time
 
-from . import boiler_entity, floor_limit
+from . import boiler_entity, disinfect_entity, floor_limit
 from .boiler_rule import CHECK_MAX_S, CHECK_TOL_K, FLOW_MIN
 from .config import NOTIFY_TARGET
 from .dhw_entity import entity_problem
@@ -62,7 +67,7 @@ from .ha_client import HAConnectionLost
 log = logging.getLogger(__name__)
 
 # ("number", "set_value") nur für das Warmwasser-Soll (Weg W, 0.38) und das Vorlauf-Soll (Weg B, 0.41),
-# ("switch", "turn_on"/"turn_off") nur für den Heizbetrieb (Weg B, 0.41)
+# ("switch", "turn_on"/"turn_off") nur für den Heizbetrieb (Weg B, 0.41) und den Schalter der Desinfektion (0.42)
 ALLOWED = {("tado", "set_climate_timer"), ("climate", "set_temperature"), ("climate", "set_hvac_mode"),
            ("number", "set_value"), ("switch", "turn_on"), ("switch", "turn_off")}
 SERVICES_S = 600                         # Dienste von HA (Rückfall auf notify.mobile_app_…) so lange merken
@@ -95,7 +100,7 @@ def _num(value) -> float | None:
 class Control:
     def __init__(self, ha, store, rooms: list, states: dict | None = None, dhw_entity: str | None = None,
                  dhw_limits: tuple[float, float] | None = None, notify_targets=(), boiler: dict | None = None,
-                 boiler_lock=None) -> None:
+                 boiler_lock=None, disinfect: str | None = None, disinfect_lock=None) -> None:
         """``rooms``: ``discovery.Room`` (Gruppen) oder nur climate-IDs (jede ihr eigener Raum).
         ``states``: HA-Zustände (``engine.states``), um Betriebsart und Soll vor dem Schreiben zu kennen.
         ``dhw_entity``/``dhw_limits`` (0.38): die eine ``number``-Entität des Warmwasser-Solls und (Minimum, Maximum)
@@ -104,7 +109,9 @@ class Control:
         ``boiler`` (0.41, Weg B): {"flow": number-Entität, "heating": switch-Entität, "max": max_flow_temp,
         "floors": Fußboden-Räume (``floor_limit.floor_rooms``)} – nur mit Schalter „heatpilot“ gesetzt, sonst None
         (dann sind ``set_flow``/``set_heating`` gesperrt); ``boiler_lock``: Aufruf, der den Grund liefert, solange
-        nicht geschrieben werden darf (Regler am Bus)."""
+        nicht geschrieben werden darf (Regler am Bus). ``disinfect``/``disinfect_lock`` (0.42): der eine Schalter der
+        Desinfektion (nur mit Termin und „HeatPilot setzt“, sonst None) und der Aufruf mit dem Grund, solange nicht
+        geschaltet werden darf."""
         self.ha = ha
         self.store = store
         self.dhw_entity = dhw_entity if dhw_entity and dhw_entity.startswith("number.") else None
@@ -114,6 +121,8 @@ class Control:
         self.flow_entity = b.get("flow") if str(b.get("flow") or "").startswith("number.") else None
         self.heat_entity = b.get("heating") if str(b.get("heating") or "").startswith("switch.") else None
         self.flow_max, self.floors, self.boiler_lock = b.get("max"), list(b.get("floors") or ()), boiler_lock
+        ok = str(disinfect or "").startswith("switch.") and disinfect != self.heat_entity
+        self.disinfect_entity, self.disinfect_lock = (disinfect if ok else None), disinfect_lock
         # dieselbe Entität für Vorlauf- und Warmwasser-Soll: beide Schreibwege gesperrt (Weg B, 0.41)
         self.conflict = (f"Vorlauf-Soll und Warmwasser-Soll sind dieselbe Entität ({self.flow_entity}) – beide "
                          "Schreibwege gesperrt" if self.flow_entity and self.flow_entity == self.dhw_entity else None)
@@ -231,6 +240,9 @@ class Control:
             self._check_flow(entity_id, data)  # nur das Vorlauf-Soll, nur in den Grenzen (Weg B, 0.41)
         elif domain == "number":
             self._check_dhw(entity_id, data)  # nur das eingestellte Warmwasser-Soll, nur in den Grenzen (0.38)
+        elif domain == "switch" and self.disinfect_entity and entity_id == self.disinfect_entity:  # Desinfektion (0.42)
+            disinfect_entity.check_call(entity_id, self.disinfect_entity, data, self._state(entity_id),
+                                        self.disinfect_lock() if self.disinfect_lock is not None else None)
         elif domain == "switch":
             self._check_heating(entity_id, data, service == "turn_on")  # nur der Heizbetrieb (Weg B, 0.41)
         elif entity_id not in self.rooms:
@@ -347,6 +359,14 @@ class Control:
         await self._call("switch", "turn_on" if on else "turn_off", self.heat_entity, {}, reason,
                          action="heating_on" if on else "heating_off")
 
+    async def set_disinfect(self, on: bool, reason: str) -> None:
+        """Schalter der Desinfektion (seit 0.42): ``switch.turn_on``/``turn_off`` – Prüfung in ``_call``."""
+        if not self.disinfect_entity or not isinstance(on, bool):
+            raise PermissionError("Desinfektion: Schalten gesperrt (kein Termin, Warmwasser-Soll nicht „HeatPilot "
+                                  "setzt“ oder keine Entität)")
+        await self._call("switch", "turn_on" if on else "turn_off", self.disinfect_entity, {}, reason,
+                         action="disinfect_on" if on else "disinfect_off")
+
     async def set_dhw(self, value: int, reason: str) -> None:
         """Warmwasser-Soll schreiben (Weg W, seit 0.38): ``number.set_value`` auf ``dhw_entity`` – die Prüfung
         macht ``_call``/``_check_dhw``; ohne eingestellte Entität (Schalter nicht „heatpilot“) gesperrt, ebenso, wenn
@@ -388,8 +408,13 @@ class Control:
                             "service_data": {"message": message, "title": title}}, timeout=30)
 
     def _maybe_sent(self, err: Exception) -> bool:
-        """Kann die Meldung trotz Fehler angekommen sein? Zeitüberlauf, getrennte Verbindung (auch wenn Home
-        Assistant gerade nicht verbunden ist) – dann kein Rückfall, sonst käme sie doppelt."""
+        """Kann die Meldung trotz Fehler angekommen sein? Dann kein Rückfall, sonst käme sie doppelt."""
+        return self.maybe_arrived(err)
+
+    def maybe_arrived(self, err: Exception) -> bool:
+        """Kann ein Aufruf trotz Fehler angekommen sein (Ausgang unklar)? Zeitüberlauf, getrennte Verbindung (auch
+        wenn Home Assistant gerade nicht verbunden ist). Auch für die Desinfektion (0.42): dann entscheidet die
+        Prüfung nach 60 s, ob sie läuft."""
         if isinstance(err, (asyncio.TimeoutError, TimeoutError, ConnectionError, HAConnectionLost)):
             return True
         connected = getattr(self.ha, "connected", None)

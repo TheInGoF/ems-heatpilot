@@ -40,7 +40,8 @@ NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boi
          "disinfectHtml", "disinfectState", "disinfectSuggestHtml", "disinfectSync", "applyDisinfect",
          "EMS_LOCK", "ctlRooms", "allRooms", "shortName", "hm", "leftText", "tileColors", "PHASE", "ctl", "managing",
          "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock",
-         "FLOOR_KINDS", "FLOOR_MAX", "FLOOR_HINT", "floorKind", "floorCell", "roomRows")  # Fußboden seit 0.39.1
+         "FLOOR_KINDS", "FLOOR_MAX", "FLOOR_HINT", "floorKind", "floorCell", "roomRows",  # Fußboden seit 0.39.1
+         "degC", "DIS_RESULT_CSS", "disWhen", "disDot", "disLast", "disNow", "disinfectTriggerHtml")  # Auslösen (0.42)
 
 
 def run_js(tmp_path, body: str):
@@ -186,7 +187,8 @@ def test_overview_tile_next_date_or_last_special(tmp_path):
             none: disinfectTile({{ ...P, configured: false, next_text: null, last_special_text: null, temp_source: "eingestellt" }}),
             old: disinfectTile(undefined) }});""")
     # Zeit groß als Wert, die Herkunft vorn in der Notiz (als Einheit bräche sie in schmalen Kacheln um)
-    assert plain(r["plan"]) == "Nächste Desinfektion So 17:30 eingestellt · 70 °C laut Kessel · HeatPilot löst sie noch nicht aus"
+    # Text seit 0.42: HeatPilot löst nur bei „Warmwasser-Soll: HeatPilot setzt“ ohne Regler am Bus aus
+    assert plain(r["plan"]) == "Nächste Desinfektion So 17:30 eingestellt · 70 °C laut Kessel · HeatPilot löst sie nicht aus"
     assert '<div class="value">So 17:30</div>' in r["plan"]
     assert plain(r["other"]).endswith("eingestellt · 70 °C laut Kessel · Termin noch nicht bestätigt – kein Regler "
                                       "desinfiziert zu dieser Zeit")

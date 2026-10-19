@@ -50,6 +50,8 @@ from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
 from .dhw_control import ACTIONS as DHW_ACTIONS
 from .dhw_control import LOG_NAME as DHW_LOG_NAME
+from .disinfect_status import ACTIONS as DISINFECT_ACTIONS
+from .disinfect_status import LOG_NAME as DISINFECT_LOG_NAME
 from .presence import arrival_unknown, next_arrival
 
 log = logging.getLogger(__name__)
@@ -550,9 +552,11 @@ class ControlLoop:
                      "Zeitplan fortsetzen. Fällt HeatPilot aus, bleibt das zuletzt geschriebene Soll stehen."
                      if managing else None),
             # seit 0.38 auch die Zeilen des Warmwasser-Solls (Weg W): kind „dhw“, Name „Warmwasser-Soll“; seit 0.41
-            # die des Kessels (Weg B, Vorlauf-Soll und Heizbetrieb): kind „boiler“, Name „Kessel“
+            # die des Kessels (Weg B, Vorlauf-Soll und Heizbetrieb): kind „boiler“, Name „Kessel“; seit 0.42 die der
+            # Desinfektion: kind „dhw“, Name „Desinfektion“
             "log": [{**row, "time": local(row["ts"]).isoformat(),
                      **({"kind": "dhw", "name": DHW_LOG_NAME} if row["action"] in DHW_ACTIONS else
+                        {"kind": "dhw", "name": DISINFECT_LOG_NAME} if row["action"] in DISINFECT_ACTIONS else
                         {"kind": "boiler", "name": BOILER_LOG_NAME} if row["action"] in BOILER_ACTIONS else
                         {"kind": "room",
                          "name": names.get(row["room"]) or names.get(self._key_of(row["room"]), row["room"])})}

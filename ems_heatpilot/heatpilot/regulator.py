@@ -77,7 +77,9 @@ def _unknown(text: str) -> dict:
 
 def regulator(eng, now: float | None = None) -> dict:
     """Ist ein Regler am Bus? {present: True | False | None (unbekannt), text, source}. Solange er da ist (oder es
-    unbekannt ist), schreibt HeatPilot nicht – der Regler überschreibt alle 60 s, was am Kessel gesetzt wird."""
+    unbekannt ist), schreibt HeatPilot nicht – der Regler überschreibt alle 60 s, was am Kessel gesetzt wird. ``hold``
+    (seit 0.42): vorhanden nur, weil er vor weniger als ``HOLD_S`` gesehen wurde – für die Desinfektion kein Nachweis,
+    dass er sie macht (``disinfect_rule.regulator_does_it``)."""
     now = time.time() if now is None else now
     ts = getattr(eng, "ems_ts", None)
     fresh = ts is not None and now - ts <= EMS_FRESH_S
@@ -96,8 +98,8 @@ def regulator(eng, now: float | None = None) -> dict:
                         "erst wieder, wenn EMS-ESP antwortet")
     w = getattr(eng, "regulator_watch", None) or {}
     seen = w.get("seen")
-    if seen is not None and now - seen < HOLD_S:
-        return {"present": True, "source": "ems",
+    if seen is not None and now - seen < HOLD_S:  # nur noch gehalten: kein frischer Nachweis (``hold``)
+        return {"present": True, "source": "ems", "hold": True,
                 "text": f"Regler zuletzt {_ago(now - seen)} gemeldet – HeatPilot schreibt erst, wenn er "
                         f"{HOLD_S // 60} min lang nicht mehr gemeldet wird. {REGULATOR_TEXT}"}
     if w.get("last") != ABSENT:

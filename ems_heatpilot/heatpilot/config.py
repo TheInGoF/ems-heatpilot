@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-from . import boiler_rule, entity_map, floor_limit
+from . import boiler_rule, disinfect_entity, entity_map, floor_limit
 from .room_entry import COMFORT_DEFAULT, COMFORT_MAX, COMFORT_MIN, PRESET_MAX  # noqa: F401 – wie bisher hier
 from .room_entry import clean_room as _clean_room
 
@@ -87,6 +87,8 @@ FIELDS: dict[str, tuple] = {
     "dhw_control": ("choice", DHW_MODES),
     "dhw_set_entity": ("entity", "number"),
     "notify_targets": ("entities", "notify"),
+    # Desinfektion auslösen (0.42): der Schalter „Desinfizieren“ (switch, leer = erkannt; disinfect_entity)
+    **disinfect_entity.FIELDS,
     # Weg B (0.41): Kessel über HeatPilot – Schalter, Vorlauf-Soll, Heizbetrieb, Rückfall-Vorlauf (boiler_rule)
     **boiler_rule.FIELDS,
     "design_outdoor_temp": ("float", -25, 0),
@@ -284,8 +286,8 @@ class Config:
     dhw_comfort_temp: float = 50.0
     dhw_max_temp: float = 60.0
     # Desinfektion (0.36.3): Termin je Woche – Tag "Mo"…"So", leer = kein Termin (Standard); Beginn (nur mit Tag
-    # wirksam) und Temperatur, falls EMS-ESP sie nicht meldet (wwdisinfectiontemp). Nur eingeplant und angezeigt –
-    # HeatPilot löst die Desinfektion noch nicht aus (EMS-ESP bleibt nur lesend)
+    # wirksam) und Temperatur, falls EMS-ESP sie nicht meldet (wwdisinfectiontemp). Seit 0.42 löst HeatPilot den Termin
+    # aus, wenn kein Regler am Bus ist und dhw_control „heatpilot“ ist (disinfect_control.py, über Home Assistant)
     dhw_disinfect_day: str = ""
     dhw_disinfect_time: time = time(13, 0)
     dhw_disinfect_temp: float = 70.0
@@ -295,6 +297,10 @@ class Config:
     dhw_control: str = "aus"
     dhw_set_entity: str | None = None
     notify_targets: list[str] = field(default_factory=list)
+    # Desinfektion auslösen (0.42): Schalter „Desinfizieren“ (switch, leer = erkannt); Laufzeit, nicht gespeichert:
+    # HeatPilot löst den Termin aus – dann zählt er im Warmwasser-Modell (setzt disinfect_control)
+    disinfect_entity: str | None = None
+    disinfect_triggered: bool = field(default=False, repr=False, compare=False)
     # Weg B (0.41): Kessel über HeatPilot – aus (Standard), trocken oder heatpilot (boiler_control.py); Entität des
     # Vorlauf-Solls (number) und des Heizbetriebs (switch), leer = erkannt; Rückfall-Vorlauf beim Zurückschalten
     boiler_control: str = "aus"
@@ -352,8 +358,8 @@ class Config:
     def from_raw(cls, raw: dict) -> "Config":
         cfg = cls()
         for key, value in raw.items():
-            if key == "night_plan_learned":
-                continue  # Laufzeitfeld, kommt nie aus einer Datei
+            if key in ("night_plan_learned", "disinfect_triggered"):
+                continue  # Laufzeitfelder, kommen nie aus einer Datei
             if key in ("night_start", "night_end", "vacation_arrival_time"):
                 value = _parse_time(value)
             elif key == "dhw_disinfect_time":
@@ -375,6 +381,7 @@ class Config:
             cfg.dhw_set_entity = None
         cfg.notify_targets = [t for t in cfg.notify_targets or [] if isinstance(t, str) and NOTIFY_TARGET.match(t)]
         boiler_rule.clean_config(cfg)  # Weg B (0.41): Unbekanntes gilt als „aus“, nichts schreiben
+        disinfect_entity.clean_config(cfg)  # Desinfektion auslösen (0.42): keine switch-Entität gilt als „erkannt“
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
         entity_map.migrate_overrides(cfg)  # gas=/weather= in die Felder (0.39.1, Seite „Entitäten“)
         cfg.floor_heating_rooms = floor_limit.migrate(cfg.rooms, cfg.floor_heating_rooms)  # Fußboden (0.39.1)

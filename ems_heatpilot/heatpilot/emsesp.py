@@ -14,6 +14,10 @@ Seit 0.36.1 fragt ``controls()`` zusätzlich einzelne Kesselsteuerungen ab
 (``writeable``). Das ist nur Anzeige für „Bereit für die Steuerung?“ – was eine spätere
 Kesselsteuerung bräuchte (``BOILER_CONTROLS``, siehe docs/planung-vorlauf-ems.md).
 
+Seit 0.42 liest ``controls()`` dazu die Brennerleistung (``POWER_CONTROLS``: ``burnmaxpower``, ``burnminpower``) mit
+ihrem Bereich – meldet der Kessel keine kleinste Brennerleistung, schlägt HeatPilot die Untergrenze des Bereichs der
+größten vor (``boiler_power``). Auch das nur lesen.
+
 Seit der Prüfung von 0.41 merkt sich ``read()`` je Gerät von Kessel und Regler, wie die Abfrage ausging
 (``status``): beantwortet (``OK``), laut EMS-ESP nicht vorhanden (``ABSENT`` – eine ausdrückliche Meldung statt
 Werten) oder Fehler (``FAILED`` – Zeitüberlauf, keine Verbindung, Serverfehler, unlesbar, leer). Eine fehlende Antwort
@@ -55,6 +59,12 @@ BOILER_CONTROLS: dict[str, tuple[str, bool, tuple[str, ...]]] = {
     "pumpdelay": ("Pumpennachlauf", False, ("pumpdelay",)),
     "heatingtemp": ("Heiztemperatur (Obergrenze)", False, ("heatingtemp",)),
     "wwdisinfecting": ("Desinfektion", False, ("wwdisinfecting", "dhw/disinfecting")),
+}
+# Brennerleistung (seit 0.42, nur lesen): Wert und Bereich für den Vorschlag der Mindestleistung (``boiler_power``) –
+# nicht Teil von „Bereit für die Steuerung?“
+POWER_CONTROLS: dict[str, tuple[str, bool, tuple[str, ...]]] = {
+    "burnmaxpower": ("Maximale Brennerleistung", False, ("burnmaxpower",)),
+    "burnminpower": ("Minimale Brennerleistung", False, ("burnminpower",)),
 }
 # daran erkennt man eine einzelne Entität (und nicht eine Meldung oder ein ganzes Unterverzeichnis)
 ENTITY_KEYS = {"value", "writeable", "writable", "fullname", "uom", "readable"}
@@ -217,7 +227,7 @@ class EmsEsp:
         return data
 
     async def controls(self) -> dict[str, dict]:
-        """Kesselsteuerungen aus ``BOILER_CONTROLS`` (seit 0.36.1, nur Anzeige, nur GET).
+        """Kesselsteuerungen aus ``BOILER_CONTROLS`` und ``POWER_CONTROLS`` (seit 0.36.1, nur Anzeige, nur GET).
 
         Je Steuerung {found, writeable, value, min, max, uom, fullname, path}; nicht gefunden →
         {"found": False}. Geschrieben wird nichts – es gibt hier keinen Schreibpfad.
@@ -225,7 +235,7 @@ class EmsEsp:
         (TimeoutError): poll_emsesp liest weiter Kesselwerte und fragt in einer Stunde erneut.
         """
         out: dict[str, dict] = {}
-        for key, (_, _, paths) in BOILER_CONTROLS.items():
+        for key, (_, _, paths) in {**BOILER_CONTROLS, **POWER_CONTROLS}.items():
             found = None
             for path in paths:
                 try:
