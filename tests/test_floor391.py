@@ -9,7 +9,6 @@ Steuerung?“ (Grenze und „Anschluss wählen“), dass die Ventil-Regeln den V
 geschrieben wird. Alle Häuser und Werte sind erfunden.
 """
 
-import re
 from pathlib import Path
 
 import pytest
@@ -338,11 +337,10 @@ def test_floor_limit_writes_nothing_and_is_readable():
 
 # ------------------------------------------------------------------ Version, Doku
 def test_version_changelog_docs():
-    assert __version__ == "0.39.1"
-    assert re.search(r'^version: "0\.39\.1"$', (ROOT / "ems_heatpilot" / "config.yaml").read_text(), re.MULTILINE)
+    assert __version__ >= "0.39.1"  # seit 0.40 prüft test_valve_control40 die genaue Version
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    head = log.split("\n## ")[1]
-    assert head.startswith("0.39.1") and "Fußbodenheizung je Raum" in head and "nichts Neues geschrieben" in head
+    head = log.split("\n## 0.39.1")[1].split("\n## ")[0]
+    assert "Fußbodenheizung je Raum" in head and "nichts Neues geschrieben" in head
     assert "55 °C" not in head  # keine persönlichen Werte
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     assert "## Fußbodenheizung je Raum" in docs and "## Fußbodenheizung ohne Stellventil" not in docs

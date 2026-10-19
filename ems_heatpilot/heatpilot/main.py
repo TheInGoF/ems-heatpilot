@@ -135,10 +135,26 @@ class App:
                 eng.live = old.live
                 if old.cfg.emsesp_host == eng.cfg.emsesp_host:  # Kesselsteuerungen bis zur nächsten Abfrage
                     eng.ems_controls, eng.ems_controls_ts = old.ems_controls, old.ems_controls_ts
+                await self._release_valves(old, found)
             self.eng = eng
             self._build_control(eng, found, old)
             self._restart_emsesp()
             self.status = "läuft"
+
+    async def _release_valves(self, old: Engine, found) -> None:
+        """Ventile führen (0.40): Führt die neue Schleife einen Raum nicht mehr („Beobachten“, „macht mit“ aus, Raum
+        entfernt), nimmt die alte ihren laufenden Schritt vorher einmal zurück aufs Wunschsoll – noch unter den alten
+        Einstellungen, unter denen er geschrieben wurde (``ControlLoop.release``). Ein Fehler hält den Aufbau nicht
+        auf."""
+        loop = old.control_loop
+        if loop is None:
+            return
+        managing = self.cfg.is_managing()
+        keep = {r.climate for r in found.rooms if r.managed} if managing else set()
+        try:
+            await loop.release(keep, "macht nicht mehr mit" if managing else "Steuerung „Beobachten“")
+        except Exception:  # noqa: BLE001
+            log.exception("Ventile führen: Zurückschreiben vor dem Neuaufbau fehlgeschlagen")
 
     def _build_control(self, eng: Engine, found, old: Engine | None) -> None:
         """Schreibstellen neu aufbauen: Control (Gruppen, HA-Zustände; seit 0.38 die eine Entität des

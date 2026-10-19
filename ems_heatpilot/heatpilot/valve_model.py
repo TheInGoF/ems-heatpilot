@@ -478,16 +478,23 @@ class ValveModel:
                                f"{E50_DAYS} Tagen)")
         return not reasons, reasons
 
+    def usable(self, now_day: str | None = None, catching_up: bool = False,
+               group: dict | None = None) -> tuple[bool, list[str]]:
+        """Belastbar für diesen Raum (``reliable``), dazu: keine gemischte Gruppe, nicht beim Nachlernen aus der
+        Historie – dasselbe Urteil für die Anzeige (``summary``) und die Ventilführung (``valve_control``, 0.40)."""
+        ok, reasons = self.reliable(now_day)
+        if group and group.get("mixed"):
+            ok, reasons = False, [*reasons, "Gruppe mit stetigen und an/aus-Ventilen – das Mittel beschreibt keines"]
+        if catching_up:
+            ok, reasons = False, ["lernt aus der gespeicherten Historie nach", *reasons]
+        return ok, reasons
+
     def summary(self, step_k: float, step_source: str, now_ts: int | None = None, catching_up: bool = False,
                 group: dict | None = None) -> dict:
         """Anzeige je Raum (Einstellungen → Räume, Raum-Dialog): Kennlinie, Punkte, Sprungantwort, Güte, Text.
         ``group``: {"n": Ventile, "mixed": stetige und an/aus gemischt} bei Gruppen."""
         day = None if now_ts is None else local(now_ts).date().isoformat()
-        ok, reasons = self.reliable(day)
-        if group and group.get("mixed"):
-            ok, reasons = False, [*reasons, "Gruppe mit stetigen und an/aus-Ventilen – das Mittel beschreibt keines"]
-        if catching_up:
-            ok, reasons = False, ["lernt aus der gespeicherten Historie nach", *reasons]
+        ok, reasons = self.usable(day, catching_up, group)
         kp, ki, e_i = self.gains()
         _, _, share = self._regression() if self.pi[0] > 0 else (None, None, 1.0)
         e_on, e_off = self.switch_e()

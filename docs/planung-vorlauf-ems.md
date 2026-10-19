@@ -152,7 +152,7 @@ zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/a
 **Auflösung fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll in
 der **vollen Auflösung des Thermostats** – bei Tado 0,5 K, siehe nächster Abschnitt.
 
-## Thermostate als Stellglied: Ventilverhalten lernen – Stufe 1 gebaut (0.39)
+## Thermostate als Stellglied: Ventilverhalten lernen – Stufe 1 gebaut (0.39), Stufe 2 gebaut (0.40)
 
 Idee Ingo: HeatPilot „missbraucht“ den eingebauten PID-Regler der Thermostate. Tado lässt das Ventil nicht
 direkt stellen – aber über ein fein verschobenes Raum-Soll lässt sich die Ventilöffnung führen. Dafür
@@ -197,8 +197,21 @@ Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineerin
   der Hebel liegt bei stetigen Ventilen mit Integrator, die am Soll noch offen sind – und auch dort ist er klein
   (im Simulator ≈ 0,05 K weniger Überschwingen je Eingriff bei 0,8 K Überschwingen). Ein P-Regler schließt vor dem
   Soll und braucht kein Drosseln. Ob sich Stufe 2 lohnt, zeigen die nachgemessenen Daten.
-- **Stufe 2 (0.40, eigener Schalter, nach Ingos Blick auf die Daten):** wirklich so steuern – nur Räume mit „macht
-  mit“, dieselben Schreibregeln, Protokoll im Schreibprotokoll.
+- **Stufe 2 gebaut (0.40): Ventile führen** (`valve_control.py`, eigener Schalter `valve_control`, Standard aus – aus
+  bleibt es beim Trockenlauf). Wirkt nur bei „HeatPilot steuert“ in Räumen mit „macht mit“, plausiblem Raummodell,
+  belastbarem Ventilmodell und einem Schritt bis 0,5 K; geschrieben wird über den bestehenden Weg (`Control.apply`,
+  `climate.set_temperature` auf die Schreibziele), höchstens **ein Schritt** vom Wunschsoll der Steuerung, auf den
+  Schritt gerundet, 5–25 °C. Regeln aus `valve_dry`, dazu strenger: früh drosseln nur in Komfort/Vorheizen, nie unter
+  Soll − 0,3 K, sofort zurück (auch in der Haltezeit), wenn der Raum darunter fällt – **wer Wärme braucht, bekommt sie
+  sofort**; gemeinsam anfordern nur für Räume, die laut Raummodell in 60 min ohnehin heizen würden, ohne Kette und
+  Pendeln (kein Auslöser, der gerade gedrosselt wird oder in den letzten 60 min angehoben war; kein Kandidat, der
+  nach dem Drosseln gesperrt ist oder in den letzten 60 min angehoben war). Nur bei Änderung, 5 min Haltezeit,
+  Phasenwechsel und Hand gehen vor (auch „aus“ bleibt aus; Eigenes – verzögert gemeldet, Teilfehler einer Gruppe –
+  zählt nie als Hand), Fehler wie die übrige Raumsteuerung. Pause: kein neuer Schritt, das Zurück aufs Wunschsoll geht
+  trotzdem hinaus; vor Pause, „Beobachten“ und „macht mit“ aus nimmt HeatPilot laufende Schritte einmal zurück. Protokoll im Schreibprotokoll („Ventil: …“) und als geschriebener Eintrag im
+  Ventil-Protokoll; nach einer Stunde wird nachgemessen, was wirklich geschah. Anzeige: Block „Ventile führen“ in
+  „Bereit für die Steuerung?“, Zeile im Raum-Dialog, „schreibt“ in der Vorschau. Den Vorlauf fasst die Ventilführung
+  nicht an – die Fußboden-Grenze bleibt unberührt; der Takt-Boost kommt mit Weg B.
 
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
 

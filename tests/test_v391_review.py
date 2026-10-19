@@ -328,8 +328,7 @@ def test_floor_heating_rooms_as_text_still_counts(value):
 
 
 def test_changelog_names_the_review_fixes():
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1]
-    assert head.startswith("0.39.1")
+    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.39.1")[1].split("\n## ")[0]  # seit 0.40
     for text in ("preheating", "Escape", "nur Anzeige", "halben Grad", "nicht verfügbar"):
         assert text in head, text
     assert "55 °C" not in head and "Ingo" not in head  # keine persönlichen Werte

@@ -62,6 +62,7 @@ DHW_MODES = ("aus", "trocken", "heatpilot")
 # overrides, nightplan. Bei entity/entities steht optional die erlaubte Domäne dabei (0.38: number, notify)
 FIELDS: dict[str, tuple] = {
     "control_mode": ("choice", CONTROL_MODES),
+    "valve_control": ("bool",),  # Ventile führen (0.40): eigener Schalter, wirkt nur mit control_mode heatpilot
     "sample_interval_s": ("int", 60, 900),
     "backfill_days": ("int", 0, 365),
     "statistics_backfill_days": ("int", 0, 1095),
@@ -303,6 +304,7 @@ class Config:
     mode: str = "observe"
     # Steuerung (0.34): beobachten (Standard) oder heatpilot – siehe CONTROL_MODES
     control_mode: str = "beobachten"
+    valve_control: bool = False  # Ventile führen (0.40, valve_control.py): Standard aus = nur Trockenlauf
     sample_interval_s: int = 300
     backfill_days: int = 30
     statistics_backfill_days: int = 365
@@ -420,6 +422,7 @@ class Config:
         cfg.floor_heating_rooms = floor_limit.migrate(cfg.rooms, cfg.floor_heating_rooms)  # Fußboden (0.39.1)
         if cfg.control_mode not in CONTROL_MODES:
             cfg.control_mode = "beobachten"
+        cfg.valve_control = cfg.valve_control is True  # nur ein echtes „an“ (0.40): sonst aus, nichts schreiben
         if cfg.dhw_disinfect_day not in DISINFECT_DAYS:
             cfg.dhw_disinfect_day = ""  # unbekannter Tag: kein Termin
         try:
@@ -520,6 +523,10 @@ class Config:
 
     def is_managing(self) -> bool:
         return self.control_mode == "heatpilot"
+
+    def guides_valves(self) -> bool:
+        """Ventile führen (0.40): nur mit eigenem Schalter UND „HeatPilot steuert“."""
+        return self.valve_control is True and self.is_managing()
 
     def writes_dhw(self) -> bool:
         """Weg W (0.38): schreibt HeatPilot das Warmwasser-Soll? Nur mit Schalter „heatpilot“."""

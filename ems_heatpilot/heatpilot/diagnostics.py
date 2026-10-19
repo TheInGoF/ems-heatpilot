@@ -21,7 +21,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, guards
+from . import __version__, guards, valve_control
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
 from .engine import num
 
@@ -470,9 +470,11 @@ def export(app, days: int = 14) -> dict:
             "zustand": eng.control_loop.as_dict() if eng.control_loop else None}),
         # seit 0.37: Trockenlauf – Plan der Vorschau je Stunde neben Regler/Automation (nichts davon geschrieben)
         "trockenlauf": _safe(lambda: _table(q("SELECT * FROM preview_log WHERE ts >= ? ORDER BY ts", (since,)), None)),
-        # seit 0.39: Ventilverhalten je Raum (gelernt) und Ventil-Trockenlauf (was HeatPilot verstellt hätte)
+        # seit 0.39: Ventilverhalten je Raum (gelernt) und Ventil-Trockenlauf (was HeatPilot verstellt hätte); seit
+        # 0.40 Ventile führen (Schalter, Bereitschaft je Raum, laufende Eingriffe) – geschriebene Einträge: written = 1
         "ventile": _safe(lambda: {
             "modelle": {c: eng.valve_info(c) for c in eng.valves},
+            "fuehren": valve_control.readiness(eng, int(time.time())),
             "trockenlauf": _table(q("SELECT * FROM valve_dry_log WHERE ts >= ? ORDER BY ts", (since,)), None),
             # Messpunkte mit Ersatz-Ventilwert (Sensor still, Ventil aus hvac_action) – nicht gelernt
             "ersatzwerte": _table(q("SELECT * FROM valve_subst WHERE ts >= ? ORDER BY ts", (since,)), None)}),

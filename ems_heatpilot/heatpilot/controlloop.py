@@ -19,6 +19,17 @@ Phasenwechsel – dann schreibt HeatPilot den Wunschzustand auch, wenn er sich d
 endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS`` Hinweis – seit 0.38 auch als
 Meldung über die Benachrichtigungsziele und im Problem-Sensor (``notify``), einmal je Ereignis; der erste Erfolg
 danach meldet „wieder in Ordnung“.
+Seit 0.40 legt die Ventilführung (``valve_control``, eigener Schalter „Ventile führen“, Standard aus) höchstens einen
+Schritt auf das Wunsch-Soll (früh drosseln, gemeinsam anfordern): ``plan()`` fragt sie je Raum nach dem Soll
+(``Guide.plan``) – Phasenwechsel, Hand, Boost und Pause gehen vor –, geschrieben wird es auf demselben Weg, mit
+denselben Fehlerregeln; erst ein erfolgreicher Schreibvorgang macht ihren Schritt gültig (``Guide.wrote``). Damit ein
+eigener Schritt nie als Hand zählt: Steht am Thermostat, was HeatPilot zuletzt schreiben wollte (``tried``, auch nach
+einem Teilfehler in einer Gruppe oder einem Neuaufbau während des Aufrufs) bzw. der laufende Schritt, gilt das als
+geschrieben; meldet es bis zu ``GRACE_TICKS`` Takte nach dem Schreiben noch den Wert von vorher, ist das Geschriebene
+noch nicht angekommen (``_observe``). Verwirft die Führung einen Schritt wegen Hand (auch „aus“), gilt das Wunschsoll
+als zuletzt geschrieben – die Hand bleibt dann wie oben bis zum Phasenwechsel. In der Pause geht nur das Zurück der
+Führung hinaus; vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt ``release`` laufende Schritte einmal zurück.
+Sollwerte gelten ab 0,1 K als verschieden (``_same``, mit Toleranz für Gleitkommareste).
 ``plan()`` läuft im Takt der Engine (nach ``dhw_step``) und sammelt die Schreibvorgänge,
 ``apply()`` führt sie danach aus (asynchron, nur über ``Control``). ``stop()`` (main.build beim
 Neuaufbau) hält ein noch laufendes ``apply()`` an, damit die alte Schleife nicht weiterschreibt.
@@ -33,7 +44,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import guards
+from . import guards, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .dhw_control import ACTIONS as DHW_ACTIONS
 from .dhw_control import LOG_NAME as DHW_LOG_NAME
@@ -52,6 +63,21 @@ LOG_SHOW = 20             # Protokollzeilen im Heizen-Reiter
 KV_STATE = "control.state"
 KV_PAUSE = "control.pause_until"
 NOTIFY_KEY = "room_write_failed:"  # + climate: Schreibfehler eines Raums ab MAX_FAILS (notify, seit 0.38)
+SAME_K = 0.1 - 1e-6       # Sollwerte gleich, wenn näher beieinander (kleinster Schritt 0,1 K, Gleitkommareste)
+GRACE_TICKS = 2           # so viele Takte nach dem Schreiben darf das Thermostat noch den Wert von vorher melden
+
+
+def _same(a: float | None, b: float | None) -> bool:
+    """Gleiches Soll? Unter 0,1 K Unterschied, auf 0,01 gerundet – 20,9 − 20,8 = 0,0999… zählt als ein Schritt."""
+    return a is not None and b is not None and abs(round(a, 2) - round(b, 2)) < SAME_K
+
+
+def _arriving(st: dict, current: float | None) -> bool:
+    """Meldet das Thermostat noch den Wert von vor dem letzten Schreibvorgang (``before``, auch „aus“)? Dann ist das
+    Geschriebene noch nicht angekommen – kein Hand-Eingriff."""
+    before = st.get("before")
+    return not _same(current, st.get("last_written")) and (
+        _same(current, before) or (current is None and before is None))
 
 
 @dataclass
@@ -173,6 +199,8 @@ class ControlLoop:
         self.pause_until: float | None = self.store.get(KV_PAUSE)
         self.rooms: dict[str, dict] = {}    # Anzeige je Raum (letzter plan())
         self.pending: list[tuple[str, float, str]] = []
+        self.props: dict[str, dict] = {}    # 0.40: Vorschläge der Ventilführung zu den vorgemerkten Schreibvorgängen
+        self.guide = valve_control.Guide(eng)  # Ventile führen (0.40, eigener Schalter)
         self.restores: list[tuple[str, float | None]] = []
         self.planned_ts: int | None = None
         self.stopped = False  # durch eine neue Schleife ersetzt (main.build): nichts mehr schreiben
@@ -213,22 +241,51 @@ class ControlLoop:
 
     # ------------------------------------------------------------------ Takt
     def plan(self, ts: int, sample: dict, rooms: list[tuple]) -> None:
-        """Wunschzustände bestimmen und Schreibvorgänge vormerken (schreibt selbst nichts)."""
+        """Wunschzustände bestimmen und Schreibvorgänge vormerken (schreibt selbst nichts). Seit 0.40 legt die
+        Ventilführung (``valve_control``, eigener Schalter) höchstens einen Schritt auf das Wunsch-Soll."""
+        eng = self.eng
+        self.planned_ts = ts
+        self.pending, self.restores, self.rooms, self.props = [], [], {}, {}
+        managing, paused = eng.cfg.is_managing(), self.paused(ts)
+        targets = {r.climate: self.control.target(r.climate) for r in eng.found.rooms}
+        boosts = self.control.active(targets, ts)
+        desireds = self._desireds(ts, sample, rooms, managing, paused, boosts)
+        expired = self._restores(ts, desireds, managing, paused)
+        if not managing:
+            if self.state:  # Schalter zurück auf beobachten: Schreibzustand vergessen
+                self.state = {}
+                self.store.put(KV_STATE, {})
+            self.guide.clear()
+            self._settle_problems()
+            return
+        managed = [r.climate for r in eng.found.rooms if r.managed]
+        lags = {c for c in managed if self._observe(c, targets.get(c))}
+        ctx = {c: self._context(c, desireds[c], targets.get(c), boosts, expired, c in lags) for c in managed}
+        wants = self.guide.plan(ts, sample, rooms, ctx)
+        for c in self.guide.dropped:  # Schritt wegen Hand (auch „aus“) verworfen: Bezug ist wieder das Wunschsoll
+            st = self.state.setdefault(c, {})
+            st["last_written"] = ctx[c]["base"]
+            if not ctx[c]["boost"]:  # Hand: was HeatPilot schreiben wollte, ist nicht mehr „eigen“ (ein Boost endet
+                st.pop("tried", None)  # in der Pause mit dem Soll von vorher – der Schritt bleibt dann erkennbar)
+        for room in eng.found.rooms:
+            if not room.managed:
+                self.state.pop(room.climate, None)
+                continue
+            self._decide(room.climate, desireds[room.climate], targets.get(room.climate), boosts, expired, paused,
+                         ts, wants.get(room.climate), room.climate in lags)
+        self.state = {c: s for c, s in self.state.items() if c in self.rooms}
+        self.store.put(KV_STATE, self.state)
+        self._settle_problems()
+
+    def _desireds(self, ts: int, sample: dict, rooms: list[tuple], managing: bool, paused: bool,
+                  boosts: dict) -> dict[str, Desired]:
+        """Wunschzustand je Raum und die Anzeige dazu (``self.rooms``)."""
         from .engine import local  # spät: engine importiert dieses Modul
 
         eng, cfg = self.eng, self.eng.cfg
-        now = local(ts)
-        self.planned_ts = ts
-        self.pending, self.restores, self.rooms = [], [], {}
-        readings = {r[0]: r for r in rooms}
-        managing = cfg.is_managing()
-        presence = self.presence(now, sample)
-        t_out = sample.get("t_out")
+        now, readings = local(ts), {r[0]: r for r in rooms}
+        presence, t_out = self.presence(now, sample), sample.get("t_out")
         t_out_at = eng.outdoor_forecast_at  # 0.37: Vorheizdauer mit der Außentemperatur zum Zielzeitpunkt
-        paused = self.paused(ts)
-        targets = {r.climate: self.control.target(r.climate) for r in eng.found.rooms}
-        boosts = self.control.active(targets, ts)
-
         desireds: dict[str, Desired] = {}
         for room in eng.found.rooms:
             reading = readings.get(room.climate)
@@ -247,63 +304,98 @@ class ControlLoop:
                                    5.0 if t_out is None else t_out),
                 "manual": False, "manual_until": None, "boost": room.climate in boosts,
                 "last_written": None, "errors": 0, "retry_at": None, "paused": paused and managing,
+                "valve": None, "valve_guided": False,  # 0.40: laufender Eingriff der Ventilführung, geführt?
             }
+        return desireds
 
-        # abgelaufene lokale Boosts: Wunschzustand zurück (heatpilot, Raum macht mit, keine Pause),
-        # sonst Soll von vorher
+    def _restores(self, ts: int, desireds: dict, managing: bool, paused: bool) -> set[str]:
+        """Abgelaufene lokale Boosts: Wunschzustand zurück (heatpilot, Raum macht mit, keine Pause), sonst Soll von
+        vorher. Gibt die Räume zurück."""
         expired = {c for c, _ in self.control.expired_boosts(ts)}
         for climate in expired:
-            room = eng.found.room_of(climate)
+            room = self.eng.found.room_of(climate)
             back = (desireds[climate].setpoint if managing and not paused and room is not None and room.managed
                     else None)
             self.restores.append((climate, back))
+        return expired
 
-        if not managing:
-            if self.state:  # Schalter zurück auf beobachten: Schreibzustand vergessen
-                self.state = {}
-                self.store.put(KV_STATE, {})
-            self._settle_problems()
-            return
+    def _observe(self, c: str, current: float | None) -> bool:
+        """Eigenes am Thermostat erkennen, bevor Hand zählt (0.40). Meldet es bis zu ``GRACE_TICKS`` Takte nach einem
+        Schreibvorgang noch den Wert von vorher, ist das Geschriebene noch nicht angekommen (True: keine Hand, nichts
+        Neues). Steht dort, was HeatPilot zuletzt schreiben wollte (``tried`` – auch nach einem Teilfehler in einer
+        Gruppe oder einem Neuaufbau während des Aufrufs) bzw. der laufende Schritt der Führung, gilt es als
+        geschrieben."""
+        st = self.state.get(c)
+        if not st:
+            return False
+        grace = int(st.pop("grace", 0) or 0)
+        if grace > 0 and _arriving(st, current):
+            st["grace"] = grace - 1
+            return True
+        active = self.guide.st["active"].get(c)
+        if current is not None and not _same(current, st.get("last_written")) and (
+                _same(current, st.get("tried")) or (active is not None and _same(current, active["sp"]))):
+            st["last_written"] = current
+        return False
 
-        for room in eng.found.rooms:
-            if not room.managed:
-                self.state.pop(room.climate, None)
-                continue
-            c, d, info = room.climate, desireds[room.climate], self.rooms[room.climate]
-            st = self.state.setdefault(c, {})
-            current = targets.get(c)
-            last = st.get("last_written")
-            phase_changed = st.get("phase") != d.phase
-            manual = last is not None and current is not None and abs(current - last) >= 0.1 and c not in boosts
-            if manual and abs(current - d.setpoint) < 0.1:  # von Hand genau auf den Wunsch gedreht
-                st["last_written"], last, manual = current, current, False
-            write = False
-            if c in boosts:
-                st["boosted"] = True
-            elif c in expired:
-                st.pop("boosted", None)  # Wiederherstellung läuft über end_boost (restores), nicht doppelt
-            elif st.pop("boosted", False):
-                write = current is None or abs(current - d.setpoint) >= 0.1  # nach dem Boost zurück zum Wunsch
-            elif phase_changed and (current is None or abs(current - d.setpoint) >= 0.1):
-                write = True  # Phasenwechsel beendet Handänderung/„aus“, auch wenn das Wunsch-Soll gleich bleibt
-            elif last is None or abs(d.setpoint - last) >= 0.1:
+    def _context(self, c: str, d: Desired, current: float | None, boosts: dict, expired: set,
+                 lag: bool = False) -> dict:
+        """Was die Ventilführung über einen Raum wissen muss: Wunsch-Soll, Phase, Phasenwechsel, Hand (gedreht, „aus“,
+        Boost) und ob das Thermostat auf dem zuletzt Geschriebenen steht (``lag``: Geschriebenes noch nicht da)."""
+        st = self.state.get(c, {})
+        last = st.get("last_written")
+        reset = st.get("phase") != d.phase
+        touched = not lag and last is not None and not _same(current, last)
+        boosted = c in boosts or c in expired or bool(st.get("boosted"))
+        return {"base": d.setpoint, "phase": d.phase, "reset": reset, "hands": boosted or (touched and not reset),
+                "boost": boosted, "settled": not lag and _same(current, last)}
+
+    def _decide(self, c: str, d: Desired, current: float | None, boosts: dict, expired: set, paused: bool,
+                ts: int, want=None, lag: bool = False) -> None:
+        """Schreiben oder nicht – nur bei einer Änderung des Wunsch-Solls (bzw. des geführten Solls), Hand bis zum
+        Phasenwechsel, Boost, Pause (außer dem Zurück der Ventilführung), Wartezeit nach Fehlern."""
+        from .engine import local
+
+        st, info = self.state.setdefault(c, {}), self.rooms[c]
+        last = st.get("last_written")
+        phase_changed = st.get("phase") != d.phase
+        manual = not lag and last is not None and current is not None and not _same(current, last) and c not in boosts
+        if manual and _same(current, d.setpoint):  # von Hand genau auf den Wunsch gedreht
+            st["last_written"], last, manual = current, current, False
+        sp, reason, prop, write = d.setpoint, f"{d.phase}: {d.reason}", None, False
+        if c in boosts:
+            st["boosted"] = True
+        elif c in expired:
+            st.pop("boosted", None)  # Wiederherstellung läuft über end_boost (restores), nicht doppelt
+        elif st.pop("boosted", False):
+            write = not _same(current, d.setpoint)  # nach dem Boost zurück zum Wunsch (auch nach „aus“)
+        elif phase_changed and not _same(current, d.setpoint):
+            write = True  # Phasenwechsel beendet Handänderung/„aus“, auch wenn das Wunsch-Soll gleich bleibt
+        else:
+            if want is not None:  # Ventilführung (0.40): geführtes Soll, Grund nur bei einer Änderung
+                sp, reason, prop = want.sp, want.reason or reason, want.prop
+            if last is None or not _same(sp, last):
                 write = not manual or phase_changed
-            if manual and phase_changed:
-                manual = False
-            st["phase"] = d.phase
-            retry_at = st.get("retry_at")
-            if write and retry_at and ts < retry_at:
-                write = False
-            if write and paused:
-                write = False
-            if write:
-                self.pending.append((c, d.setpoint, f"{d.phase}: {d.reason}"))
-            info.update({"manual": manual, "manual_until": _iso(d.until) if manual else None,
-                         "last_written": st.get("last_written"), "errors": int(st.get("fails", 0)),
-                         "retry_at": None if not retry_at or ts >= retry_at else _iso(local(retry_at))})
-        self.state = {c: s for c, s in self.state.items() if c in self.rooms}
-        self.store.put(KV_STATE, self.state)
-        self._settle_problems()
+        if manual and phase_changed:
+            manual = False
+        st["phase"] = d.phase
+        retry_at = st.get("retry_at")
+        back = prop is not None and prop["action"] == "zurück"  # Zurück der Ventilführung: auch in der Pause (0.40)
+        if write and ((retry_at and ts < retry_at) or (paused and not back)):
+            write = False
+        if write:
+            self.pending.append((c, sp, reason))
+            st["tried"], st["before"] = sp, current  # eigen, auch wenn der Aufruf nur teilweise oder spät ankommt
+            if prop is not None:
+                self.props[c] = prop
+        info.update({"manual": manual, "manual_until": _iso(d.until) if manual else None,
+                     "last_written": st.get("last_written"), "errors": int(st.get("fails", 0)),
+                     "retry_at": None if not retry_at or ts >= retry_at else _iso(local(retry_at)),
+                     "valve": self.guide.room_info(c), "valve_guided": c in self.guide.guided})
+
+    def guided_rooms(self) -> set[str]:
+        """Räume, die die Ventilführung gerade führt – der Trockenlauf (``valve_dry.step``) rechnet sie nicht mit."""
+        return set(self.guide.guided)
 
     # ------------------------------------------------------------------ Meldungen (0.38)
     def _notifier(self):
@@ -334,20 +426,29 @@ class ControlLoop:
             n.solved(NOTIFY_KEY + climate, f"{room.name if room else climate}: Thermostat nimmt das Soll wieder an")
 
     async def apply(self) -> None:
-        """Vorgemerkte Schreibvorgänge ausführen – nur über Control (erlaubte Dienste, gewählte Räume)."""
-        pending, restores = self.pending, self.restores
-        self.pending, self.restores = [], []
+        """Vorgemerkte Schreibvorgänge ausführen – nur über Control (erlaubte Dienste, gewählte Räume). Ein Schritt der
+        Ventilführung (0.40) geht in der Schrittweite des Thermostats hinaus, nur solange ihr Schalter wirkt; erst der
+        Erfolg macht ihn gültig (``Guide.wrote``)."""
+        pending, restores, props = self.pending, self.restores, self.props
+        self.pending, self.restores, self.props = [], [], {}
         now = self.planned_ts or time.time()  # dieselbe Uhr wie plan()
         for climate, setpoint, reason in pending:
             if self.stopped or not self.eng.cfg.is_managing():  # inzwischen ersetzt bzw. Schalter beobachten
                 log.info("HeatPilot: Schreibvorgänge verworfen – Schleife ersetzt oder Steuerung aus")
                 break
             st, info = self.state.setdefault(climate, {}), self.rooms.get(climate, {})
+            prop = props.get(climate)
+            if prop is not None and prop["action"] != "zurück" and not self.eng.cfg.guides_valves():
+                continue  # Ventile führen inzwischen aus: keinen Schritt mehr schreiben
             try:
-                await self.control.apply(climate, setpoint, reason)
-                st["last_written"], st["fails"] = setpoint, 0
+                await self.control.apply(climate, setpoint, reason, *(() if prop is None else (prop["step"],)))
+                st["last_written"], st["fails"], st["grace"] = setpoint, 0, GRACE_TICKS
                 st.pop("retry_at", None)
-                info.update({"last_written": setpoint, "errors": 0, "retry_at": None})
+                if not self.stopped:  # sofort – ersetzt (main.build), füllt die alte Schleife den kv nicht wieder
+                    self.store.put(KV_STATE, self.state)  # (die neue erkennt den Schritt an ``tried`` aus plan())
+                self.guide.wrote(climate, now, prop, save=not self.stopped)
+                info.update({"last_written": setpoint, "errors": 0, "retry_at": None,
+                             "valve": self.guide.room_info(climate)})
                 log.info("HeatPilot: %s → %.1f °C (%s)", climate, setpoint, reason)
                 self._report(climate, 0)
             except Exception as err:  # noqa: BLE001 – loggen, später erneut
@@ -369,6 +470,34 @@ class ControlLoop:
                 log.warning("Boost %s: Wiederherstellen fehlgeschlagen (%s)", climate, err)
         if (pending or restores) and not self.stopped:
             self.store.put(KV_STATE, self.state)
+
+    async def release(self, keep: set[str], why: str) -> int:
+        """Ventile führen (0.40): laufende Schritte der Räume außerhalb von ``keep`` einmal zurück aufs Wunschsoll – vor
+        einer Pause (alle Räume) und bevor eine neue Schleife einen Raum nicht mehr führen darf („Beobachten“, „macht
+        mit“ aus, Raum entfernt; ``main.build``). Geschrieben wird noch unter den Einstellungen, unter denen der Schritt
+        entstand (HeatPilot steuert, Raum macht mit), über denselben Weg – und nur, wenn der Schritt noch am Thermostat
+        steht (sonst gilt die Hand, auch „aus“). Gibt die Zahl der Schreibvorgänge zurück."""
+        if self.stopped or not self.eng.cfg.is_managing():
+            return 0
+        now, done = int(time.time()), 0
+        for c, want in self.guide.give_back(set(self.guide.st["active"]) - set(keep), why, now).items():
+            room, st = self.eng.found.room_of(c), self.state.setdefault(c, {})
+            current, step_sp = self.control.target(c), self.guide.st["active"][c]["sp"]
+            arriving = bool(st.get("grace")) and _arriving(st, current)  # eben geschrieben, noch nicht gemeldet
+            if room is None or not room.managed or not (_same(current, step_sp) or arriving):
+                continue
+            try:
+                await self.control.apply(c, want.sp, want.reason, want.prop["step"])
+            except Exception as err:  # noqa: BLE001 – der Schritt bleibt stehen, höchstens einer neben dem Wunschsoll
+                log.warning("HeatPilot: %s nicht zurück auf %.1f °C gesetzt (%s)", c, want.sp, err)
+                continue
+            st.update(last_written=want.sp, tried=want.sp, before=current, grace=GRACE_TICKS)
+            self.guide.wrote(c, now, want.prop)
+            done += 1
+            log.info("HeatPilot: %s → %.1f °C (%s)", c, want.sp, want.reason)
+        if done:
+            self.store.put(KV_STATE, self.state)
+        return done
 
     # ------------------------------------------------------------------ Anzeige
     def desired_setpoints(self) -> dict[str, float]:
