@@ -7,8 +7,12 @@ Erlaubt sind ausschließlich diese Aufrufe auf die ``climate.*``-Entitäten der 
 * ``climate.set_temperature`` – Soll eines Raums (Bedienung, Regelschleife, lokaler Boost),
 * ``climate.set_hvac_mode`` – Zeitplan (``auto``), Aus (``off``) oder Manuell (``heat``).
 
-Alles andere – auch jeder Schreibzugriff auf EMS-ESP – wird hart abgewiesen. Jeder erfolgreiche
-Schreibvorgang landet im Protokoll ``control_log`` (Raum, Dienst, Wert, Grund).
+Alles andere – andere Dienste und Entitäten außerhalb der gewählten Räume – wird hart abgewiesen.
+Eine eigene Sperre für EMS-ESP gibt es hier nicht: Wählt jemand den Heizkreis von EMS-ESP
+(``climate.…_thermostat_hc1``) als Raum, ginge ``climate.set_temperature`` über Home Assistant an
+den Regler. Die Erkennung schlägt ihn deshalb nicht vor (``discovery._EMS_CLIMATE``), die Doku rät
+davon ab; an EMS-ESP selbst schickt HeatPilot nur Lese-Anfragen (``emsesp.py``, GET). Jeder
+erfolgreiche Schreibvorgang landet im Protokoll ``control_log`` (Raum, Dienst, Wert, Grund).
 
 Ein Raum ist eine Gruppe (``discovery.Room``): mit Raumregler wird nur dieser beschrieben,
 sonst alle Ventile des Raums. Boost auf Knopfdruck: Tado-Cloud-Entitäten über den Tado-Timer,
