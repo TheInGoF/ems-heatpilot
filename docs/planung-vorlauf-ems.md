@@ -79,7 +79,9 @@ geht also nur ohne ES73. Ingo baut den ES73 ab, sobald HeatPilot den Kessel übe
 ## Warmwasser-Soll schon vor Weg B (Weg W)
 
 Weil HA das Speicher-Soll heute schon schreibt und der ES73 es stehen lässt, kann HeatPilot diese Aufgabe
-**vor** dem Abbau des ES73 übernehmen – als kleiner, eigener Schritt:
+**vor** dem Abbau des ES73 übernehmen – als kleiner, eigener Schritt. **Entschieden** (Ingo, 19.10.2026):
+HeatPilot soll das Warmwasser-Zeitprogramm übernehmen können. Reihenfolge: Vorschau in 0.37, danach
+Weg W als eigene Version.
 
 - HeatPilot setzt `wwseltemp` je Stunde aus seiner Warmwasser-Empfehlung (Komfort plus Reserve je
   Ereignis, Minimum sonst, Legionellen-Ladung genutzt statt nachgeheizt, Anwesenheit). Die HA-Automation
