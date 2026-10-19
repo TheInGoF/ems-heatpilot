@@ -69,12 +69,28 @@ geht also nur ohne ES73. Ingo baut den ES73 ab, sobald HeatPilot den Kessel übe
    - Vorschau/Trockenlauf je Stunde: Vorlauf-Soll, Heizbetrieb an/aus, Warmwasser-Soll (0.37) – verglichen
      mit dem, was der ES73 tatsächlich setzt (`sel_flow`, Speicher-Soll), mindestens einige Wochen Heizbetrieb.
    - Eigene Witterungsführung (Heizkurve aus Haus- und Raummodellen) als Grundlage der Vorschau.
-   - Warmwasser-Zeitprogramm und Desinfektion als Einstellung in HeatPilot (Desinfektion 0.36.3), Termine
-     zunächst wie im ES73.
+   - Warmwasser-Soll über HeatPilot statt HA-Automation (Weg W, unten) und Desinfektion als Einstellung
+     in HeatPilot (0.36.3), Termin zunächst wie im ES73.
    - „Bereit für die Steuerung?“ zeigt alle nötigen Kessel-Steuerungen als vorhanden und schreibbar.
 3. **Umstieg:** eigener Schalter „Kessel: HeatPilot“, erst Trockenlauf mit Protokoll, dann schreiben.
    ES73 erst danach abbauen. Wächter in HA (HeatPilot-Sensor älter als 1 h → Kessel auf festen Vorlauf
    45 °C und Warmwasser 50 °C).
+
+## Warmwasser-Soll schon vor Weg B (Weg W)
+
+Weil HA das Speicher-Soll heute schon schreibt und der ES73 es stehen lässt, kann HeatPilot diese Aufgabe
+**vor** dem Abbau des ES73 übernehmen – als kleiner, eigener Schritt:
+
+- HeatPilot setzt `wwseltemp` je Stunde aus seiner Warmwasser-Empfehlung (Komfort plus Reserve je
+  Ereignis, Minimum sonst, Legionellen-Ladung genutzt statt nachgeheizt, Anwesenheit). Die HA-Automation
+  wird dann abgeschaltet – zwei Schreiber gleichzeitig darf es nicht geben (Hinweis in der Oberfläche).
+- Eigener Schalter „Warmwasser: HeatPilot“, getrennt von der Raumsteuerung; erst Trockenlauf (Vorschau
+  in 0.37 zeigt, was geschrieben würde, neben dem, was die Automation tatsächlich setzt), dann schreiben.
+- Grenzen: `dhw_min_temp` bis `dhw_max_temp` aus den Einstellungen, höchstens ein Schreibvorgang je
+  Stunde, Protokoll wie `control_log`. Fällt HeatPilot aus, bleibt das letzte Soll stehen – darum nie
+  unter das Minimum.
+- Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
+  `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an).
 
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
 
@@ -151,9 +167,10 @@ Folgerungen:
    „writeable“)? Besonders `mode`, `remotetemp`, `offsettemp`, `designtemp`, `wwmode`.
 2. ~~Nimmt der BK15 `boiler/selflowtemp` an, solange der ES73 am Bus hängt?~~ **Nein** – der ES73
    überschreibt alle 60 s (Ingo, 19.10.2026). Daraus folgt Weg B.
-3. Liegt das Warmwasser-Zeitprogramm (04:35 / 21:05) im ES73 oder im Kessel? Die Desinfektion (So 13:00)
-   kommt aus dem ES73 – der Kessel hat dafür keinen Timer, nur `wwdisinfecting` an/aus. Vermutlich gilt
-   dasselbe für das Zeitprogramm; dann muss HeatPilot es ebenfalls übernehmen.
+3. ~~Liegt das Warmwasser-Zeitprogramm im ES73 oder im Kessel?~~ **Weder noch** – eine HA-Automation setzt
+   das Speicher-Soll (`wwseltemp`): 55 °C, Nacht, Abwesenheit (Ingo, 19.10.2026). Der ES73 hat dafür kein
+   richtiges Zeitprogramm und überschreibt diesen Wert nicht. Die Desinfektion (So 13:00) kommt dagegen aus
+   dem ES73 – der Kessel hat dafür keinen Timer, nur `wwdisinfecting` an/aus.
 4. Moduliert der BK15 die Heizkreispumpe selbst, oder gibt der ES73 die Pumpe vor?
 5. EEPROM-Grenzen des ES73 (Buderus nennt für RC35 begrenzte Schreibzyklen) – wie oft darf die Kurve
    geändert werden?
