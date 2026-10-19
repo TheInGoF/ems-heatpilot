@@ -90,8 +90,8 @@ Weg W als eigene Version.
   in 0.37 zeigt, was geschrieben würde, neben dem, was die Automation tatsächlich setzt), dann schreiben.
 - Grenzen: `dhw_min_temp` bis `dhw_max_temp` aus den Einstellungen. Fällt HeatPilot aus, bleibt das
   letzte Soll stehen – darum nie unter das Minimum.
-- **Schreiben nur bei Änderung** (Ingo): kein „55, 55, 55“ – nur wenn sich das Soll ändert. Der Kessel
-  hält den Wert dann selbst.
+- **Schreiben nur bei Änderung** (Ingo): kein „55, 55, 55“ – nur wenn sich das Soll um mindestens 1 K
+  ändert. Der Kessel hält den Wert dann selbst.
 - **Haltezeit 5 min nach jedem Schreiben**, kein Viertelstunden-Raster: Schreibt HeatPilot um 15:03 55 °C
   (jemand kommt bald heim), darf es bis 15:08 nicht umentscheiden; danach sofort, wenn nötig.
 - **Nach 60 s prüfen**, ob der Kessel ihn übernommen hat (`wwseltemp` zurücklesen). Wenn nicht: Fehler im
@@ -113,6 +113,9 @@ Der Vorlauf braucht mehr als das Warmwasser (Ingo): **live** – HeatPilot rechn
 Nachkommastellen nicht jedes Mal schreiben). Wie beim Warmwasser: nur bei Änderung, 60 s danach
 zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/aus bekommt dieselbe
 5-min-Haltezeit wie das Warmwasser, damit der Kessel nicht hin und her schaltet.
+
+**Schwellen fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll
+(Thermostate, sobald das Soll nach Ventilstellung gleitend wird) ab 0,5 K.
 
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
 
