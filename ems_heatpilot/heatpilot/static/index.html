@@ -87,7 +87,6 @@ input[type=checkbox] { width: 16px; height: 16px; }
 .btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; font-weight: 600; }
 .btn.small { padding: 3px 9px; font-size: 12px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-#outdoor-list .row input, #power-list .row input, #power-ex-list .row input { flex: 1; width: auto; min-width: 0; }
 .msg-ok { color: var(--good); } .msg-err { color: #e34948; }
 .savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; border-top: 1px solid var(--border);
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -177,6 +176,10 @@ table.plan td.np-learned { white-space: nowrap; font-size: 12px; } table.plan .b
 table.form input[type=checkbox] { min-width: 0; } table.form input.r-comfort { min-width: 72px; width: 72px; }
 /* Räume (0.35): Voreinstellung/Stufen klein; Empfehlungen: Erwartung je Raum als Chips, Wirkungszeile abgesetzt */
 table.form input.r-preset, table.form input.r-preset-max { min-width: 60px; width: 60px; }
+/* Fußboden (0.39.1): Anschluss als Auswahl, darunter der höchste Vorlauf – schmal, damit die Tabelle nicht wächst */
+table.form select.r-floor { min-width: 132px; } table.form input.r-floor-max { min-width: 64px; width: 64px; }
+.r-floor-box { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.r-floor-box[hidden] { display: none; }
 .adv-exp { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0 2px; font-size: 12px; color: var(--text-secondary); align-items: center; }
 .adv-exp span { padding: 1px 7px; border-radius: 99px; border: 1px solid var(--border); white-space: nowrap; }
 .adv-exp span.down { border-color: var(--good); color: var(--good); }
@@ -291,6 +294,58 @@ table.notify-t td { vertical-align: middle; overflow-wrap: anywhere; }
 .msg-warn { color: var(--warn); }
 .card .notify-state p { margin: 8px 0 0; } .notify-state ul.cmp-facts { margin: 4px 0 0; }
 code { font-size: 12px; overflow-wrap: anywhere; }
+/* Entitäten (0.39.1): Umschalter „Allgemein | Entitäten“ oben in den Einstellungen; Gruppen als aufklappbare Karten mit
+   Zähler, je Rolle eine Zeile (Name und Zweck · was gilt · ändern) mit Auswahl und Suche; am Handy untereinander */
+.set-nav { margin: 0 0 14px; max-width: 360px; }
+.em-alert { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 6px; border-radius: 99px; background: #e34948;
+  color: #fff; font-size: 11px; line-height: 18px; font-weight: 700; }
+.em-alert[hidden] { display: none; }
+.em-top { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; margin: 0 0 12px;
+  font-size: 13px; color: var(--text-secondary); }
+.em-filter { display: flex; gap: 6px; align-items: center; cursor: pointer; color: var(--text-primary); }
+details.em-group { margin-bottom: 12px; }
+details.em-group > summary h2 { display: inline; }
+.em-count { margin-left: 8px; font-size: 12px; color: var(--text-muted); }
+.card p.em-gtext { margin: 8px 0 2px; }
+.em-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.25fr) minmax(0, 1fr); gap: 4px 16px;
+  padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.em-name b { color: var(--text-primary); }
+.em-why { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.em-now { color: var(--text-secondary); min-width: 0; }
+.em-ent { margin-top: 3px; overflow-wrap: anywhere; }
+.em-ent b { color: var(--text-primary); font-weight: 600; }
+.em-k { color: var(--text-secondary); }
+.em-x { padding: 0 7px; margin-left: 4px; }
+.em-pick { display: flex; gap: 6px; align-items: center; }
+.em-pick input { flex: 1; width: auto; min-width: 0; }
+.em-list { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); max-height: 320px;
+  overflow-y: auto; margin-top: 4px; }
+.em-list[hidden] { display: none; }
+.em-opt { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--border);
+  background: none; color: var(--text-primary); font: inherit; font-size: 13px; cursor: pointer; }
+.em-opt:hover, .em-opt.on { background: var(--surface-1); box-shadow: inset 3px 0 0 var(--series-1); }
+.em-opt code, .em-opt .muted { display: block; }
+.em-opt.unfit > span:first-child { color: var(--text-secondary); }
+.em-more { padding: 6px 10px; font-size: 12px; color: var(--text-muted); }
+.badge.em-req { border-color: var(--series-1); color: var(--series-1); }
+.badge.em-badge { margin-right: 4px; }
+.badge.em-s-auto { border-color: var(--good); color: var(--good); }
+.badge.em-s-set { border-color: var(--series-1); color: var(--series-1); }
+.badge.em-s-miss { border-color: #e34948; color: #e34948; }
+.badge.em-s-off { border-color: var(--warn); color: var(--warn); }
+.em-row.em-wide .em-edit { grid-column: 1 / -1; }
+.em-row.em-wide table.form { margin-top: 4px; }
+.em-changed .em-name b::after { content: " •"; color: var(--series-1); }
+.em-none { display: none; }
+.em-only .em-row[data-issue="0"] { display: none; }
+.em-only details.em-clean .em-none { display: block; margin: 8px 0 0; }
+details.em-fold { border-top: 1px solid var(--border); padding: 8px 0 0; font-size: 13px; }
+details.em-fold > summary { padding: 2px 0 6px; }
+.em-only details.em-fold:not(:has(.em-row[data-issue="1"])) { display: none; }
+.card p.em-ref { font-size: 13px; color: var(--text-secondary); margin: 8px 0; }
+.card p.em-ref code { color: var(--text-primary); }
+tr.room.room-flash td { background: rgba(42, 120, 214, .14); }
+@media (max-width: 760px) { .em-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
 </style>
 </head>
 <body>
@@ -374,7 +429,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
         <div class="row"><input id="sensor-filter" placeholder="Filter, z. B. Raum, pump, fehlt" oninput="renderSensors()" style="width:220px">
           <label class="muted"><input type="checkbox" id="sensor-unused" onchange="renderSensors()"> auch nicht verwendete EMS-ESP-Werte</label>
           <button class="btn small" onclick="loadSensors()">Aktualisieren</button></div></div>
-      <p>Was HeatPilot liest – wofür, woher, wie es in Home Assistant heißt und was es gerade meldet. Hier sieht man schnell, was fehlt, veraltet ist oder unsinnige Werte liefert und besser abgewählt oder unter „Zuordnungen“ korrigiert wird.</p>
+      <p>Was HeatPilot liest – wofür, woher, wie es in Home Assistant heißt und was es gerade meldet. Hier sieht man schnell, was fehlt, veraltet ist oder unsinnige Werte liefert und besser abgewählt oder unter Einstellungen → Entitäten korrigiert wird.</p>
       <div class="scroll"><table id="sensor-table" style="font-size:12px"></table></div>
     </div>
     <div class="card">
@@ -860,7 +915,7 @@ async function loadLive() {
     tile("Rücklauf", fmt(n.ret), "°C", n.flow !== null && n.ret !== null ? `Spreizung ${fmt(n.flow - n.ret)} K` : ""),
     tile("Heizungspumpe", n.pump_on === null || n.pump_on === undefined ? (n.pump_mod !== null ? (n.pump_mod > 0 ? "an" : "aus") : "–") : n.pump_on ? "an" : "aus",
       n.pump_mod !== null ? `· ${fmt(n.pump_mod, 0)} %` : "",
-      n.pump_on === null && n.pump_mod === null ? "Wert fehlt – unter Einstellungen → Zuordnungen „Heizungspumpe“/„Pumpenmodulation“ prüfen"
+      n.pump_on === null && n.pump_mod === null ? "Wert fehlt – unter Einstellungen → Entitäten „Heizungspumpe“/„Pumpenmodulation“ prüfen"
         : "Drehzahl (Modulation) in %" + (n.pump_delay ? ` · läuft ${fmt(n.pump_delay, 0)} min nach` : "")),
     tile("Kesselstatus", n.service_code ? esc(n.service_code) : "–", "", SERVICE_CODES[n.service_code] || "Servicecode des Kessels"),
     tile("Anlagendruck", fmt(n.syspress, 1), "bar", n.syspress === null || n.syspress === undefined ? "" : n.syspress < 1 ? "⚠ niedrig – nachfüllen lassen" : n.syspress > 2.5 ? "⚠ hoch" : "in Ordnung (1,0–2,5 bar)"),
@@ -1280,7 +1335,7 @@ const trendK = (d) => d === 0 ? "±0 K" : `${d < 0 ? "−" : "+"}${fmt(Math.abs(
 function forecastTile(f, weather) {
   const off = (value, note) => `<div class="tile off" id="tile-forecast"><div class="label">Vorhersage</div><div class="value">${value}</div><div class="muted">${note}</div></div>`;
   if (!f) return weather ? off("keine Daten", `${esc(weather)} liefert keine stündliche Vorhersage – HeatPilot fragt stündlich nach`)
-    : off("keine Wetter-Entität", "Einstellungen → Messwerte → Wetter");
+    : off("keine Wetter-Entität", "Einstellungen → Entitäten → Außen & Wetter");
   const m = f.age_min, age = m === null || m === undefined ? "" : ` · Stand vor ${m < 120 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} Tagen`}`;
   const n = f.next12;
   if (!n) return off("keine Daten", `keine Werte für die nächsten 12 h${age}`);
@@ -1458,7 +1513,7 @@ async function load() {
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
 }
 // ---------------------------------------------------------------- Einstellungen
-let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
+let SET = null, ENT = [], SUG = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
 let DIS = null;  // Desinfektion (0.36.3): GET api/settings → disinfect
 let DHWC = null, NOTIFY = null;  // 0.38: GET api/settings → dhw_control (Weg W) und notify (Benachrichtigungen)
 function sunText(g, updates) {
@@ -1745,7 +1800,8 @@ function pvBasis(p) {
   for (const r of p.rooms_skipped || []) (why[r.why] = why[r.why] || []).push(esc(r.name));
   const used = (p.rooms_used || []).map(esc).join(", "), skip = Object.entries(why).map(([w, n]) => `${n.join(", ")} (${esc(w)})`).join("; ");
   const rooms = used ? `Vorlauf aus ${used}${skip ? ` · nicht dabei: ${skip}` : ""}.` : skip ? `Nicht dabei: ${skip}.` : "";
-  return `${mode} ${out}${rooms ? " " + rooms : ""}`;
+  const floor = p.floor && p.floor.text ? " " + esc(p.floor.text) : "";  // Fußboden-Grenze (0.39.1), ältere Version: nichts
+  return `${mode} ${out}${rooms ? " " + rooms : ""}${floor}`;
 }
 // Legende wie die Marken: Linie, gestrichelte Linie, Band, Streifen, Ring
 function pvLegend(p) {
@@ -2542,20 +2598,13 @@ function showTab(name) {
 }
 
 const isTemp = (e) => e.id.startsWith("sensor.") && (e.device_class === "temperature" || e.unit === "°C");
-// Leistung (0.36): nur sensor.* mit device_class power oder Einheit W/kW – Hausleistung und Ausschlüsse
-const isPower = (e) => e.id.startsWith("sensor.") && (e.device_class === "power" || e.unit === "W" || e.unit === "kW");
 const isSensor = (e) => e.id.startsWith("sensor.") || e.id.startsWith("counter.");
 const PICKERS = {
   temp: { filter: isTemp, label: "Temperatur-Sensoren" },
-  power: { filter: isPower, label: "Leistungssensoren" },
   sensor: { filter: isSensor, label: "Sensoren" },
-  weather: { filter: (e) => e.id.startsWith("weather."), label: "Wetter" },
-  climate: { filter: (e) => e.id.startsWith("climate."), label: "Thermostate" },
-  toggle: { filter: (e) => /^(input_boolean|switch|binary_sensor)\./.test(e.id), label: "Schalter" },
   // Warmwasser-Soll (0.38): nur number mit °C ohne andere Rolle (api/entities: dhw.fits), Vorschlag und Namen mit
   // Warmwasser-Hinweis zuerst
   dhw: { filter: (e) => !!(e.dhw && e.dhw.fits), sort: (a, b) => dhwRank(b) - dhwRank(a), label: "Warmwasser-Soll (number, °C)" },
-  any: { filter: () => true, label: "Alle" },
 };
 
 const dhwRank = (e) => (e.id === (DHWC || {}).suggested ? 2 : 0) + (e.dhw && e.dhw.hint ? 1 : 0);
@@ -2563,7 +2612,6 @@ function datalists() {
   return Object.entries(PICKERS).map(([key, p]) =>
     `<datalist id="dl-${key}">${ENT.filter(p.filter).sort(p.sort || (() => 0)).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}${e.state != null ? " · " + esc(e.state) + (e.unit ? " " + esc(e.unit) : "") : ""}</option>`).join("")}</datalist>`).join("");
 }
-const ent = (id, value, picker, ph = "") => `<input id="${id}" list="dl-${picker}" value="${esc(value)}" placeholder="${esc(ph)}" autocomplete="off">`;
 const field = (label, inner, hint = "") => `<div class="field"><label>${label}</label>${inner}${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
 const num = (id, value, step = "any") => `<input id="${id}" type="number" step="${step}" value="${esc(value)}">`;
 const tim = (id, value) => `<input id="${id}" type="time" value="${esc(value)}">`;
@@ -2596,6 +2644,34 @@ const climateEntities = () => ENT.filter((e) => e.id.startsWith("climate.")).sor
   // nach Bereich (ohne Bereich zuletzt), dann Name – die Geräte eines Zimmers stehen untereinander
   (a.area ? 0 : 1) - (b.area ? 0 : 1) || String(a.area || "").localeCompare(String(b.area || ""), "de")
   || String(a.name || "").localeCompare(String(b.name || ""), "de"));
+// Fußbodenheizung je Raum (0.39.1): Anschluss (floor_type) und höchster Vorlauf (floor_max_flow) am Raum-Eintrag – wie
+// floor_limit im Backend. Ein Raum aus floor_heating_rooms ohne Anschluss (Einstellungen vor 0.39.1) zeigt „Anschluss
+// wählen“ und gilt bis dahin wie direkt am Kessel; Speichern ohne Wahl lässt ihn so
+const FLOOR_KINDS = { "": "kein Fußboden", mischer: "mit Mischer", rtl: "mit RTL-Ventil", direkt: "direkt am Kessel", unbekannt: "Anschluss wählen" };
+const FLOOR_MAX = { def: 45, min: 25, max: 70 };
+const FLOOR_HINT = { mischer: "Mischer regelt selbst – keine Grenze", rtl: "gilt, solange der Raum Wärme anfordert",
+  direkt: "gilt immer", unbekannt: "gilt immer, bis der Anschluss gewählt ist" };
+const floorKind = (c, r) => r.floor_type && r.floor_type !== "unbekannt" && FLOOR_KINDS[r.floor_type] ? r.floor_type
+  : (SET.floor_heating_rooms || []).includes(c) ? "unbekannt" : "";
+function floorCell(c, r) {
+  const k = floorKind(c, r), limit = k && k !== "mischer";
+  const opts = Object.entries(FLOOR_KINDS).filter(([v]) => v !== "unbekannt" || k === "unbekannt")
+    .map(([v, t]) => `<option value="${v}"${v === k ? " selected" : ""}>${t}</option>`).join("");
+  return `<select class="sel r-floor" onchange="floorSync(this)" title="Fußbodenheizung im Raum und wie sie angeschlossen ist">${opts}</select>` +
+    `<label class="r-floor-box"${limit ? "" : " hidden"}>höchster Vorlauf (°C) <input type="number" class="r-floor-max" min="${FLOOR_MAX.min}" max="${FLOOR_MAX.max}" step="0.5" value="${esc(r.floor_max_flow ?? "")}" placeholder="${FLOOR_MAX.def}" title="So heiß darf der Vorlauf höchstens werden, wenn die Grenze gilt – leer = ${FLOOR_MAX.def} °C"></label>` +
+    `<div class="hint muted r-floor-hint">${FLOOR_HINT[k] || ""}</div>`;
+}
+// Auswahl geändert: Feld „höchster Vorlauf“ nur bei RTL-Ventil, direkt am Kessel und unbekanntem Anschluss
+function floorSync(sel) {
+  const td = sel.parentNode, k = sel.value;
+  td.querySelector(".r-floor-box").hidden = !k || k === "mischer";
+  td.querySelector(".r-floor-hint").textContent = FLOOR_HINT[k] || "";
+}
+// Speichern: „Anschluss wählen“ bleibt ohne Anschluss (nur in floor_heating_rooms), die Grenze nur, wo sie gilt
+function floorOf(tr) {
+  const k = tr.querySelector(".r-floor").value, max = tr.querySelector(".r-floor-max").value.trim();
+  return { floor_type: k === "unbekannt" ? "" : k, floor_max_flow: k && k !== "mischer" ? max : "", floor: !!k };
+}
 function roomRows() {
   const climates = climateEntities();
   const chosen = Object.fromEntries((SET.rooms || []).map((r) => [r.climate, r]));
@@ -2630,7 +2706,7 @@ function roomRows() {
       <td><input class="r-group" value="${esc(group)}" placeholder="${esc(area || "z. B. Wohnzimmer")}"></td>
       <td style="text-align:center"><input type="checkbox" class="r-controller" ${controller ? "checked" : ""}>${wallHint ? `<div class="hint">${wallHint}</div>` : ""}</td>
       <td>${esc(c.platform || "–")}${c.platform && c.platform !== "tado" && c.platform !== "homekit_controller" ? '<div class="hint">kein Tado – wirklich ein Raum?</div>' : ""}</td>
-      <td style="text-align:center"><input type="checkbox" class="r-floor" ${(SET.floor_heating_rooms || []).includes(c.id) ? "checked" : ""}></td>
+      <td>${floorCell(c.id, r)}</td>
       <td><input type="number" class="r-preset" min="0" max="${pmax}" step="1" value="${esc(r.preset ?? "")}" placeholder="–" title="Aktuelle Voreinstellung am Ventilunterteil, z. B. 5 – leer = unbekannt"></td>
       <td><input type="number" class="r-preset-max" min="0" max="${pmax}" step="1" value="${esc(r.preset_max ?? "")}" placeholder="–" title="Zahl der Stufen, z. B. 6 – leer = unbekannt, 0 = kein Voreinstellventil (Rücklaufverschraubung)"></td>
       <td><input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || sibling(c, "heating_power"))}" placeholder="Ventil % (optional)"></td>
@@ -2674,12 +2750,6 @@ function learnedHint(key, show) {
   if (l === null || l === undefined || src === "wochenplan") return "";  // bei „HeatPilot steuert“ gilt der Wochenplan
   return ` · gelernt: ${show(l)}` + (src === "gelernt" || l === e ? " (verwendet)" : src.startsWith("eingestellt (") ? " – Untergrenze gilt" : ` – verwendet: ${show(e)}`);
 }
-
-// Mehrfach-Liste von Entitäten (0.36, wie die Außenfühler): Zeilen mit ×, der Knopf hängt eine leere Zeile an
-let entN = 100;
-const entRow = (id, picker, value) => `<div class="row" style="margin-bottom:4px">${ent(`${id}-${entN++}`, value, picker)}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`;
-const entList = (id, values, picker, more) => `<div id="${id}">${values.map((v) => entRow(id, picker, v)).join("")}</div><button class="btn small" onclick="addEnt('${id}', '${picker}')">${more}</button>`;
-function addEnt(id, picker) { $(id).insertAdjacentHTML("beforeend", entRow(id, picker, "")); }
 
 // Gelernte Planhälfte (0.36): „21:35 · 5 Nächte ± 20 min“, grau solange nicht belastbar, „gilt“ wenn die Steuerung sie nutzt
 function learnedCell(d, half, eff) {
@@ -2726,11 +2796,17 @@ function controlCard(s) {
     </div>
     <h3 style="font-size:13px;margin:14px 0 4px">Nachtzeiten aus dem Stromverbrauch</h3>
     <p class="muted" style="margin:0 0 6px">Abends fällt der Hausverbrauch auf das Nachtniveau, morgens steigt er wieder – daraus lernt HeatPilot je Wochentag Beginn und Ende der Nacht (Median der letzten ${(SLEEP && SLEEP.weeks) || 6} Wochen). Ohne Sensor ist die Funktion aus.</p>
+    ${powerRef(power, powerEx, missing)}
     <div class="form-grid">
-      ${field("Leistungssensoren (Haus, ggf. je Phase)", entList("power-list", power, "power", "+ Sensor"), "Summe aller Einträge = Hausleistung; bei drei Phasen alle drei eintragen (W oder kW)." + (missing.length ? ` <span class="msg-err">Nicht in Home Assistant gefunden: ${missing.map(esc).join(", ")}</span>` : ""))}
-      ${field("Nicht zählen (Waschmaschine, Spülmaschine, Wallbox …)", entList("power-ex-list", powerEx, "power", "+ Verbraucher"), "Leistungssensoren von Verbrauchern, die auch nachts laufen – werden von der Hausleistung abgezogen.")}
       ${field("Gelernte Zeiten verwenden", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-night_plan_auto" ${s.night_plan_auto ? "checked" : ""}> gelernte Nachtzeiten statt des Wochenplans</label>`, "Sonst nur Vorschlag; wo nichts Belastbares gelernt ist, gilt der Wochenplan oben.")}
     </div>`;
+}
+// Leistungssensoren (0.39.1 auf der Seite „Entitäten“, Gruppe Strom): hier nur, was gewählt ist, und der Weg dorthin
+function powerRef(power, powerEx, missing) {
+  const list = (ids) => ids.map((p) => `<code>${esc(p)}</code>`).join(", ");
+  return `<p class="em-ref" id="power-ref">Leistungssensoren: ${power.length ? list(power) : "keine gewählt – die Funktion ist aus"}` +
+    `${powerEx.length ? ` · nicht zählen: ${list(powerEx)}` : ""}${missing.length ? ` <span class="msg-err">Nicht in Home Assistant gefunden: ${missing.map(esc).join(", ")}</span>` : ""}` +
+    ` – <a href="#" onclick="emGo('strom');return false">ändern unter Entitäten</a></p>`;
 }
 function modeHint() {
   const m = document.querySelector('input[name="control_mode"]:checked'), box = $("mode-hint");
@@ -2755,6 +2831,7 @@ let READY_OPEN = false;  // Link „Einzelheiten“: Box beim nächsten Zeichnen
 const READY_SHOW = { details: false, boiler: false };
 function openReadiness() {
   READY_OPEN = true;
+  setPage("general");  // die Zustandsbox steht unter „Allgemein“ → Steuerung
   showTab("settings");
   if ($("ready-box")) renderReadyBox(HEAT && HEAT.readiness);
 }
@@ -2937,7 +3014,7 @@ function dhwUpdate(d, rd, note) {
   if ($("dhw-box") && DHWC) $("dhw-box").innerHTML = dhwBoxHtml(DHWC.status, DHWC.readiness, note);
   if ($("ready-box") && HEAT && HEAT.readiness) renderReadyBox(HEAT.readiness);
 }
-function dhwOpenSettings() { DHW_OPEN = true; showTab("settings"); dhwScroll(); }
+function dhwOpenSettings() { DHW_OPEN = true; setPage("general"); showTab("settings"); dhwScroll(); }
 function dhwScroll() {
   const h = $("dhw-head"); if (!DHW_OPEN || !h) return;
   DHW_OPEN = false;
@@ -2950,23 +3027,23 @@ function dhwSectionHtml(s, x) {
   x = x || {};
   const mode = DHW_LABEL[s.dhw_control] ? s.dhw_control : "aus", notes = (x.status || {}).notes || DHW_NOTES;
   const radio = (m) => `<label><input type="radio" name="dhw_control" value="${m}" ${m === mode ? "checked" : ""} onchange="dhwModeHint()"> ${DHW_LABEL[m]}</label>`;
-  const input = `<input id="f-dhw_set_entity" list="dl-dhw" value="${esc(s.dhw_set_entity || "")}" placeholder="${esc(x.suggested || "number.…")}" autocomplete="off" oninput="dhwModeHint()">`;
   return `<h3 class="sec-h" id="dhw-head" style="margin-top:0">Warmwasser-Soll über HeatPilot</h3>` +
     `<p class="muted" style="margin:0 0 6px">HeatPilot kann das Speicher-Soll des Kessels selbst setzen – statt einer Automation in Home Assistant, ` +
     `unabhängig vom Schalter unter „Steuerung“. Geschrieben wird nur über Home Assistant (<code>number.set_value</code>) auf die eine Entität unten, ` +
     `nur ganze Grad zwischen Minimum und Maximum, nur bei Änderung ab 1 K, danach 5 min Haltezeit; 60 s später prüft HeatPilot, ob der Kessel den Wert zeigt.</p>` +
     `<div class="seg seg3" id="f-dhw_control">${Object.keys(DHW_LABEL).map(radio).join("")}</div>` +
     `<p class="hint" id="dhw-mode-hint" style="margin:6px 0 0"></p>` +
-    `<div class="form-grid" style="margin-top:10px">${field("Entität des Warmwasser-Solls", input, dhwEntityHint(s, x))}</div>` +
+    `<p class="em-ref" id="dhw-entity-ref">Entität des Warmwasser-Solls: ${dhwEntityHint(s, x)} – <a href="#" onclick="emGo('warmwasser');return false">ändern unter Entitäten</a></p>` +
     `<div class="warnbox" id="dhw-warn">${notes.map((n) => esc(n) + ".").join(" ")} Zurück auf „Aus“ oder „Trockenlauf“: HeatPilot schreibt nichts zurück – ` +
     `der Kessel behält den letzten Wert, die Automation dann ggf. wieder einschalten.</div>` +
     `<div class="dhw-box" id="dhw-box">${dhwBoxHtml(x.status, x.readiness)}</div>`;
 }
-// Unter dem Feld: woher die Entität kommt (eingestellt / erkannt), ihr Wert und ihre Grenzen in Home Assistant
+// Verweis in Einstellungen → Warmwasser (seit 0.39.1 wird die Entität unter „Entitäten“ gewählt): welche gilt (gewählt /
+// erkannt), ihr Wert und ihre Grenzen in Home Assistant, Probleme
 function dhwEntityHint(s, x) {
   const rd = x.readiness || {}, sug = x.suggested, has = (v) => v !== null && v !== undefined;
-  const src = s.dhw_set_entity ? `Eingestellt${sug && sug !== s.dhw_set_entity ? ` – leer = erkannt: ${esc(sug)}` : ""}.`
-    : sug ? `Leer = erkannt: ${esc(sug)}.` : "Keine number-Entität fürs Warmwasser-Soll erkannt – bitte wählen (nur number.*, z. B. die von EMS-ESP).";
+  const src = s.dhw_set_entity ? `<code>${esc(s.dhw_set_entity)}</code> (gewählt${sug && sug !== s.dhw_set_entity ? `; Automatik wäre ${esc(sug)}` : ""}).`
+    : sug ? `<code>${esc(sug)}</code> (automatisch erkannt).` : "keine number-Entität fürs Warmwasser-Soll erkannt – bitte wählen (nur number.*, z. B. die von EMS-ESP).";
   const info = rd.entity && rd.entity_ok ? ` ${esc(rd.entity_name || rd.entity)}: jetzt ${has(rd.value) ? degC(rd.value) : "–"}` +
     (has(rd.entity_min) && has(rd.entity_max) ? ` · in Home Assistant ${fmt(rd.entity_min, 0)}–${fmt(rd.entity_max, 0)} °C` : "") : "";
   return src + info + (rd.entity && rd.entity_problem ? ` <span class="msg-err">${esc(rd.entity_problem)}</span>` : "") +
@@ -2995,7 +3072,7 @@ function dhwBoxHtml(d, rd, note = "") {
 function dhwModeHint() {
   const m = document.querySelector('input[name="dhw_control"]:checked'), box = $("dhw-mode-hint");
   if (!m || !box) return;
-  const x = DHWC || {}, entity = ($("f-dhw_set_entity") || {}).value || x.suggested || "";
+  const x = DHWC || {}, entity = (EM_BY.dhw_set_entity ? String(emValue("dhw_set_entity") || "") : "") || x.suggested || "";
   box.innerHTML = dhwModeText(m.value, (SET || {}).dhw_control, entity.trim(), x.status || {});
 }
 function dhwModeText(mode, saved, entity, st) {
@@ -3036,7 +3113,7 @@ function dhwReadyHtml(x, open) {
     `<details id="ready-dhw-details"${open ? " open" : ""} ontoggle="READY_SHOW.dhw = this.open"><summary>Einzelheiten <span class="muted">(Schalter: ${esc(DHW_LABEL[x.mode] || x.mode)})</span></summary>` +
     (list ? `<ul class="ready-list">${list}</ul>` : "") +
     `<div class="scroll"><table class="ready-t">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table></div></details>` +
-    `<p class="muted" style="margin:6px 0 0">Nur Anzeige – ändert die Stufe der Raumsteuerung nicht. Schalter und Entität unter Einstellungen → Warmwasser.</p></div>`;
+    `<p class="muted" style="margin:6px 0 0">Nur Anzeige – ändert die Stufe der Raumsteuerung nicht. Schalter unter Einstellungen → Warmwasser, Entität unter Einstellungen → Entitäten.</p></div>`;
 }
 function dhwOpenReady() {
   READY_SHOW.dhw = true;
@@ -3097,30 +3174,351 @@ async function notifyTest() {
   btn.disabled = false;
 }
 
+// ---------------------------------------------------------------- Entitäten (0.39.1)
+// Unterseite der Einstellungen (Umschalter „Allgemein | Entitäten“): alle Rollen aus GET api/entity_map in Gruppen –
+// Name und Zweck, nötig/optional, was gilt (Entität, Zustand, Bereich), Status (automatisch gefunden, gewählt, über
+// EMS-ESP, fehlt, nicht verfügbar), Auswahl mit Suche (passende Entitäten zuerst) und „Automatik“ (zurück zur
+// Erkennung). Die Werte stehen in EM_VAL; gespeichert wird mit „Speichern“ wie alle Einstellungen (collect → emCollect):
+// Kessel- und Regler-Rollen als overrides, alles andere in den bisherigen Feldern. Räume ändert die Räume-Tabelle.
+let EMAP = null, SET_PAGE = "general", EM_ONLY = false, EM_PICK = null;
+let EM_BY = {}, EM_VAL = {}, EM_EXTRA = [], EM_ENT = new Map();
+const EM_OPEN = {};  // aufgeklappte Gruppen bleiben es – auch nach dem Speichern
+const EM_FOLD = ["kessel", "regler"];  // viele optionale Werte: was die Erkennung nicht fand, steht eingeklappt darunter
+const EM_MAX = 40;   // so viele Treffer zeigt die Auswahl
+const EM_PROBLEMS = ["fehlt", "nicht verfügbar", "nicht gefunden"];  // wie entity_map.PROBLEMS
+const EM_FREE = /^[a-z_]+\.[A-Za-z0-9_]+$/;  // frei eingetragen (nicht in Home Assistant): nur so und nur mit Enter
+const EM_BADGE = { "gewählt": ["gewählt", "em-s-set"], automatisch: ["automatisch gefunden", "em-s-auto"],
+  "EMS-ESP": ["über EMS-ESP", "em-s-auto"], fehlt: ["fehlt", "em-s-miss"], "nicht verfügbar": ["nicht verfügbar", "em-s-off"],
+  "nicht gefunden": ["nicht gefunden", ""], "nicht gewählt": ["nicht gewählt", ""] };
+// Zeilen mit eigener Tabelle: Personen (Häkchen) und Benachrichtigungsziele (Entitäten und Dienste)
+const EM_CUSTOM = { persons: () => emPersons(), notify_targets: () => notifyHtml(NOTIFY) };
+
+// Antwort übernehmen: Einträge nach Schlüssel, Werte der Felder (gewählt; leer = Automatik), unbekannte Zuordnungen
+function emInit(m) {
+  const entries = m && m.groups ? m.groups.flatMap((g) => g.entries) : [];
+  EM_BY = Object.fromEntries(entries.map((e) => [e.key, e]));
+  EM_VAL = Object.fromEntries(entries.map((e) => [e.key, e.multi ? [...(e.chosen || [])] : e.chosen || ""]));
+  EM_EXTRA = [...((m && m.extra_overrides) || [])];
+  EM_ENT = new Map(ENT.map((x) => [x.id, x]));
+}
+// Passt die Entität (api/entities) zur Rolle? Wie entity_map.fits im Backend; das Warmwasser-Soll nach PICKERS.dhw
+function emFits(x, f) {
+  if (!f) return true;
+  if (f.picker && PICKERS[f.picker]) return PICKERS[f.picker].filter(x);
+  const dom = f.domains || [], units = f.units || [], dcs = f.device_classes || [];
+  if (dom.length && !dom.includes(x.id.split(".")[0])) return false;
+  if (!units.length && !dcs.length) return true;
+  return units.includes(x.unit || "") || (!!x.device_class && dcs.includes(x.device_class));
+}
+// Treffer der Auswahl: Vorschlag der Erkennung zuerst, dann die passenden nach Bereich und Name; mit Suchtext danach die
+// unpassenden (markiert). Gesucht wird in Entität, Name und Bereich – alle Wörter müssen vorkommen
+function emOptions(e, query, taken = []) {
+  const words = String(query || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const hit = (x) => words.every((w) => `${x.id} ${x.name || ""} ${x.area || ""}`.toLowerCase().includes(w));
+  const det = new Set([].concat(e.detected || [], e.suggested || []).filter(Boolean));
+  const order = (a, b) => (det.has(a.id) ? 0 : 1) - (det.has(b.id) ? 0 : 1) || (a.area ? 0 : 1) - (b.area ? 0 : 1)
+    || String(a.area || "").localeCompare(String(b.area || ""), "de") || String(a.name || a.id).localeCompare(String(b.name || b.id), "de");
+  const pool = ENT.filter((x) => !taken.includes(x.id) && hit(x));
+  const fit = pool.filter((x) => emFits(x, e.filter)).sort(order);
+  const rest = words.length ? pool.filter((x) => !emFits(x, e.filter)).sort(order) : [];
+  const all = [...fit.map((x) => ({ ...x, fit: true })), ...rest.map((x) => ({ ...x, fit: false }))].map((x) => ({ ...x, det: det.has(x.id) }));
+  return { list: all.slice(0, EM_MAX), more: Math.max(0, all.length - EM_MAX), hidden: words.length ? 0 : pool.length - fit.length };
+}
+// Zustand einer Entität: aus api/entities, sonst was das Backend dazu weiß (Dienste, Ziele), sonst „nicht in HA“
+function emItem(e, id) {
+  const x = EM_ENT.get(id);
+  if (x) return { id, name: x.name, state: x.state, unit: x.unit, area: x.area, exists: true,
+                  available: !["unavailable", "unknown"].includes(x.state), fit: emFits(x, e.filter) };
+  const b = (e.items || []).find((i) => i.entity_id === id) || (e.current === id ? { ...e, entity_id: id } : null);
+  return b ? { id, name: b.friendly_name, state: b.state, unit: b.unit, area: b.area, exists: b.exists, available: b.available, fit: b.fits }
+    : { id, name: id, state: null, unit: null, area: null, exists: false, available: false, fit: null };
+}
+// Was in einer Zeile gilt – aus dem Eintrag und dem Wert im Feld (leer = Automatik bzw. nichts gewählt), wie
+// entity_map im Backend: Quelle, Entitäten, Ersatz (has: ob eine andere Rolle belegt ist), Zustand fürs Abzeichen
+function emState(e, value, has = () => false) {
+  const chosen = e.multi ? (value || []).filter(Boolean) : String(value || "").trim();
+  const own = e.multi ? chosen.length > 0 : !!chosen;
+  const auto = e.auto ? [].concat(e.detected || []).filter(Boolean) : [];
+  const ids = own ? [].concat(chosen) : auto;
+  const items = ids.map((id) => emItem(e, id));
+  const source = own ? "gewählt" : ids.length ? "automatisch" : e.ems_key ? "EMS-ESP" : "fehlt";
+  const alt = source === "fehlt" ? (e.alt || []).find((k) => has(k)) || null : null;
+  const issue = source === "fehlt" && e.required && !alt ? "fehlt"
+    : items.some((i) => i.available === false) && !e.ems_key ? "nicht verfügbar"
+    : source === "fehlt" && !alt ? (e.auto && e.group !== "raeume" ? "nicht gefunden" : "nicht gewählt") : null;
+  return { source, items, alt, issue, problem: EM_PROBLEMS.includes(issue), own };
+}
+const emValue = (key) => key in EM_VAL ? EM_VAL[key] : (EM_BY[key] || {}).chosen;
+const emHas = (key) => !!EM_BY[key] && emState(EM_BY[key], emValue(key)).source !== "fehlt";
+const emStateOf = (key) => emState(EM_BY[key], emValue(key), emHas);
+const emSaved = (e, v) => JSON.stringify(e.multi ? [...(v || [])] : String(v || "").trim()) === JSON.stringify(e.multi ? e.chosen || [] : e.chosen || "");
+function emCounts(entries) {
+  const st = entries.map((e) => emStateOf(e.key));
+  return { total: entries.length, found: st.filter((s) => s.source !== "fehlt").length, missing: st.filter((s) => s.issue === "fehlt").length,
+           unavailable: st.filter((s) => s.issue === "nicht verfügbar").length, auto: entries.some((e) => e.auto) };
+}
+// Räume: Zahl der Räume und der gewählten Sensoren (die Sensoren sind optional)
+function emRoomCount(entries) {
+  const rooms = new Set(entries.map((e) => e.room_climate)).size;
+  const sensors = entries.filter((e) => e.setting.field !== "climate" && emStateOf(e.key).source !== "fehlt").length;
+  return `${rooms} ${rooms === 1 ? "Raum" : "Räume"} · ${sensors} ${sensors === 1 ? "Sensor" : "Sensoren"} gewählt`;
+}
+function emCountText(c) {
+  return [`${c.found} von ${c.total} ${c.auto === false ? "gewählt" : "gefunden"}`,
+    c.missing ? `${c.missing} nötige ${c.missing === 1 ? "fehlt" : "fehlen"}` : "", c.unavailable ? `${c.unavailable} nicht verfügbar` : ""]
+    .filter(Boolean).join(" · ");
+}
+
+// ---- Zeichnen
+// Umschalter oben in den Einstellungen; die Zahl am Reiter: nötige, die fehlen, und nicht verfügbare
+function setNav() {
+  const c = Object.keys(EM_BY).length ? emCounts(Object.values(EM_BY)) : null, n = c ? c.missing + c.unavailable : 0;
+  const radio = (v, t) => `<label><input type="radio" name="set-page" value="${v}"${SET_PAGE === v ? " checked" : ""} onchange="setPage(this.value)"> ${t}</label>`;
+  return `<div class="seg set-nav" id="set-nav">${radio("general", "Allgemein")}${radio("entities", `Entitäten<span class="em-alert" id="em-alert"${n ? "" : " hidden"}>${n}</span>`)}</div>`;
+}
+function setPage(p) {
+  SET_PAGE = p === "entities" ? "entities" : "general";
+  if ($("set-general")) { $("set-general").hidden = SET_PAGE !== "general"; $("set-entities").hidden = SET_PAGE !== "entities"; }
+  for (const i of document.querySelectorAll('input[name="set-page"]')) i.checked = i.value === SET_PAGE;
+}
+function emPage(m) {
+  if (!m) return '<div class="card"><p class="muted">Entitäten nicht geladen – startet das Add-on noch?</p></div>';
+  if (m.error) return `<div class="card" id="em-error"><h2>Entitäten</h2><p class="msg-err">Nicht lesbar: ${esc(m.error)}</p>` +
+    '<p class="muted">Die gespeicherten Zuordnungen bleiben, wie sie sind – Speichern ändert sie nicht.</p></div>';
+  return '<p class="sub">Was HeatPilot aus Home Assistant liest – geordnet nach Thema. Was die Erkennung gefunden hat, steht schon da; ' +
+    "wo etwas fehlt oder nicht passt, eine andere Entität wählen (die Auswahl zeigt passende zuerst). „Automatik“ geht zurück zur " +
+    "Erkennung. Gespeichert wird mit „Speichern“ unten wie alle Einstellungen.</p>" +
+    `<div class="em-top"><span id="em-sum"></span><label class="em-filter"><input type="checkbox" id="em-only"${EM_ONLY ? " checked" : ""} onchange="emOnly(this.checked)"> nur fehlende und nicht verfügbare</label></div>` +
+    `<div id="em-groups"${EM_ONLY ? ' class="em-only"' : ""}>${m.groups.map(emGroup).join("")}</div>`;
+}
+function emGroup(g) {
+  const c = emCounts(g.entries), rooms = g.key === "raeume", rows = rooms ? new Set(g.entries.map((e) => e.room_climate)).size : g.entries.length;
+  const open = EM_OPEN[g.key] ?? (EM_ONLY || c.missing + c.unavailable > 0 || rows <= 6);
+  const fold = EM_FOLD.includes(g.key) ? g.entries.filter((e) => emStateOf(e.key).issue === "nicht gefunden") : [];
+  const rest = fold.length ? `<details class="em-fold"${EM_ONLY ? " open" : ""}><summary>Weitere Werte, die die Erkennung nicht gefunden hat ` +
+    `<span class="muted">(${fold.length})</span></summary>${fold.map(emRow).join("")}</details>` : "";
+  const body = rooms ? emRoomRows(g.entries)
+    : g.entries.filter((e) => !fold.includes(e)).map(emRow).join("") + rest + (g.key === "kessel" ? emExtra() : "");
+  return `<details class="card em-group" id="em-g-${g.key}"${open ? " open" : ""} ontoggle="EM_OPEN['${g.key}'] = this.open">` +
+    `<summary><h2>${esc(g.title)}</h2><span class="em-count" id="em-c-${g.key}">${rooms ? emRoomCount(g.entries) : emCountText(c)}</span></summary>` +
+    `<p class="em-gtext">${esc(g.text)}</p>${body}<p class="muted em-none">Hier fehlt nichts.</p></details>`;
+}
+const emReq = (e) => `<span class="badge${e.required ? " em-req" : ""}">${e.required ? "nötig" : "optional"}</span>`;
+function emRow(e) {
+  const st = emStateOf(e.key), wide = !!EM_CUSTOM[e.key];
+  return `<div class="em-row${wide ? " em-wide" : ""}" data-key="${esc(e.key)}" data-issue="${st.problem ? 1 : 0}">` +
+    `<div class="em-name"><b>${esc(e.label)}</b> ${emReq(e)}<div class="em-why">${esc(e.purpose)}</div></div>` +
+    `<div class="em-now">${emNow(e, st)}</div><div class="em-edit">${wide ? EM_CUSTOM[e.key]() : emEdit(e)}</div>` +
+    '<div class="em-list" hidden></div></div>';
+}
+// Abzeichen: fehlt bzw. nicht verfügbar vor der Quelle; ohne Entität mit Ersatz „Ersatz“, sonst nicht gefunden/gewählt
+function emBadge(st) {
+  const key = st.issue === "fehlt" || st.issue === "nicht verfügbar" ? st.issue : st.source !== "fehlt" ? st.source : st.alt ? "" : st.issue;
+  const [txt, cls] = EM_BADGE[key] || ["Ersatz", ""];
+  return `<span class="badge em-badge${cls ? " " + cls : ""}">${txt}</span>`;
+}
+// Spalte „was gilt“: Abzeichen, die Entitäten mit Zustand und Bereich, sonst Ersatz bzw. Wert von EMS-ESP direkt
+function emNow(e, st) {
+  const unsaved = emSaved(e, emValue(e.key)) ? "" : ' <span class="muted em-unsaved">nicht gespeichert</span>';
+  const x = (n) => st.own && e.multi ? ` <button class="btn small em-x" title="entfernen" onclick="emDrop('${e.key}', ${n})">×</button>` : "";
+  const lines = EM_CUSTOM[e.key] ? "" : st.items.map((i, n) => `<div class="em-ent">${emEnt(i)}${x(n)}</div>`).join("");
+  const label = (k) => esc((EM_BY[k] || {}).label || k);
+  const alt = st.alt ? `<div class="muted">kein eigener Wert – ${label(st.alt)} genügt</div>`
+    : st.issue === "fehlt" && (e.alt || []).length ? `<div class="muted">eines genügt: ${[e.key, ...e.alt].map(label).join(" oder ")}</div>`
+    : st.issue === "fehlt" && e.setting.kind === "override" ? '<div class="muted">eine Entität wählen – oder EMS-ESP direkt verbinden (Allgemein → Verbindung)</div>' : "";
+  const ems = st.source === "EMS-ESP" ? `<div class="em-ent">direkt von EMS-ESP <code>${esc(e.ems_key)}</code>${e.state != null ? `: <b>${esc(e.state)}</b>` : ""}</div>`
+    : e.ems_key && st.items.length ? `<div class="muted">Wert kommt direkt von EMS-ESP (<code>${esc(e.ems_key)}</code>)</div>` : "";
+  const sug = e.suggested && !st.items.length ? `<div class="muted">Vorschlag: <code>${esc(e.suggested)}</code></div>` : "";
+  const fb = e.fallback && emSaved(e, emValue(e.key)) ? `<div class="muted">${esc(e.fallback)}</div>` : "";
+  return `${emBadge(st)}${unsaved}${lines}${alt}${ems}${sug}${fb}`;
+}
+function emEnt(i) {
+  const val = i.state === null || i.state === undefined ? "" : ["unavailable", "unknown"].includes(i.state) ? ` · meldet „${esc(i.state)}“`
+    : ` · <b>${esc(i.state)}${i.unit ? " " + esc(i.unit) : ""}</b>`;
+  return `<code>${esc(i.id)}</code>${i.name && i.name !== i.id ? ` ${esc(i.name)}` : ""}${val}${i.area ? ` · ${esc(i.area)}` : ""}` +
+    (i.exists === false ? ' <span class="msg-err">nicht in Home Assistant</span>' : i.fit === false ? ' <span class="msg-warn">passt nicht zur Rolle</span>' : "");
+}
+// Spalte „ändern“: Feld mit Suche (Kessel/Regler: Zuordnung, sonst das Feld der Einstellungen) und „Automatik“
+function emEdit(e) {
+  const s = e.setting || {}, id = s.kind === "override" ? `ov-${s.role}` : `f-${s.name}`;
+  const ph = e.multi ? "+ hinzufügen · suchen …" : e.auto ? "Automatik · suchen …" : "suchen …";
+  return `<div class="em-pick"><input id="${id}" class="em-in" data-key="${esc(e.key)}" value="${esc(e.multi ? "" : emValue(e.key))}" placeholder="${esc(ph)}" ` +
+    `autocomplete="off" spellcheck="false" onfocus="emOpen(this)" oninput="emOpen(this)" onkeydown="emKey(event, this)" onblur="emBlur(this)">` +
+    `<button class="btn small em-auto" onclick="emAuto('${e.key}')" title="${e.auto ? "zurück zur automatischen Erkennung" : "Auswahl leeren"}"` +
+    `${emStateOf(e.key).own ? "" : " disabled"}>${e.auto ? "Automatik" : "leeren"}</button></div>`;
+}
+// Kessel: Zuordnungen ohne bekannte Rolle (wirkungslos) – bleiben beim Speichern, bis sie entfernt werden
+function emExtra() {
+  if (!EM_EXTRA.length) return "";
+  return `<div class="em-row em-wide" data-key="extra" data-issue="1"><div class="em-name"><b>Zuordnungen ohne bekannte Rolle</b><div class="em-why">wirkungslos – entfernen oder lassen</div></div>` +
+    `<div class="em-edit" id="em-extra">${EM_EXTRA.map((x, i) => `<div class="em-ent"><code>${esc(x.role)}=${esc(x.entity)}</code> <button class="btn small" onclick="emExtraDrop(${i})">entfernen</button></div>`).join("")}</div></div>`;
+}
+// Räume: je Raum-Eintrag Thermostat und Sensoren mit Status – geändert wird in der Räume-Tabelle (Allgemein)
+function emRoomRows(entries) {
+  const rooms = [...new Set(entries.map((e) => e.room_climate))];
+  if (!rooms.length) return '<p class="muted">Keine Räume – in der Räume-Tabelle (Allgemein) Thermostate wählen.</p>';
+  return rooms.map((c) => {
+    const es = entries.filter((e) => e.room_climate === c), st = es.map((e) => emStateOf(e.key));
+    const parts = es.map((e, i) => `<div class="em-ent"><span class="em-k">${esc(e.label)}:</span> ${emBadge(st[i])}` +
+      `${st[i].items.length ? " " + emEnt(st[i].items[0]) : e.suggested ? ` <span class="muted">Vorschlag: <code>${esc(e.suggested)}</code></span>` : ""}</div>`).join("");
+    return `<div class="em-row" data-key="room:${esc(c)}" data-issue="${st.some((s) => s.problem) ? 1 : 0}"><div class="em-name"><b>${esc(es[0].room)}</b>` +
+      `<div class="em-why"><code>${esc(c)}</code></div></div><div class="em-now">${parts}</div>` +
+      `<div class="em-edit"><button class="btn small" data-climate="${esc(c)}" onclick="emRoom(this.dataset.climate)">in der Räume-Tabelle ändern</button></div></div>`;
+  }).join("");
+}
+function emPersons() {
+  return '<p class="muted">Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus ' +
+    "z. B. als leer, wenn nur das Auto weg ist.</p>" +
+    `<div class="scroll"><table class="form" id="em-persons"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`;
+}
+
+// ---- Bedienen
+function emRefresh(key, alts = true) {
+  const e = EM_BY[key], row = document.querySelector(`#set-entities .em-row[data-key="${key}"]`);
+  if (!e || !row) return;
+  const st = emStateOf(key);
+  row.querySelector(".em-now").innerHTML = emNow(e, st);
+  row.dataset.issue = st.problem ? "1" : "0";
+  const btn = row.querySelector(".em-auto"); if (btn) btn.disabled = !st.own;
+  row.classList.toggle("em-changed", !emSaved(e, emValue(key)));
+  if (alts) for (const o of Object.values(EM_BY)) if ((o.alt || []).includes(key)) emRefresh(o.key, false);  // Ersatz der anderen
+  if (key === "dhw_set_entity") dhwModeHint();
+  for (const r of document.querySelectorAll(`.em-ref[data-ref="${key}"]`)) r.outerHTML = emRef(key, r.dataset.group, r.dataset.label);
+  if (alts) emSum();
+}
+// Zähler je Gruppe, oben und am Reiter; mit Filter: Gruppen ohne Treffer sagen „Hier fehlt nichts.“
+function emSum() {
+  for (const g of (EMAP && EMAP.groups) || []) {
+    const box = $("em-c-" + g.key); if (box) box.textContent = g.key === "raeume" ? emRoomCount(g.entries) : emCountText(emCounts(g.entries));
+  }
+  const all = Object.values(EM_BY), c = emCounts(all), n = c.missing + c.unavailable;
+  if ($("em-sum")) $("em-sum").textContent = `Insgesamt ${emCountText(c)}`;
+  if ($("em-alert")) { $("em-alert").hidden = !n; $("em-alert").textContent = n; }
+  for (const d of document.querySelectorAll("#set-entities details.em-group"))
+    d.classList.toggle("em-clean", !d.querySelector('.em-row[data-issue="1"]'));
+}
+function emOnly(on) {
+  EM_ONLY = !!on;
+  const box = $("em-groups"); if (!box) return;
+  box.classList.toggle("em-only", EM_ONLY);
+  if (EM_ONLY) for (const d of box.querySelectorAll("details.em-group, details.em-fold")) if (d.querySelector('.em-row[data-issue="1"]')) d.open = true;
+}
+function emOpen(inp) {
+  const e = EM_BY[inp.dataset.key], box = inp.closest(".em-row").querySelector(".em-list");
+  const val = inp.value.trim(), exact = !e.multi && EM_ENT.has(val);
+  const o = emOptions(e, exact ? "" : val, e.multi ? emValue(e.key) || [] : []);
+  EM_PICK = { key: e.key, list: o.list, at: 0 };
+  box.innerHTML = emListHtml(e, o, val);
+  box.hidden = false;
+}
+function emListHtml(e, o, val = "") {
+  const opt = (x, i) => `<button type="button" class="em-opt${x.fit ? "" : " unfit"}${i === 0 ? " on" : ""}" data-id="${esc(x.id)}" ` +
+    `onmousedown="event.preventDefault()" onclick="emPick('${e.key}', this.dataset.id)"><span>${esc(x.name || x.id)}${x.id === val ? " ✓" : ""}</span>` +
+    `<code>${esc(x.id)}</code><span class="muted">${[x.state != null ? `${esc(x.state)}${x.unit ? " " + esc(x.unit) : ""}` : "", x.area ? esc(x.area) : "",
+      x.det ? "Vorschlag der Erkennung" : "", x.fit ? "" : "passt nicht zur Rolle"].filter(Boolean).join(" · ")}</span></button>`;
+  const notes = [o.more ? `… und ${o.more} weitere – Suche verfeinern` : "",
+    o.hidden ? `${o.hidden} weitere passen nicht zur Rolle – mit Suchbegriff erscheinen sie darunter` : ""].filter(Boolean);
+  return (o.list.length ? o.list.map(opt).join("") : '<div class="em-more">Nichts gefunden – andere Suche, oder die Entität als domain.name eintragen und mit Enter übernehmen.</div>') +
+    notes.map((t) => `<div class="em-more">${t}</div>`).join("");
+}
+// Tasten im Suchfeld: Pfeile wählen in der Liste; Enter übernimmt eine bekannte Entität, wie sie im Feld steht, sonst
+// den markierten Treffer, ohne Treffer eine frei eingetragene in der Form domain.name; Escape verwirft die Suche
+function emKey(ev, inp) {
+  const box = inp.closest(".em-row").querySelector(".em-list"), p = EM_PICK;
+  if (ev.key === "Escape") { emReset(inp); box.hidden = true; return; }
+  if (!p || p.key !== inp.dataset.key) return;
+  if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+    ev.preventDefault();
+    p.at = Math.max(0, Math.min(p.list.length - 1, p.at + (ev.key === "ArrowDown" ? 1 : -1)));
+    box.querySelectorAll(".em-opt").forEach((b, i) => b.classList.toggle("on", i === p.at));
+  } else if (ev.key === "Enter") {
+    ev.preventDefault();
+    const typed = inp.value.trim();
+    const id = typed && EM_ENT.has(typed) ? typed : p.list[p.at] ? p.list[p.at].id : EM_FREE.test(typed) ? typed : null;
+    if (id) emPick(p.key, id);
+  }
+}
+// Suchfeld zurück auf das, was gilt (mehrere: leer) – ein Suchbegriff ist nie ein Wert
+function emReset(inp) {
+  const e = EM_BY[inp.dataset.key];
+  if (e) inp.value = e.multi ? "" : String(emValue(e.key) || "");
+}
+function emPick(key, id) {
+  const e = EM_BY[key], inp = document.querySelector(`#set-entities .em-in[data-key="${key}"]`);
+  if (e.multi) { if (!(EM_VAL[key] || []).includes(id)) EM_VAL[key] = [...(EM_VAL[key] || []), id]; if (inp) inp.value = ""; }
+  else { EM_VAL[key] = id; if (inp) inp.value = id; }
+  if (inp) inp.closest(".em-row").querySelector(".em-list").hidden = true;
+  EM_PICK = null;
+  emRefresh(key);
+}
+// Feld verlassen: übernommen wird nur eine Entität aus Home Assistant, wie sie im Feld steht – auch wenn der Klick auf
+// „Speichern“ das Feld verlässt. Alles andere (Suchbegriff, geleertes Feld) gilt nicht: das Feld zeigt wieder, was gilt
+// (frei eintragen mit Enter, zurück zur Erkennung mit „Automatik“). Die Liste schließt kurz danach
+function emBlur(inp) {
+  const e = EM_BY[inp.dataset.key], row = inp.closest(".em-row"), v = inp.value.trim();
+  if (!e || !row) return;
+  if (EM_ENT.has(v) && (e.multi || v !== String(EM_VAL[e.key] || ""))) emPick(e.key, v);
+  else emReset(inp);
+  setTimeout(() => { row.querySelector(".em-list").hidden = true; }, 150);
+}
+function emAuto(key) {
+  const e = EM_BY[key]; if (!e) return;
+  EM_VAL[key] = e.multi ? [] : "";
+  const inp = document.querySelector(`#set-entities .em-in[data-key="${key}"]`); if (inp) inp.value = "";
+  emRefresh(key);
+}
+function emDrop(key, n) { EM_VAL[key] = (EM_VAL[key] || []).filter((_, i) => i !== n); emRefresh(key); }
+function emExtraDrop(i) { EM_EXTRA.splice(i, 1); $("em-extra").parentNode.outerHTML = emExtra(); }
+// Sprung aus „Allgemein“ zu einer Gruppe der Entitäten bzw. zurück zur Zeile der Räume-Tabelle
+function emGo(group) {
+  setPage("entities");
+  const d = $("em-g-" + group); if (!d) return;
+  d.open = true; d.scrollIntoView({ block: "start" });
+}
+function emRoom(climate) {
+  setPage("general");
+  const tr = document.querySelector(`tr.room[data-climate="${climate}"]`); if (!tr) return;
+  tr.closest("details.card").open = true;
+  tr.scrollIntoView({ block: "center" });
+  tr.classList.add("room-flash"); setTimeout(() => tr.classList.remove("room-flash"), 2500);
+}
+// Verweis in den Karten von „Allgemein“: was gilt, und der Weg zur Seite „Entitäten“
+function emRef(key, group, label) {
+  const e = EM_BY[key], st = e ? emStateOf(key) : null;
+  const what = !st ? "" : st.items.length ? st.items.map((i) => `<code>${esc(i.id)}</code>`).join(", ") + " " + emBadge(st)
+    : st.alt ? `Ersatz: ${esc((EM_BY[st.alt] || {}).label || st.alt)}` : emBadge(st);
+  return `<p class="em-ref" data-ref="${key}" data-group="${group}" data-label="${esc(label)}">${esc(label)}${what ? ": " + what : ""} – ` +
+    `<a href="#" onclick="emGo('${group}');return false">ändern unter Entitäten</a></p>`;
+}
+// Speichern: Kessel- und Regler-Rollen als overrides (leer = Erkennung; unbekannte Rollen bleiben), die übrigen in ihre
+// Felder; Personen und Benachrichtigungsziele aus ihren Tabellen (collect). Es zählt nur, was gewählt ist (EM_VAL), nie
+// ein Suchbegriff im Feld. Ohne geladene Seite nichts – es bleibt das Gespeicherte
+function emCollect(out) {
+  if (!EMAP || EMAP.error || !EMAP.groups) return out;
+  const ov = [];
+  for (const e of Object.values(EM_BY)) {
+    const s = e.setting || {}, v = EM_VAL[e.key];
+    if (s.kind === "override" && String(v || "").trim()) ov.push(`${s.role}=${String(v).trim()}`);
+    else if (s.kind === "field" && !EM_CUSTOM[e.key]) out[s.name] = e.multi ? [...(v || [])] : String(v || "").trim();
+  }
+  out.overrides = [...ov, ...EM_EXTRA.map((x) => `${x.role}=${x.entity}`)];
+  return out;
+}
+
 function renderSettings() {
   const s = SET;
-  const discovered = (role) => (DISC.boiler || {})[role] || (DISC.thermostat || {})[role] || "";
-  const overrides = Object.fromEntries((s.overrides || []).map((o) => o.split("=")));
-  const outdoor = (s.outdoor_sensors || []).length ? s.outdoor_sensors : (SUG.outdoor || []);
-  $("view-settings").innerHTML = datalists() +
-    `<p class="sub">Alles, was das Add-on braucht. Felder mit Vorschlag sind aus der automatischen Erkennung vorausgefüllt – prüfen und speichern. Speichern wirkt sofort, ohne Neustart.</p>` +
+  emInit(EMAP);  // Seite „Entitäten“ (0.39.1): Einträge und Werte aus GET api/entity_map
+  $("view-settings").innerHTML = datalists() + setNav() + `<div id="set-general"${SET_PAGE === "general" ? "" : " hidden"}>` +
+    `<p class="sub">Alles, was das Add-on braucht. Felder mit Vorschlag sind aus der automatischen Erkennung vorausgefüllt – prüfen und speichern. Speichern wirkt sofort, ohne Neustart. Welche Entitäten HeatPilot liest (Kessel, Außenfühler, Gaszähler, Personen …), steht unter „Entitäten“.</p>` +
     card("Steuerung", controlCard(s)) +
     card("Verbindung", `<div class="form-grid">${field("EMS-ESP-Adresse", `<div class="row"><input id="f-emsesp_host" value="${esc(s.emsesp_host)}" placeholder="z. B. 192.168.1.50 oder ems-esp.local" style="flex:1"><button class="btn small" onclick="testEms()">Testen</button></div><div id="ems-msg" class="hint"></div>`, "Optional. Liest alle Kesselwerte direkt – nur lesend, ohne Token. Leer = nur über Home Assistant.")}</div>`) +
-    card("Messwerte", `<div class="form-grid">
-      ${field("Außenfühler", `<div id="outdoor-list">${outdoor.map((o, i) => `<div class="row" style="margin-bottom:4px">${ent("f-out-" + i, o, "temp")}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`).join("")}</div><button class="btn small" onclick="addOutdoor()">+ Fühler</button>`, "Einer oder mehrere – es zählt das Minimum. Leer = Außenfühler der Therme.")}
-      ${field("Gaszähler", ent("f-gas_sensor", s.gas_sensor || SUG.gas || "", "sensor", "sensor.…"), "Zählerstand in m³ oder kWh. Leer = Energie-Schätzung von EMS-ESP.")}
-      ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Vorhersage für den Vorheizplan zur Ankunft (Außentemperatur zum Zielzeitpunkt) und Bewölkung für die Sonnenanteile; Rückfall für die aktuelle Außentemperatur. Die Steuerung nutzt die Vorhersage ab 0.37.")}
-      ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
-    </div>`) +
     card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
-      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). „Fußboden“ für Fußbodenheizung ohne Stellventil (z. B. festes RTL) – der Heizkörper dort gilt als Boost.
+      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). <b>Fußboden</b>: Fußbodenheizung im Raum und wie sie angeschlossen ist – <b>mit Mischer</b> (er regelt die Temperatur selbst, keine Grenze), <b>mit RTL-Ventil</b> (am Anfang fließt der volle Vorlauf hinein: der <b>höchste Vorlauf</b> gilt, solange der Raum Wärme anfordert) oder <b>direkt am Kessel</b> (der höchste Vorlauf gilt immer; leer = ${FLOOR_MAX.def} °C). HeatPilot plant nie einen Vorlauf darüber; der Heizkörper im Raum gilt als Boost.
       Unter jeder Entität stehen <b>Bereich</b> und <b>Gerät</b> aus Home Assistant; ein leeres Feld „Raum“ zeigt den Bereich als Platzhalter, „Bereiche übernehmen“ trägt ihn ein – Gespeichertes bleibt. Sensoren des Geräts (Temperatur, Feuchte, Heizleistung) sind vorbelegt.
       <b>Voreinstellung</b> und <b>Stufen</b>: die Zahl am Ventilunterteil (Durchflussbegrenzer), z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil. Damit nennt der hydraulische Abgleich konkrete Stufen und rechnet die Wirkung auf die anderen Räume; bei mehreren Geräten in einem Raum gilt der Wert des <b>Schlüsselgeräts</b> (Raumregler, sonst das erste), weitere Ventile dürfen eigene Werte haben.</p>
       ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
-      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden</th><th>Voreinstellung <span class="hint">(Stufe am Ventil)</span></th><th>Stufen <span class="hint">(Skala, 0 = ohne)</span></th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
-    card("Personen", `<p>Wer zählt für die Anwesenheit? Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus z. B. als leer, wenn nur das Auto weg ist. Ohne Häkchen wählt HeatPilot automatisch alle Personen mit HA-Benutzer und Gerät.</p>
-      <div class="scroll"><table class="form"><tr><th></th><th>Person</th><th>Zustand</th><th>Gerät / GPS</th></tr>${personRows()}</table></div>`) +
-    card("Gas & Kosten", `<div class="form-grid">
+      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden <span class="hint">(Anschluss, höchster Vorlauf)</span></th><th>Voreinstellung <span class="hint">(Stufe am Ventil)</span></th><th>Stufen <span class="hint">(Skala, 0 = ohne)</span></th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+    card("Gas & Kosten", `${emRef("gas_sensor", "gas", "Gaszähler")}<div class="form-grid">
       ${field("Brennwert (kWh/m³)", num("f-gas_calorific_value", s.gas_calorific_value), "Laut Gasrechnung, typisch 10,5–11,5")}
       ${field("Zustandszahl", num("f-gas_z_number", s.gas_z_number), "Laut Gasrechnung, typisch 0,93–0,97")}
       ${field("Arbeitspreis (€/kWh)", num("f-gas_price_eur_per_kwh", s.gas_price_eur_per_kwh))}
@@ -3143,40 +3541,33 @@ function renderSettings() {
       ${field("Komfort (°C)", num("f-dhw_comfort_temp", s.dhw_comfort_temp, "1"), "Mindestens zu Beginn einer Nutzung")}
       ${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}
     </div>${disinfectHtml(s, DIS)}`) +
-    card("Benachrichtigungen", notifyHtml(NOTIFY)) +
     card("Urlaub", `<p>Im Urlaub lernt das Add-on keine Gewohnheiten. Ohne Uhrzeit beim Ende gilt die Standard-Rückkehrzeit. Kommt jemand per GPS sicher heim, zählt die GPS-Ankunft.</p>
       <div id="vac-list">${(s.vacations || []).map(vacRow).join("")}</div><button class="btn small" onclick="addVac()">+ Urlaub</button>
       <div class="form-grid" style="margin-top:10px">
         ${field("Standard-Rückkehrzeit", tim("f-vacation_arrival_time", s.vacation_arrival_time))}
-        ${field("Urlaubs-Schalter", ent("f-vacation_entity", s.vacation_entity, "toggle", "optional, z. B. input_boolean.urlaub"), "An = Urlaub")}
-      </div>`) +
-    card("Zuordnungen (Experten)", `<p>Nur nötig, wenn die automatische Erkennung etwas nicht oder falsch gefunden hat.</p>
-      <div class="scroll"><table class="form"><tr><th>Wert</th><th>Erkannt</th><th>Eigene Zuordnung</th></tr>
-      ${ROLES.map((r) => `<tr><td>${esc(r.label)}<div class="hint">${r.group}</div></td><td>${esc(discovered(r.role)) || '<span class="muted">– nicht gefunden</span>'}</td><td><input class="ov" data-role="${r.role}" list="dl-any" value="${esc(overrides[r.role] || "")}" placeholder="leer = automatisch"></td></tr>`).join("")}
-      </table></div>`, false) +
+      </div>${emRef("vacation_entity", "personen", "Urlaubs-Schalter")}`) +
     card("Erweitert", `<div class="form-grid">
       ${field("Abtastintervall (s)", num("f-sample_interval_s", s.sample_interval_s, "1"))}
       ${field("Historie beim ersten Start (Tage)", num("f-backfill_days", s.backfill_days, "1"), "Einzelwerte aus dem Recorder")}
       ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
       ${field("Ausführliches Log", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-debug_logging" ${s.debug_logging ? "checked" : ""}> jeden Takt protokollieren</label>`, "Für die Fehlersuche – das Log wird dann deutlich größer")}
     </div><p style="margin-top:10px"><button class="btn small" onclick="reloadHistory()">Historie neu einlesen</button> <span class="muted">z. B. nach Wechsel des Gaszählers – dauert je nach Umfang einige Minuten.</span></p>`, false) +
+    `</div><div id="set-entities"${SET_PAGE === "entities" ? "" : " hidden"}>${emPage(EMAP)}</div>` +
     `<div class="savebar"><button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="applySuggestions()">Vorschläge übernehmen</button><span id="save-msg"></span></div>`;
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
   $("f-gas_calorific_value").oninput = upd; $("f-gas_z_number").oninput = upd; upd();
   modeHint(); disinfectSync();
   dhwModeHint(); notifySync(); dhwScroll();  // 0.38: Hinweis zum Schalter, Testknopf, Sprung aus Heizen/Übersicht
+  emSum();  // 0.39.1: Zähler der Seite „Entitäten“ und am Umschalter
   renderReadyBox(HEAT && HEAT.readiness); loadReadiness();  // Zustandsbox (0.36.1): sofort der letzte Stand, dann frisch
 }
 
-let outdoorN = 100;
-function addOutdoor() { $("outdoor-list").insertAdjacentHTML("beforeend", `<div class="row" style="margin-bottom:4px">${ent("f-out-" + (outdoorN++), "", "temp")}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`); }
 function addVac() { $("vac-list").insertAdjacentHTML("beforeend", vacRow()); }
 
 function collect() {
   const v = (id) => $(id).value.trim();
-  const out = { outdoor_sensors: [...document.querySelectorAll("#outdoor-list input")].map((i) => i.value.trim()).filter(Boolean) };
-  for (const k of ["emsesp_host", "gas_sensor", "weather_entity", "demand_sensor", "vacation_entity",
-                   "night_start", "night_end", "vacation_arrival_time",
+  const out = {};
+  for (const k of ["emsesp_host", "night_start", "night_end", "vacation_arrival_time",
                    "dhw_disinfect_day", "dhw_disinfect_time"]) out[k] = v("f-" + k);  // Desinfektion (0.36.3): "" = aus
   // Tag „aus“ und Uhrzeit geleert (das Feld ist dann gesperrt): die gespeicherte Uhrzeit bleibt
   if (!out.dhw_disinfect_day && !out.dhw_disinfect_time) delete out.dhw_disinfect_time;
@@ -3189,36 +3580,36 @@ function collect() {
   const cm = document.querySelector('input[name="control_mode"]:checked');
   out.control_mode = cm ? cm.value : "beobachten";
   out.night_plan = [...document.querySelectorAll("tr.np")].map((tr) => ({ start: tr.querySelector(".np-start").value, end: tr.querySelector(".np-end").value }));
-  // Nachtzeiten aus dem Stromverbrauch (0.36): Sensorlisten als Arrays, Häkchen als bool
-  out.power_sensors = [...document.querySelectorAll("#power-list input")].map((i) => i.value.trim()).filter(Boolean);
-  out.power_exclude = [...document.querySelectorAll("#power-ex-list input")].map((i) => i.value.trim()).filter(Boolean);
+  // Nachtzeiten aus dem Stromverbrauch (0.36): Häkchen als bool – die Sensoren stehen seit 0.39.1 unter „Entitäten“
   out.night_plan_auto = $("f-night_plan_auto").checked;
-  out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
+  // Personen (seit 0.39.1 unter „Entitäten“): nur, wenn die Tabelle gezeichnet ist – sonst bleibt das Gespeicherte
+  if ($("em-persons")) out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
   out.rooms = []; out.floor_heating_rooms = [];
   for (const tr of document.querySelectorAll("tr.room")) {
     if (!tr.querySelector(".r-on").checked) continue;
-    const c = tr.dataset.climate;
+    const c = tr.dataset.climate, fl = floorOf(tr);
     out.rooms.push({ climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
                      temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim(),
                      group: tr.querySelector(".r-group").value.trim(), controller: tr.querySelector(".r-controller").checked,
                      managed: managedOf(tr, c), comfort: tr.querySelector(".r-comfort").value.trim(),
                      // Hydraulik (0.35): leer = unbekannt (wird nicht gespeichert), Stufen 0 = kein Voreinstellventil
-                     preset: tr.querySelector(".r-preset").value.trim(), preset_max: tr.querySelector(".r-preset-max").value.trim() });
-    if (tr.querySelector(".r-floor").checked) out.floor_heating_rooms.push(c);
+                     preset: tr.querySelector(".r-preset").value.trim(), preset_max: tr.querySelector(".r-preset-max").value.trim(),
+                     // Fußboden (0.39.1): Anschluss und höchster Vorlauf; floor_heating_rooms = alle Räume mit Fußboden
+                     floor_type: fl.floor_type, floor_max_flow: fl.floor_max_flow });
+    if (fl.floor) out.floor_heating_rooms.push(c);
   }
   out.vacations = [...document.querySelectorAll(".vac")].map((r) => {
     const g = (c) => r.querySelector(c).value;
     if (!g(".v-sd") || !g(".v-ed")) return "";
     return `${g(".v-sd")}${g(".v-st") ? " " + g(".v-st") : ""} - ${g(".v-ed")}${g(".v-et") ? " " + g(".v-et") : ""}`;
   }).filter(Boolean);
-  out.overrides = [...document.querySelectorAll("input.ov")].filter((i) => i.value.trim()).map((i) => `${i.dataset.role}=${i.value.trim()}`);
-  // Weg W und Benachrichtigungen (0.38): Schalter, Entität (leer = erkannt), Ziele mit Häkchen – fehlt ein Teil, bleibt
-  // das Gespeicherte
+  // Weg W und Benachrichtigungen (0.38): Schalter, Ziele mit Häkchen – fehlt ein Teil, bleibt das Gespeicherte
   const dc = document.querySelector('input[name="dhw_control"]:checked');
   if (dc) out.dhw_control = dc.value;
-  if ($("f-dhw_set_entity")) out.dhw_set_entity = v("f-dhw_set_entity");
   if ($("notify-list")) out.notify_targets = [...document.querySelectorAll("#notify-list input.n-on:checked")].map((i) => i.dataset.id);
-  return out;
+  // Seite „Entitäten“ (0.39.1): Zuordnungen der Kessel- und Regler-Rollen, Außenfühler, Wetter, Gaszähler, Anforderung,
+  // Leistungssensoren, Urlaubs-Schalter, Warmwasser-Soll-Entität
+  return emCollect(out);
 }
 
 async function saveSettings() {
@@ -3227,7 +3618,7 @@ async function saveSettings() {
   const body = collect();
   if (!dhwConfirm(body)) { msg.textContent = "Nicht gespeichert."; return; }
   // Leistungssensoren geändert (0.36): das Backend liest die Historie neu ein, die Nächte kommen erst danach
-  const same = (k) => JSON.stringify([...new Set(body[k])]) === JSON.stringify((SET || {})[k] || []);
+  const same = (k) => !(k in body) || JSON.stringify([...new Set(body[k])]) === JSON.stringify((SET || {})[k] || []);
   const reload = !same("power_sensors") || !same("power_exclude");
   const r = await fetch("api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await readJSON(r);
@@ -3251,9 +3642,10 @@ function saveNote(j) {
 }
 
 function applySuggestions() {
-  if (SUG.gas) $("f-gas_sensor").value = SUG.gas;
-  if (SUG.weather) $("f-weather_entity").value = SUG.weather;
-  if ((SUG.outdoor || []).length) { $("outdoor-list").innerHTML = ""; SUG.outdoor.forEach((o) => { addOutdoor(); $("outdoor-list").lastElementChild.querySelector("input").value = o; }); }
+  // Entitäten (0.39.1): Gaszähler, Wetter und Außenfühler auf „Automatik“ – die Erkennung findet dasselbe wie der Vorschlag
+  if (SUG.gas) emAuto("gas_sensor");
+  if (SUG.weather) emAuto("weather_entity");
+  if ((SUG.outdoor || []).length) emAuto("outdoor_sensors");
   const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
   const pre = new Set(SUG.auto_rooms || []);  // angehakt nur die Betriebsauswahl (kein Ventil doppelt), Felder für alle
   for (const tr of document.querySelectorAll("tr.room")) {
@@ -3298,7 +3690,9 @@ async function loadSettings() {
     setTimeout(loadSettings, 5000); return;
   }
   ENT = await getJSON("api/entities");
-  SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
+  try { EMAP = await getJSON("api/entity_map"); if (EMAP.starting) EMAP = null; }  // Seite „Entitäten“ (0.39.1)
+  catch (e) { EMAP = { error: e.message || String(e) }; }
+  SET = j.settings; SUG = j.suggested; SCHED = j.schedule;
   DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
   SLEEP = j.sleep || null;  // Nachtzeiten aus dem Stromverbrauch (0.36)
   DIS = j.disinfect || null;  // Desinfektion (0.36.3): Termin, Temperatur, Vorschlag

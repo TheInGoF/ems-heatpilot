@@ -167,10 +167,13 @@ def test_plan_line_says_which_outdoor_temperature(tmp_path):
 
 
 def test_weather_field_hint():
-    js = script()
-    assert ('field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), '
-            '"Vorhersage für den Vorheizplan zur Ankunft (Außentemperatur zum Zielzeitpunkt) und Bewölkung für die '
-            'Sonnenanteile; Rückfall für die aktuelle Außentemperatur. Die Steuerung nutzt die Vorhersage ab 0.37.")') in js
+    # seit 0.39.1 auf der Seite „Entitäten“ (Gruppe Außen & Wetter): der Zweck kommt aus entity_map
+    from heatpilot.entity_map import FIELD_ENTRIES
+    group, label, kind, multi, auto, purpose = FIELD_ENTRIES["weather_entity"]
+    assert (group, label, kind, multi, auto) == ("aussen", "Wetter", "weather", False, True)
+    assert purpose == ("Vorhersage für Vorheizen und Vorschau, Bewölkung für die Sonnenanteile; ohne Außenfühler auch die "
+                       "Außentemperatur.")
+    assert 'field("Wetter", ent(' not in script()
 
 
 # ------------------------------------------------------------------ Bereit für die Steuerung?
@@ -200,7 +203,7 @@ def test_ready_box_above_switch_loaded_from_api_heat(tmp_path):
     load = between(js, "async function loadReadiness() {", "function renderReadyBox(")
     assert 'await getJSON("api/heat")' in load and "HEAT = j;" in load
     assert "} catch (e) { renderReadyBox(null, e.message || String(e)); }" in load
-    assert "renderReadyBox(HEAT && HEAT.readiness); loadReadiness();" in between(js, "function renderSettings()", "let outdoorN")
+    assert "renderReadyBox(HEAT && HEAT.readiness); loadReadiness();" in between(js, "function renderSettings()", "function addVac()")
     assert 'else if (name === "settings") loadReadiness();' in between(js, "function showTab(name)", "const isTemp")
     # Antworten von POST api/heat/* behalten readiness
     assert "HEAT = { rooms: j.rooms, limits: j.limits, control: j.control, readiness: j.readiness }" in js

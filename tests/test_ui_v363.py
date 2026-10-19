@@ -39,7 +39,8 @@ NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boi
          "DIS_NOT_YET", "splitWhen", "disinfectTile", "DAY_NAMES", "CHARGE_FROM", "DIS_BOILER",
          "disinfectHtml", "disinfectState", "disinfectSuggestHtml", "disinfectSync", "applyDisinfect",
          "EMS_LOCK", "ctlRooms", "allRooms", "shortName", "hm", "leftText", "tileColors", "PHASE", "ctl", "managing",
-         "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock", "roomRows")
+         "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock",
+         "FLOOR_KINDS", "FLOOR_MAX", "FLOOR_HINT", "floorKind", "floorCell", "roomRows")  # Fußboden seit 0.39.1
 
 
 def run_js(tmp_path, body: str):
@@ -89,7 +90,7 @@ def test_dhw_card_has_disinfect_section_and_collect_saves_fields():
             in js)
     load = between(js, "async function loadSettings()", "let OV_STALE")
     assert "DIS = j.disinfect || null;" in load and "let DIS = null;" in js
-    assert "modeHint(); disinfectSync();" in between(js, "function renderSettings()", "let outdoorN")
+    assert "modeHint(); disinfectSync();" in between(js, "function renderSettings()", "function addVac()")
     # collect(): Tag und Uhrzeit als Text ("" = aus), Temperatur wie die anderen Zahlen
     coll = between(js, "function collect()", "async function saveSettings")
     strings = between(coll, "for (const k of [", "]) out[k] = v(")

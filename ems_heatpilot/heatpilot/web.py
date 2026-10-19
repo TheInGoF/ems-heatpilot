@@ -7,6 +7,9 @@ Seit 0.38 dazu Weg W und Benachrichtigungen: ``GET api/dhw`` (Status und Bereits
 ``POST api/dhw/resume`` („wieder einschalten“ – nur bei einer Pause, sonst 409), ``GET api/notify`` (Ziele zur
 Auswahl) und ``POST api/notify/test`` (Testnachricht nur an die gespeicherten Ziele). ``api/entities`` sagt je
 ``number``-Entität, ob sie als Warmwasser-Soll taugt (``dhw``: fits, hint – für die Auswahl).
+
+Seit 0.39.1 ``GET api/entity_map`` (nur lesen): alle Rollen in Gruppen mit Zweck, nötig/optional, Filter und dem, was
+gilt (``entity_map``) – für die Seite „Entitäten“ in den Einstellungen. Gespeichert wird weiter über ``api/settings``.
 """
 
 from __future__ import annotations
@@ -24,7 +27,7 @@ from aiohttp import web
 from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
-from . import dhw_control, dhw_entity, notify, valve_dry
+from . import dhw_control, dhw_entity, entity_map, notify, valve_dry
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -184,6 +187,19 @@ def make_app(app) -> web.Application:
                 **({"dhw": dhw_entity.picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
             })
         return json_response(out)
+
+    async def entity_map_get(_req):
+        """Seite „Entitäten“ (0.39.1): Rollen in Gruppen mit gewählter bzw. erkannter Entität und Zustand – nur lesen.
+        Dienste nur für die Benachrichtigungsziele; nicht lesbar: ihr Zustand bleibt offen."""
+        if app.eng is None:
+            return json_response({"starting": True, "status": app.status})
+        try:
+            services = await asyncio.wait_for(app.ha.get_services(), timeout=5)
+        except Exception:  # noqa: BLE001 – ältere HA bzw. Fehler: Dienste unbekannt
+            services = None
+        idx = Registry.of(await app.registry()).lookup()
+        return json_response(entity_map.build(app.cfg, app.eng.found, await app.suggestions(), app.eng.states, idx,
+                                              app.eng.ems, services))
 
     async def post_settings(req):
         try:
@@ -465,6 +481,7 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/settings", get_settings)
     web_app.router.add_post("/api/settings", post_settings)
     web_app.router.add_get("/api/entities", entities)
+    web_app.router.add_get("/api/entity_map", entity_map_get)
     web_app.router.add_post("/api/test_emsesp", test_emsesp)
     web_app.router.add_post("/api/reload_history", reload_history)
     web_app.router.add_get("/api/diagnostics", diag)

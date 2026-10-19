@@ -12,14 +12,16 @@ Tado und Anwesenheit.
 
 Nach der Installation öffnet die HeatPilot-Seite (Seitenleiste) direkt den
 Reiter **Einstellungen**. Eingerichtet wird ausschließlich dort – das Add-on hat
-keine YAML-Optionen:
+keine YAML-Optionen. Oben schaltet **„Allgemein | Entitäten“** zwischen den Einstellungen und der Seite
+[Entitäten](#entitäten) um (seit 0.39.1: alle Entitäten, die HeatPilot liest, geordnet an einer Stelle). Unter
+„Allgemein“:
 
 - **Steuerung:** der Hauptschalter **Beobachten** (Standard: lernen, empfehlen, Tado
   nur auf Knopfdruck) oder **HeatPilot steuert** (HeatPilot schreibt die
   Raum-Solltemperaturen selbst – siehe [Steuerung](#steuerung-beobachten-oder-heatpilot-steuert)),
   dazu der Wochenplan der Nachtabsenkung, Nacht- und Abwesenheitstemperatur, der
-  Vorheizdeckel und die **Nachtzeiten aus dem Stromverbrauch** (Leistungssensoren des Hauses,
-  „Nicht zählen“ für Waschmaschine & Co., Häkchen „Gelernte Zeiten verwenden“ – siehe
+  Vorheizdeckel und die **Nachtzeiten aus dem Stromverbrauch** (Häkchen „Gelernte Zeiten verwenden“; die
+  Leistungssensoren des Hauses und „Nicht zählen“ für Waschmaschine & Co. stehen unter Entitäten → Strom – siehe
   [Nachtzeiten aus dem Stromverbrauch](#nachtzeiten-aus-dem-stromverbrauch))
 - **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Passwort/Token).
   Gelesen werden Kessel und Regler alle 30 s und alle weiteren Geräte, die EMS-ESP
@@ -29,15 +31,10 @@ keine YAML-Optionen:
   meldet der Kessel erst nach dem ersten Brennerstart bzw. der ersten Warmwasserladung.
   Seit 0.36.1 fragt HeatPilot außerdem beim Start und dann stündlich die Kesselsteuerungen ab
   (ebenfalls nur lesen) – siehe [Bereit für die Steuerung?](#bereit-für-die-steuerung)
-- **Messwerte:** Außenfühler (einer oder mehrere, Minimum zählt), Gaszähler,
-  Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
-  Entitäten in Home Assistant. Die Wetter-Entität liefert die stündliche Vorhersage für den
-  Vorheizplan zur Ankunft und die Bewölkung für die Sonnenanteile; ohne Außenfühler auch die
-  aktuelle Außentemperatur. Seit 0.37 nutzen auch die Steuerung (Vorheizdauer) und die
-  [Vorschau (Trockenlauf)](#vorschau-trockenlauf) die Vorhersage
 - **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
   **„macht mit“** und **Komforttemperatur** (für „HeatPilot steuert“), **Raum** und
-  **Raumregler** (mehrere Thermostate als ein Raum), Fußbodenheizung, **Voreinstellung**
+  **Raumregler** (mehrere Thermostate als ein Raum), [Fußbodenheizung](#fußbodenheizung-je-raum) mit
+  Anschluss und höchstem Vorlauf, **Voreinstellung**
   und **Stufen** des Ventils (für den hydraulischen Abgleich), optionale
   Ventil-/Temperatur-/Feuchtesensoren. Unter jeder Entität stehen **Bereich** und
   **Gerät** aus Home Assistant (z. B. „Bereich: Wohnzimmer · Gerät: tado Smart Radiator
@@ -56,25 +53,83 @@ keine YAML-Optionen:
   hinzu, liest HeatPilot die Historie automatisch neu ein (dauert einige Minuten). Beim
   Speichern mehrerer Geräte in einem Raum sagt HeatPilot, welches das Schlüsselgerät ist
   (Raumregler, sonst das erste)
-- **Personen:** alle `person.*` mit Häkchen. Automatisch gewählt werden nur Personen
+- **Personen** (seit 0.39.1 unter Entitäten → Personen & Urlaub): alle `person.*` mit Häkchen. Automatisch gewählt werden nur Personen
   mit Home-Assistant-Benutzer und Gerät. Fahrzeuge, die als Person angelegt sind
   (Bild, Abwesenheiten, aber kein Benutzer), sind als „Fahrzeug oder Gerät?“
   markiert und nicht gewählt; Dummies ohne Gerät ebenso. Abwählen geht jederzeit. Nach einer
   Änderung zählt HeatPilot die Anwesenheit in den gespeicherten Daten neu;
   abgewählte Räume und Personen fließen in keine Auswertung mehr ein.
-- **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub** – unter Warmwasser seit 0.36.3 auch der
+- **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub** (Gaszähler, Warmwasser-Soll-Entität und Urlaubs-Schalter
+  stehen dort nur als Verweis „ändern unter Entitäten“) – unter Warmwasser seit 0.36.3 auch der
   Termin der **Desinfektion (Legionellen)** mit Vorschlag (siehe [Desinfektion](#desinfektion-legionellen)),
   seit 0.38 der Schalter **Warmwasser-Soll** (Aus / Trockenlauf / HeatPilot setzt, siehe
   [Weg W](#warmwasser-über-heatpilot-weg-w))
-- **Benachrichtigungen** (seit 0.38): Ziele in Home Assistant für Meldungen, mit „Testnachricht senden“ (siehe
-  [Benachrichtigungen](#benachrichtigungen))
-- **Zuordnungen (Experten):** was die Erkennung gefunden hat, mit eigener Korrektur
+- **Benachrichtigungen** (seit 0.38, seit 0.39.1 unter Entitäten): Ziele in Home Assistant für Meldungen, mit
+  „Testnachricht senden“ (siehe [Benachrichtigungen](#benachrichtigungen))
 - **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“
 
 Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
-(„Vorschläge übernehmen“ setzt sie erneut). **Speichern** prüft alle Eingaben,
+(„Vorschläge übernehmen“ setzt die Räume erneut und Gaszähler, Wetter und Außenfühler auf „Automatik“). **Speichern** prüft alle Eingaben,
 erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
 `/data/settings.json` und bleiben bei Updates erhalten.
+
+## Entitäten
+
+Seit 0.39.1 steht unter **Einstellungen → Entitäten** (Umschalter „Allgemein | Entitäten“) geordnet alles, was
+HeatPilot aus Home Assistant liest – und die eine Entität, die es beschreiben darf (Warmwasser-Soll). Die Gruppen sind
+aufklappbare Karten mit Zähler („Kessel (EMS-ESP) · 13 von 38 gefunden · 1 nicht verfügbar“): **Kessel (EMS-ESP)**,
+**Regler (EMS-ESP)**, **Warmwasser über HeatPilot**, **Außen & Wetter** (Außenfühler, Wetter), **Gas & Bedarf**
+(Gaszähler, Heizungsanforderung), **Strom** (Leistungssensoren, „Nicht zählen“), **Räume**, **Personen & Urlaub**
+(Personen, Urlaubs-Schalter) und **Benachrichtigungen**. Die Zahl am Reiter „Entitäten“ nennt die nötigen, die fehlen,
+und die nicht verfügbaren. Diese Seite ersetzt die frühere Karte mit den Zuordnungen und die einzelnen Entitätsfelder.
+
+Je Zeile: Name und wofür HeatPilot den Wert braucht, **nötig** oder **optional**, was gerade gilt (Entität, Zustand mit
+Einheit, Bereich) und ein Status:
+
+- **automatisch gefunden** – die Erkennung hat die Entität gefunden,
+- **gewählt** – von dir gewählt (bis zum Speichern mit „nicht gespeichert“),
+- **über EMS-ESP** – keine Entität, aber EMS-ESP liefert den Wert direkt (Einstellungen → Verbindung; beim
+  Außenfühler am Kessel nur zur Anzeige, siehe unten),
+- **Ersatz** – kein eigener Wert, eine andere Rolle genügt (z. B. „Brenner an“ statt der Brennerleistung),
+- **fehlt** (nötig, ohne Ersatz), **nicht verfügbar** (fehlt in Home Assistant oder meldet „unavailable“/„unknown“),
+  **nicht gefunden** bzw. **nicht gewählt** (optional).
+
+Daneben das Feld mit **Suche** (Name, Entität oder Bereich; alle Wörter müssen vorkommen). Die Liste zeigt die
+passenden Entitäten zuerst – den Vorschlag der Erkennung, dann nach Bereich und Name. Passend heißt die richtige
+Domäne und Einheit bzw. Geräteklasse, z. B. für den Vorlauf `sensor`/`number` mit °C, für den Gaszähler m³ oder kWh,
+für die Leistungssensoren W oder kW, für das Warmwasser-Soll nur, was dafür taugt. Mit Suchbegriff stehen darunter auch
+die unpassenden, markiert mit „passt nicht zur Rolle“. Pfeiltasten und Enter gehen auch. Was im Feld steht, ist nur
+die Suche: Übernommen wird ein Treffer (Klick oder Enter) oder eine Entität aus Home Assistant, genau so eingetragen;
+eine Entität, die Home Assistant (noch) nicht kennt, nur in der Form `domain.name` und mit Enter. Escape oder das
+Verlassen des Felds ohne Wahl lässt den Wert, wie er ist. **„Automatik“** geht zurück zur Erkennung (bei Rollen ohne
+Erkennung heißt der Knopf „leeren“). Bei
+Außenfühlern und Leistungssensoren lassen sich mehrere wählen, × entfernt eine. Oben filtert **„nur fehlende und nicht
+verfügbare“**; was die Erkennung bei Kessel und Regler nicht gefunden hat, steht eingeklappt unter „Weitere Werte“.
+
+**Was nötig ist** – im Code geprüft, mit Ersatz: der **Vorlauf** (Ist; Heizkurve, Wärmemodell, Vorschau – Ersatz nur
+EMS-ESP direkt); **Brenner an** oder **Brennerleistung** – eines genügt; **Warmwasser lädt** oder
+**Speichertemperatur** – eines genügt (eine Ladung erkennt HeatPilot auch am Anstieg der Speichertemperatur und hält
+sie aus dem Heizmodell heraus; ohne Speichertemperatur gibt es kein Warmwasser-Modell); eine **Außentemperatur**
+(Außenfühler, sonst der Außenfühler am Kessel als Entität in Home Assistant, sonst das Wetter); je Raum das
+**Thermostat**; die **Warmwasser-Soll-Entität** nur bei „HeatPilot setzt“. Der **Rücklauf** ist optional – er dient
+nur der Vorlauf-Auswertung und der Live-Anzeige. Liefert EMS-ESP einen Kessel- oder Regler-Wert direkt, fehlt er
+nicht – außer beim **Außenfühler am Kessel**: Den Wert direkt von EMS-ESP zeigt die Seite nur an, als
+Außentemperatur dient er nicht (dafür eine Entität wählen, einen Außenfühler oder das Wetter).
+
+**Räume** zeigt je Raum Thermostat, Temperatur-, Feuchte- und Ventilsensor mit Status; geändert wird in der
+Räume-Tabelle unter „Allgemein“ („in der Räume-Tabelle ändern“ springt hin), weil dort auch Name, Raum, Komfort,
+Fußboden und Voreinstellung stehen. Ein leeres Sensorfeld nutzt HeatPilot nicht – der Sensor am Gerät steht dann als
+Vorschlag dabei. **Personen** sind eine Liste mit Häkchen (nur Name und Zustand, keine Koordinaten),
+**Benachrichtigungen** die Ziele mit „Testnachricht senden“.
+
+**Gespeichert** wird mit „Speichern“ wie alle Einstellungen (`POST api/settings`) – es gibt keine zweite
+Speicherstelle: Kessel- und Regler-Rollen als `overrides` (`rolle=entity_id`, leer = Erkennung), alles andere in den
+bisherigen Feldern (`gas_sensor`, `weather_entity`, `outdoor_sensors`, `demand_sensor`, `power_sensors`,
+`power_exclude`, `persons`, `vacation_entity`, `dhw_set_entity`, `notify_targets`). In den Karten unter „Allgemein“
+steht nur noch, was gilt, mit „ändern unter Entitäten“. Alte Einstellungen bleiben gültig; frühere Zuordnungen
+`gas=…`/`weather=…` übernimmt HeatPilot beim Laden in Gaszähler bzw. Wetter (sie hatten Vorrang), Zuordnungen ohne
+bekannte Rolle stehen beim Kessel zum Entfernen. Die Seite liest `GET api/entity_map` (nur lesen); ist das nicht
+möglich, steht der Grund da, und Speichern lässt die Zuordnungen, wie sie sind.
 
 ## Alle Sensoren
 
@@ -437,6 +492,10 @@ Zustand. Geprüft wird in dieser Reihenfolge:
    Leistungssensoren nach dem Wochenplan (Hinweis).
 7. **Außentemperatur** – fehlt sie, rechnet das Vorheizen mit 5 °C (Einschränkung).
 8. **Laufzeit** – weniger als 72 gelernte Stunden im Hausmodell: „Modelle sind jung“ (Hinweis).
+9. **Fußboden-Grenze** (seit 0.39.1, Hinweis) – mit Fußbodenheizung die Grenze für den Vorlauf jetzt („Vorlauf-Grenze
+   der Fußbodenheizung jetzt: Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C“ bzw. „gerade keine
+   Vorlauf-Grenze“) und für jeden Raum, dessen Anschluss noch fehlt, **„Anschluss wählen“** – bis dahin gilt seine
+   Grenze immer, wie direkt am Kessel. Die Raumsteuerung schreibt keinen Vorlauf; die Stufe ändert sich dadurch nicht.
 
 Räume ohne „macht mit“ stehen als „nicht dabei“ in der Liste, ebenso der Heizkreis von EMS-ESP, falls
 er als Raum gewählt ist („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Heizkreis“). Die Übersicht zeigt bei „Beobachten“ die
@@ -587,7 +646,8 @@ Plans.
 Wann das Haus schlafen geht, verrät der Stromzähler: Abends fällt der Verbrauch auf das Nachtniveau
 (Standby), morgens steigt er wieder (Kaffeemaschine, Licht, Bad). Seit 0.36 lernt HeatPilot daraus
 den Wochenplan der Nachtabsenkung – als Vorschlag oder, mit dem Häkchen, als wirksame Zeiten.
-Einstellungen → Steuerung, unter dem Wochenplan:
+Die Sensoren wählst du unter Einstellungen → Entitäten → Strom; das Häkchen steht unter Einstellungen → Steuerung,
+unter dem Wochenplan (dort auch, welche Sensoren gewählt sind):
 
 - **Leistungssensoren (Haus, ggf. je Phase):** ein oder mehrere Sensoren in W oder kW; die Summe
   ist die Hausleistung, bei drei Phasen also alle drei eintragen. Gemeint ist der **Verbrauch** des
@@ -672,6 +732,16 @@ Gerechnet wird in 5-min-Schritten von jetzt bis zum Ende der 24. vollen Stunde:
   plausiblem Modell zählen wie die übrigen, Räume ohne plausibles Modell nach dem Messwert – mehr als 0,3 K
   unter dem Soll oder ohne Temperatur hält der Heizbetrieb an („Bad unter Soll (ohne Raummodell) –
   Heizbetrieb bleibt an“, mindestens 35 °C). Ohne plausibles Raummodell gibt es kein Vorlauf-Soll, mit Grund.
+- **Fußboden-Grenze (seit 0.39.1):** Das Vorlauf-Soll liegt nie über dem höchsten Vorlauf der Fußbodenheizungen,
+  für die er gerade gilt – direkt am Kessel (und Anschluss unbekannt) in jeder Stunde, mit Mischer nie, mit
+  RTL-Ventil, solange der Raum Wärme anfordert: jetzt nach den Messwerten, genau wie „Bereit für die Steuerung?“
+  (0,1 K unter dem Soll, Ventil über 5 %, „heizt“), danach in den Stunden, in denen der Raum laut Vorschau Wärme
+  braucht. Ohne plausibles Raummodell bleibt die Anforderung von jetzt, solange sein Soll wie jetzt ist (die
+  Raumtemperatur läuft dann nicht mit); ist ein Thermostat des Raums nicht verfügbar, gilt die Grenze in jeder
+  Stunde. Das gilt auch beim Vorheizen und beim Aufheizen. Die
+  Stunde sagt dann „… – begrenzt durch Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C“; „Womit gerechnet
+  wurde“ nennt die Fußboden-Räume mit ihrer Regel. Liegt die Grenze unter 35 °C, gilt sie, sobald ein Raum Wärme
+  braucht – sonst käme der Vorlauf nie auf die Untergrenze. Siehe [Fußbodenheizung je Raum](#fußbodenheizung-je-raum).
 - **Warmwasser-Soll:** die Warmwasser-Empfehlung für jeden Zeitpunkt (Komfort plus Reserve vor erwarteten
   Zapfungen, sonst das Minimum, niemand zu Hause bzw. Ankunft), mit dem Desinfektionstermin aus den
   Einstellungen; auf 1 K gerundet. Die Stunde des Termins ist markiert.
@@ -846,7 +916,8 @@ HeatPilot weiterhin nur Lese-Anfragen; die Schreibregeln für die Thermostate bl
   („Trockenlauf: würde 55 °C schreiben (…)“) – nach denselben Regeln wie unten, am Kessel ändert sich nichts.
 - **HeatPilot setzt**: HeatPilot schreibt nach den Regeln unten.
 
-**Entität:** vorgeschlagen aus der Erkennung (Rolle „Warmwasser-Soll“, nur `number`-Entitäten); eine andere lässt
+**Entität** (seit 0.39.1 unter Einstellungen → Entitäten → Warmwasser über HeatPilot; unter Warmwasser steht, welche
+gilt): vorgeschlagen aus der Erkennung (Rolle „Warmwasser-Soll“, nur `number`-Entitäten); eine andere lässt
 sich wählen – die Auswahl bietet nur `number`-Entitäten mit °C an, die nicht zu etwas anderem gehören, den Vorschlag
 und Namen mit Warmwasser-Hinweis zuerst. Geschrieben wird nur auf diese eine Entität, nur ganze Grad zwischen Minimum
 und Maximum der Warmwasser-Einstellungen, nur innerhalb der Grenzen, die Home Assistant für die Entität meldet, und
@@ -918,8 +989,8 @@ und Bereitschaft), `POST api/dhw/resume` („wieder einschalten“ – ohne Paus
 
 ## Benachrichtigungen
 
-Seit 0.38 meldet HeatPilot Probleme an Ziele in Home Assistant – **Einstellungen → Benachrichtigungen**, Liste
-mit Häkchen:
+Seit 0.38 meldet HeatPilot Probleme an Ziele in Home Assistant – **Einstellungen → Entitäten → Benachrichtigungen**
+(bis 0.39 eine eigene Karte), Liste mit Häkchen:
 
 - **notify-Entitäten** (Home Assistant ab 2024.6, z. B. `notify.handy`) – geschickt mit der Aktion
   `notify.send_message`,
@@ -957,7 +1028,7 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
   Kessel das Speicher-Soll: `number.set_value` über Home Assistant, nur auf die eine eingestellte Entität des
   Warmwasser-Solls, nur ganze Grad zwischen Minimum und Maximum, nur bei Änderung ab 1 K, mit Haltezeit und Prüfung
   nach 60 s (siehe [Weg W](#warmwasser-über-heatpilot-weg-w)). Jede andere `number`-Entität weist der Code hart ab.
-- Meldungen schickt es nur an die gewählten Ziele (Einstellungen → Benachrichtigungen, siehe dort).
+- Meldungen schickt es nur an die gewählten Ziele (Einstellungen → Entitäten → Benachrichtigungen, siehe dort).
 - Das Ventilverhalten (seit 0.39) lernt und zeigt es nur; was es mit den Thermostaten als Stellglied tun würde,
   protokolliert es im Trockenlauf – geschrieben wird dafür nichts (siehe [Ventilverhalten](#ventilverhalten)).
 
@@ -1048,7 +1119,8 @@ Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
 Im Reiter Einstellungen → **Räume** stehen alle Thermostate (climate-Entitäten)
 als Tabelle. Häkchen = Raum wird gelernt. Je Raum optional: eigener Name,
 „macht mit“ und Komforttemperatur (für „HeatPilot steuert“), Raum und Raumregler
-(mehrere Thermostate als ein Raum, siehe „Steuerung“), Voreinstellung und Stufen des
+(mehrere Thermostate als ein Raum, siehe „Steuerung“), Fußbodenheizung (Anschluss und höchster
+Vorlauf, siehe [Fußbodenheizung je Raum](#fußbodenheizung-je-raum)), Voreinstellung und Stufen des
 Ventils (siehe „Hydraulischer Abgleich“), Ventil-/Heizleistungs-Sensor (%),
 Temperatursensor (für die Langzeitstatistik) und Feuchtesensor. Unter jeder Entität
 stehen Bereich und Gerät aus Home Assistant; die Tabelle ist nach Bereich und Name
@@ -1057,7 +1129,8 @@ Sensoren vor – für jedes Thermostat mit Gerät in Home Assistant (Tado-Cloud,
 andere): Name und Raum aus dem Bereich, Temperatur/Feuchte/Heizleistung aus den
 Sensoren desselben Geräts, Raumregler bei Wandthermostaten. Vorschläge füllen nur
 leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder ein);
-„macht mit“ setzt nie ein Vorschlag, nur du.
+„macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Entitäten →
+Räume.
 
 ## Wärmebedarf aus dem Tado-Soll
 
@@ -1207,23 +1280,52 @@ Was ignoriert wurde, steht in der Übersicht unter „Leitplanken“, im Selbstt
 mit diesem Schutz aus den gespeicherten und den Home-Assistant-Daten neu
 berechnet; „Historie neu einlesen“ macht dasselbe auf Knopfdruck.
 
-## Fußbodenheizung ohne Stellventil
+## Fußbodenheizung je Raum
 
-Für Räume mit Fußbodenheizung, deren Kreis nicht geregelt wird (z. B. festes
-RTL-Ventil), in Einstellungen → Räume das Häkchen **„Fußboden“** setzen.
+In Einstellungen → **Räume** steht je Thermostat die Spalte **Fußboden**: ob im Raum eine Fußbodenheizung liegt und
+wie sie angeschlossen ist. Davon hängt ab, wie heiß der Vorlauf werden darf:
 
-Das Raummodell bekommt dann einen zweiten Wärmeeingang: Der Fußboden heizt
-immer, wenn warmes Heizwasser fließt – unabhängig von Tado – und wirkt über den
-Estrich verzögert (≈3 h). Der Tado-Heizkörper im Raum wird als Boost gelernt.
-Ohne diese Angabe würde das Modell die Fußbodenwärme als „Fremdwärme“ deuten
-und das Auskühlen des Raums falsch einschätzen.
+- **kein Fußboden** (Standard) – nur Heizkörper.
+- **mit Mischer** – ein Mischer regelt die Temperatur der Fußbodenheizung selbst nach. Der Vorlauf darf höher sein,
+  wie es gerade passt; aus diesem Raum kommt keine Grenze.
+- **mit RTL-Ventil** (Rücklauftemperaturbegrenzer) – ist der Boden kalt, fließt am Anfang der volle Vorlauf hinein.
+  Der **höchste Vorlauf** gilt, solange der Raum Wärme anfordert: ein Thermostat des Raums mehr als 0,1 K unter
+  seinem Soll, sein Ventil über 5 % offen oder es meldet „heizt“ bzw. „heizt vor“ (`hvac_action: heating` oder
+  `preheating`); bei mehreren Thermostaten in einem Raum genügt eines. Fordert der Heizkörper Wärme an, ist auch der
+  Boden zu kalt. Weiß HeatPilot es nicht (Thermostat nicht verfügbar, ausgeschaltet ohne `hvac_action`), gilt die
+  Grenze ebenfalls – auch in der Vorschau: Ist das Thermostat jetzt nicht verfügbar, gilt sie dort in jeder Stunde.
+- **direkt am Kessel** – ohne Mischer und ohne RTL: Der höchste Vorlauf gilt **immer**, auch ohne Raummodell und
+  ohne Messwert.
+
+Bei RTL-Ventil und direkt am Kessel erscheint darunter das Feld **höchster Vorlauf (°C)**, 25–70 °C in halben Grad
+(die Vorschau rechnet mit ganzen Grad darunter, z. B. 45,5 °C → höchstens 45 °C); leer = 45 °C
+(vorsichtig – den richtigen Wert nennt der Heizungsbauer bzw. die Anleitung von Estrich und Rohr). Gibt es mehrere
+Fußboden-Räume, gilt die niedrigste Grenze, die gerade gilt. Liegen in einem Raum mehrere Thermostate mit
+verschiedenen Angaben, gilt die strengere (direkt vor RTL vor Mischer, die niedrigste Grenze).
+
+**Wo die Grenze gilt:** in der [Vorschau (Trockenlauf)](#vorschau-trockenlauf) für jedes Vorlauf-Soll, auch beim
+Vorheizen – die Stunde sagt „begrenzt durch …“ –, in „Bereit für die Steuerung?“ als Hinweis mit der Grenze jetzt,
+und später vor jedem Schreiben des Vorlaufs (Weg B, [Planung](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/planung-vorlauf-ems.md)).
+Die Regeln der [Ventile im Trockenlauf](#ventile-im-trockenlauf) verschieben nur Raum-Sollwerte, nie den Vorlauf.
+Geschrieben wird dadurch nichts – weder am Kessel noch an den Thermostaten.
+
+**Einstellungen vor 0.39.1:** Ein Raum mit dem früheren Häkchen „Fußboden“ zeigt **„Anschluss wählen“**. Bis du
+wählst, gilt er wie direkt am Kessel mit 45 °C (sicher), und „Bereit für die Steuerung?“ erinnert daran. Gespeichert
+wird der Anschluss am Raum (`floor_type`: `mischer`, `rtl`, `direkt`; `floor_max_flow` in °C); die Liste
+`floor_heating_rooms` enthält weiter alle Räume mit Fußbodenheizung.
+
+**Lernen:** Für jeden Raum mit Fußbodenheizung bekommt das Raummodell einen zweiten Wärmeeingang: Der Fußboden heizt,
+wenn warmes Heizwasser fließt – unabhängig von Tado – und wirkt über den Estrich verzögert (≈3 h). Der Tado-Heizkörper
+im Raum wird als Boost gelernt. Ohne diese Angabe würde das Modell die Fußbodenwärme als „Fremdwärme“ deuten und das
+Auskühlen des Raums falsch einschätzen. Den Vorlauf bestimmen Fußboden-Räume nicht; den Heizbetrieb halten sie an,
+solange sie Wärme brauchen. Ein anderer Anschluss bei bleibender Fußbodenheizung lässt das Gelernte stehen.
 
 ## Urlaub
 
 In Einstellungen → **Urlaub** Zeiträume mit „+ Urlaub“ anlegen: Beginn und Ende
 als Datum, Uhrzeiten optional. Ohne Uhrzeit beim Ende gilt die
 **Standard-Rückkehrzeit** (Vorgabe 18:00). Optional ein **Urlaubs-Schalter**
-(z. B. `input_boolean.urlaub`, an = Urlaub).
+(z. B. `input_boolean.urlaub`, an = Urlaub) – zu wählen unter Einstellungen → Entitäten → Personen & Urlaub.
 
 **Rückkehr – das Live-Signal schlägt den Plan:**
 
@@ -1369,4 +1471,5 @@ Mit Termin ist die Desinfektion in „Bereit für die Steuerung?“ eine nötige
 
 EMS-ESP-Entitäten werden in beiden Schreibweisen erkannt: Kurzname
 (`binary_sensor.boiler_burngas`) und langer Name (`binary_sensor.boiler_gas`),
-auch mit Präfix (`number.ems_esp_thermostat_hc1_remotetemp`).
+auch mit Präfix (`number.ems_esp_thermostat_hc1_remotetemp`). Was gefunden wurde, und eine eigene Wahl je
+Rolle: Einstellungen → [Entitäten](#entitäten).

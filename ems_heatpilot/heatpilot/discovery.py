@@ -1,7 +1,7 @@
 """Entitäten automatisch finden: EMS-ESP-Therme, Tado-Räume, Personen, Wetter, Gas.
 
-Jede Zuordnung lässt sich in den Add-on-Optionen über ``overrides``
-(``rolle=entity_id``) überschreiben.
+Jede Kessel- und Regler-Rolle lässt sich unter Einstellungen → Entitäten überschreiben (gespeichert als
+``overrides``, ``rolle=entity_id``); die übrigen Entitäten stehen dort in ihren Feldern (``entity_map``).
 """
 
 from __future__ import annotations

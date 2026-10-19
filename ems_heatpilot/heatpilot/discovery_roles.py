@@ -2,7 +2,7 @@
 
 ``BOILER_ROLES`` (Kessel) und ``THERMOSTAT_ROLES`` (Regler, Heizkreis 1) ordnen jeder Rolle die Namen zu, unter
 denen EMS-ESP den Wert meldet – in der API und als Entität in Home Assistant. ``ROLE_LABELS`` beschriftet die
-Rollen für die Oberfläche (Zuordnungen, Diagnose). Nur Tabellen, keine Logik; ``discovery`` sucht damit die
+Rollen für die Oberfläche (Seite „Entitäten“, Diagnose). Nur Tabellen, keine Logik; ``discovery`` sucht damit die
 Entitäten und reicht die Namen weiter.
 """
 
@@ -72,7 +72,7 @@ THERMOSTAT_ROLES: dict[str, tuple[str, ...]] = {
     "disinfect_hour": ("dhw_disinfecthour", "wwdisinfecthour", "dhw_disinfection_hour"),
 }
 
-# Beschriftungen für die Oberfläche (Zuordnungen)
+# Beschriftungen für die Oberfläche (Seite „Entitäten“, Diagnose)
 ROLE_LABELS: dict[str, str] = {
     "flow_temp": "Vorlauftemperatur (Ist)",
     "sel_flow_temp": "Vorlauftemperatur (Soll am Kessel)",

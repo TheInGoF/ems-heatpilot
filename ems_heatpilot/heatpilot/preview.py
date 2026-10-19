@@ -22,6 +22,14 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
   Beginn rechnet ``desired`` mit der Aufheizzeit bei maximalem Vorlauf – meist ist es deshalb der maximale),
   heizt er sonst auf, +5 K. Heizbetrieb aus nur, wenn kein Raum Wärme braucht – auch keiner, der nicht für den
   Vorlauf zählt (``_other_need``).
+* **Fußboden-Grenze** (0.39.1, ``floor_limit``): Das Vorlauf-Soll liegt nie über dem höchsten Vorlauf der
+  Fußbodenheizungen, für die er gerade gilt – direkt am Kessel (bzw. Anschluss unbekannt) immer, Mischer nie,
+  RTL-Ventil, solange der Raum Wärme anfordert (``_floor_want``): jetzt nach den Messwerten wie „Bereit für die
+  Steuerung?“ (``floor_limit.demand``), danach in den Schritten, in denen er laut Vorschau Wärme braucht; ohne
+  Raummodell bleibt die Anforderung von jetzt, solange das Soll wie jetzt ist; hat ein Gerät des Raums keinen Zustand
+  (nicht verfügbar), bleibt sie offen und die Grenze gilt (sicher). Auch beim Vorheizen und Aufheizen (``_capped``,
+  nach allen anderen Regeln). Liegt die Grenze unter 35 °C, gilt sie, sobald ein Raum Wärme braucht. Der Grund sagt
+  dann „… – begrenzt durch Fußboden …“.
 * **Warmwasser-Soll** aus ``DhwModel.recommend`` mit derselben Anwesenheit und dem Desinfektionstermin, auf ganze
   Grad wie Weg W (``dhw_control.wish``: halbe Grad aufwärts, Minimum…Maximum).
 * **Schreibvorgänge, die es gäbe** (``count_writes``): nur bei Änderung ab 1 K bzw. an/aus, 5 min Haltezeit. Seit 0.38
@@ -44,7 +52,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from . import dhw_control, dhw_disinfect, guards
+from . import dhw_control, dhw_disinfect, floor_limit, guards
 from .config import Config
 from .controlloop import Presence, desired
 from .engine_summary import FORECAST_MAX_GAP_MIN
@@ -167,6 +175,12 @@ class _Run:
         self.skipped: list[dict] = []
         self.rooms = self._rooms(readings)
         self.preheat: dict = {}
+        # Fußboden-Grenze (0.39.1): Räume, Anforderung jetzt aus den Messwerten, Räume mit einem Gerät ohne Zustand
+        self.floors = floor_limit.floor_rooms(self.cfg, eng.found.rooms)
+        seen = floor_limit.read(self.floors, eng.states)
+        self.floor_now = {f.climate: floor_limit.demand(f, seen) for f in self.floors}
+        self.floor_blind = {f.climate for f in self.floors if floor_limit.blind(f, seen)}
+        self.floor_sp0: dict = {}  # Soll jetzt (erster Schritt) je Fußboden-Raum
 
     def _rooms(self, readings: list[tuple]) -> list[_Room]:
         eng, cfg = self.eng, self.cfg
@@ -286,7 +300,8 @@ class _Run:
         """Vorlauf fürs Vorheizen: der niedrigste (1 K genau), mit dem der Raum ab ``t`` bis ``until`` sein Soll
         erreicht – reicht auch der maximale nicht, der maximale. Den Beginn ``t`` bestimmt die Steuerung
         (``desired``: Aufheizzeit bei maximalem Vorlauf, gedeckelt mit „Vorheizen höchstens“), deshalb ist es
-        meist der maximale Vorlauf. Einmal je Vorheizen gerechnet, dann fest."""
+        meist der maximale Vorlauf. Einmal je Vorheizen gerechnet, dann fest. Die Fußboden-Grenze (0.39.1) gilt danach
+        in ``_capped`` – dieselbe Zahl, als suchte es nur bis zur Grenze, und die Stunde sagt „begrenzt durch …“."""
         key = (r.room.climate, until)
         if key not in self.preheat:
             hours = (until - t).total_seconds() / 3600
@@ -303,20 +318,42 @@ class _Run:
     def step(self, t: datetime) -> dict:
         t_out, src = self._t_out(t)
         pres = self.hh.at(t)
-        sps, phases, needs = {}, {}, []
+        sps, phases, needs, wants = {}, {}, [], {}
+        first = t.timestamp() <= self.start_ts
         for r in self.rooms:
             sp, phase, until = self._setpoint(r, t, pres, 5.0 if t_out is None else t_out)
             sps[r.name], phases[r.name] = sp, phase
             need = self._need(r, sp, phase, until, t, t_out) if t_out is not None else None
+            wants[r.room.climate] = self._floor_want(r, need is not None, sp, first)
             if need is not None:
                 needs.append((need[0], r.name, need[1]))
-        flow, heating, why = self._flow(needs, t_out)
+        cap, cap_why = floor_limit.cap_of(self.floors, wants)
+        flow, heating, why, limited = self._capped(needs, self._flow(needs, t_out), cap, cap_why)
         dhw, dhw_why, dhw_exact = self._dhw(t, pres)
         night = self.cfg.is_night_at(t) if self.cfg.is_managing() else self.eng.eff.is_night(t.time())
         return {"ts": int(t.timestamp()), "t": t, "t_out": t_out, "src": src, "flow": flow, "heating": heating,
                 "why": why, "dhw": dhw, "dhw_why": dhw_why, "sps": sps, "phases": phases, "night": night,
                 "home": pres.home_count, "vacation": pres.vacation,
-                "dhw_exact": dhw_exact}
+                "dhw_exact": dhw_exact, "cap": cap, "limited": limited}
+
+    def _floor_want(self, r: _Room, needs_heat: bool, sp: float | None, first: bool) -> bool | None:
+        """Fordert ein Fußboden-Raum in diesem Schritt Wärme an (für die RTL-Grenze, ``floor_limit.cap_of``)? None =
+        offen, die Grenze gilt. Jetzt (erster Schritt) wie „Bereit für die Steuerung?“ aus den Messwerten (0,1 K unter
+        dem Soll, Ventil, hvac_action). Danach: braucht er laut Vorschau Wärme, ja; hat ein Gerät keinen Zustand, offen;
+        ohne Raummodell (die Temperatur läuft nicht mit) die Anforderung von jetzt, solange das Soll wie jetzt ist."""
+        c = r.room.climate
+        if c not in self.floor_now:
+            return needs_heat
+        if first:
+            self.floor_sp0[c] = sp
+            return self.floor_now[c]
+        if needs_heat:
+            return True
+        if c in self.floor_blind:
+            return None
+        if r.model is None and c in self.floor_sp0 and self.floor_sp0[c] == sp:
+            return self.floor_now[c]
+        return False
 
     def _flow(self, needs: list[tuple], t_out: float | None) -> tuple[int | None, bool | None, str]:
         if not any(r.heats for r in self.rooms):
@@ -335,6 +372,22 @@ class _Run:
         else:
             value, name, why = (FLOW_MIN, *others[0][1:])
         return round(min(max(value, FLOW_MIN), self.cfg.max_flow_temp)), True, f"{name} {why}"
+
+    @staticmethod
+    def _capped(needs: list[tuple], res: tuple, cap: float | None, cap_why: str | None) -> tuple:
+        """Fußboden-Grenze (0.39.1) auf (Vorlauf, Heizbetrieb, Grund) anwenden – (…, begrenzt?). Über der Grenze gilt
+        die Grenze („begrenzt durch …“). Liegt sie unter ``FLOW_MIN``, käme der Vorlauf nie auf die Untergrenze: Dann
+        gilt die Grenze, sobald ein Raum Wärme braucht (statt „Heizbetrieb aus“)."""
+        flow, heating, why = res
+        if cap is None or heating is None:
+            return flow, heating, why, False
+        top = math.floor(cap + 1e-9)
+        if heating and flow > top:
+            return top, True, f"{why} – begrenzt durch {cap_why}", True
+        if heating is False and needs and top < FLOW_MIN:
+            _, name, reason = max(needs, key=lambda n: -math.inf if n[0] is None else n[0])
+            return top, True, f"{name} {reason} – begrenzt durch {cap_why}", True
+        return flow, heating, why, False
 
     def _dhw(self, t: datetime, pres: Presence) -> tuple[int | None, str, float | None]:
         """(Warmwasser-Soll auf ganze Grad wie Weg W, Grund, Empfehlung ungerundet – für die Schwelle)."""
@@ -410,6 +463,8 @@ def _hour(h_ts: int, rows: list[dict], writes: list[dict], dis: list[datetime], 
         "t_out_src": _dominant([r["src"] for r in sel]),
         "flow": flow, "flow_max": max((r["flow"] for r in sel if r["heating"]), default=None),
         "heating": heating, "flow_reason": lead["why"],
+        # Fußboden-Grenze (0.39.1): die der Stunde und ob sie den Vorlauf gesenkt hat
+        "flow_cap": _dominant([r["cap"] for r in sel]), "flow_limited": bool(heating and lead["limited"]),
         "dhw": dhw, "dhw_reason": next(r["dhw_why"] for r in sel if r["dhw"] == dhw),
         "rooms": {n: _dominant([r["sps"][n] for r in sel]) for n in names},
         "phases": {n: _dominant([r["phases"][n] for r in sel]) for n in names},
@@ -476,6 +531,7 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
         "dhw_note": rows[0]["dhw_why"] if rows and rows[0]["dhw"] is None else None,
         "rooms_used": [r.name for r in run.rooms if r.heats],
         "rooms_skipped": run.skipped,
+        "floor": floor_limit.describe(run.floors),  # Fußboden-Räume mit Anschluss und Grenze (0.39.1)
         "forecast": bool(run.pt_ts),
         # Versatz Außenfühler − Vorhersage jetzt (K): so weit ist die Vorhersage angeglichen, klingt über fade_h ab
         "forecast_offset_k": round(run.offset, 1) if run.pt_ts and run.t_out_now is not None else None,

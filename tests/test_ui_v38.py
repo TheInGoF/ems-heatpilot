@@ -122,18 +122,21 @@ def test_status_lines_log_and_settings_are_wired():
     rb = between(js, 'function renderReadyBox(r, err = "") {', "function readyBoxHtml(")
     assert 'box.insertAdjacentHTML("beforeend", dhwReadyHtml(r.dhw, READY_SHOW.dhw));' in rb
     assert "DHWC = j.dhw_control || null; NOTIFY = j.notify || null;" in between(js, "async function loadSettings()", "let OV_STALE")
-    rs = between(js, "function renderSettings()", "let outdoorN")
+    rs = between(js, "function renderSettings()", "function addVac()")
     assert 'card("Warmwasser", dhwSectionHtml(s, DHWC) + `<h3 class="sec-h">Temperaturen</h3><div class="form-grid">' in rs
-    assert '</div>${disinfectHtml(s, DIS)}`) +\n    card("Benachrichtigungen", notifyHtml(NOTIFY)) +' in rs
+    # Benachrichtigungen seit 0.39.1 auf der Seite „Entitäten“ (Zeile der Ziele zeigt dieselbe Karte)
+    assert '</div>${disinfectHtml(s, DIS)}`) +\n    card("Urlaub",' in rs and 'card("Benachrichtigungen"' not in rs
+    assert "notify_targets: () => notifyHtml(NOTIFY) };" in js
     assert "dhwModeHint(); notifySync(); dhwScroll();" in rs
     pickers = between(js, "const PICKERS = {", "};")
     assert ('dhw: { filter: (e) => !!(e.dhw && e.dhw.fits), sort: (a, b) => dhwRank(b) - dhwRank(a), '
             'label: "Warmwasser-Soll (number, °C)" }') in pickers and "number:" not in pickers  # nur passende (0.38)
     assert "${ENT.filter(p.filter).sort(p.sort || (() => 0)).map((e) =>" in between(js, "function datalists() {", "const ent =")
-    # gesendet: Schalter, Entität (leer = erkannt), Häkchen – fehlt ein Teil der Seite, bleibt das Gespeicherte
+    # gesendet: Schalter, Entität (leer = erkannt; seit 0.39.1 über die Seite „Entitäten“), Häkchen – fehlt ein Teil der
+    # Seite, bleibt das Gespeicherte
     coll = between(js, "function collect()", "async function saveSettings")
     assert "if (dc) out.dhw_control = dc.value;" in coll
-    assert 'if ($("f-dhw_set_entity")) out.dhw_set_entity = v("f-dhw_set_entity");' in coll
+    assert "return emCollect(out);" in coll and "if (!EMAP || EMAP.error || !EMAP.groups) return out;" in js
     assert ('if ($("notify-list")) out.notify_targets = [...document.querySelectorAll("#notify-list input.n-on:checked")]'
             '.map((i) => i.dataset.id);') in coll
     save = between(js, "async function saveSettings()", "function saveNote(j)")
@@ -161,7 +164,7 @@ def test_texts_match_backend(tmp_path):
     # die Doku nennt die Stellen in der Oberfläche
     docs = re.sub(r"\s+", " ", (ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8"))
     for text in ("Einstellungen → Warmwasser, Schalter „Warmwasser-Soll“", "**Trockenlauf**", "**HeatPilot setzt**",
-                 "„wieder einschalten“", "Einstellungen → Benachrichtigungen", "„Testnachricht senden“",
+                 "„wieder einschalten“", "Einstellungen → Entitäten → Benachrichtigungen", "„Testnachricht senden“",
                  "„Warmwasser über HeatPilot“", "beim Speichern mit „HeatPilot setzt“ fragt die Oberfläche einmal danach",
                  "solange geänderte Häkchen nicht gespeichert sind, ist der Knopf gesperrt"):
         assert text in docs, text
@@ -230,11 +233,12 @@ def test_settings_section_switch_entity_and_box(tmp_path, berlin):
             old: dhwSectionHtml({{ dhw_control: "kaputt" }}, null) }});""")
     sec = r["sec"]
     assert re.findall(r'value="(\w+)" (checked|)', sec) == [("aus", ""), ("trocken", ""), ("heatpilot", "checked")]
-    assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)][:4] == ["Aus", "Trockenlauf", "HeatPilot setzt",
-                                                                                 "Entität des Warmwasser-Solls"]
-    assert f'<input id="f-dhw_set_entity" list="dl-dhw" value="" placeholder="{ENT}"' in sec
-    hint = plain(re.search(r'<div class="hint">(.*?)</div>', sec).group(1))
-    assert hint == f"Leer = erkannt: {ENT}. Boiler WW-Soll: jetzt 50 °C · in Home Assistant 30–70 °C"
+    assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)] == ["Aus", "Trockenlauf", "HeatPilot setzt"]
+    # die Entität wird seit 0.39.1 unter „Entitäten“ gewählt – hier ein Verweis mit dem, was gilt
+    assert 'id="f-dhw_set_entity"' not in sec
+    ref = plain(re.search(r'<p class="em-ref" id="dhw-entity-ref">(.*?)</p>', sec).group(1))
+    assert ref == (f"Entität des Warmwasser-Solls: {ENT} (automatisch erkannt). Boiler WW-Soll: jetzt 50 °C · in Home "
+                   "Assistant 30–70 °C – ändern unter Entitäten")
     warn = plain(re.search(r'<div class="warnbox" id="dhw-warn">(.*?)</div>', sec).group(1))
     assert warn.startswith(f"{dc_mod.HINT_AUTOMATION}. {dc_mod.HINT_FAILSAFE}. Zurück auf „Aus“ oder „Trockenlauf“: "
                            "HeatPilot schreibt nichts zurück")
@@ -243,8 +247,8 @@ def test_settings_section_switch_entity_and_box(tmp_path, berlin):
     assert f"{rd['headline']} Einzelheiten unter „Bereit für die Steuerung?“" in plain(sec)
     assert rd["headline"].startswith("Läuft – eingeschränkt: Minimum 40 °C liegt unter 50 °C")  # Hygiene (0.38)
     # eingestellte Entität, die es nicht gibt; nichts erkannt; unbekannter Schalter → „Aus“, Hinweise wie im Backend
-    assert plain(r["own"]) == f"Eingestellt – leer = erkannt: {ENT}. number.anderes fehlt in Home Assistant"
-    assert plain(r["none"]).startswith("Keine number-Entität fürs Warmwasser-Soll erkannt – bitte wählen")
+    assert plain(r["own"]) == f"number.anderes (gewählt; Automatik wäre {ENT}). number.anderes fehlt in Home Assistant"
+    assert plain(r["none"]).startswith("keine number-Entität fürs Warmwasser-Soll erkannt – bitte wählen")
     assert 'value="aus" checked' in r["old"] and "Status nicht verfügbar" in r["old"]
     assert f"{dc_mod.HINT_FAILSAFE}." in r["old"]
 
@@ -419,7 +423,7 @@ def test_css_rules_and_theme_tokens():
                  "table.notify-t td { vertical-align: middle; overflow-wrap: anywhere; }"):
         assert rule in css, rule
     # neue Regeln nutzen nur Farben, die es in beiden Themen gibt
-    new = css.split("/* Warmwasser über HeatPilot (0.38)")[1]
+    new = css.split("/* Warmwasser über HeatPilot (0.38)")[1].split("/* Entitäten (0.39.1)")[0]  # 0.39.1: test_ui_v391
     assert set(re.findall(r"var\((--[\w-]+)\)", new)) <= {"--warn", "--series-4", "--border", "--bg", "--text-primary",
                                                           "--text-secondary"}
 

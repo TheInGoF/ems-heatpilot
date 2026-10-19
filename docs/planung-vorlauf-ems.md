@@ -1,7 +1,8 @@
 # Planung: Vorlauftemperatur über EMS führen (Diskussionspapier)
 
 Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden). Gebaut ist bisher nur **Weg W** (Warmwasser-Soll über Home
-Assistant, 0.38, siehe unten); alles andere nicht. EMS-ESP bleibt bis auf Weiteres **nur lesend**.
+Assistant, 0.38, siehe unten); alles andere nicht – die Fußboden-Grenze je Raum (0.39.1) gilt bisher nur in Vorschau
+und Anzeige. EMS-ESP bleibt bis auf Weiteres **nur lesend**.
 Dieses Papier sammelt Wege, Risiken und offene Fragen, damit die Entscheidung nebenbei reifen kann.
 
 ## Ausgangslage
@@ -210,15 +211,22 @@ Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineerin
 - **Wer Wärme braucht, bekommt sie sofort.** Braucht nur ein Raum Wärme, wird DIESER Raum warm – der Takt-Boost hebt
   den Vorlauf dafür an. Kein Warten, bis andere Räume auskühlen und mitanfordern. „Gemeinsam anfordern“ zieht nur
   Räume vor, die ohnehin bald heizen würden, und lässt nie einen Raum warten.
-- **Fußbodenheizung je Raum** (0.39.1): Anschluss Mischer (keine Grenze aus diesem Raum), RTL-Ventil (Grenze gilt,
-  solange der Raum Wärme anfordert) oder direkt am Kessel (Grenze gilt immer, auch ohne Modell); die Grenze legt
-  der Nutzer fest (Ingo: RTL, 55 °C). Takt-Boost, Vorheizen und jeder Vorlauf in Weg B halten sie ein.
+- **Fußbodenheizung je Raum – gebaut (0.39.1, `floor_limit.py`):** Anschluss Mischer (keine Grenze aus diesem
+  Raum), RTL-Ventil (Grenze gilt, solange der Raum Wärme anfordert: ein Thermostat mehr als 0,1 K unter Soll, Ventil
+  über 5 % oder „heizt“ bzw. „heizt vor“, bei Gruppen genügt eines; unbekannt = gilt) oder direkt am Kessel (Grenze gilt immer, auch
+  ohne Modell und Messwert); Räume mit dem alten Häkchen ohne Anschluss gelten wie direkt („Anschluss wählen“). Die
+  Grenze legt der Nutzer fest, ohne Angabe 45 °C (Ingo: RTL, 55 °C). Heute hält die Vorschau sie ein (jede Stunde,
+  RTL jetzt nach den Messwerten wie `flow_cap`, danach in den Stunden mit Wärmebedarf, bei nicht verfügbarem
+  Thermostat in jeder Stunde; auch beim Vorheizen; unter 35 °C gilt die Grenze statt „Heizbetrieb aus“),
+  „Bereit für die Steuerung?“ zeigt sie. **Weg B: harte Grenze vor jedem Schreiben** – jedes Vorlauf-Soll geht
+  unmittelbar vor dem Schreiben durch `floor_limit.flow_cap` (mit den Messwerten von jetzt) und wird abgewiesen bzw.
+  auf die Grenze gesenkt, auch beim Takt-Boost und beim Vorheizen; ein Wert darüber wird nie geschrieben.
 
 1. **Takt-Boost** (Idee Ingo): Taktet der Kessel stark (z. B. mehr als 3 Starts je Stunde, Brennerläufe
    unter 5 min) und wartet dabei ein Raum mit offenem Ventil unter Soll, den Vorlauf in 2-K-Schritten um
    bis zu +10 K anheben. Mehr Energie je Brennerlauf, längere Läufe, wartende Räume bekommen Leistung.
    Zurück, sobald der Raum warm ist oder das Takten aufhört. Preis: etwas weniger Brennwert, deshalb nur
-   bei Bedarf. Die Taktsperre selbst wird nie umgangen.
+   bei Bedarf. Die Taktsperre selbst wird nie umgangen, die Fußboden-Grenze auch nicht (höchstens bis zu ihr).
 2. **Beharrung tief:** Sind alle Räume am Soll und die Ventile wenig offen, Vorlauf senken, bis der
    erste Raum sein Soll nicht mehr hält (Raummodelle: nötiger Vorlauf je Raum, Maximum plus Reserve).
 3. **Aufheizen hoch:** Vor dem Nachtende bzw. der Ankunft Vorlauf anheben, damit die Aufheizzeit kurz
@@ -239,7 +247,8 @@ fordern drei Räume zusammen an, läuft er durch.
 ## Schutzregeln, falls geschrieben wird
 
 - Weiße Liste der erlaubten Befehle und Werte (wie heute bei Tado in `control.py`), Grenzen 35 °C bis
-  `max_flow_temp` (Ingo: braucht kein Raum mindestens 35 °C, Heizbetrieb aus), Fußboden-Grenze je Raum (unten), höchstens ein Schreibvorgang je 10 min je Wert, Kurvenparameter höchstens 3× am Tag.
+  `max_flow_temp` (Ingo: braucht kein Raum mindestens 35 °C, Heizbetrieb aus), Fußboden-Grenze je Raum als harte
+  Grenze vor jedem Schreiben (`floor_limit.flow_cap`, siehe „Regeln für den Vorlauf“), höchstens ein Schreibvorgang je 10 min je Wert, Kurvenparameter höchstens 3× am Tag.
 - Trockenlauf-Modus: HeatPilot rechnet und protokolliert, was es schreiben würde, schreibt aber nicht.
 - Jeder Schreibvorgang im Protokoll (wie `control_log`), Anzeige im Heizen-Reiter.
 - Ausfall-Verhalten dokumentiert: Weg A → ES73 regelt weiter; Weg B → Kesselknopf bzw. HA-Wächter.
