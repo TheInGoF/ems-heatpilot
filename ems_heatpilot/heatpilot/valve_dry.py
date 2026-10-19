@@ -20,7 +20,9 @@ mit mehreren Ventilen ist ein Raum; der Heizkreis von EMS-ESP ist nie dabei):
 
 Regeln wie abgesprochen, im Trockenlauf mitgezählt: nur bei Änderung, in der vollen Auflösung des Thermostats
 (Schrittweite je Gerät, ``valve_learn.step_of``), 5 min Haltezeit je Raum nach jedem Schreibvorgang (wie Weg W).
-Ändern Zeitplan oder Hand das Soll, endet ein Eingriff ohne Zurückschreiben.
+Ändern Zeitplan oder Hand das Soll, endet ein Eingriff ohne Zurückschreiben. Beide Regeln verschieben nur Raum-Sollwerte,
+nie den Vorlauf – die Fußboden-Grenze (``floor_limit``, 0.39.1) kann kein Vorschlag überschreiten; ein späterer
+Takt-Boost am Vorlauf muss sie vor jedem Schreiben einhalten (Planungspapier, Weg B).
 
 Protokoll: Tabelle ``valve_dry_log`` (90 Tage; „Lernstand neu berechnen“ lässt sie stehen). Eine Stunde danach trägt
 ``fill_actuals`` nach, was wirklich geschah (Überschwingen über das Soll, Brennerstarts – aus den Brennerereignissen

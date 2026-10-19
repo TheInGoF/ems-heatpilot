@@ -34,15 +34,17 @@ def between(js: str, start: str, end: str) -> str:
 
 
 def test_power_picker_filters_power_sensors_only():
-    js = script()
-    # nur sensor.* mit device_class power oder Einheit W/kW – kein Energiezähler, kein Temperaturfühler
-    assert 'const isPower = (e) => e.id.startsWith("sensor.") && (e.device_class === "power" || e.unit === "W" || e.unit === "kW");' in js
-    pickers = between(js, "const PICKERS = {", "};")
-    assert 'power: { filter: isPower, label: "Leistungssensoren" }' in pickers
-    # beide Listen nutzen diese Datalist
-    card = between(js, "function controlCard(s)", "function modeHint()")
-    assert 'entList("power-list", power, "power", "+ Sensor")' in card
-    assert 'entList("power-ex-list", powerEx, "power", "+ Verbraucher")' in card
+    # nur sensor.* mit device_class power oder Einheit W/kW – kein Energiezähler, kein Temperaturfühler; seit 0.39.1 der
+    # Filter der Seite „Entitäten“ (entity_map, in der Oberfläche emFits) – beide Listen nutzen ihn
+    from heatpilot import entity_map as em
+    f = em.filter_of("power")
+    assert f == {"domains": ["sensor"], "units": ["W", "kW"], "device_classes": ["power"]}
+    assert em.fits("sensor.haus", "W", None, f) and em.fits("sensor.haus", "kW", None, f)
+    assert em.fits("sensor.haus", None, "power", f)
+    assert not em.fits("sensor.zaehler", "kWh", "energy", f) and not em.fits("sensor.t", "°C", "temperature", f)
+    assert not em.fits("input_number.haus", "W", None, f)
+    assert [em.FIELD_ENTRIES[k][2:4] for k in ("power_sensors", "power_exclude")] == [("power", True), ("power", True)]
+    assert "isPower" not in script() and "entList(" not in script()
 
 
 def test_control_card_has_power_section_lists_and_checkbox():
@@ -50,19 +52,24 @@ def test_control_card_has_power_section_lists_and_checkbox():
     card = between(js, "function controlCard(s)", "function modeHint()")
     assert "Nachtzeiten aus dem Stromverbrauch</h3>" in card
     assert "const power = s.power_sensors || [], powerEx = s.power_exclude || [];" in card
-    assert 'field("Leistungssensoren (Haus, ggf. je Phase)"' in card
-    assert "Summe aller Einträge = Hausleistung; bei drei Phasen alle drei eintragen" in card
-    assert 'field("Nicht zählen (Waschmaschine, Spülmaschine, Wallbox …)"' in card
+    # Sensoren seit 0.39.1 unter „Entitäten“ → Strom; hier, was gewählt ist (und was fehlt), mit Sprung dorthin
+    assert "${powerRef(power, powerEx, missing)}" in card
+    ref = between(js, "function powerRef(power, powerEx, missing) {", "function modeHint()")
+    assert "Leistungssensoren: ${power.length ? list(power) : \"keine gewählt – die Funktion ist aus\"}" in ref
+    assert "onclick=\"emGo('strom');return false\">ändern unter Entitäten</a>" in ref
+    from heatpilot.entity_map import FIELD_ENTRIES
+    assert FIELD_ENTRIES["power_sensors"][1] == "Leistungssensoren (Haus, ggf. je Phase)"
+    assert "bei drei Phasen alle drei" in FIELD_ENTRIES["power_sensors"][5]
+    assert FIELD_ENTRIES["power_exclude"][1] == "Nicht zählen (Waschmaschine, Wallbox …)"
     assert 'field("Gelernte Zeiten verwenden"' in card
     assert '<input type="checkbox" id="f-night_plan_auto" ${s.night_plan_auto ? "checked" : ""}>' in card
     assert "Sonst nur Vorschlag; wo nichts Belastbares gelernt ist, gilt der Wochenplan oben." in card
     # Sensoren, die Home Assistant nicht kennt, werden genannt (found.power aus sleep.sensors)
     assert "const missing = SLEEP ? power.filter((p) => !(SLEEP.sensors || []).includes(p)) : [];" in card
-    # Mehrfach-Liste wie die Außenfühler: Zeile mit ×, Knopf hängt eine leere an
-    lst = between(js, "let entN = 100;", "function learnedCell")
-    assert "onclick=\"this.parentNode.remove()\">×</button>" in lst
-    assert "function addEnt(id, picker) { $(id).insertAdjacentHTML(\"beforeend\", entRow(id, picker, \"\")); }" in lst
-    assert "#outdoor-list .row input, #power-list .row input, #power-ex-list .row input" in markup
+    # Mehrfach-Liste (seit 0.39.1 auf der Seite „Entitäten“): je Entität ein ×, das Suchfeld hängt eine an
+    assert "function emDrop(key, n) { EM_VAL[key] = (EM_VAL[key] || []).filter((_, i) => i !== n); emRefresh(key); }" in js
+    assert "if (e.multi) { if (!(EM_VAL[key] || []).includes(id)) EM_VAL[key] = [...(EM_VAL[key] || []), id];" in js
+    assert ".em-pick input { flex: 1; width: auto; min-width: 0; }" in markup
 
 
 def test_learned_columns_only_with_sensors_and_mark_used_halves():
@@ -90,12 +97,15 @@ def test_learned_columns_only_with_sensors_and_mark_used_halves():
 def test_collect_sends_power_lists_and_auto_flag():
     js = script()
     coll = between(js, "function collect()", "async function saveSettings")
-    assert 'out.power_sensors = [...document.querySelectorAll("#power-list input")].map((i) => i.value.trim()).filter(Boolean);' in coll
-    assert 'out.power_exclude = [...document.querySelectorAll("#power-ex-list input")].map((i) => i.value.trim()).filter(Boolean);' in coll
+    # Sensorlisten seit 0.39.1 über die Seite „Entitäten“ (emCollect: Felder als Arrays), Häkchen als bool
+    assert "return emCollect(out);" in coll
+    em = between(js, "function emCollect(out) {", "\n}\n")
+    assert 'else if (s.kind === "field" && !EM_CUSTOM[e.key]) out[s.name] = e.multi ? [...(v || [])] : String(v || "").trim();' in em
     assert 'out.night_plan_auto = $("f-night_plan_auto").checked;' in coll
     # Speichern: geänderte Sensoren → Hinweis, dass die Historie neu eingelesen wird
     save = between(js, "async function saveSettings()", "function saveNote(j)")
     assert 'const reload = !same("power_sensors") || !same("power_exclude");' in save
+    assert "const same = (k) => !(k in body) ||" in save  # nicht mitgeschickt (Seite nicht geladen): nichts neu einlesen
     assert "Historie wird neu eingelesen – die gelernten Nachtzeiten erscheinen danach." in save
     # Daten aus der api/settings-Payload: sleep neben settings/schedule
     load = between(js, "async function loadSettings()", "let OV_STALE")

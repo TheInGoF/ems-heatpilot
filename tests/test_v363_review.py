@@ -253,7 +253,7 @@ globalThis.document = { querySelectorAll: () => [], querySelector: () => null };
 
 
 def test_empty_time_with_day_off_keeps_stored_time(tmp_path):
-    names = ["collect", "managedOf"]
+    names = ["collect", "managedOf", "EMAP", "emCollect"]  # 0.39.1: collect gibt emCollect(out) zurück
     body = COLLECT_STUBS + """
       const cases = [["", ""], ["", "07:30"], ["So", ""], ["So", "17:30"]].map(([d, t]) => {
         $("f-dhw_disinfect_day").value = d; $("f-dhw_disinfect_time").value = t;

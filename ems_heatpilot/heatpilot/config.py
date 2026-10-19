@@ -14,6 +14,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
+from . import entity_map, floor_limit
+
 DATA_DIR = Path(os.environ.get("HEATPILOT_DATA", "/data"))
 SETTINGS_NAME = "settings.json"
 # Sicherungskopie im Add-on-Konfigurationsordner (/addon_configs/<slug>/, per Samba erreichbar)
@@ -134,7 +136,8 @@ def _clean_time(value) -> str:
 
 
 def _clean_room(r: dict) -> dict:
-    """Ein Raum-Eintrag aus der Oberfläche; neue Felder (0.34) nur, wenn sie gesetzt sind."""
+    """Ein Raum-Eintrag aus der Oberfläche; neue Felder (0.34) nur, wenn sie gesetzt sind. Seit 0.39.1 dazu die
+    Fußbodenheizung: Anschluss ``floor_type`` und höchster Vorlauf ``floor_max_flow`` (``floor_limit.clean_entry``)."""
     climate = str(r.get("climate", "")).strip()
     if not _ENTITY.match(climate):
         raise ValueError(f"Raum ohne gültige climate-Entität: {climate or '(leer)'}")
@@ -181,6 +184,7 @@ def _clean_room(r: dict) -> dict:
         room["preset_max"] = steps["preset_max"]
     if steps.get("preset"):
         room["preset"] = steps["preset"]
+    room.update(floor_limit.clean_entry(r, climate))
     return room
 
 
@@ -282,6 +286,9 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                 clean[key] = items
         except (TypeError, ValueError) as err:
             errors.append(f"{key}: {err}")
+    if not errors and "rooms" in clean and "floor_heating_rooms" in clean:
+        # Fußboden (0.39.1): Räume mit Anschluss stehen immer auch in floor_heating_rooms (Modelle, Abgleich …)
+        clean["floor_heating_rooms"] = floor_limit.migrate(clean["rooms"], clean["floor_heating_rooms"])
     if not errors:
         lo = clean.get("dhw_min_temp", raw.get("dhw_min_temp"))
         mid = clean.get("dhw_comfort_temp", raw.get("dhw_comfort_temp"))
@@ -305,7 +312,8 @@ class Config:
     # group: gleicher Name = derselbe Raum (Mitläufer); controller: Wandthermostat (Raumregler);
     # managed: „macht mit“ (HeatPilot schreibt); comfort: Komforttemperatur des Raums (°C);
     # preset/preset_max (0.35): Voreinstellung am Ventilunterteil und Zahl der Stufen (fehlt = unbekannt,
-    # preset_max 0 = kein Voreinstellventil)
+    # preset_max 0 = kein Voreinstellventil); floor_type/floor_max_flow (0.39.1): Anschluss der Fußbodenheizung
+    # (mischer, rtl, direkt) und ihr höchster Vorlauf in °C – siehe floor_limit
     rooms: list[dict] = field(default_factory=list)
     # Personen für die Anwesenheit; leer = automatisch (alle person.* mit Gerät/GPS)
     persons: list[str] = field(default_factory=list)
@@ -360,7 +368,8 @@ class Config:
     preheat_max_h: float = 3.0
     # Nachtzeiten/-temperatur und Abwesenheit aus Tado weiterlernen (Einstellungen = Startwerte)
     learn_schedule: bool = True
-    # Räume mit Fußbodenheizung ohne Stellventil (z. B. festes RTL), climate-Entitäten
+    # Räume mit Fußbodenheizung (climate-Entitäten) – seit 0.39.1 samt denen mit Anschluss am Raum-Eintrag; ein
+    # Raum nur hier, ohne Anschluss (Einstellungen vor 0.39.1), hat einen unbekannten Anschluss (gilt wie direkt)
     floor_heating_rooms: list[str] = field(default_factory=list)
     # Urlaub: ["2026-12-20 - 2027-01-03", "2027-02-01 08:00 - 2027-02-05 17:30"]
     vacations: list[str] = field(default_factory=list)
@@ -395,8 +404,7 @@ class Config:
                 except (TypeError, ValueError, AttributeError):
                     continue  # unlesbar: Standard 13:00
             elif key == "overrides":
-                value = dict(item.split("=", 1) for item in value if "=" in item)
-                value = {k.strip(): v.strip() for k, v in value.items()}
+                value = entity_map.parse_overrides(value)
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
         for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host", "vacation_entity", "dhw_set_entity"):
@@ -408,6 +416,8 @@ class Config:
             cfg.dhw_set_entity = None
         cfg.notify_targets = [t for t in cfg.notify_targets or [] if isinstance(t, str) and NOTIFY_TARGET.match(t)]
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
+        entity_map.migrate_overrides(cfg)  # gas=/weather= in die Felder (0.39.1, Seite „Entitäten“)
+        cfg.floor_heating_rooms = floor_limit.migrate(cfg.rooms, cfg.floor_heating_rooms)  # Fußboden (0.39.1)
         if cfg.control_mode not in CONTROL_MODES:
             cfg.control_mode = "beobachten"
         if cfg.dhw_disinfect_day not in DISINFECT_DAYS:

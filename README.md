@@ -24,7 +24,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 ### Lernen
 
 - **Haus:** Wärmeverlust (W/K), Fremdwärme und Heizgrenze, Trägheit, Heizlast bei jeder Außentemperatur
-- **Räume:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil; Sonne je Raum ohne Sensor, aus Sonnenstand und Bewölkung
+- **Räume:** Aufheizen und Auskühlen je Raum, auch mit Fußbodenheizung – seit 0.39.1 mit Anschluss (Mischer, RTL-Ventil, direkt am Kessel) und höchstem Vorlauf, über den die Vorschau nie plant; Sonne je Raum ohne Sensor, aus Sonnenstand und Bewölkung
 - **Fremdwärme je Raum:** Kamin, Ofen oder viele Gäste werden erkannt – diese Zeit lernen weder Raum- noch Hausmodell
 - **Ventilverhalten je Raum (seit 0.39):** wie das Thermostat sein Ventil abhängig vom Abstand zum Soll stellt – Kennlinie, Reaktionszeit auf Soll-Sprünge, kleines Reglermodell mit Vorhersagefehler; bei Thermostaten ohne Ventilwert die Schaltpunkte. Gelernt aus den eigenen Messwerten, ohne Gerätedaten
 - **Warmwasser:** Bereitschaftsverlust je Temperatur, Ladekosten, Zapfprofil; Legionellenschaltung und Einmalladung laufen mit, ohne gelernt zu werden
@@ -121,7 +121,9 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 2. `https://github.com/TheInGoF/ems-heatpilot` eintragen
 3. „EMS HeatPilot“ installieren und starten
 4. In der Seitenleiste „HeatPilot“ öffnen – der Reiter **Einstellungen** führt
-   durch die Einrichtung (Vorschläge sind vorausgefüllt). Das Add-on hat keine YAML-Optionen.
+   durch die Einrichtung (Vorschläge sind vorausgefüllt). Das Add-on hat keine YAML-Optionen. Welche Entitäten
+   HeatPilot liest – Kessel, Regler, Außen, Gas, Strom, Räume, Personen, Benachrichtigungen –, steht seit 0.39.1 geordnet
+   auf der Seite **Entitäten** (Umschalter oben in den Einstellungen): was gefunden ist, was fehlt, Auswahl mit Suche.
 
 Ausführliche Doku: [ems_heatpilot/DOCS.md](ems_heatpilot/DOCS.md) · Änderungen: [CHANGELOG.md](CHANGELOG.md)
 

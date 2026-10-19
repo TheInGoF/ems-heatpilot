@@ -354,11 +354,10 @@ def test_classes(e, cls):
 
 # ------------------------------------------------------------------ Version, Doku
 def test_version_changelog_docs():
-    assert __version__ == "0.39.0"
-    assert re.search(r'^version: "0\.39\.0"$', (ROOT / "ems_heatpilot" / "config.yaml").read_text(), re.MULTILINE)
+    assert __version__ >= "0.39.0"  # seit 0.39.1 prüft test_floor391 die genaue Version
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    head = log.split("\n## ")[1]
-    assert head.startswith("0.39.0") and "nichts Neues geschrieben" in head
+    head = log.split("\n## 0.39.0\n")[1].split("\n## ")[0]
+    assert "nichts Neues geschrieben" in head
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     assert "## Ventilverhalten" in docs and "### Ventile im Trockenlauf" in docs
     assert "`target_temp_step`" in docs and "nur Protokoll, es wird nichts geschrieben" in docs

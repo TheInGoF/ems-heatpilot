@@ -25,13 +25,17 @@ Prüfung, Pause, fremder Schreiber, Kessel-Soll unklar (Entität und EMS-ESP ver
 ohne Desinfektionstermin (Legionellen) – mit dem Hinweis „HA-Automation für das Speicher-Soll abschalten“, solange in
 den letzten 24 h fremde Änderungen kamen. Dieselben Hindernisse hält ``DhwControl.blocker`` beim Schreiben ein. Auch
 er ändert die Stufe der Raumsteuerung nicht. Texte ohne Uhrzeit des Add-ons – Zeiten als ISO-Felder.
+
+Seit 0.39.1 steht unter ``floor`` die Fußboden-Grenze für den Vorlauf (``floor_limit.status``): wirksame Grenze jetzt,
+je Raum Anschluss, Anforderung und Grund; als Hinweise die wirksame Grenze und „Anschluss wählen“ für Räume mit
+Fußbodenheizung ohne Anschluss (Einstellungen vor 0.39.1, gelten wie direkt am Kessel). Ändert die Stufe nicht.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from . import dhw_control, dhw_entity, guards
+from . import dhw_control, dhw_entity, floor_limit, guards
 from .controlloop import MAX_FAILS, preheat_hours, reach_c
 from .emsesp import BOILER_CONTROLS
 from .ems_lock import LOCK_TEXT
@@ -283,7 +287,7 @@ def assess(eng, now_ts: int) -> dict:
 
     # 5. Anwesenheit
     if not eng.found.persons:
-        notes.append("Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Personen)")
+        notes.append("Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Entitäten → Personen & Urlaub)")
     else:
         unclear, unknown = _presence(eng, now_ts)
         if unclear:
@@ -306,6 +310,9 @@ def assess(eng, now_ts: int) -> dict:
     if managing and loop is not None and loop.paused(now_ts):
         notes.append(f"Pausiert bis {datetime.fromtimestamp(loop.pause_until).astimezone():%H:%M} – "
                      "solange schreibt HeatPilot nichts")
+    # 9. Fußboden-Grenze (0.39.1): nur Hinweise – die Raumsteuerung schreibt keinen Vorlauf
+    floor = floor_limit.status(cfg, eng.found.rooms, eng.states)
+    notes += floor["notes"]
 
     level = "nicht bereit" if blockers else ("eingeschränkt" if limits else "bereit")
     if blockers:
@@ -331,6 +338,7 @@ def assess(eng, now_ts: int) -> dict:
                    "accepted": len(accepted), "learning": len(learning)},
         "boiler": boiler(eng),
         "dhw": dhw(eng, now_ts),
+        "floor": floor,
     }
 
 
