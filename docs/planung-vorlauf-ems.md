@@ -88,9 +88,15 @@ Weg W als eigene Version.
   wird dann abgeschaltet – zwei Schreiber gleichzeitig darf es nicht geben (Hinweis in der Oberfläche).
 - Eigener Schalter „Warmwasser: HeatPilot“, getrennt von der Raumsteuerung; erst Trockenlauf (Vorschau
   in 0.37 zeigt, was geschrieben würde, neben dem, was die Automation tatsächlich setzt), dann schreiben.
-- Grenzen: `dhw_min_temp` bis `dhw_max_temp` aus den Einstellungen, höchstens ein Schreibvorgang je
-  Stunde, Protokoll wie `control_log`. Fällt HeatPilot aus, bleibt das letzte Soll stehen – darum nie
-  unter das Minimum.
+- Grenzen: `dhw_min_temp` bis `dhw_max_temp` aus den Einstellungen. Fällt HeatPilot aus, bleibt das
+  letzte Soll stehen – darum nie unter das Minimum.
+- **Schreiben nur bei Änderung** (Ingo): kein „55, 55, 55“ – nur wenn sich das Soll ändert, und höchstens
+  alle 15 min. Der Kessel hält den Wert dann selbst.
+- **Nach 60 s prüfen**, ob der Kessel ihn übernommen hat (`wwseltemp` zurücklesen). Wenn nicht: Fehler im
+  Protokoll, Hinweis in der Oberfläche und eine Meldung in HA (Benachrichtigung bzw. Problem-Sensor
+  `binary_sensor.heatpilot_problem` mit Grund), kein endloses Nachschreiben – nach 3 Fehlschlägen
+  hintereinander pausiert Weg W, bis jemand nachsieht.
+- Jeder Schreibvorgang mit Grund im Protokoll wie `control_log`.
 - Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
   `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an).
 
