@@ -154,7 +154,9 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
                    | ({f.gas} if f.gas else set())
                    | ({eng.cfg.vacation_entity} if eng.cfg.vacation_entity else set())
                    | {d["heating_power"] for r in f.rooms for d in r.devices if d.get("heating_power")}
-                   | {d["humidity"] for r in f.rooms for d in r.devices if d.get("humidity")})
+                   | {d["humidity"] for r in f.rooms for d in r.devices if d.get("humidity")}
+                   # seit 0.36: Hausleistung – damit nach dem ersten Start sofort Nächte da sind
+                   | set(f.power) | set(f.power_exclude))
     with_attrs = f.climate_ids() + f.persons + ([f.weather] if f.weather else [])  # Bewölkung
     series: dict[str, list] = {e: [] for e in plain + with_attrs}
     t = start_ts

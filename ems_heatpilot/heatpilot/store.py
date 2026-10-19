@@ -63,6 +63,9 @@ SAMPLE_COLS = (
     "dhw_starts", "dhw_special", "syspress",
     # seit 0.32: alle Personen lange weg (Reise ohne Urlaubseintrag) – kein Urlaub, nur nicht lernen
     "away_long",
+    # seit 0.36: Hausleistung in W (Summe der Leistungssensoren; NULL, sobald einer fehlt) und davon
+    # die Verbraucher, die nicht zählen (Summe der vorhandenen Ausschluss-Sensoren)
+    "power_w", "power_ex_w",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",
@@ -111,10 +114,16 @@ class Store:
         werden beim Neueinlesen der Historie neu gebildet und hier gelöscht (sonst doppelt).
         """
         self.db.execute("DELETE FROM kv WHERE key LIKE 'model.%' OR key IN "
-                        "('last_room_step', 'last_hour', 'schedule.learned', 'backfill_done')")
+                        "('last_room_step', 'last_hour', 'schedule.learned', 'sleep.nights', 'backfill_done')")
         self.db.execute("DELETE FROM daily WHERE day >= ?", (since_day,))
         self.db.execute("DELETE FROM snapshots")
         self.db.execute("DELETE FROM room_events")  # Fremdwärme-Ereignisse werden beim Nachlernen neu erkannt
+        self.db.commit()
+
+    def clear_power(self) -> None:
+        """Hausleistung aller Messpunkte verwerfen (0.36: andere Leistungssensoren gewählt – die alten Werte
+        gehören zu anderen Sensoren; das Neueinlesen holt, was HA noch hat)."""
+        self.db.execute("UPDATE samples SET power_w = NULL, power_ex_w = NULL")
         self.db.commit()
 
     # --- Messwerte ---

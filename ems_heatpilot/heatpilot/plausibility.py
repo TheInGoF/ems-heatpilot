@@ -32,6 +32,8 @@ RANGES: dict[str, tuple[float, float]] = {
     "burner_pow": (0.0, 100.0), "pump_mod": (0.0, 100.0), "flame": (0.0, 200.0),
     "demand_pct": (0.0, 100.0), "min_period": (0.0, 240.0), "syspress": (0.0, 6.0),
     "room_temp": (0.0, 40.0), "room_target": (4.0, 30.0), "valve": (0.0, 100.0), "humidity": (0.0, 100.0),
+    # seit 0.36: Hausleistung in W – negativ wäre Einspeisung (falscher Sensor), darüber kein Haushalt
+    "power_w": (0.0, 100000.0), "power_ex_w": (0.0, 100000.0),
 }
 
 ROOM_SPIKE_K = 4.0          # Sprung in einem Abtastschritt, der als Einzelspitze gilt

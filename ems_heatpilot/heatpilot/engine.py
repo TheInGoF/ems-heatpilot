@@ -12,7 +12,7 @@ import time
 from collections import Counter, deque
 from datetime import datetime, timedelta
 
-from . import advice, analysis, flowstudy, guards, plausibility, schedule, solar, weekly
+from . import advice, analysis, flowstudy, guards, plausibility, schedule, sleep, solar, weekly
 from .config import Config
 from .dhw import AFTER_CHARGE_H, DhwModel, DhwShadow, DrawWatch, tail_rising
 from .live import LiveBuffer
@@ -133,6 +133,12 @@ class Engine:
         self.dhw_shadow = DhwShadow()
         # Zeiten/Temperaturen: Einstellungen sind Startwerte, gelernt wird aus Tado
         self.schedule_learned: dict | None = store.get("schedule.learned")
+        # Schlafenszeit aus dem Stromverbrauch (0.36): gespeicherte Nächte → Wochenplan, damit die
+        # Steuerung vom ersten Takt an die richtigen Zeiten hat; wirkt nur mit night_plan_auto
+        self._sleep_ts = 0.0
+        self.sleep_nights: dict = (store.get(sleep.KV_NIGHTS) or {}) if found.power else {}
+        self._sleep = sleep.summary(self.sleep_nights, int(time.time()), cfg, found.power, found.power_exclude)
+        cfg.night_plan_learned = sleep.learned_plan(self._sleep["plan"]) if found.power else None
         self.eff = schedule.effective(cfg, self.schedule_learned)
         self._schedule_ts = 0.0
         self.live = LiveBuffer()  # 30-s-Werte der letzten 12 h für den Reiter „Live“
@@ -342,6 +348,27 @@ class Engine:
             return num(self.states[self.found.weather]["attributes"].get("temperature"))
         return None
 
+    def power_sum(self, entities: list[str], strict: bool) -> float | None:
+        """Summe der Leistungssensoren in W (kW ×1000; Einheit aus dem Zustand, sonst die der Erkennung).
+
+        ``strict``: fehlt ein Sensor oder hat er keinen Wert, ist die Summe unbekannt (None) – eine
+        Phasensumme ohne eine Phase wäre falsch. Sonst zählt ein fehlender Sensor 0 (Ausschlüsse).
+        Ohne Sensoren None.
+        """
+        if not entities:
+            return None
+        total = 0.0
+        for e in entities:
+            st = self.states.get(e)
+            v = num(st.get("state")) if st else None
+            if v is None:
+                if strict:
+                    return None
+                continue
+            unit = st.get("attributes", {}).get("unit_of_measurement") or self.found.power_units.get(e) or "W"
+            total += v * 1000 if str(unit).strip().lower() == "kw" else v
+        return total
+
     def snapshot(self) -> tuple[dict, list[tuple], list[tuple]]:
         burner_pow = num(self._boiler("burner_power"))
         burner_on = self.burner_on()
@@ -401,6 +428,10 @@ class Engine:
             "dhw_starts": num(self._boiler("dhw_starts")),
             "dhw_special": self.dhw_special(),
             "syspress": num(self._boiler("sys_press")),
+            # seit 0.36: Hausleistung (Summe der Leistungssensoren; fehlt einer, bleibt sie offen) und
+            # die Verbraucher, die nicht zählen (Waschmaschine, Wallbox …)
+            "power_w": self.power_sum(self.found.power, strict=True),
+            "power_ex_w": self.power_sum(self.found.power_exclude, strict=False),
             # nur für die Live-Ansicht (nicht in der Datenbank): läuft die Heizungspumpe?
             "pump_on": (int(num(self._boiler("pump_mod")) > 0) if num(self._boiler("pump_mod")) is not None
                         else flag(self._boiler("heating_pump"))),
@@ -556,6 +587,7 @@ class Engine:
         self.store.add_room_samples((ts, *r) for r in rooms)
         self.store.add_person_samples((ts, *p) for p in persons)
         self.dhw_step(ts, sample)
+        self.update_sleep(now_ts)  # Nachtzeiten aus dem Strom (0.36) – vor dem Wunschzustand, stündlich
         if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
             self.control_loop.plan(ts, sample, rooms)
         self.store.commit()
@@ -622,6 +654,31 @@ class Engine:
             log.info("Zeiten/Temperaturen: %s (gelernt aus %d Nächten)", eff.as_dict(), learned["nights"])
         self.schedule_learned, self.eff = learned, eff
         self.store.put("schedule.learned", learned)
+
+    def update_sleep(self, now_ts: int | None = None, max_age_s: int = 3600) -> None:
+        """Schlafenszeiten aus dem Hausstromverbrauch (0.36) nachrechnen – stündlich, nur mit Leistungssensoren.
+
+        Gerechnet werden nur fertige Nächte, die noch nicht gespeichert sind (nach der Datenübernahme beim
+        ersten Takt alle). Daraus der Wochenplan in ``cfg.night_plan_learned`` – unabhängig von der
+        Steuerung; wirksam nur mit ``night_plan_auto``, sonst Anzeige.
+        """
+        now_ts = now_ts or int(time.time())
+        if not self.found.power or now_ts - self._sleep_ts < max_age_s:
+            return
+        self._sleep_ts = now_ts
+        self.sleep_nights = sleep.learn(self.store, now_ts)
+        self._sleep = sleep.summary(self.sleep_nights, now_ts, self.cfg, self.found.power, self.found.power_exclude)
+        learned = sleep.learned_plan(self._sleep["plan"])
+        if learned != self.cfg.night_plan_learned:
+            log.info("Nachtzeiten aus dem Stromverbrauch (%d Nächte, %s): %s", self._sleep["nights"],
+                     "wirksam" if self._sleep["active"] else "nur Anzeige",
+                     " ".join(f"{d['day']} {d['start'] or '–'}/{d['end'] or '–'}" for d in self._sleep["plan"]))
+            self.cfg.night_plan_learned = learned
+            self.eff = schedule.effective(self.cfg, self.schedule_learned)
+
+    def sleep_summary(self) -> dict:
+        """Zusammenfassung der gelernten Nachtzeiten (gecacht aus update_sleep) für Oberfläche und API."""
+        return self._sleep
 
     # ------------------------------------------------------------------ Lernen
     def seed_room_priors(self) -> None:
@@ -1321,6 +1378,7 @@ class Engine:
             "schedule": {"learned": self.schedule_learned, "effective": self.eff.as_dict(),
                          # bei Steuerung heatpilot wäre Lernen aus Tado zirkulär: der Wochenplan gilt
                          "learning": self.cfg.learn_schedule and not self.cfg.is_managing()},
+            "sleep": self.sleep_summary(),  # Nachtzeiten aus dem Stromverbrauch (0.36)
             "control_mode": self.cfg.control_mode,
             "limits": {
                 "away_temp": self.eff.away_temp,      # damit rechnet die Ersparnis (gelernt, nie darunter)
