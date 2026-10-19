@@ -72,8 +72,8 @@ def test_heat_tab_pause_only_when_managing_and_status_from_control():
     assert "heatPost('pause', { hours: ${h} }" in pause and "heatPost('pause', { hours: 0 }" in pause
     assert 'btn(1, "1 h")}${btn(2, "2 h")}${btn(4, "4 h")}${btn(morn' in pause
     assert "function hoursUntilMorning()" in js
-    # Antwort einer Aktion enthält control – darf nicht verloren gehen
-    assert "HEAT = { rooms: j.rooms, limits: j.limits, control: j.control }" in js
+    # Antwort einer Aktion enthält control (seit 0.36.1 auch readiness) – darf nicht verloren gehen
+    assert "HEAT = { rooms: j.rooms, limits: j.limits, control: j.control, readiness: j.readiness }" in js
     # Protokoll: die letzten 20 Einträge
     assert "(c.log || []).slice(0, 20)" in js
     # Fußzeile „schaltet nie von selbst“ nur noch bei Beobachten

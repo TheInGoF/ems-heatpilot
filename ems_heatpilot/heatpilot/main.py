@@ -25,6 +25,7 @@ from .store import Store
 from .web import make_app
 
 log = logging.getLogger("heatpilot")
+CONTROLS_EVERY_S = 3600  # Kesselsteuerungen (0.36.1) beim ersten Kontakt und danach stündlich prüfen
 
 DATA_VERSION = 13  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladeerkennung · 6 (0.20): Sonne
 #                   7 (0.26): Hausmodell mit Fremdwärme, Auskühlzeit, mittiger Ableitung, Heizperiode
@@ -122,8 +123,11 @@ class App:
                 eng.on_state(entity_id, s)
             self.pending.clear()
             if old is not None:
-                eng.forecast = old.forecast
+                if old.found.weather == eng.found.weather:  # Vorhersage nur von derselben Wetter-Entität
+                    eng.forecast, eng.forecast_ts = old.forecast, old.forecast_ts
                 eng.live = old.live
+                if old.cfg.emsesp_host == eng.cfg.emsesp_host:  # Kesselsteuerungen bis zur nächsten Abfrage
+                    eng.ems_controls, eng.ems_controls_ts = old.ems_controls, old.ems_controls_ts
             self.eng = eng
             # Steuerung (0.34): Control kennt die Gruppen (Raumregler/Mitläufer) und die HA-Zustände
             self.control = Control(self.ha, self.store, found.rooms, states=eng.states)
@@ -239,13 +243,16 @@ async def run(app: App) -> None:
     await app.build(backfill=True)
     app._live_task = asyncio.create_task(live_loop(app))
 
-    last_forecast = 0.0
+    forecast_of = None  # Wetter-Entität des letzten Abrufs
     while True:
         eng = app.eng
         try:
-            if eng.found.weather and time.time() - last_forecast > 3600:
-                eng.forecast = await app.ha.weather_forecast(eng.found.weather)
-                last_forecast = time.time()
+            # stündlich – und sofort nach einem Wechsel der Wetter-Entität (build() verwirft dann die alte)
+            weather = eng.found.weather
+            if weather and (weather != forecast_of or eng.forecast_ts is None
+                            or time.time() - eng.forecast_ts > 3600):
+                eng.forecast = await app.ha.weather_forecast(weather)
+                eng.forecast_ts, forecast_of = time.time(), weather  # Stand der Vorhersage (Kachel, seit 0.36.1)
         except Exception as err:  # noqa: BLE001
             log.warning("Wettervorhersage nicht verfügbar: %s", err)
         try:
@@ -263,8 +270,14 @@ async def run(app: App) -> None:
         await asyncio.sleep(interval - time.time() % interval + 1)
 
 
-async def poll_emsesp(ems: EmsEsp, app: App, interval_s: int = 30) -> None:
-    """Alle Werte direkt von EMS-ESP lesen (nur lesen, kein Token nötig)."""
+async def poll_emsesp(ems: EmsEsp, app: App, interval_s: int = 30, controls_every_s: int = CONTROLS_EVERY_S) -> None:
+    """Alle Werte direkt von EMS-ESP lesen (nur lesen, kein Token nötig).
+
+    Seit 0.36.1 außerdem die Kesselsteuerungen (``EmsEsp.controls``, ebenfalls nur GET) für
+    „Bereit für die Steuerung?“: sobald EMS-ESP antwortet, danach stündlich, in ``eng.ems_controls``.
+    Fehler dabei werden nur geloggt.
+    """
+    controls_at: float | None = None
     try:
         while True:
             try:
@@ -276,6 +289,19 @@ async def poll_emsesp(ems: EmsEsp, app: App, interval_s: int = 30) -> None:
                 raise
             except Exception:  # noqa: BLE001
                 log.exception("EMS-ESP-Abfrage fehlgeschlagen")
+            if ems.ok and app.eng is not None and (
+                    controls_at is None or time.monotonic() - controls_at >= controls_every_s):
+                controls_at = time.monotonic()
+                try:
+                    controls = await ems.controls()
+                    app.eng.ems_controls, app.eng.ems_controls_ts = controls, time.time()
+                    found = [c for c in controls.values() if c.get("found")]
+                    log.info("EMS-ESP: Kesselsteuerungen %d von %d gefunden, %d schreibbar (nur Anzeige)",
+                             len(found), len(controls), sum(1 for c in found if c.get("writeable")))
+                except asyncio.CancelledError:
+                    raise
+                except Exception as err:  # noqa: BLE001 – nur Anzeige: loggen, in einer Stunde erneut
+                    log.warning("EMS-ESP-Kesselsteuerungen nicht lesbar: %s", err)
             await asyncio.sleep(interval_s)
     finally:
         await ems.close()
