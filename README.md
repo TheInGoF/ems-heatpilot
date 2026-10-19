@@ -19,7 +19,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 > über die Tado-Bridge in HomeKit (`homekit_controller`). Andere `climate`-Thermostate
 > in Home Assistant werden erkannt und lassen sich wählen, sind aber ungetestet.
 
-## Was es heute kann (0.36)
+## Was es heute kann (0.37)
 
 ### Lernen
 
@@ -35,7 +35,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 ### Steuern
 
 - **Schalter „Steuerung“:** „Beobachten“ (Standard) oder „HeatPilot steuert“. Dann schreibt HeatPilot die Raum-Solltemperaturen selbst: Komfort je Raum, Nacht nach Wochenplan (wahlweise mit den gelernten Zeiten aus dem Stromverbrauch), Abwesenheit, wenn niemand zu Hause ist, Urlaub
-- **Vorheizen** vor der Ankunft und vor dem Nachtende, so früh, wie der Raum laut Modell braucht – gedeckelt; Räume, die ihr Soll nicht schaffen, werden akzeptiert statt hochgedreht
+- **Vorheizen** vor der Ankunft und vor dem Nachtende, so früh, wie der Raum laut Modell braucht – gedeckelt; Räume, die ihr Soll nicht schaffen, werden akzeptiert statt hochgedreht. Die Vorheizdauer rechnet mit der Außentemperatur zum Zielzeitpunkt laut Vorhersage: Wird es bis dahin kälter, beginnt das Vorheizen früher
 - **Hand, Pause, Protokoll:** von Hand Gedrehtes bleibt bis zum nächsten Phasenwechsel, Pause (1 h, 2 h, 4 h oder bis morgen früh), jeder Schreibvorgang mit Grund im Protokoll
 - **Räume aus Home Assistant:** Bereiche und Geräte werden gelesen und vorgeschlagen; mehrere Thermostate bilden einen Raum, ein Wandthermostat kann Raumregler sein
 - **Tado lokal über HomeKit:** die Ventile der Tado-Bridge auch ohne Tado-Cloud – der Boost läuft dann als Timer in HeatPilot
@@ -54,6 +54,8 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Warmwasser-Empfehlung:** sparsamste Speichertemperatur nach Zapfprofil und Anwesenheit; die Legionellenladung des Reglers ist eingerechnet, die große Zapfung danach braucht keine eigene Ladung – nur Empfehlung, gesetzt wird nichts
 - **Desinfektion (Legionellen) mit Terminvorschlag:** Termin in den Einstellungen, Temperatur vom Kessel; HeatPilot schlägt die Zeit kurz vor deiner größten regelmäßigen Zapfung vor („So 18 Uhr zapfst du am meisten – Desinfektion So 17:30“) und plant sie ein, sobald der Regler zu dieser Zeit desinfiziert – ausgelöst wird sie noch nicht
 - **Vorhersage sichtbar:** Minimum und Trend der nächsten 12 h; der Vorheizplan nennt die Außentemperatur, mit der er rechnet
+- **Vorschau (Trockenlauf):** welchen Vorlauf, welchen Heizbetrieb und welches Warmwasser-Soll HeatPilot in den nächsten 24 h je Stunde am Kessel setzen würde – aus Raummodellen, Anwesenheit, Nachtplan, Vorhersage und Warmwasser-Empfehlung, mit den Schreibvorgängen, die es gäbe. Nur Anzeige: HeatPilot schreibt nichts an den Kessel
+- **Trockenlauf gegen Regler und Automation:** der stündlich gemerkte Plan neben dem, was Regler (z. B. ES73) und Warmwasser-Automation tatsächlich gesetzt haben – je Tag und über 7 Tage, mit Unterschied in K und Zahl der Schreibvorgänge
 - **Zertifikat als PDF:** Haus und Heizung auf einer Seite – Heizlast, Kesselgröße, Takten, Energieklasse und Gesamtbewertung, bezogen auf die letzten 12 Monate
 - **Diagnose und Export:** Selbsttest, Log und alle gelernten Werte als Datei zum Gegenprüfen – ohne Koordinaten und Zugangsdaten
 - **Einrichtung komplett in der Oberfläche** – keine YAML-Optionen, Vorschläge vorausgefüllt
@@ -91,7 +93,7 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 |---|---|---|
 | 1 | Beobachten, lernen, empfehlen | erfüllt (0.1–0.33) |
 | 2 | Räume steuern: Komfort, Nacht nach Wochenplan bzw. Stromverbrauch, Abwesenheit, Vorheizen; „Bereit für die Steuerung?“ | erfüllt (0.34–0.36.1) |
-| 3 | Vorschau (Trockenlauf): welcher Vorlauf und welches Warmwasser-Soll je Stunde, Vorhersage in der Steuerung | 0.37 |
+| 3 | Vorschau (Trockenlauf): welcher Vorlauf und welches Warmwasser-Soll je Stunde, Vorhersage in der Steuerung | erfüllt (0.37) |
 | 4 | Warmwasser über EMS-ESP: Speicher-Soll nur bei Änderung, Prüfung nach 60 s, Desinfektion nach Termin, Fehler in HA melden | 0.36.3 / 0.38 |
 | 5 | Thermostate als Stellglied: Ventilverhalten lernen, Soll in voller Auflösung, Räume gemeinsam anfordern (weniger Takten) | 0.39 |
 | 6 | Kessel übernehmen: Vorlauf live und Heizbetrieb über EMS-ESP, eigene Witterungsführung – der Regler (z. B. ES73) entfällt | geplant |

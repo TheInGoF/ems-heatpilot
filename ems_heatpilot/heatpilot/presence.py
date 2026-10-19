@@ -391,6 +391,29 @@ class PersonLearner:
                 return at, p
         return None
 
+    def next_away_by_habit(self, now: datetime, horizon_h: int = 24) -> datetime | None:
+        """Erwartete Abfahrt (seit 0.37, Vorschau): der nächste Wechsel „zu Hause“ → „weg“ der Gewohnheit – das
+        erste verlässlich gelernte Feld „weg“, vor dem ab jetzt (laufendes Feld eingeschlossen) mindestens ein
+        verlässliches Feld „zu Hause“ liegt. Wer gegen die Gewohnheit zu Hause ist (Homeoffice, Feiertag), bleibt
+        so bis zur nächsten gewohnten Abfahrt. Reine Rechnung auf dem Raster, ohne GPS-Zustand."""
+        cur = slot_of(now)
+        seen_home = self.week[cur] > HABIT_MIN_P and self.habit_reliable(cur)
+        for at, slot in self._habit_slots(now, horizon_h, None):
+            if not self.habit_reliable(slot):
+                continue
+            if self.week[slot] > HABIT_MIN_P:
+                seen_home = True
+            elif self.week[slot] < HABIT_MIN_P and seen_home:
+                return at
+        return None
+
+    def unlearned_slots(self, now: datetime, until: datetime, earliest: datetime | None = None) -> list[datetime]:
+        """Beginne der noch nicht verlässlich gelernten Felder bis ``until`` (seit 0.37, Vorschau) – dort wäre die
+        Ankunft offen (wie ``unknown_from``, aber für eine geplante Abwesenheit und ohne GPS-Zustand)."""
+        hours = max(int((until - now).total_seconds() // 3600) + 1, 1)
+        return [at for at, slot in self._habit_slots(now, hours, earliest)
+                if at < until and not self.habit_reliable(slot)]
+
     def earliest_arrival(self, now: datetime) -> datetime | None:
         """Frühestmögliche Ankunft aus der Entfernung – nur Untergrenze für die Gewohnheit."""
         if self.dist_km is None or self.dist_km <= EARLIEST_MIN_KM:

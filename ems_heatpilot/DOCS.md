@@ -33,7 +33,8 @@ keine YAML-Optionen:
   Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
   Entitäten in Home Assistant. Die Wetter-Entität liefert die stündliche Vorhersage für den
   Vorheizplan zur Ankunft und die Bewölkung für die Sonnenanteile; ohne Außenfühler auch die
-  aktuelle Außentemperatur. Die Steuerung nutzt die Vorhersage ab 0.37
+  aktuelle Außentemperatur. Seit 0.37 nutzen auch die Steuerung (Vorheizdauer) und die
+  [Vorschau (Trockenlauf)](#vorschau-trockenlauf) die Vorhersage
 - **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
   **„macht mit“** und **Komforttemperatur** (für „HeatPilot steuert“), **Raum** und
   **Raumregler** (mehrere Thermostate als ein Raum), Fußbodenheizung, **Voreinstellung**
@@ -508,9 +509,12 @@ Für jeden Raum mit „macht mit“ bestimmt HeatPilot eine Phase und das dazuge
 2. **Nacht** laut Wochenplan → Nachttemperatur (Standard 18 °C). Je Wochentag gilt ein Beginn am
    Abend dieses Tages und ein Ende am Morgen dieses Tages; Standard: Beginn So–Do 21:00, Fr und
    Sa 22:00; Ende Mo–Fr 04:30, Sa und So 06:30. Vor dem Nachtende wird so früh **vorgeheizt**,
-   wie der Raum laut Raummodell braucht (Aufheizzeit bei maximalem Vorlauf und aktueller
-   Außentemperatur), mindestens 15 min, höchstens der **Vorheizdeckel** (Standard 3 h). Ohne
-   plausibles Raummodell pauschal 1 h. Folgt nach der Nacht Abwesenheit, wird nicht vorgeheizt.
+   wie der Raum laut Raummodell braucht (Aufheizzeit bei maximalem Vorlauf), mindestens 15 min,
+   höchstens der **Vorheizdeckel** (Standard 3 h). Ohne plausibles Raummodell pauschal 1 h. Folgt nach
+   der Nacht Abwesenheit, wird nicht vorgeheizt. Seit 0.37 rechnet die Aufheizzeit mit der
+   Außentemperatur **zum Zielzeitpunkt** (Nachtende, Ankunft, Rückkehr aus dem Urlaub) laut
+   Vorhersage – höchstens 90 min daneben –, sonst wie bisher mit der aktuellen: Wird es bis zum Morgen
+   kälter, beginnt das Vorheizen früher.
 3. **Niemand zu Hause** (alle gewählten Personen sicher weg) → Abwesenheitstemperatur; liegt die
    erwartete Ankunft (GPS-Heimfahrt oder Gewohnheit) innerhalb der Aufheizzeit, wird auf Komfort
    vorgeheizt. Ist die Ankunft offen (Gewohnheit lernt noch) oder die Anwesenheit unbekannt
@@ -604,7 +608,84 @@ Einstellungen → Steuerung, unter dem Wochenplan:
   Nächte da sind. Die Hausleistung wird wie die anderen Messwerte gespeichert (`power_w`,
   `power_ex_w`) und steht im Export; „Lernstand neu berechnen“ rechnet die Nächte mit neu.
 
-Später (0.37): Soll nach Ventilstellung – jetzt bewusst nicht enthalten.
+Später: Soll nach Ventilstellung – jetzt bewusst nicht enthalten.
+
+## Vorschau (Trockenlauf)
+
+Bevor HeatPilot je etwas am Kessel setzt, zeigt es seit 0.37, **was es setzen würde** – für die nächsten 24 h,
+je Stunde. **Trockenlauf – HeatPilot schreibt nichts an den Kessel:** EMS-ESP bleibt nur lesend, es gibt
+keinen Schreibpfad. Die Vorschau ist ein Vorschlag zum Vergleichen; wann und ob umgestellt wird, entscheidest
+du. Zu finden in der Übersicht, Abschnitt „Vorschau (Trockenlauf)“.
+
+Gerechnet wird in 5-min-Schritten von jetzt bis zum Ende der 24. vollen Stunde:
+
+- **Außentemperatur:** der Vorhersagepunkt der Wetter-Entität (höchstens 90 min daneben), an den
+  Außenfühler angeglichen: Jetzt gilt der Fühler (gegen ihn sind die Raummodelle gelernt, mit ihm rechnet die
+  Steuerung), der Unterschied zur Vorhersage klingt über 6 h ab. Ohne Vorhersagepunkt die aktuelle – je
+  Stunde steht dabei, woher sie kommt, und wie weit Fühler und Vorhersage gerade auseinanderliegen.
+- **Anwesenheit:** Wer jetzt zu Hause ist, sagt Home Assistant (ein Tracker ohne Wert heißt „unbekannt“, wie
+  in der Steuerung). Wer zu Hause ist, bleibt es bis zur nächsten gewohnten Abfahrt – wer gegen die
+  Gewohnheit da ist (Homeoffice, Feiertag), also bis zur nächsten regulären; wer weg ist, bis zur
+  erwarteten Ankunft (GPS-Heimfahrt bzw. Gewohnheit), danach gilt wieder die Gewohnheit. Wo die Gewohnheit
+  noch lernt, ist die Ankunft offen (dann Komfort, wie in der Steuerung); Urlaub bis zur erwarteten Rückkehr.
+- **Raum-Soll:** Räume mit „macht mit“ bei „HeatPilot steuert“ bekommen den Wunschzustand der Steuerung
+  (Komfort, Nacht, Abwesenheit, Vorheizen – siehe oben). Für alle anderen Räume (und bei „Beobachten“) das,
+  was Tado voraussichtlich will, vereinfacht: tagsüber das heutige Soll, nachts die Nachttemperatur, bei
+  Abwesenheit die Abwesenheitstemperatur (gelernt bzw. eingestellt). Nachts oder bei Abwesenheit abgefragt,
+  gilt als Tages-Soll das tagsüber gemessene der letzten 48 h (Median, ohne Nacht, Abwesenheit und Urlaub),
+  ohne Messung der Komfortwert des Raums. Ein Thermostat, das auch tagsüber auf „aus“ steht, bleibt aus.
+- **Raumtemperatur:** läuft nach dem Raummodell mit – ohne Wärme kühlt der Raum aus, darunter heizt er mit
+  dem Vorlauf auf, am Soll hält ihn das Thermostat (±0,3 K). Daraus folgen die Vorheizdauer und ob ein Raum
+  gerade Wärme braucht. Räume, die nicht für den Vorlauf zählen (Fußbodenheizung, Raummodell noch nicht
+  plausibel), hält ihr Thermostat am Soll, solange der Heizbetrieb nicht sicher aus ist; ohne Raummodell
+  bleibt ihr Messwert stehen.
+- **Vorlauf-Soll:** der höchste nötige Vorlauf über die Räume mit plausiblem Raummodell (ohne
+  Fußbodenheizung): zum Halten der Vorlauf, mit dem der Raum sein Soll dauerhaft hält; beim **Vorheizen**
+  der niedrigste Vorlauf (1 K genau), mit dem der Raum ab dem Beginn des Vorheizens rechtzeitig warm wird.
+  Den Beginn bestimmt die Steuerung mit der Aufheizzeit bei maximalem Vorlauf (Nachtende bzw. Ankunft,
+  gedeckelt mit „Vorheizen höchstens“) – meist ist es deshalb der maximale Vorlauf. Sonst beim Aufheizen 5 K
+  mehr. Immer zwischen 25 °C und dem maximalen Vorlauf, auf 1 K gerundet. **Braucht kein Raum Wärme** (alle
+  am oder über dem Soll, oder Fremdwärme reicht), steht dort „Heizbetrieb aus“ statt eines Vorlaufs – typisch
+  zu Beginn der Nacht. Das gilt auch für Räume, die den Vorlauf nicht bestimmen: Fußbodenräume mit
+  plausiblem Modell zählen wie die übrigen, Räume ohne plausibles Modell nach dem Messwert – mehr als 0,3 K
+  unter dem Soll oder ohne Temperatur hält der Heizbetrieb an („Bad unter Soll (ohne Raummodell) –
+  Heizbetrieb bleibt an“, mindestens 25 °C). Ohne plausibles Raummodell gibt es kein Vorlauf-Soll, mit Grund.
+- **Warmwasser-Soll:** die Warmwasser-Empfehlung für jeden Zeitpunkt (Komfort plus Reserve vor erwarteten
+  Zapfungen, sonst das Minimum, niemand zu Hause bzw. Ankunft), mit dem Desinfektionstermin aus den
+  Einstellungen; auf 1 K gerundet. Die Stunde des Termins ist markiert.
+- **Schreibvorgänge, die es gäbe:** nach den abgesprochenen Regeln – nur bei Änderung (Vorlauf und
+  Warmwasser ab 1 K, Heizbetrieb an/aus), danach 5 min Haltezeit. Der erste Vergleich ist mit dem, was
+  heute am Kessel steht. Markiert wird je Stunde, wann und was geschrieben würde, dazu die Summe über 24 h.
+
+Je Stunde gilt der Wert, der den größten Teil der Stunde gilt; der Graf zeigt die Änderungen auf 5 min genau.
+Gerechnet wird beim Abruf (höchstens alle 5 min neu) und einmal je Stunde fürs Protokoll – nicht im
+Messtakt.
+
+**In der Übersicht** (gleich unter den Kacheln): oben der Hinweis und ein Satz, wie oft HeatPilot in 24 h
+schreiben würde und was heute am Kessel steht; darunter womit gerechnet wurde (Modus, Vorhersage, welche Räume
+den Vorlauf bestimmen und welche nicht dabei sind, mit Grund). Zwei kleine Grafen mit derselben Zeitachse statt
+einer zweiten y-Achse: oben Vorlauf-Soll (Stufen) und Außentemperatur (gestrichelt), unten Warmwasser-Soll mit
+dem Desinfektionstermin. Hinterlegt sind Nacht und „niemand zu Hause“, ein grauer Streifen unten heißt
+„Heizbetrieb aus“, ein Ring „würde schreiben“. Antippen bzw. Zeigen auf eine Stunde markiert sie in beiden
+Grafen und zeigt alle Werte der Stunde mit Grund und Schreibvorgängen. „Je Stunde“ klappt dieselben Werte als
+Tabelle auf – mit Raum-Soll (nur wo es sich ändert) und am Tag der Zeitumstellung der doppelten Stunde „(2.)“.
+
+**Trockenlauf gegen Regler/Automation (7 Tage):** Zu Beginn jeder Stunde merkt sich HeatPilot den Plan für
+diese Stunde – so, wie er damals gerechnet wurde, ohne ihn nachträglich zu verbessern. Ist die Stunde vorbei,
+kommt der Ist-Wert dazu: das mittlere Vorlauf-Soll des Reglers (z. B. ES73) für den Heizkreis bei Heizbetrieb –
+das Heizkreis-Soll, ohne es das Kessel-Soll `sel_flow`; Speicherladungen (Ventil auf Warmwasser bzw. Kessel-Soll
+mehr als 15 K über dem Heizkreis) und Zeiten ohne Anforderung (Kessel-Soll unter 20 °C) zählen nicht –, das
+mittlere Speicher-Soll (z. B. aus einer HA-Automation) und wie lange der Heizbetrieb an war (Betriebsart Tag und
+„Heizen abschalten“ aus). Die Karte zeigt je Größe Plan und Ist als zwei Linien (Ist grau, Stunden „HeatPilot aus,
+Regler heizt“ als Streifen; „Wochenraster“ zeigt Plan minus Ist je Wochentag und Stunde – auf schmalen
+Bildschirmen nur die Linien), darunter je Tag zum Aufklappen, und die Kennzahlen in einem
+Satz: „HeatPilot läge im Mittel 6 K tiefer beim Vorlauf, 4 K tiefer beim Warmwasser; 9 statt 31
+Schreibvorgänge“ – die zweite Zahl zählt, wie oft Regler und Automation ihr Soll geändert haben (ab 1 K bzw.
+an/aus; den Vorlauf wie im Plan nur bei Heizbetrieb mit Anforderung, ein Nachtwechsel zählt also einmal). Vorlauf wird nur verglichen, wenn beide heizen; dazu die Stunden, in denen HeatPilot aus wäre, der
+Regler aber heizt. Beim Warmwasser gibt es eine grobe Energie-Einschätzung aus dem gelernten
+Bereitschaftsverlust des Speichers (nur mit plausiblem Warmwasser-Modell), beim Vorlauf keine kWh. Ohne Daten:
+„sammelt – erste Werte nach einer Stunde“. Das Protokoll bleibt 90 Tage, „Lernstand neu berechnen“ lässt es
+stehen (es ist Messung, nichts Gelerntes); es steht im Export („trockenlauf“) und im Diagnosepaket.
 
 ## Was das Add-on macht
 
@@ -937,7 +1018,8 @@ Entität wird gleich abgefragt.
 **Kachel „Vorhersage“** (Übersicht, neben „Haus-Trägheit“): „nächste 12 h: min −1 °C um 06:00,
 Trend −3 K · Stand vor 20 min“. Der Trend ist die Temperatur in 12 h gegen jetzt (auf 0,5 K
 gerundet), abgerufen wird stündlich. Ohne Wetter-Entität bzw. ohne Daten bleibt die Kachel grau.
-Die Steuerung nutzt die Vorhersage erst ab 0.37 – bis dahin ist sie Anzeige und Vorheizplan.
+Seit 0.37 nutzt auch die Steuerung sie (Vorheizdauer mit der Außentemperatur zum Zielzeitpunkt), ebenso
+die Vorschau (Trockenlauf).
 
 ## Warmwasser
 

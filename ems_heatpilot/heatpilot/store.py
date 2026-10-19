@@ -38,12 +38,20 @@ CREATE TABLE IF NOT EXISTS room_events(
 CREATE TABLE IF NOT EXISTS control_log(
     ts INTEGER, room TEXT, action TEXT, value REAL, reason TEXT
 );
+CREATE TABLE IF NOT EXISTS preview_log(
+    ts INTEGER PRIMARY KEY, flow REAL, heating INTEGER, dhw REAL, t_out REAL
+);
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
 CREATE INDEX IF NOT EXISTS idx_control_ts ON control_log(ts);
 CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 """
 
 CONTROL_LOG_KEEP_DAYS = 90  # Schreibprotokoll (0.34) so lange aufheben
+PREVIEW_LOG_KEEP_DAYS = 90  # Trockenlauf-Protokoll (0.37) so lange aufheben
+# Trockenlauf (0.37) je Stunde: Plan (flow, heating, dhw, t_out aus SCHEMA) und dazu Schreibvorgänge des Plans,
+# nach der Stunde der Ist-Wert (Mittel der Messpunkte, Anteil Heizbetrieb an), dessen Wechsel und die Zahl der Messpunkte
+PREVIEW_COLS = ("w_flow", "w_heating", "w_dhw", "act_flow", "act_heating", "act_dhw",
+                "ch_flow", "ch_heating", "ch_dhw", "act_n")
 
 SAMPLE_COLS = (
     "t_out", "flow", "sel_flow", "ret", "burner_pow", "burner_on",
@@ -88,6 +96,10 @@ class Store:
         for col in HOURLY_COLS:
             if col not in have:
                 self.db.execute(f"ALTER TABLE hourly ADD COLUMN {col} REAL")
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(preview_log)")}
+        for col in PREVIEW_COLS:
+            if col not in have:
+                self.db.execute(f"ALTER TABLE preview_log ADD COLUMN {col} REAL")
         self.db.commit()
 
     # --- Schlüssel/Wert ---
@@ -110,7 +122,8 @@ class Store:
     def reset_learning(self, since_day: str) -> None:
         """Gelerntes verwerfen, damit es aus den Rohdaten neu berechnet werden kann.
 
-        Bleibt: Messwerte, Einstellungen, Empfehlungs-Verlauf. Tageszähler ab ``since_day``
+        Bleibt: Messwerte, Einstellungen, Empfehlungs-Verlauf, Schreib- und Trockenlauf-Protokoll (Messung, nichts
+        Gelerntes). Tageszähler ab ``since_day``
         werden beim Neueinlesen der Historie neu gebildet und hier gelöscht (sonst doppelt).
         """
         self.db.execute("DELETE FROM kv WHERE key LIKE 'model.%' OR key IN "
@@ -201,6 +214,36 @@ class Store:
             sql, params = sql + " WHERE ts >= ?", [since]
         rows = self.db.execute(sql + " ORDER BY ts DESC, rowid DESC LIMIT ?", (*params, int(limit))).fetchall()
         return [dict(r) for r in rows]
+
+    # --- Trockenlauf (0.37) ---
+    def add_preview_plan(self, ts: int, plan: dict) -> bool:
+        """Plan der Vorschau für die Stunde ab ``ts`` – nur der erste je Stunde zählt (der damals gerechnete).
+
+        ``plan``: flow, heating, dhw, t_out und die Schreibvorgänge w_flow, w_heating, w_dhw. False, wenn es die
+        Stunde schon gab. Ältere Stunden als ``PREVIEW_LOG_KEEP_DAYS`` fallen weg.
+        """
+        cols = ("flow", "heating", "dhw", "t_out", "w_flow", "w_heating", "w_dhw")
+        cur = self.db.execute(f"INSERT OR IGNORE INTO preview_log(ts, {', '.join(cols)}) VALUES({', '.join('?' * 8)})",
+                              (int(ts), *(plan.get(c) for c in cols)))
+        self.db.execute("DELETE FROM preview_log WHERE ts < ?", (int(ts) - PREVIEW_LOG_KEEP_DAYS * 86400,))
+        self.db.commit()
+        return cur.rowcount > 0
+
+    def preview_open(self, now_ts: int) -> list[int]:
+        """Stunden mit Plan, die vorbei sind und noch keinen Ist-Wert haben."""
+        return [r["ts"] for r in self.db.execute(
+            "SELECT ts FROM preview_log WHERE act_n IS NULL AND ts + 3600 <= ? ORDER BY ts", (int(now_ts),))]
+
+    def set_preview_actual(self, ts: int, values: dict) -> None:
+        """Ist-Werte einer abgelaufenen Stunde nachtragen (Spalten ``act_*``, ``ch_*``)."""
+        cols = [c for c in PREVIEW_COLS if c.startswith(("act_", "ch_"))]
+        self.db.execute(f"UPDATE preview_log SET {', '.join(f'{c} = ?' for c in cols)} WHERE ts = ?",
+                        (*(values.get(c) for c in cols), int(ts)))
+        self.db.commit()
+
+    def preview_log(self, since: int) -> list[dict]:
+        """Protokoll ab ``since``, älteste Stunde zuerst."""
+        return [dict(r) for r in self.db.execute("SELECT * FROM preview_log WHERE ts >= ? ORDER BY ts", (int(since),))]
 
     def add_burner_event(self, ts: int, state: bool) -> None:
         self.db.execute("INSERT INTO burner_events VALUES(?, ?)", (ts, int(state)))

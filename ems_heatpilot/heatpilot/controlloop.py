@@ -6,7 +6,8 @@ Der Wunschzustand ist eine reine Funktion ``desired(...)`` (testbar) mit den Pha
 
 1. Urlaub → Abwesenheitstemperatur; rechtzeitig vor der Rückkehr vorheizen auf Komfort.
 2. Nacht laut Wochenplan → Nachttemperatur; vor dem Nachtende so früh vorheizen, wie der Raum
-   laut Modell braucht (gedeckelt auf ``preheat_max_h``, mindestens 15 min).
+   laut Modell braucht (gedeckelt auf ``preheat_max_h``, mindestens 15 min). Seit 0.37 mit der
+   Außentemperatur zum Zielzeitpunkt (Nachtende, Ankunft, Rückkehr) laut Vorhersage, sonst der aktuellen.
 3. Niemand zu Hause (sicher) → Abwesenheitstemperatur; erwartete Ankunft innerhalb der Aufheizzeit →
    vorheizen. Tracker unbekannt oder Ankunft offen (Gewohnheit lernt noch) → Komfort.
 4. Sonst Komfort.
@@ -25,6 +26,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
@@ -94,31 +96,37 @@ def _clamp(value: float, comfort: float, cfg) -> float:
 
 
 def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: float | None = None,
-            t_out: float | None = None) -> Desired:
-    """Wunschzustand eines Raums (``discovery.Room``) – reine Funktion, siehe Modulbeschreibung."""
+            t_out: float | None = None, t_out_at: Callable[[datetime], float | None] | None = None) -> Desired:
+    """Wunschzustand eines Raums (``discovery.Room``) – reine Funktion, siehe Modulbeschreibung.
+
+    ``t_out_at(Zeitpunkt)`` (seit 0.37, z. B. ``Engine.outdoor_forecast_at``): Außentemperatur zum Ziel des
+    Vorheizens (Nachtende, Ankunft, Rückkehr) laut Vorhersage; liefert sie None oder fehlt sie, gilt ``t_out``.
+    """
     comfort, away, night = float(room.comfort), cfg.away_temp, cfg.night_temp
     t_out = 5.0 if t_out is None else t_out
 
-    def lead(target: float) -> timedelta:
-        return timedelta(hours=preheat_hours(model, temp, target, cfg.max_flow_temp, t_out, cfg.preheat_max_h))
+    def lead(target: float, at: datetime) -> timedelta:
+        t_at = t_out_at(at) if t_out_at is not None else None
+        return timedelta(hours=preheat_hours(model, temp, target, cfg.max_flow_temp,
+                                             t_out if t_at is None else t_at, cfg.preheat_max_h))
 
     # 1. Urlaub
     if presence.vacation:
         eta = presence.arrival
-        if eta is not None and now >= eta - lead(comfort):
+        if eta is not None and now >= eta - lead(comfort, eta):
             return Desired(_clamp(comfort, comfort, cfg), "vorheizen", f"Rückkehr aus dem Urlaub {eta:%H:%M}", eta)
         return Desired(_clamp(away, comfort, cfg), "urlaub", "Urlaub",
-                       None if eta is None else eta - lead(comfort))
+                       None if eta is None else eta - lead(comfort, eta))
 
     # Tagesziel (ohne Nacht): 3. niemand zu Hause, 4. sonst Komfort
     if presence.home_count == 0:
         eta, unknown = presence.arrival, presence.arrival_unknown
-        if unknown is not None and unknown <= now + lead(comfort):
+        if unknown is not None and unknown <= now + lead(comfort, unknown):
             day = (comfort, "komfort", "Ankunft offen – Gewohnheit lernt noch", unknown)
-        elif eta is not None and now >= eta - lead(comfort):
+        elif eta is not None and now >= eta - lead(comfort, eta):
             day = (comfort, "vorheizen", f"Ankunft erwartet {eta:%H:%M}", eta)
         elif eta is not None:
-            day = (away, "abwesend", f"niemand zu Hause, Ankunft {eta:%H:%M}", eta - lead(comfort))
+            day = (away, "abwesend", f"niemand zu Hause, Ankunft {eta:%H:%M}", eta - lead(comfort, eta))
         else:
             day = (away, "abwesend", "niemand zu Hause", None)
     elif presence.home_count is None:
@@ -131,7 +139,7 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
     if cfg.is_night_at(now):
         end = cfg.night_end_at(now)
         if day_phase in ("komfort", "vorheizen") and day_sp > night:
-            start = end - lead(day_sp)
+            start = end - lead(day_sp, end)
             if now >= start:
                 hours = (end - start).total_seconds() / 3600
                 return Desired(_clamp(day_sp, comfort, cfg), "vorheizen",
@@ -211,6 +219,7 @@ class ControlLoop:
         managing = cfg.is_managing()
         presence = self.presence(now, sample)
         t_out = sample.get("t_out")
+        t_out_at = eng.outdoor_forecast_at  # 0.37: Vorheizdauer mit der Außentemperatur zum Zielzeitpunkt
         paused = self.paused(ts)
         targets = {r.climate: self.control.target(r.climate) for r in eng.found.rooms}
         boosts = self.control.active(targets, ts)
@@ -221,14 +230,14 @@ class ControlLoop:
             temp = reading[1] if reading else None
             model = eng.rooms.get(room.climate)
             ok = model is not None and guards.check_room(model)["ok"]
-            d = desired(room, now, cfg, presence, model if ok else None, temp, t_out)
+            d = desired(room, now, cfg, presence, model if ok else None, temp, t_out, t_out_at)
             desireds[room.climate] = d
             self.rooms[room.climate] = {
                 "managed": bool(room.managed), "phase": d.phase if managing else None,
                 "desired": d.setpoint if managing else None, "reason": d.reason if managing else None,
                 "next_change": _iso(d.until) if managing else None,
                 "next_phase": (desired(room, d.until + timedelta(minutes=1), cfg, presence, model if ok else None,
-                                       temp, t_out).phase if managing and d.until else None),
+                                       temp, t_out, t_out_at).phase if managing and d.until else None),
                 "reach_c": reach_c(model if ok else None, d.setpoint, cfg.max_flow_temp,
                                    5.0 if t_out is None else t_out),
                 "manual": False, "manual_until": None, "boost": room.climate in boosts,

@@ -16,6 +16,7 @@
   --series-3: #1a9641; --series-4: #8e5bd0; --series-5: #8a8984;
   --band-burner: rgba(235, 104, 52, .13); --band-dhw: rgba(42, 120, 214, .13);
   --band-home: rgba(26, 150, 65, .14);
+  --band-night: rgba(84, 96, 168, .12); --band-away: rgba(138, 137, 132, .17);
   --good: #008300; --warn: #c98500;
 }
 @media (prefers-color-scheme: dark) {
@@ -27,6 +28,7 @@
     --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
     --grid: #262624;
     --series-1: #3987e5; --series-2: #d95926;
+    --band-night: rgba(140, 155, 235, .13); --band-away: rgba(200, 199, 190, .10);
   }
 }
 :root[data-theme="dark"] {
@@ -36,6 +38,7 @@
   --text-primary: #f0efec; --text-secondary: #c3c2b7; --text-muted: #8f8e86;
   --grid: #262624;
   --series-1: #3987e5; --series-2: #d95926;
+  --band-night: rgba(140, 155, 235, .13); --band-away: rgba(200, 199, 190, .10);
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text-primary);
@@ -225,6 +228,25 @@ table.ready-t .rt-narrow { display: none; }
 .dis-counts { border-left: 3px solid var(--warn); padding-left: 8px; color: var(--text-primary); }
 .btn:disabled { opacity: .5; cursor: default; }
 .field input:disabled, table.form input:disabled { opacity: .5; cursor: not-allowed; }
+/* Vorschau (0.37): Trockenlauf-Hinweis, Legende mit Linien/Bändern/Ring, zwei kleine Grafen übereinander,
+   Stundentabelle mit Gründen in einer zweiten Zeile; Vergleich 7 Tage mit Satz und Kennzahlen */
+.card p.pv-note { border-left: 3px solid var(--series-1); background: var(--bg); border-radius: 6px; padding: 7px 10px; color: var(--text-primary); }
+.card p.pv-miss { border-left: 3px solid var(--warn); padding-left: 8px; }
+.card p.cmp-text { color: var(--text-primary); font-size: 14px; }
+.pv-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin: 12px 0 0; }
+.legend i.lk, .pv-title i.lk { width: 14px; height: 0; border-radius: 0; border-top: 2px solid; vertical-align: 3px; background: none; }
+.legend i.lk.dash { border-top-style: dashed; }
+.legend i.strip { height: 4px; vertical-align: 2px; border-radius: 1px; opacity: .6; }
+.legend i.band { box-shadow: inset 0 0 0 1px var(--border); }
+.legend i.ring { width: 9px; height: 9px; border-radius: 50%; border: 1.5px solid var(--text-secondary); background: var(--surface-1); }
+.tip-key { display: inline-block; width: 12px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+.tip-why { display: inline-block; white-space: normal; max-width: min(280px, 70vw); color: var(--text-secondary); padding-left: 17px; }
+table.pv-t th, table.pv-t td { padding: 4px 6px; }
+table.pv-t tr.pv-h td { border-bottom: 0; padding-bottom: 1px; white-space: nowrap; }
+table.pv-t tr.pv-why td { font-size: 12px; color: var(--text-secondary); padding-top: 0; }
+table.pv-t .muted { font-size: 11px; }
+#cmp-mode[hidden] { display: none; }  /* .row setzt display: flex */
+ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
 </style>
 </head>
 <body>
@@ -322,6 +344,35 @@ table.ready-t .rt-narrow { display: none; }
   <p class="sub" id="status">Lade …</p>
 
   <div class="tiles" id="tiles"></div>
+  <div class="card" id="pv" style="margin-bottom:12px" hidden>
+    <h2>Vorschau (Trockenlauf)</h2>
+    <p class="pv-note" id="pv-note"></p>
+    <p id="pv-sum"></p>
+    <p class="muted" id="pv-basis"></p>
+    <div id="pv-miss"></div>
+    <div class="legend" id="lg-pv"></div>
+    <div class="pv-title">Vorlauf-Soll und Außentemperatur (°C)</div><div id="ch-pv-flow"></div>
+    <div class="pv-title"><i class="lk" style="border-top-color:var(--series-4)"></i>Warmwasser-Soll (°C)</div><div id="ch-pv-dhw"></div>
+    <details id="pv-hours" style="margin-top:8px"><summary>Je Stunde – Werte, Gründe und Schreibvorgänge</summary>
+      <div class="scroll"><table class="pv-t" id="pv-table"></table></div><p class="muted" id="pv-foot" style="margin-top:6px"></p></details>
+  </div>
+  <div class="card" id="cmp" style="margin-bottom:12px" hidden>
+    <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">Trockenlauf gegen Regler/Automation (7 Tage)</h2>
+      <div class="row" id="cmp-mode"><button class="btn small primary" data-m="lines" onclick="setCmpMode('lines')">Verlauf</button><button class="btn small" data-m="grid" onclick="setCmpMode('grid')">Wochenraster</button></div></div>
+    <p>Zu Beginn jeder Stunde merkt sich HeatPilot den Plan dafür – so, wie er damals gerechnet wurde – und legt nach der Stunde daneben, was Regler und Automation eingestellt hatten.</p>
+    <p class="cmp-text" id="cmp-text"></p>
+    <ul class="cmp-facts" id="cmp-facts"></ul>
+    <div id="cmp-lines">
+      <div class="legend" id="lg-cmp-flow"></div><div id="ch-cmp-flow"></div>
+      <div class="legend" id="lg-cmp-dhw" style="margin-top:10px"></div><div id="ch-cmp-dhw"></div>
+    </div>
+    <div id="cmp-grid" hidden>
+      <p class="muted">Plan minus Ist je Wochentag und Stunde (K): blau – HeatPilot läge tiefer, orange – höher. Leer: kein Vergleich (Heizbetrieb aus oder keine Werte). Rahmen = jetzt, rechts das Mittel des Tages.</p>
+      <div class="pv-title">Vorlauf: Plan − Regler</div><div id="ch-cmp-grid-flow"></div>
+      <div class="pv-title">Warmwasser: Plan − Automation</div><div id="ch-cmp-grid-dhw"></div>
+    </div>
+    <details id="cmp-days-box" style="margin-top:8px"><summary>Je Tag</summary><div class="scroll"><table class="pv-t" id="cmp-days"></table></div></details>
+  </div>
   <div class="card" id="advice" style="margin-bottom:12px"></div>
   <div class="card" id="guards" style="margin-bottom:12px"></div>
   <div class="card" id="sched" style="margin-bottom:12px" hidden></div>
@@ -822,7 +873,7 @@ const ICON = {
   drop: '<svg viewBox="0 0 24 24" fill="currentColor" width="11" height="11"><path d="M12 2.5s6 7 6 11.5a6 6 0 0 1-12 0C6 9.5 12 2.5 12 2.5z"/></svg>',
 };
 // Steuerung (0.34): Status der Regelschleife aus GET api/heat (control) – Phasen, Wunschsoll, Pause, Protokoll
-const PHASE = { komfort: "Komfort", nacht: "Nacht", abwesend: "Abwesend", vorheizen: "Vorheizen", urlaub: "Urlaub" };
+const PHASE = { komfort: "Komfort", nacht: "Nacht", abwesend: "Abwesend", vorheizen: "Vorheizen", urlaub: "Urlaub", aus: "Aus" };  // „aus“: Vorschau (0.37), Thermostat aus
 const PAUSE_MORNING_H = 6;  // „bis morgen“ = bis zum nächsten Morgen 06:00 – die Oberfläche rechnet es in Stunden um
 const clock = (iso) => iso ? new Date(iso).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" }) : "–";
 const ctl = () => (HEAT && HEAT.control) || { mode: "beobachten", active: false, paused_until: null, rooms: {}, log: [], warnings: [], status_text: "Beobachten" };
@@ -1246,6 +1297,7 @@ async function load() {
     `<li><b>Je Raum geprüft:</b> ${roomCheckText(sv)}</li>` +
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul>`;
   renderSchedule(s);
+  loadPreview().catch(previewOff);  // Vorschau (Trockenlauf, 0.37): eigene Abfrage, nicht im summary
   loadCert().catch((e) => { $("cert").innerHTML = `<h2>Zertifikat über Haus & Heizung</h2><p class="muted">Konnte nicht geladen werden: ${esc(e.message)}</p>`; });
   renderFlowStudy(s.flow_study);
   loadWeek().catch(() => {});
@@ -1521,6 +1573,357 @@ function drawWeek() {
     tip: (v, d, h) => `<b>${WEEK_METRIC === "model" && v > 0 ? "+" : ""}${fmt(v, digits)}</b> ${m.unit} · ${m.n[d][h]} Stunden`,
   });
   $("week-findings").innerHTML = (m.findings || []).map((f) => `<li>${esc(f)}</li>`).join("");
+}
+
+// ---------------------------------------------------------------- Vorschau (Trockenlauf, 0.37)
+// Was HeatPilot in den nächsten 24 h am Kessel setzen würde (GET api/preview → preview) und der Vergleich der letzten
+// 7 Tage mit Regler und Automation (→ compare). Nur Anzeige – HeatPilot schreibt nichts an den Kessel, die Vorschau
+// ist ein Vorschlag zum Vergleichen. Keine zweite y-Achse: zwei kleine Grafen übereinander (Vorlauf mit Außen-
+// temperatur oben, Warmwasser unten), gleiche Zeitachse, ein Tooltip je Stunde in beiden; die Tabelle je Stunde ist
+// der Zwilling ohne Maus.
+const PV_NOTE = "Trockenlauf – HeatPilot schreibt nichts an den Kessel";  // wie preview.NOTE
+const PV_C = { flow: "var(--series-2)", out: "var(--series-1)", dhw: "var(--series-4)", act: "var(--series-5)" };
+const PV_WHAT = { flow: "Vorlauf", heating: "Heizbetrieb", dhw: "Warmwasser" };
+let PV = null, CMP_MODE = "lines";
+const CMP_GRID_MIN = 520;
+const tsOf = (iso) => Date.parse(iso) / 1000;
+const tclock = (ts) => new Date(ts * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
+const wday = (ts) => WEEKDAYS[(new Date(ts * 1000).getDay() + 6) % 7];
+const degC = (v) => v === null || v === undefined ? "–" : `${fmt(v, 0)} °C`;
+const tipKey = (c, dash) => `<i class="tip-key" style="border-top:2px ${dash ? "dashed" : "solid"} ${c}"></i>`;
+// y-Bereich mindestens 10 K: sonst zeigt frame() einen konstanten Wert mit Zehntel-Teilung, als schwanke er
+const span10 = (ys) => { const lo = Math.min(...ys), hi = Math.max(...ys), m = Math.floor((lo + hi) / 2 - 5);
+  return hi - lo >= 10 ? {} : { yMin: Math.min(lo, m), yMax: Math.max(hi, m + 10) }; };
+const pvBandOf = (h) => h.night ? "var(--band-night)" : h.home === 0 || h.vacation ? "var(--band-away)" : null;
+// „11:05 Vorlauf 45 → 25 °C“ bzw. „21:00 Heizbetrieb aus“
+const pvWrite = (w) => `${clock(w.t)} ${PV_WHAT[w.what] || esc(w.what)} ` + (w.what === "heating" ? (w.value ? "an" : "aus")
+  : `${w.from === null || w.from === undefined ? "" : fmt(w.from, 0) + " → "}${fmt(w.value, 0)} °C`);
+
+async function loadPreview() {
+  const j = await getJSON("api/preview");
+  if (j.starting) return;
+  PV = j;
+  drawPreview();
+}
+function previewOff() { $("pv").hidden = true; $("cmp").hidden = true; }  // ältere Version ohne api/preview
+function drawPreview() {
+  if (!PV) return;
+  renderPreview(PV.preview);
+  renderCompare(PV.compare);
+}
+
+function renderPreview(p) {
+  const box = $("pv");
+  box.hidden = !p || !(p.hours || []).length;
+  if (box.hidden) return;
+  $("pv-note").innerHTML = `<b>${esc(p.note || PV_NOTE)}.</b> Die Vorschau ist ein Vorschlag zum Vergleichen – wann und ob umgestellt wird, entscheidest du.`;
+  $("pv-sum").innerHTML = pvSummary(p);
+  $("pv-basis").innerHTML = pvBasis(p);
+  $("pv-miss").innerHTML = [["Vorlauf", p.flow_note], ["Warmwasser", p.dhw_note]].filter((x) => x[1])
+    .map(([k, v]) => `<p class="pv-miss">${k}: ${esc(v)}</p>`).join("");
+  const hours = p.hours.map((h) => tsOf(h.t)), x1 = hours[hours.length - 1] + 3600;
+  const x0 = p.steps && p.steps.length ? Math.max(tsOf(p.steps[0].t), hours[0]) : hours[0];
+  pvLegend(p);
+  pvFlowChart($("ch-pv-flow"), p, hours, x0, x1);
+  pvDhwChart($("ch-pv-dhw"), p, hours, x0, x1);
+  $("pv-table").innerHTML = pvTable(p);
+  $("pv-foot").textContent = p.hours.some((h) => h.t_out_src === "aktuell") ? "* aktuelle Außentemperatur – für diese Stunde kein Vorhersagepunkt." : "";
+}
+// Satz über der Grafik: Schreibvorgänge in 24 h nach den Regeln, dazu was heute am Kessel steht (Startwert der Zählung)
+function pvSummary(p) {
+  const w = p.writes_24h || {}, r = p.rules || {}, s = p.start || {};
+  const n = (w.flow || 0) + (w.heating || 0) + (w.dhw || 0);
+  const parts = Object.keys(PV_WHAT).filter((k) => w[k]).map((k) => `${PV_WHAT[k]} ${w[k]}×`).join(", ");
+  const head = n ? `In den nächsten 24 h würde HeatPilot <b>${n}× schreiben</b> (${parts})` : "In den nächsten 24 h würde HeatPilot <b>nichts schreiben</b>";
+  const rules = `nur bei Änderung (Vorlauf ab ${fmt(r.flow_k ?? 1)} K, Warmwasser ab ${fmt(r.dhw_k ?? 1)} K, Heizbetrieb an/aus), danach ${fmt(r.hold_min ?? 5, 0)} min Haltezeit`;
+  const now = [s.flow === null || s.flow === undefined ? "" : `Vorlauf-Soll ${degC(s.flow)}`,
+    s.dhw === null || s.dhw === undefined ? "" : `Warmwasser-Soll ${degC(s.dhw)}`,
+    s.heating === true ? "Heizbetrieb an" : s.heating === false ? "Heizbetrieb aus" : ""].filter(Boolean);
+  return `${head} – ${rules}. ` + (now.length ? `Heute am Kessel: ${now.join(" · ")}.`
+    : "Was heute am Kessel steht, ist unbekannt – der erste Wert zählt als Schreibvorgang.");
+}
+// Womit gerechnet wurde: Modus, Außentemperatur, Räume für den Vorlauf
+function pvBasis(p) {
+  const mode = p.control_mode === "heatpilot"
+    ? "Gerechnet wie bei „HeatPilot steuert“: Räume mit „macht mit“ nach dem Wunschzustand der Steuerung, die übrigen nach Tado."
+    : "Gerechnet mit dem, was Tado voraussichtlich will (Beobachten): tagsüber das heutige Soll, nachts und bei Abwesenheit abgesenkt.";
+  const off = p.forecast_offset_k;  // Fühler − Vorhersage jetzt: so weit angeglichen, klingt ab
+  const out = !p.forecast ? "Keine Vorhersage – alle Stunden mit der aktuellen Außentemperatur."
+    : off !== null && off !== undefined && Math.abs(off) >= 0.5
+      ? `Außentemperatur aus der Vorhersage, an den Außenfühler angeglichen: Er misst jetzt ${fmt(Math.abs(off))} K ${off > 0 ? "mehr" : "weniger"} als vorhergesagt, der Unterschied klingt über ${fmt(p.forecast_fade_h, 0)} h ab.`
+      : "Außentemperatur aus der Vorhersage.";
+  const why = {};  // gleicher Grund: Räume zusammen nennen
+  for (const r of p.rooms_skipped || []) (why[r.why] = why[r.why] || []).push(esc(r.name));
+  const used = (p.rooms_used || []).map(esc).join(", "), skip = Object.entries(why).map(([w, n]) => `${n.join(", ")} (${esc(w)})`).join("; ");
+  const rooms = used ? `Vorlauf aus ${used}${skip ? ` · nicht dabei: ${skip}` : ""}.` : skip ? `Nicht dabei: ${skip}.` : "";
+  return `${mode} ${out}${rooms ? " " + rooms : ""}`;
+}
+// Legende wie die Marken: Linie, gestrichelte Linie, Band, Streifen, Ring
+function pvLegend(p) {
+  const it = [["lk", PV_C.flow, "Vorlauf-Soll"], ["lk dash", PV_C.out, "Außen"]].filter((x, k) => k ? p.hours.some((h) => h.t_out !== null)
+    : (p.steps || []).some((s) => s.heating === true && s.flow !== null));
+  if (p.hours.some((h) => h.night)) it.push(["band", "var(--band-night)", "Nacht"]);
+  if (p.hours.some((h) => !h.night && (h.home === 0 || h.vacation))) it.push(["band", "var(--band-away)", p.hours.some((h) => h.vacation) ? "niemand zu Hause / Urlaub" : "niemand zu Hause"]);
+  if ((p.steps || []).some((s) => s.heating === false)) it.push(["strip", "var(--text-muted)", "Heizbetrieb aus"]);
+  $("lg-pv").innerHTML = it.map(([cls, c, name]) => `<span><i class="${cls}" style="${cls.startsWith("lk") ? "border-top-color" : "background"}:${c}"></i>${name}</span>`).join("") +
+    (p.hours.some((h) => h.writes.length) ? `<span><i class="ring"></i>würde schreiben</span>` : "");
+}
+
+function pvFlowChart(box, p, hours, x0, x1) {
+  const st = p.steps.map((s) => tsOf(s.t)), ends = st.map((t, i) => i + 1 < st.length ? st[i + 1] : x1);
+  const flows = p.steps.map((s) => s.heating === true ? s.flow : null);
+  const outs = p.hours.map((h) => h.t_out), mids = hours.map((t) => Math.max(t + 1800, x0));
+  const ys = [...flows, ...outs].filter((v) => v !== null && v !== undefined);
+  if (!ys.length) { box.innerHTML = `<p class="muted">Weder Vorlauf-Soll noch Außentemperatur.</p>`; return; }
+  const f = frame(box, [x0, x1], ys, { xTicks: timeTicks, height: 190, label: "Vorlauf-Soll und Außentemperatur", ...span10(ys) });
+  pvBands(f, hours, p.hours.map(pvBandOf));
+  pvStrip(f, st, ends, p.steps.map((s) => s.heating === false));
+  const line = { fill: "none", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
+  el("path", { ...line, d: smoothPath(mids, outs, f.sx, f.sy, 5400), stroke: PV_C.out, "stroke-width": 1.5, "stroke-dasharray": "5 4" }, f.svg);
+  el("path", { ...line, d: stepPath(st, ends, flows, f.sx, f.sy), stroke: PV_C.flow, "stroke-width": 2 }, f.svg);
+  pvMarks(f, p.hours.flatMap((h) => h.writes).filter((w) => w.what !== "dhw"), PV_C.flow);
+  hourHover("pv", f, hours, (i) => pvTip(p, i));
+}
+function pvDhwChart(box, p, hours, x0, x1) {
+  const st = p.steps.map((s) => tsOf(s.t)), ends = st.map((t, i) => i + 1 < st.length ? st[i + 1] : x1);
+  const vals = p.steps.map((s) => s.dhw), ys = vals.filter((v) => v !== null && v !== undefined);
+  if (!ys.length) { box.innerHTML = `<p class="muted">Kein Warmwasser-Soll${p.dhw_note ? " – " + esc(p.dhw_note) : ""}.</p>`; return; }
+  const dis = p.hours.map((h) => h.disinfect).filter(Boolean);
+  const yr = dis.length ? [...ys, Math.max(...ys) + 8] : ys;  // Platz über der Linie für „Desinfektion …“
+  const f = frame(box, [x0, x1], yr, { xTicks: timeTicks, height: 140, label: "Warmwasser-Soll", ...span10(yr) });
+  pvBands(f, hours, p.hours.map(pvBandOf));
+  for (const d of dis) {
+    const x = f.sx(tsOf(d.at)), right = x > f.W - f.m.r - 110;
+    el("line", { x1: x, x2: x, y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-secondary)", "stroke-width": 1, "stroke-dasharray": "2 3" }, f.svg);
+    el("text", { x: right ? x - 4 : x + 4, y: f.m.t + 10, "text-anchor": right ? "end" : "start" }, f.svg).textContent = `Desinfektion ${clock(d.at)}`;
+  }
+  el("path", { d: stepPath(st, ends, vals, f.sx, f.sy), fill: "none", stroke: PV_C.dhw, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" }, f.svg);
+  pvMarks(f, p.hours.flatMap((h) => h.writes).filter((w) => w.what === "dhw"), PV_C.dhw);
+  hourHover("pv", f, hours, (i) => pvTip(p, i));
+}
+// Stufenlinie: Wert i gilt von ts[i] bis ends[i]; anschließende Stufen verbunden, Lücken (null, fehlende Stunde) offen
+function stepPath(ts, ends, vals, sx, sy) {
+  let d = "", open = false;
+  vals.forEach((v, i) => {
+    if (v === null || v === undefined) { open = false; return; }
+    d += open && ends[i - 1] === ts[i] ? `V${sy(v).toFixed(1)}` : `M${sx(ts[i]).toFixed(1)},${sy(v).toFixed(1)}`;
+    d += `H${sx(ends[i]).toFixed(1)}`;
+    open = true;
+  });
+  return d;
+}
+// Hintergrund je Stunde (Farbe oder null), gleiche Nachbarstunden als ein Band
+function pvBands(f, hours, colors) {
+  const top = f.m.t, h = f.H - f.m.b - top;
+  for (let i = 0, j; i < hours.length; i = j + 1) {
+    for (j = i; j + 1 < hours.length && colors[j + 1] === colors[i] && hours[j + 1] === hours[j] + 3600; j++);
+    const a = Math.max(f.sx(hours[i]), f.m.l), b = Math.min(f.sx(hours[j] + 3600), f.W - f.m.r);
+    if (colors[i] && b > a) el("rect", { x: a, y: top, width: b - a, height: h, fill: colors[i] }, f.svg);
+  }
+}
+// Streifen am unteren Rand, wo on[i] gilt (Heizbetrieb aus)
+function pvStrip(f, ts, ends, on) {
+  const y = f.H - f.m.b - 4;
+  ts.forEach((t, i) => {
+    if (!on[i]) return;
+    const a = Math.max(f.sx(t), f.m.l), b = Math.min(f.sx(ends[i]), f.W - f.m.r);
+    if (b > a) el("rect", { x: a, y, width: b - a, height: 4, fill: "var(--text-muted)", "fill-opacity": 0.6 }, f.svg);
+  });
+}
+// „würde schreiben“: Ring auf der Linie zum Zeitpunkt (Heizbetrieb an/aus auf dem Streifen)
+function pvMarks(f, writes, color) {
+  for (const w of writes) {
+    const x = f.sx(w.ts);
+    if (x < f.m.l - 1 || x > f.W - f.m.r + 1) continue;
+    const heat = w.what === "heating";
+    el("circle", { cx: x, cy: heat ? f.H - f.m.b - 2 : f.sy(w.value), r: 3.5, fill: "var(--surface-1)",
+      stroke: heat ? "var(--text-secondary)" : color, "stroke-width": 1.5 }, f.svg);
+  }
+}
+// Stunden-Hover: die Stunde unter dem Zeiger in allen Grafen der Gruppe hervorgehoben, ein Tooltip je Stunde
+// (Maus und Finger wie scrub; erst der Tooltip, dann die Markierung – showTip blendet die vorige aus)
+const HOVER = {};
+function hourHover(group, f, hours, html) {
+  const top = f.m.t, bottom = f.H - f.m.b, left = f.m.l, right = f.W - f.m.r;
+  const band = el("rect", { x: left, y: top, width: 1, height: bottom - top, fill: "var(--text-primary)", "fill-opacity": 0.08, visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: left, y: top, width: right - left, height: bottom - top, fill: "transparent" }, f.svg);
+  const own = { svg: f.svg, hide: () => band.setAttribute("visibility", "hidden"),
+    show: (i) => {
+      const a = Math.max(f.sx(hours[i]), left), b = Math.min(f.sx(hours[i] + 3600), right);
+      band.setAttribute("x", a); band.setAttribute("width", Math.max(b - a, 1)); band.setAttribute("visibility", "visible");
+    } };
+  HOVER[group] = (HOVER[group] || []).filter((m) => m.svg.isConnected).concat(own);
+  scrub(f.svg, hit, (e, rel) => {
+    const t = f.x0 + (rel * f.W - left) / (right - left) * (f.x1 - f.x0);
+    let i = 0;
+    hours.forEach((h, k) => { if (Math.abs(h + 1800 - t) < Math.abs(hours[i] + 1800 - t)) i = k; });
+    const all = HOVER[group].filter((m) => m.svg.isConnected);
+    showTip(e, html(i), () => all.forEach((m) => m.hide()));
+    all.forEach((m) => m.show(i));
+  });
+}
+function pvTip(p, i) {
+  const h = p.hours[i], t = tsOf(h.t);
+  const state = [h.vacation ? "Urlaub" : h.home === 0 ? "niemand zu Hause" : "", h.night ? "Nacht" : ""].filter(Boolean);
+  const flow = h.heating === false ? "<b>Heizbetrieb aus</b>" : h.flow === null || h.flow === undefined ? "–"
+    : `<b>${h.flow} °C</b>` + (h.flow_max > h.flow ? ` (bis ${h.flow_max} °C)` : "");
+  const src = { vorhersage: " (Vorhersage)", angeglichen: " (Vorhersage, an den Fühler angeglichen)", aktuell: " (aktuell)" }[h.t_out_src] || "";
+  const rows = [`${tipKey(PV_C.flow)}Vorlauf-Soll: ${flow}`, `<span class="tip-why">${esc(h.flow_reason)}</span>`,
+    `${tipKey(PV_C.out, 1)}Außen: <b>${fmt(h.t_out)} °C</b>${src}`,
+    `${tipKey(PV_C.dhw)}Warmwasser-Soll: ${h.dhw === null || h.dhw === undefined ? "–" : `<b>${h.dhw} °C</b>`}`,
+    `<span class="tip-why">${esc(h.dhw_reason)}</span>`];
+  if (h.disinfect) rows.push(`Desinfektion ${clock(h.disinfect.at)} · ${fmt(h.disinfect.temp, 0)} °C`);
+  rows.push(h.writes.length ? "würde schreiben:" : "würde nichts schreiben", ...h.writes.map(pvWrite));
+  return `${wday(t)} ${tclock(t)}–${tclock(t + 3600)}${state.length ? " · " + state.join(" · ") : ""}<br>${rows.join("<br>")}`;
+}
+// Tabelle je Stunde: Werte in einer Zeile, darunter Gründe, Raum-Soll (nur Änderungen) und Schreibvorgänge
+function pvTable(p) {
+  let prevDay = null;
+  const rows = p.hours.map((h, i) => {
+    const t = tsOf(h.t), day = new Date(t * 1000).toDateString(), prev = i ? p.hours[i - 1] : null;
+    const twice = prev && tclock(tsOf(prev.t)) === tclock(t);  // Zeitumstellung im Herbst: dieselbe Uhrzeit zweimal
+    const label = (day !== prevDay ? `${wday(t)} ` : "") + tclock(t) + (twice ? ' <span class="muted" title="Zeitumstellung: diese Stunde gibt es heute zweimal">(2.)</span>' : "");
+    prevDay = day;
+    const state = [h.night ? "Nacht" : "", h.vacation ? "Urlaub" : h.home === 0 ? "weg" : ""].filter(Boolean).join(", ");
+    const flow = h.heating === false ? "aus" : degC(h.flow) + (h.flow_max > h.flow ? `<div class="muted">bis ${h.flow_max} °C</div>` : "");
+    const why = [`Vorlauf: ${esc(h.flow_reason)}`, `Warmwasser: ${esc(h.dhw_reason)}`, pvRooms(h, prev),
+      h.disinfect ? `Desinfektion ${clock(h.disinfect.at)}` : "",
+      h.writes.length ? `würde schreiben: ${h.writes.map(pvWrite).join(", ")}` : ""].filter(Boolean).join(" · ");
+    return `<tr class="pv-h"><td>${label}${state ? `<div class="muted">${state}</div>` : ""}</td>` +
+      `<td>${fmt(h.t_out)} °C${h.t_out_src === "aktuell" ? "*" : ""}</td><td>${flow}</td><td>${degC(h.dhw)}</td>` +
+      `<td>${h.writes.length ? `<b>${h.writes.length}×</b>` : "–"}</td></tr><tr class="pv-why"><td colspan="5">${why}</td></tr>`;
+  });
+  return "<tr><th>Stunde</th><th>Außen</th><th>Vorlauf</th><th>Warmw.</th><th>schreibt</th></tr>" + rows.join("");
+}
+// Raum-Soll der Stunde: in der ersten alle, danach nur, was sich gegenüber der Vorstunde ändert
+function pvRooms(h, prev) {
+  const one = (n) => h.rooms[n] === null || h.rooms[n] === undefined ? `${esc(n)} aus`
+    : `${esc(n)} ${fmt(h.rooms[n])} °C (${PHASE[h.phases[n]] || esc(h.phases[n])})`;
+  const names = Object.keys(h.rooms || {}).filter((n) => !prev || prev.rooms[n] !== h.rooms[n] || prev.phases[n] !== h.phases[n]);
+  return names.length ? `Räume: ${names.map(one).join(", ")}` : "";
+}
+
+// ---------------------------------------------------------------- Trockenlauf gegen Regler/Automation (7 Tage)
+function renderCompare(c) {
+  $("cmp").hidden = !c;
+  if (!c) return;
+  $("cmp-text").textContent = c.text;  // Satz aus dem Backend (ohne Daten: „sammelt – erste Werte nach einer Stunde“)
+  const has = !c.collecting && !!c.total, n = (c.series || []).length;
+  for (const id of ["cmp-mode", "cmp-lines", "cmp-grid", "cmp-days-box"]) $(id).hidden = !has;
+  $("cmp-facts").innerHTML = has ? cmpFacts(c.total)
+    : n ? `<li>${n === 1 ? "Eine Stunde" : `${n} Stunden`} mit Plan – der Ist-Wert kommt nach Ablauf der Stunde dazu.</li>` : "";
+  if (!has) return;
+  $("cmp-days").innerHTML = cmpDays(c.days || []);
+  drawCompare();
+}
+function setCmpMode(m) { CMP_MODE = m; drawCompare(); }
+function drawCompare() {
+  const c = PV && PV.compare;
+  if (!c || c.collecting || !c.total) return;
+  // Die Legende des Wochenrasters (heatLegend, unverändert) braucht ≈ 520 px – schmaler nur der Verlauf
+  const inner = $("cmp").clientWidth - 30, fits = !inner || inner >= CMP_GRID_MIN;
+  $("cmp-mode").hidden = !fits;
+  document.querySelectorAll("#cmp-mode button").forEach((b) => b.classList.toggle("primary", b.dataset.m === CMP_MODE));
+  const lines = CMP_MODE === "lines" || !fits;
+  $("cmp-lines").hidden = !lines; $("cmp-grid").hidden = lines;
+  if (!lines) return cmpGrids(c);
+  const s = c.series, off = s.some((r) => r.heating === 0 && (r.act_heating ?? 0) >= 0.5);
+  cmpLegend("lg-cmp-flow", "Vorlauf", PV_C.flow, "Regler (Kessel-Soll)", off);
+  cmpChart($("ch-cmp-flow"), c, { plan: "flow", act: "act_flow", color: PV_C.flow, label: "Vorlauf: Plan gegen Regler", strip: off });
+  cmpLegend("lg-cmp-dhw", "Warmwasser", PV_C.dhw, "Automation (Speicher-Soll)", false);
+  cmpChart($("ch-cmp-dhw"), c, { plan: "dhw", act: "act_dhw", color: PV_C.dhw, label: "Warmwasser: Plan gegen Automation", height: 150 });
+}
+const cmpLegend = (id, what, color, act, off) => { $(id).innerHTML = `<span><b>${what} (°C)</b></span>` +
+  `<span><i class="lk" style="border-top-color:${color}"></i>Plan HeatPilot</span><span><i class="lk" style="border-top-color:${PV_C.act}"></i>${act}</span>` +
+  (off ? `<span><i class="strip" style="background:var(--text-muted)"></i>HeatPilot aus, Regler heizt</span>` : ""); };
+// Kennzahlen in Sätzen (stats() im Backend): Vorlauf nur, wo beide heizen; Heizbetrieb; Warmwasser; Schreibvorgänge
+function cmpFacts(s) {
+  const by = (o) => Object.keys(PV_WHAT).map((k) => `${PV_WHAT[k]} ${(o || {})[k] || 0}`).join(", ");
+  const k = (d) => d === null || d === undefined ? "–" : kelvin(d);
+  return [
+    s.flow_hours ? `Vorlauf: ${s.flow_hours} Stunden verglichen, in denen beide heizen – im Mittel ${k(s.flow_diff_k)}; ${s.flow_lower_h} h tiefer, ${s.flow_higher_h} h höher (ab 1 K).`
+      : "Vorlauf: noch keine Stunde, in der beide heizen.",
+    `Heizbetrieb: ${s.heating_off_h} h wäre HeatPilot aus, während der Regler heizt` + (s.heating_on_h ? `; ${s.heating_on_h} h umgekehrt.` : "."),
+    s.dhw_hours ? `Warmwasser: ${s.dhw_hours} Stunden verglichen – im Mittel ${k(s.dhw_diff_k)}; ${s.dhw_lower_h} h tiefer, ${s.dhw_higher_h} h höher.`
+      : "Warmwasser: noch keine Stunde zum Vergleichen.",
+    `Schreibvorgänge: HeatPilot ${s.writes_plan} (${by(s.writes_plan_by)}) · Regler und Automation ${s.changes_act} Wechsel (${by(s.changes_act_by)}).`,
+  ].map((t) => `<li>${t}</li>`).join("");
+}
+// Je Tag (neuester oben): Plan − Ist, Schreibvorgänge gegen Wechsel, Bereitschaftsverlust Warmwasser (nur mit Modell)
+function cmpDays(days) {
+  const kwh = days.some((d) => d.dhw_kwh !== null && d.dhw_kwh !== undefined), k = (d) => d === null || d === undefined ? "–" : kelvin(d);
+  return `<tr><th>Tag</th><th>Vorlauf</th><th>Warmw.</th><th>Schreiben</th>${kwh ? '<th title="Bereitschaftsverlust Warmwasser, Plan gegen Ist">Speicher kWh</th>' : ""}</tr>` +
+    days.slice().reverse().map((d) => {
+      const t = Date.parse(d.day + "T12:00:00") / 1000;
+      return `<tr title="${esc(d.text)}"><td style="white-space:nowrap">${wday(t)} ${Number(d.day.slice(8, 10))}.<div class="muted">${d.hours} h</div></td>` +
+        `<td>${k(d.flow_diff_k)}</td><td>${k(d.dhw_diff_k)}</td><td>${d.writes_plan} statt ${d.changes_act}</td>` +
+        (kwh ? `<td>${d.dhw_kwh === null || d.dhw_kwh === undefined ? "–" : `${d.dhw_kwh > 0 ? "+" : d.dhw_kwh < 0 ? "−" : ""}${fmt(Math.abs(d.dhw_kwh), 1)}`}</td>` : "") + "</tr>";
+    }).join("");
+}
+// Plan und Ist je Stunde als Stufen (Ist grau), Tage als Achse, Mitternacht als Haarlinie
+function cmpChart(box, c, o) {
+  const s = c.series, ts = s.map((r) => tsOf(r.t)), ends = ts.map((t) => t + 3600);
+  const plan = s.map((r) => o.plan === "flow" && r.heating !== 1 ? null : r[o.plan]), act = s.map((r) => r[o.act]);
+  const ys = [...plan, ...act].filter((v) => v !== null && v !== undefined);
+  if (!ys.length) { box.innerHTML = `<p class="muted">Noch keine Werte.</p>`; return; }
+  const x0 = ts[0], x1 = ts[ts.length - 1] + 3600;
+  const f = frame(box, [x0, x1], ys, { xTicks: dayTicks, height: o.height || 170, label: o.label });
+  for (const d = new Date(x0 * 1000); d.setHours(24, 0, 0, 0) / 1000 < x1;) {  // jede Mitternacht im Fenster
+    const x = f.sx(d.getTime() / 1000);
+    el("line", { x1: x, x2: x, y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--border)", "stroke-width": 1 }, f.svg);
+  }
+  if (o.strip) pvStrip(f, ts, ends, s.map((r) => r.heating === 0 && (r.act_heating ?? 0) >= 0.5));
+  const line = { fill: "none", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
+  el("path", { ...line, d: stepPath(ts, ends, act, f.sx, f.sy), stroke: PV_C.act, "stroke-width": 1.5 }, f.svg);
+  el("path", { ...line, d: stepPath(ts, ends, plan, f.sx, f.sy), stroke: o.color, "stroke-width": 1.8 }, f.svg);
+  hourHover("cmp", f, ts, (i) => cmpTip(c, i));
+}
+// Tage als Achse: Wochentag (im 7-Tage-Fenster eindeutig) mitten im sichtbaren Teil des Tages, ab 4 h; unter 36 h Uhrzeiten
+function dayTicks(x0, x1) {
+  if (x1 - x0 < 36 * 3600) return timeTicks(x0, x1);
+  const out = [], d = new Date(x0 * 1000);
+  d.setHours(0, 0, 0, 0);
+  while (d.getTime() / 1000 < x1) {
+    const a = Math.max(d.getTime() / 1000, x0);
+    d.setDate(d.getDate() + 1);
+    const b = Math.min(d.getTime() / 1000, x1);
+    if (b - a >= 4 * 3600) out.push([(a + b) / 2, wday(a)]);
+  }
+  return out;
+}
+function cmpTip(c, i) {
+  const r = c.series[i], t = tsOf(r.t), v = (x) => x === null || x === undefined ? "–" : `<b>${fmt(x, 0)} °C</b>`;
+  const heat = r.act_heating === null || r.act_heating === undefined ? "" : ` · Heizbetrieb ${fmt(r.act_heating * 100, 0)} % der Stunde`;
+  return `${wday(t)} ${dateOf(t)} ${tclock(t)}–${tclock(t + 3600)}<br>` + [
+    `${tipKey(PV_C.flow)}Vorlauf Plan: ${r.heating === 0 ? "<b>Heizbetrieb aus</b>" : v(r.flow)}`,
+    `${tipKey(PV_C.act)}Vorlauf Regler: ${v(r.act_flow)}${heat}`,
+    `${tipKey(PV_C.dhw)}Warmwasser Plan: ${v(r.dhw)}`, `${tipKey(PV_C.act)}Warmwasser Automation: ${v(r.act_dhw)}`,
+    r.t_out === null || r.t_out === undefined ? "" : `Außen ${fmt(r.t_out)} °C`,
+    r.changes === null || r.changes === undefined ? `HeatPilot würde ${r.writes}× schreiben · Ist-Wert nach Ablauf der Stunde`
+      : `HeatPilot würde ${r.writes}× schreiben · Regler/Automation ${r.changes} Wechsel`,
+  ].filter(Boolean).join("<br>");
+}
+// Wochenraster (unverändert die Funktionen von „Die Woche im Blick“): Plan minus Ist je Wochentag und Stunde,
+// blau tiefer, orange höher; Vorlauf nur, wo beide heizen (wie im Backend); rechts das Mittel des Tages
+function cmpGrid(series, plan, act) {
+  const grid = WEEKDAYS.map(() => Array(24).fill(null));
+  for (const r of series) {
+    const both = plan !== "flow" || (r.heating === 1 && (r.act_heating === null || r.act_heating === undefined || r.act_heating >= 0.5));
+    if (!both || r[plan] === null || r[plan] === undefined || r[act] === null || r[act] === undefined) continue;
+    const d = new Date(tsOf(r.t) * 1000);
+    grid[(d.getDay() + 6) % 7][d.getHours()] = Math.round((r[plan] - r[act]) * 10) / 10;
+  }
+  return grid;
+}
+function cmpGrids(c) {
+  const perDay = (key) => { const out = WEEKDAYS.map(() => null);
+    for (const d of c.days || []) out[(new Date(d.day + "T12:00:00").getDay() + 6) % 7] = d[key]; return out; };
+  for (const [id, plan, act, key, what] of [["ch-cmp-grid-flow", "flow", "act_flow", "flow_diff_k", "Regler"], ["ch-cmp-grid-dhw", "dhw", "act_dhw", "dhw_diff_k", "Automation"]]) {
+    const grid = cmpGrid(c.series, plan, act), box = $(id);
+    if (!grid.flat().some((v) => v !== null)) { box.innerHTML = `<p class="muted">Noch keine Stunde zum Vergleichen.</p>`; continue; }
+    heatmap(box, grid, { unit: "K", digits: 0, diverging: true, now: nowCell(), label: `${PV_WHAT[plan]}: Plan − ${what}`,
+      totals: perDay(key), totalDigits: 0, totalUnit: "K", totalsLabel: "Ø", tip: (v) => `<b>${kelvin(v)}</b> Plan − ${what}` });
+  }
 }
 
 // Anwesenheit: wie HeatPilot Entfernung und Heimkehr deutet – zum Nachprüfen
