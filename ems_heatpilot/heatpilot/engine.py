@@ -12,7 +12,7 @@ import time
 from collections import Counter, deque
 from datetime import datetime, timedelta
 
-from . import advice, analysis, flowstudy, guards, plausibility, schedule, sleep, solar, weekly
+from . import advice, analysis, flowstudy, guards, plausibility, readiness, schedule, sleep, solar, weekly
 from .config import Config
 from .dhw import AFTER_CHARGE_H, DhwModel, DhwShadow, DrawWatch, tail_rising
 from .live import LiveBuffer
@@ -66,6 +66,10 @@ EXT_MAX_H = 12           # … spätestens nach so vielen Stunden
 EXT_DAY_SKIP_H = 3.0     # Tag mit so vielen Stunden Fremdwärme lernt das Tagesmodell nicht (zählt nur als Vortag)
 EXT_COUNT_DAYS = 7       # Zähler je Raum in der Übersicht
 PERSON_UNKNOWN = {None, "", "unknown", "unavailable"}  # Tracker ohne Wert: weder zu Hause noch weg
+# Wettervorhersage (seit 0.36.1): ein Vorhersagepunkt gilt nur so nah am gefragten Zeitpunkt – sonst keiner
+# (eine Ankunft in drei Tagen bekommt nicht den letzten Punkt einer 24-h-Vorhersage)
+FORECAST_MAX_GAP_MIN = 90
+FORECAST_AHEAD_H = 12  # Kachel „Vorhersage“: Minimum, Maximum und Trend der nächsten so vielen Stunden
 
 
 def num(value) -> float | None:
@@ -92,6 +96,26 @@ def local(ts: float) -> datetime:
     return datetime.fromtimestamp(ts).astimezone()
 
 
+def aware(dt: datetime) -> datetime:
+    """Zeitpunkt mit Zeitzone – ohne Zone gilt er als Ortszeit."""
+    return dt if dt.tzinfo is not None else dt.astimezone()
+
+
+def parse_time(value) -> datetime | None:
+    """ISO-Zeit (auch mit „Z“) oder datetime als Zeitpunkt mit Zone; ohne Zone Ortszeit, unlesbar None."""
+    if isinstance(value, datetime):
+        return aware(value)
+    if not isinstance(value, str) or not value.strip():
+        return None
+    text = value.strip()
+    if text.endswith(("Z", "z")):
+        text = text[:-1] + "+00:00"
+    try:
+        return aware(datetime.fromisoformat(text))
+    except ValueError:
+        return None
+
+
 def midnight(day: datetime) -> int:
     """Beginn dieses Kalendertags (Ortszeit) – auch am Tag der Zeitumstellung richtig (23/25 h).
 
@@ -108,6 +132,10 @@ class Engine:
         self.found = found
         self.states: dict[str, dict] = {}
         self.ems: dict[str, dict] = {}  # direkt von EMS-ESP gelesen (optional)
+        # Kesselsteuerungen laut EMS-ESP (seit 0.36.1, nur Anzeige): {Kurzname: {found, writeable, value …}},
+        # main.poll_emsesp liest sie beim Start und stündlich; ohne EMS-ESP bleibt es leer
+        self.ems_controls: dict[str, dict] = {}
+        self.ems_controls_ts: float | None = None
         self.gas_factor = 1.0 if (found.gas_unit or "").lower() == "kwh" else cfg.gas_kwh_per_m3
         self.house = HouseModel.from_dict(store.get("model.house")) if store.get("model.house") else HouseModel()
         self.rooms: dict[str, RoomModel] = {}
@@ -151,6 +179,7 @@ class Engine:
         self.dhw_rec: dict | None = None
         self._advice: tuple[float, list, list] | None = None
         self.forecast: list[dict] = []
+        self.forecast_ts: float | None = None  # Zeit des letzten Abrufs (main setzt sie, build übernimmt sie)
         self.last_plan: dict | None = None
         self._last_burner: int | None = None
         # Live-Zähler (Nachlauf, Taktsperre) – ereignisgenau statt 5-min-Raster
@@ -1328,15 +1357,18 @@ class Engine:
         plan = None
         if arrival and arrival["eta"] and t_out is not None and house_check["ok"]:
             room_inputs, skipped = self.plan_rooms(rooms, room_checks)
-            t_out_arrival = self.outdoor_forecast_at(arrival["eta"])
+            # Außentemperatur zur Ankunft: Vorhersagepunkt in der Nähe, sonst die aktuelle (seit 0.36.1 sichtbar)
+            point = self.forecast_point_at(arrival["eta"])
+            t_used = t_out if point is None else point[1]
             plan = analysis.preheat_plan(
-                room_inputs, self.house, arrival["eta"], now,
-                t_out if t_out_arrival is None else t_out_arrival, self.cfg.max_flow_temp,
+                room_inputs, self.house, arrival["eta"], now, t_used, self.cfg.max_flow_temp,
                 dhw=self.dhw_for_arrival(arrival["eta"], now),
             )
             if plan is not None:  # worauf der Plan sich verlässt
                 plan = {**plan, "arrival_source": arrival.get("source"), "skipped_warm": skipped,
-                        "arrival_confidence": arrival.get("confidence"), "arrival_person": arrival.get("person")}
+                        "arrival_confidence": arrival.get("confidence"), "arrival_person": arrival.get("person"),
+                        "t_out_used": t_used, "t_out_source": "aktuell" if point is None else "vorhersage",
+                        "t_out_at": None if point is None else point[0].astimezone().isoformat()}
         self.last_plan = plan
         ext = self.ext_summary(now_ts)
 
@@ -1350,6 +1382,7 @@ class Engine:
             if needs:
                 flow_needed = round(min(max(max(needs), 25), self.cfg.max_flow_temp), 1)
 
+        ready = readiness.assess(self, now_ts)
         return {
             "now": now.isoformat(),
             "mode": self.cfg.mode,
@@ -1379,6 +1412,9 @@ class Engine:
                          # bei Steuerung heatpilot wäre Lernen aus Tado zirkulär: der Wochenplan gilt
                          "learning": self.cfg.learn_schedule and not self.cfg.is_managing()},
             "sleep": self.sleep_summary(),  # Nachtzeiten aus dem Stromverbrauch (0.36)
+            # seit 0.36.1: Wettervorhersage (Kachel) und „Bereit für die Steuerung?“ (Stufe und ein Satz)
+            "forecast": self.forecast_summary(now_ts),
+            "readiness": {k: ready[k] for k in ("level", "headline")},
             "control_mode": self.cfg.control_mode,
             "limits": {
                 "away_temp": self.eff.away_temp,      # damit rechnet die Ersparnis (gelernt, nie darunter)
@@ -1718,13 +1754,64 @@ class Engine:
         return {"hourly": hourly, "snapshots": snaps, "cycles": list(reversed(daily_cycles))}
 
     # ------------------------------------------------------------------ Vorhersage
-    def outdoor_forecast_at(self, when: datetime) -> float | None:
-        best = None
-        for f in self.forecast:
-            try:
-                t = datetime.fromisoformat(f["datetime"])
-            except (KeyError, ValueError):
+    def forecast_points(self) -> list[tuple[datetime, float]]:
+        """Stündliche Vorhersage als (Zeitpunkt mit Zone, Außentemperatur), zeitlich sortiert.
+
+        Punkte ohne lesbare Zeit oder Temperatur fallen weg. Zeiten ohne Zone gelten als Ortszeit
+        (HA liefert ISO mit Offset; seit 0.36.1 defensiv, vorher brach der Vergleich ab).
+        """
+        out = []
+        for f in self.forecast or []:
+            if not isinstance(f, dict):
                 continue
-            if best is None or abs((t - when).total_seconds()) < abs((best[0] - when).total_seconds()):
-                best = (t, num(f.get("temperature")))
-        return best[1] if best else None
+            when, temp = parse_time(f.get("datetime")), num(f.get("temperature"))
+            if when is not None and temp is not None:
+                out.append((when, temp))
+        return sorted(out, key=lambda p: p[0])
+
+    def forecast_point_at(self, when: datetime) -> tuple[datetime, float] | None:
+        """Der Vorhersagepunkt am nächsten zu ``when`` – nur innerhalb ``FORECAST_MAX_GAP_MIN``, sonst None.
+
+        Für die Anzeige, welcher Zeitpunkt genommen wurde (Vorheizplan: „Vorhersage für 17:00“).
+        Ohne Wetter-Entität None – eine alte Vorhersage zählt dann nicht mehr (wie bei der Kachel).
+        """
+        if not self.found.weather:
+            return None
+        when = aware(when)
+        best = min(self.forecast_points(), key=lambda p: abs((p[0] - when).total_seconds()), default=None)
+        if best is None or abs((best[0] - when).total_seconds()) > FORECAST_MAX_GAP_MIN * 60:
+            return None
+        return best
+
+    def outdoor_forecast_at(self, when: datetime) -> float | None:
+        """Außentemperatur laut Vorhersage zum Zeitpunkt ``when`` – None ohne Punkt in der Nähe (seit 0.36.1)."""
+        point = self.forecast_point_at(when)
+        return point[1] if point else None
+
+    def forecast_summary(self, now_ts: float) -> dict | None:
+        """Kachel „Vorhersage“ (seit 0.36.1): Alter, Reichweite, nächste 12 h und Trend.
+
+        None ohne Wetter-Entität oder ohne Punkte. ``trend_k`` = Temperatur in 12 h − jetzt (je nächster
+        Punkt, auf 0,5 K gerundet); fehlt einer der beiden Punkte, None.
+        """
+        if not self.found.weather:
+            return None
+        points = self.forecast_points()
+        if not points:
+            return None
+        now = local(now_ts)
+        ahead = now + timedelta(hours=FORECAST_AHEAD_H)
+        # der Punkt der laufenden Stunde zählt mit (HA beginnt meist zur vollen Stunde)
+        window = [p for p in points if now - timedelta(minutes=30) <= p[0] <= ahead]
+        next12 = None
+        if window:
+            low = min(window, key=lambda p: p[1])
+            next12 = {"min": low[1], "min_at": low[0].astimezone().isoformat(), "max": max(p[1] for p in window)}
+        cur, later = self.forecast_point_at(now), self.forecast_point_at(ahead)
+        return {
+            "age_min": None if self.forecast_ts is None else max(0, round((now_ts - self.forecast_ts) / 60)),
+            "points": len(points),
+            "hours": round(max((points[-1][0] - now).total_seconds() / 3600, 0.0), 1),
+            "next12": next12,
+            "trend_k": (round((later[1] - cur[1]) * 2) / 2 or 0.0) if cur and later else None,  # ohne −0,0
+        }

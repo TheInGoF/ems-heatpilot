@@ -27,9 +27,13 @@ keine YAML-Optionen:
   EMS-ESP-Oberfläche zeigt: In EMS-ESP unter „Customizations“ können Werte für
   API/MQTT ausgeschlossen sein – die gibt EMS-ESP dann nirgends heraus. Manche Werte
   meldet der Kessel erst nach dem ersten Brennerstart bzw. der ersten Warmwasserladung.
+  Seit 0.36.1 fragt HeatPilot außerdem beim Start und dann stündlich die Kesselsteuerungen ab
+  (ebenfalls nur lesen) – siehe [Bereit für die Steuerung?](#bereit-für-die-steuerung)
 - **Messwerte:** Außenfühler (einer oder mehrere, Minimum zählt), Gaszähler,
   Wetter, optional eine Heizungsanforderung – Auswahl mit Suche aus allen
-  Entitäten in Home Assistant
+  Entitäten in Home Assistant. Die Wetter-Entität liefert die stündliche Vorhersage für den
+  Vorheizplan zur Ankunft und die Bewölkung für die Sonnenanteile; ohne Außenfühler auch die
+  aktuelle Außentemperatur. Die Steuerung nutzt die Vorhersage ab 0.37
 - **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
   **„macht mit“** und **Komforttemperatur** (für „HeatPilot steuert“), **Raum** und
   **Raumregler** (mehrere Thermostate als ein Raum), Fußbodenheizung, **Voreinstellung**
@@ -204,7 +208,8 @@ Unter den Grafen steht je gewählter Person:
   gesichert noch zurückgenommen.
 - **Entfernung im Verlauf** (12 h bis 7 Tage, grün hinterlegt: zu Hause).
 - **Gewohnheit (gelernt):** Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde.
-  Ohne GPS-Annäherung gilt das erste Feld ab 50 % als erwartete Ankunft.
+  Ohne GPS-Annäherung gilt das erste Feld ab 50 % als erwartete Ankunft. Die Farbe steht
+  in festen Stufen (10, 25, 40, 50, 65, 85 %), die Legende darunter nennt sie.
 - **Heimkehr-Kontrolle:** bei jeder Ankunft (nach mind. 30 min Abwesenheit) hält
   HeatPilot fest, was es 60, 30 und 15 min vorher erwartet hatte. „+5′“ heißt 5 min zu
   spät erwartet, „−5′“ zu früh. Darüber der mittlere Fehler und wie oft er innerhalb
@@ -218,7 +223,9 @@ Gespeichert werden nur Entfernungen zum Zuhause, nie Koordinaten.
 In der Übersicht zeigt eine Wärmekarte Montag bis Sonntag × Stunde, was im Haus
 üblicherweise passiert – gemittelt über 4 Wochen bis 1 Jahr, ohne Urlaub, Zählersprünge
 herausgerechnet. Rechts die Summe (Gas, Starts) bzw. das Mittel je Tag, darunter in
-Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage.
+Klartext die Spitzen, der stärkste Wochentag und Wochenende gegen Werktage. Die Farbe hat
+sieben gleichmäßige Stufen, auch im Dunkelmodus; die Legende unter dem Raster nennt Anfangs- und
+Endwert. Felder mit zu wenig Daten haben nur einen Rahmen – nicht zu verwechseln mit „wenig“.
 
 | Ansicht | Was sie zeigt |
 | --- | --- |
@@ -384,6 +391,77 @@ keinen Zwischenmodus und keinen automatischen Rückfall:
   HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt
   geschriebene Soll stehen.
 
+### Bereit für die Steuerung?
+
+Über dem Schalter steht seit 0.36.1, ob HeatPilot steuern könnte und was es hindert – bei
+„Beobachten“ als „wäre bereit“, bei „HeatPilot steuert“ als „läuft“ mit den Einschränkungen dahinter.
+Die Ampel kennt drei Stufen:
+
+- **bereit** (grün): alles da – „Bereit – 6 Räume schreibbar, 5 mit belastbarem Modell. Flur erreicht
+  sein Soll nicht und wird akzeptiert.“
+- **eingeschränkt** (gelb): steuern geht, aber ohne Teile der Intelligenz – „Läuft – eingeschränkt:
+  Küche lernt noch (Vorheizen nach Pauschale).“
+- **nicht bereit** (grau): Schreiben ginge ins Leere – „Nicht bereit – kein Raum macht mit.“
+
+Aufgeklappt stehen die Hindernisse (rot), Einschränkungen (gelb), Hinweise (grau) und je Raum der
+Zustand. Geprüft wird in dieser Reihenfolge:
+
+1. **Beschreibbar** – je Raum mit „macht mit“ jedes Thermostat, auf das geschrieben würde (Raumregler,
+   sonst alle Ventile der Gruppe): in Home Assistant vorhanden, nicht „nicht verfügbar“/„unbekannt“, kann
+   heizen (Betriebsart `heat` oder `auto`) und hat ein einstellbares Soll. Meldet eine Plattform das
+   nicht, wird durchgelassen. Kein Raum mit „macht mit“ oder keiner beschreibbar → nicht bereit; einzelne
+   Räume nicht beschreibbar → Einschränkung („diese Räume folgen nicht“).
+2. **Schreibfehler** – ein Raum mit drei Fehlschlägen in Folge („Küche: 3 Schreibfehler in Folge –
+   Thermostat prüfen“) ist ein Hindernis, bis wieder geschrieben werden kann.
+3. **Raummodell** – noch nicht plausibel („lernt“, mit dem ersten Grund): Vorheizen für diesen Raum
+   pauschal 1 h (höchstens der Vorheizdeckel) statt nach seiner Aufheizzeit → Einschränkung.
+4. **Soll erreichbar** – schafft ein Raum bei maximalem Vorlauf und der aktuellen Außentemperatur sein
+   Soll um mehr als 0,5 K nicht, heißt er **„akzeptiert“**: „erreicht sein Soll nicht (höchstens 19,5 °C
+   bei 3 °C außen, 17 °C bei −12 °C) – wird akzeptiert, kein Hindernis“. Das ist kein Fehler – solche
+   Räume werden nicht hochgedreht (siehe unten). Erst wenn es mindestens zwei Räume und mehr als die
+   Hälfte der beschreibbaren Räume mit „macht mit“ betrifft (auch die, die noch lernen), ist es eine
+   Einschränkung („Vorlauf/Abgleich prüfen“, siehe Empfehlungen) – ein einzelner Raum wie der Flur nie.
+   Schafft ein Raum es nur bei Auslegungstemperatur nicht, steht das als Zusatz beim Raum.
+5. **Anwesenheit** – ohne Personen gibt es keine Abwesenheits-Absenkung (Hinweis); ist die Anwesenheit
+   in der letzten Stunde meist unklar (Tracker ohne Zustand), bleibt es im Zweifel bei Komfort
+   (Einschränkung).
+6. **Nachtzeiten** – eine Zeile: gelernt aus dem Stromverbrauch und wirksam, nur Vorschlag oder ohne
+   Leistungssensoren nach dem Wochenplan (Hinweis).
+7. **Außentemperatur** – fehlt sie, rechnet das Vorheizen mit 5 °C (Einschränkung).
+8. **Laufzeit** – weniger als 72 gelernte Stunden im Hausmodell: „Modelle sind jung“ (Hinweis).
+
+Räume ohne „macht mit“ stehen als „nicht dabei“ in der Liste. Die Übersicht zeigt bei „Beobachten“ die
+Stufe als Badge in der Statuszeile, der Heizen-Reiter in seiner Statuszeile.
+
+**Kessel über EMS-ESP** (zweiter Block, nur Anzeige): Bevor es je einen Kessel-Schalter gibt, zeigt
+HeatPilot, ob es alle nötigen Steuerungen hätte. Dazu fragt es beim Start und dann stündlich je
+Steuerung `GET /api/boiler/<kurzname>` ab (bei neueren EMS-ESP liegen die Warmwasserwerte unter
+`/api/boiler/dhw/…`) – mit Wert, Bereich, Einheit und ob EMS-ESP sie schreiben ließe (`writeable`).
+
+| Steuerung | EMS-ESP | |
+|---|---|---|
+| Vorlauf-Soll | `selflowtemp` | nötig |
+| Warmwasser-Soll | `wwseltemp` / `dhw/seltemp` | nötig |
+| Heizbetrieb | `heatingactivated` | nötig |
+| Warmwasser-Betrieb | `wwactivated` / `dhw/activated` | nötig |
+| Warmwasser-Einmalladung | `wwonetime` / `dhw/onetime` | nötig |
+| Heizen abschalten | `heatingoff` | Info |
+| Antipendelzeit | `burnminperiod` | Info (nur lesen) |
+| Pumpennachlauf | `pumpdelay` | Info |
+| Heiztemperatur (Obergrenze) | `heatingtemp` | Info |
+| Desinfektion | `wwdisinfecting` / `dhw/disinfecting` | Info |
+
+„Alle 5 nötigen Steuerungen vorhanden und schreibbar – eine Kesselsteuerung wäre möglich (nicht
+gebaut, HeatPilot schreibt nichts)“ bzw. „Es fehlen: Vorlauf-Soll (nicht schreibbar), …“. Ohne
+EMS-ESP-Adresse: „EMS-ESP nicht eingerichtet“. Schalter (Heizbetrieb, Einmalladung …) stehen als
+„an“/„aus“, gleich in welchem Bool-Format EMS-ESP sie meldet. Antwortet EMS-ESP auf eine dieser
+Abfragen nicht in 3 s, bricht die Runde ab und wird nach einer Stunde wiederholt – die Kesselwerte
+alle 30 s laufen davon unberührt weiter. Auch diese Abfragen sind reine Lese-Anfragen; einen
+Schreibpfad zu EMS-ESP gibt es weiterhin nicht, auch keinen vorbereiteten. Was HeatPilot damit täte,
+steht in der Planung ([docs/planung-vorlauf-ems.md](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/planung-vorlauf-ems.md));
+geschrieben wird erst mit einem eigenen Schalter in einer späteren Version. Der Kessel-Block ändert die
+Stufe der Raumsteuerung nicht – die Tado-Steuerung braucht ihn nicht.
+
 ### Räume und Geräte
 
 - Je Raum: **„macht mit“** (nur dann wird geschrieben) und die **Komforttemperatur**
@@ -426,7 +504,8 @@ Komforttemperatur des Raums (außer Boost auf Knopfdruck), immer 5–25 °C im 0
 Räume mit zu kleinem Heizkörper (Ventil dauernd offen, Temperatur bleibt darunter) werden
 akzeptiert: Die Vorheizzeit ist gedeckelt, es wird nichts hochgedreht und der Raum nicht
 „aus Angst“ dauerhaft auf Komfort gehalten. Im Heizen-Reiter steht „erreicht ≈ 19,5°“ – die
-Temperatur, die der Raum laut Modell bei maximalem Vorlauf schafft.
+Temperatur, die der Raum laut Modell bei maximalem Vorlauf schafft. In „Bereit für die Steuerung?“
+heißen solche Räume „akzeptiert“ – sie sind kein Hindernis.
 
 ### Schreiben, Hand, Pause, Fehler
 
@@ -510,7 +589,7 @@ Später (0.37): Soll nach Ventilstellung – jetzt bewusst nicht enthalten.
 
 **Beobachten und lernen.** Im Standard greift es nicht von selbst in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt –
-  auch bei „HeatPilot steuert“.
+  auch bei „HeatPilot steuert“ und für die Kesselsteuerungen in „Bereit für die Steuerung?“.
 - In Home Assistant schreibt es von selbst nur seine eigenen `sensor.heatpilot_*`.
 - Ausnahme, nur auf deinen Knopfdruck im Reiter „Heizen“: Tado-Timer, Soll und
   Betriebsart der gewählten Räume (siehe oben). Jeder andere Schreibversuch wird im
@@ -824,6 +903,20 @@ Heizphase dagegen nur 1–2 K, und der Brenner läuft beim Umschalten ohne neuen
 Start durch. Ist es schon zu knapp, startet der Plan sofort und sagt, um wie viele
 Minuten es später fertig wird. Auch die Ersparnis-Rechnung berücksichtigt, dass
 der Heizkreis während Warmwasserladungen keine Leistung bekommt.
+
+**Mit welcher Außentemperatur der Plan rechnet,** steht seit 0.36.1 unter der Ankunftszeile:
+„Gerechnet mit −3 °C außen (Vorhersage für 17:00)“ – der stündliche Vorhersagepunkt der
+Wetter-Entität, der der Ankunft am nächsten liegt. Er zählt nur, wenn er höchstens 90 min neben
+der Ankunft liegt; sonst rechnet der Plan mit der aktuellen Außentemperatur („aktuelle
+Außentemperatur – keine Vorhersage für den Zeitpunkt“). Vorher bekam eine Ankunft in drei Tagen
+den letzten Punkt einer 24-h-Vorhersage. Zeiten ohne Zeitzone gelten als Ortszeit. Wird die
+Wetter-Entität geleert oder gewechselt, zählt die alte Vorhersage sofort nicht mehr; eine neue
+Entität wird gleich abgefragt.
+
+**Kachel „Vorhersage“** (Übersicht, neben „Haus-Trägheit“): „nächste 12 h: min −1 °C um 06:00,
+Trend −3 K · Stand vor 20 min“. Der Trend ist die Temperatur in 12 h gegen jetzt (auf 0,5 K
+gerundet), abgerufen wird stündlich. Ohne Wetter-Entität bzw. ohne Daten bleibt die Kachel grau.
+Die Steuerung nutzt die Vorhersage erst ab 0.37 – bis dahin ist sie Anzeige und Vorheizplan.
 
 ## Warmwasser
 

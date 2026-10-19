@@ -183,6 +183,32 @@ table.form input.r-preset, table.form input.r-preset-max { min-width: 60px; widt
 #heat-status { margin: 0 0 10px; } #heat-status .warn { color: #e34948; display: block; }
 .pause-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0 10px; }
 .ctl-info { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; } .ctl-info b { color: var(--text-primary); }
+/* Bereit für die Steuerung? (0.36.1): Zustandsbox in Einstellungen → Steuerung mit Ampel, Kessel über EMS-ESP;
+   Statuszeile im Heizen-Reiter; Kachel „Vorhersage“ grau ohne Daten */
+.ready-box { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px 12px; margin: 10px 0; }
+.ready-box h3 { font-size: 13px; margin: 0 0 6px; }
+.ready-head { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-primary); }
+.ready-head .dot { margin-top: 4px; }
+.ready-box details { margin-top: 6px; font-size: 13px; }
+.dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); flex: none; }
+.dot.dot-ok { background: var(--good); } .dot.dot-warn { background: var(--warn); }  /* nicht .warn: #heat-status .warn ist eine Zeile */
+.ready-list { margin: 6px 0; padding-left: 0; list-style: none; }
+.ready-list li { padding: 2px 0 2px 8px; margin: 3px 0; border-left: 3px solid var(--border); color: var(--text-secondary); }
+.ready-list li.block { border-color: #e34948; color: var(--text-primary); }
+.ready-list li.limit { border-color: var(--warn); color: var(--text-primary); }
+.ready-boiler { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
+table.ready-t th, table.ready-t td { padding: 4px 6px; font-size: 12px; vertical-align: top; }
+table.ready-t td:last-child { color: var(--text-secondary); }
+table.ready-t tr.muted td { color: var(--text-muted); }
+table.ready-t .badge { white-space: nowrap; }
+/* Kesseltabelle am Handy: Bereich unter dem Wert statt eigener Spalte, sonst passt sie nicht */
+table.ready-t .rt-narrow { display: none; }
+@media (max-width: 520px) { table.ready-t th, table.ready-t td { padding: 4px 4px; }
+  table.ready-t .rt-wide { display: none; } table.ready-t .rt-narrow { display: block; } }
+#heat-status .ready-line { display: block; margin-top: 4px; }
+#heat-status .ready-line .dot { margin-right: 4px; vertical-align: 0; }
+.tile.off { background: var(--off-bg); }
+.tile.off .value { font-size: 15px; font-weight: 500; color: var(--text-muted); padding: 5px 0 3px; }
 </style>
 </head>
 <body>
@@ -791,14 +817,25 @@ function hoursUntilMorning() {
   if (t - n < 3600e3) t.setDate(t.getDate() + 1);
   return Math.round((t - n) / 36e5 * 4) / 4;
 }
-function heatStatus(c) {
+function heatStatus(c, r) {
   let h = `<span class="badge">${esc(c.status_text || "Beobachten")}</span>`;
   const more = [];
   if (c.paused_until) more.push(`pausiert bis ${clock(c.paused_until)}`);
   if (c.mode === "heatpilot") more.push(`${c.managed_rooms || 0} ${c.managed_rooms === 1 ? "Raum macht" : "Räume machen"} mit`);
   if (more.length) h += `<span class="muted" style="display:block;margin-top:4px">${more.join(" · ")}</span>`;
+  h += readyLine(r, c.mode === "heatpilot");
   for (const w of c.warnings || []) h += `<span class="warn">⚠ ${esc(w)}</span>`;
   return h;
+}
+// „Bereit für die Steuerung?“ (0.36.1) als Zeile unter dem Status: bei Beobachten „HeatPilot wäre bereit …“,
+// bei „HeatPilot steuert“ nur, was einschränkt oder hindert. Einzelheiten stehen unter Einstellungen → Steuerung.
+function readyLine(r, pil) {
+  if (!r || !r.level || (pil && r.level === "bereit")) return "";
+  const rest = esc(readyRest(r.headline)), lv = READY[r.level] || READY["nicht bereit"];
+  const text = pil ? `${r.level === "eingeschränkt" ? "Einschränkungen" : "Nicht bereit"}: ${rest}`
+    : r.level === "bereit" ? `HeatPilot wäre bereit zu steuern${rest ? ` – ${rest}` : ""}`
+    : `HeatPilot wäre ${r.level === "eingeschränkt" ? "eingeschränkt bereit" : "nicht bereit"}: ${rest}`;
+  return `<span class="ready-line" id="ready-line">${readyDot(lv.dot)}${text} <a href="#" onclick="openReadiness();return false">Einzelheiten unter Einstellungen → Steuerung</a></span>`;
 }
 const ACTION_NAME = { set_temperature: "Soll", set_hvac_mode: "Betriebsart", set_climate_timer: "Tado-Timer" };
 function renderHeatLog(c) {
@@ -827,7 +864,7 @@ function renderHeat() {
   const autoN = j.rooms.filter((r) => r.mode === "auto" && !r.boost).length;
   const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
   const c = ctl(), pil = managing();
-  $("heat-status").innerHTML = heatStatus(c);
+  $("heat-status").innerHTML = heatStatus(c, j.readiness);
   $("heat-acts").className = "acts" + (pil ? " four" : "");  // vierte Kachel „Pause“ nur bei Steuerung heatpilot
   $("heat-acts").innerHTML =
     act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
@@ -974,7 +1011,7 @@ async function heatPost(action, body, busy) {
   heatMsg(busy);
   try {
     const j = await getJSON("api/heat/" + action, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    HEAT = { rooms: j.rooms, limits: j.limits, control: j.control }; renderHeat();
+    HEAT = { rooms: j.rooms, limits: j.limits, control: j.control, readiness: j.readiness }; renderHeat();
     heatMsg(j.ok ? `<span class="msg-ok">Erledigt.</span>${j.hint ? " " + esc(j.hint) : ""}` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc((j.errors || []).join(" · "))}</span>`);
   } catch (e) { heatError(e); }
 }
@@ -1086,6 +1123,28 @@ function tile(label, value, unit, note) {
   if (value === "–" || value === "" || value === null || value === undefined) return "";
   return `<div class="tile"><div class="label">${label}</div><div class="value">${value}<span class="unit"> ${unit || ""}</span></div>${note ? `<div class="muted">${note}</div>` : ""}</div>`;
 }
+// Kachel „Vorhersage“ (0.36.1): tiefster Wert der nächsten 12 h mit Uhrzeit, Trend und Stand des Abrufs (summary.forecast).
+// Ohne Vorhersage bleibt die Kachel stehen, grau mit dem Grund – sonst sähe man nicht, dass etwas fehlt.
+// Trend wie im Backend auf 0,5 K: immer mit Nachkommastelle, wo nötig (kelvin() rundet ab 2 K auf ganze Kelvin)
+const trendK = (d) => d === 0 ? "±0 K" : `${d < 0 ? "−" : "+"}${fmt(Math.abs(d), 1)} K`;
+function forecastTile(f, weather) {
+  const off = (value, note) => `<div class="tile off" id="tile-forecast"><div class="label">Vorhersage</div><div class="value">${value}</div><div class="muted">${note}</div></div>`;
+  if (!f) return weather ? off("keine Daten", `${esc(weather)} liefert keine stündliche Vorhersage – HeatPilot fragt stündlich nach`)
+    : off("keine Wetter-Entität", "Einstellungen → Messwerte → Wetter");
+  const m = f.age_min, age = m === null || m === undefined ? "" : ` · Stand vor ${m < 120 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} Tagen`}`;
+  const n = f.next12;
+  if (!n) return off("keine Daten", `keine Werte für die nächsten 12 h${age}`);
+  const trend = f.trend_k === null || f.trend_k === undefined ? "" : `, Trend ${trendK(f.trend_k)}`;
+  return `<div class="tile" id="tile-forecast" title="${f.points} Stundenwerte, reicht ${fmt(f.hours, 0)} h · höchstens ${fmt(n.max)} °C in 12 h">` +
+    `<div class="label">Vorhersage</div><div class="value">${fmt(n.min)}<span class="unit"> °C</span></div>` +
+    `<div class="muted">nächste 12 h: min ${fmt(n.min)} °C um ${clock(n.min_at)}${trend}${age}</div></div>`;
+}
+// Womit der Vorheizplan rechnet (0.36.1): Vorhersagepunkt nahe der Ankunft, sonst die aktuelle Außentemperatur
+function planOutdoor(plan) {
+  if (!plan || plan.t_out_used === null || plan.t_out_used === undefined) return "";
+  return `<p class="muted" id="plan-tout">Gerechnet mit ${fmt(plan.t_out_used)} °C außen ` +
+    (plan.t_out_source === "vorhersage" ? `(Vorhersage für ${clock(plan.t_out_at)})` : "(aktuelle Außentemperatur – keine Vorhersage für den Zeitpunkt)") + "</p>";
+}
 const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–";
 
 async function load() {
@@ -1100,20 +1159,26 @@ async function load() {
   OV_STALE = $("view-overview").hidden;  // im Hintergrund gezeichnet: Grafen beim Öffnen in voller Breite neu
   const hist = await getJSON("api/history?days=60");
   const h = s.house, c = s.cycling, sv = s.savings;
-  $("status").innerHTML = `Modus <span class="badge">${s.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten – greift nicht ein"}</span> · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
+  // Beobachten (0.36.1): daneben, ob HeatPilot steuern könnte – Klick führt zu Einstellungen → Steuerung
+  const rd = s.readiness, rdv = rd && READY[rd.level];
+  const readyBadge = s.control_mode !== "heatpilot" && rdv
+    ? ` <a href="#" class="badge" id="ready-badge" style="border-color:${rdv.css};color:${rdv.css};text-decoration:none" title="${esc(rd.headline)}" onclick="openReadiness();return false">Steuerung: ${rdv.word}</a>` : "";
+  $("status").innerHTML = `Modus <span class="badge">${s.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten – greift nicht ein"}</span>${readyBadge} · außen ${fmt(s.t_out)} °C · innen Ø ${fmt(s.t_in)} °C · ${h.updates} Stunden gelernt` +
     ` · Wärmebedarf laut Tado-Soll: <b>${s.setpoint_demand === null ? "–" : s.setpoint_demand ? "ja" : "nein"}</b>` +
     (s.demand_pct !== null ? ` · Heizungsanforderung ${fmt(s.demand_pct, 0)} %` : "") +
     ` · Regler: ${s.hc_mode ?? "–"}` +
     (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "") +
     (s.vacation.active ? ` · <span class="badge">Urlaub${s.vacation.until ? " bis " + timeOf(s.vacation.until) : ""} – Gewohnheiten pausiert</span>` : "");
+  const fc = forecastTile(s.forecast, (s.discovered || {}).weather);  // gemessen statt gelernt: auch ohne Hausmodell
   $("tiles").innerHTML = [
     // Hauswerte erst, wenn das Modell plausibel ist – vorher wären es Zahlen ohne Aussage
-    ...(s.guards.house.ok ? [
+    ...(!s.guards.house.ok ? [fc] : [
       tile("Wärmeverlust des Hauses", fmt(h.heat_loss_w_per_k, 0), "W/K", "Leistung je Grad Unterschied innen/außen"),
       tile("Heizlast jetzt", fmt(h.demand_now_kw, 1), "kW", "bei aktueller Außentemperatur"),
       tile("Normheizlast", fmt(h.design_load_kw, 1), "kW", "bei der Auslegungs-Außentemperatur"),
       tile("Haus-Trägheit", fmt(h.tau_h, 0), "h", (h.tau_source === "abkuehlung" ? `Zeitkonstante der Wände, gemessen in ${h.cool_updates} gasfreien Nachtstunden` + (h.cool_fast_k >= 0.1 ? ` · direkt nach dem Abschalten zusätzlich ≈ ${fmt(h.cool_fast_k, 1)} K schneller (Luft, Heizkörper)` : "") : "vorläufig aus der Gasbilanz – misst noch gasfreie Nächte") + coolDownText(h, s)),
-      h.free_heat_kw > 0.05 ? tile("Fremdwärme", fmt(h.free_heat_kw, 1), "kW", `Sonne, Personen, Geräte – bei 20 °C innen heizt das Haus erst unter ${fmt(20 - h.heating_limit_k, 0)} °C außen`) : ""] : []),
+      fc,
+      h.free_heat_kw > 0.05 ? tile("Fremdwärme", fmt(h.free_heat_kw, 1), "kW", `Sonne, Personen, Geräte – bei 20 °C innen heizt das Haus erst unter ${fmt(20 - h.heating_limit_k, 0)} °C außen`) : ""]),
     tile("Brennerstarts heute", fmt(c.starts, 0), "", `Ø ${fmt(c.avg_run_min)} min je Heizstart` + (c.lifetime_run_per_start_min ? ` · seit Einbau ${fmt(c.lifetime_run_per_start_min)} min` : "")),
     tile("Wartezeit durch Taktsperre", fmt(c.blocked_min, 0), "min heute", `Sperre ${fmt(s.min_period, 0)} min · Räume warteten insgesamt ${fmt(c.waiting_min, 0)} min`),
     tile("Startverzögerung", fmt(c.enable_delay_min, 0), "min heute", `${c.enable_delay_count}× kurz gewartet, bis der Regler auf Tag ging · ${c.mode_switch_count} Tag/Nacht-Wechsel heute`),
@@ -1201,9 +1266,10 @@ async function load() {
   $("rooms").closest(".card").hidden = !s.rooms.length;
   if (!s.arrival) $("plan").innerHTML = "";
   else if (!plan || !plan.feasible) $("plan").innerHTML = `<p>Ankunft erwartet ${timeOf(s.arrival.eta)} – ` +
-    (plan && plan.unreachable ? `${esc(plan.unreachable)} wird laut Modell selbst mit dem höchsten Vorlauf (${fmt(maxFlow, 0)} °C) nicht warm genug – kein machbarer Plan.</p>` : `noch kein machbarer Plan (Modell lernt noch).</p>`);
+    (plan && plan.unreachable ? `${esc(plan.unreachable)} wird laut Modell selbst mit dem höchsten Vorlauf (${fmt(maxFlow, 0)} °C) nicht warm genug – kein machbarer Plan.</p>` : `noch kein machbarer Plan (Modell lernt noch).</p>`) +
+    planOutdoor(plan);
   else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${esc(src[plan.arrival_source || s.arrival.source] || plan.arrival_source || s.arrival.source || "")}` +
-    `${(plan.arrival_confidence ?? s.arrival.confidence) ? `, Konfidenz ${fmt((plan.arrival_confidence ?? s.arrival.confidence) * 100, 0)} %` : ""}). Start <b>${timeOf(plan.best.start)}</b>` +
+    `${(plan.arrival_confidence ?? s.arrival.confidence) ? `, Konfidenz ${fmt((plan.arrival_confidence ?? s.arrival.confidence) * 100, 0)} %` : ""}).</p>${planOutdoor(plan)}<p>Start <b>${timeOf(plan.best.start)}</b>` +
     (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:13px">` +
     plan.best.steps.map((st) => st.what === "Warmwasser"
       ? `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Warmwasser ${fmt(st.from, 0)} → ${fmt(st.to, 0)} °C</li>`
@@ -1260,12 +1326,57 @@ function drawDhwProfile() {
 }
 // Wochenraster 7 × 24 – für Gas, Starts, Anwesenheit, Zapfungen, Gewohnheiten
 const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+// Farbstufen der Wochenraster (0.36.1): 7 Stufen gleich weit in der Helligkeit (OKLCH), aus der Serienfarbe
+// gerechnet – hell: von fast Fläche bis dunkel, dunkel: von knapp über der Fläche bis hell. Deckkraft allein
+// ließ die kleinen Werte im Dunkelmodus in der Fläche verschwinden.
+const SEQ_N = 7, _ramps = {};
+const _lin = (c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+const _gam = (c) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055);
+function toOklch(hex) {
+  const n = parseInt(hex.replace("#", "").slice(0, 6), 16), [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((v) => _lin(v / 255));
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  const L = 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+  const A = 1.9779984951 * l - 2.428592205 * m + 0.4505937099 * s, B = 0.0259040371 * l + 0.7827717662 * m - 0.808675766 * s;
+  return [L, Math.hypot(A, B), Math.atan2(B, A)];
+}
+function fromOklch(L, C, h) {
+  for (let c = C; c >= 0; c -= 0.004) {  // Chroma senken, bis die Farbe darstellbar ist
+    const A = c * Math.cos(h), B = c * Math.sin(h);
+    const l = (L + 0.3963377774 * A + 0.2158037573 * B) ** 3, m = (L - 0.1055613458 * A - 0.0638541728 * B) ** 3;
+    const s = (L - 0.0894841775 * A - 1.291485548 * B) ** 3;
+    const rgb = [4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s, -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
+                 -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s];
+    if (rgb.every((v) => v >= -1e-4 && v <= 1.0001))
+      return "#" + rgb.map((v) => Math.round(Math.min(Math.max(_gam(v), 0), 1) * 255).toString(16).padStart(2, "0")).join("");
+  }
+  return "#808080";
+}
+function seqRamp(color) {
+  const root = getComputedStyle(document.documentElement), m = /^var\((--[\w-]+)\)$/.exec(color);
+  const hex = (m ? root.getPropertyValue(m[1]) : color).trim() || "#2a78d6";
+  const dark = toOklch(root.getPropertyValue("--surface-1").trim() || "#fcfcfb")[0] < 0.5, key = hex + dark;
+  if (!_ramps[key]) {
+    const [, c, h] = toOklch(hex), [l0, l1] = dark ? [0.32, 0.84] : [0.95, 0.38];
+    _ramps[key] = [...Array(SEQ_N)].map((_, i) => {
+      const t = i / (SEQ_N - 1);
+      return fromOklch(l0 + (l1 - l0) * t, c * (0.3 + 0.7 * Math.min(1, t * 1.5)), h);
+    });
+  }
+  return _ramps[key];
+}
+// Stufe eines Werts: feste Grenzen (o.breaks, aufsteigend, SEQ_N − 1 Stück) oder gleich breit zwischen lo und hi
+function seqStep(v, lo, hi, breaks) {
+  if (breaks) { const i = breaks.findIndex((b) => v < b); return i < 0 ? breaks.length : i; }
+  return Math.min(SEQ_N - 1, Math.max(0, Math.floor((v - lo) / (hi - lo) * SEQ_N)));
+}
 function heatmap(box, grid, o = {}) {
   box.innerHTML = ""; showCard(box);
   const vals = grid.flat().filter((v) => v !== null && v !== undefined);
   if (!vals.length) return empty(box, o.empty || "Noch keine Werte.");
-  const totW = o.totals ? 58 : 0;
-  const W = Math.max(box.clientWidth || 520, 280), cellW = (W - 30 - totW) / 24, cellH = 20, H = 7 * cellH + 22;
+  const totW = o.totals ? 58 : 0, legH = 18;
+  const W = Math.max(box.clientWidth || 520, 280), cellW = (W - 30 - totW) / 24, cellH = 20, H = 7 * cellH + 22 + legH;
   const lo = o.min ?? Math.min(0, ...vals), hi = Math.max(o.max ?? Math.max(...vals), lo + 1e-6);
   const amax = Math.max(...vals.map(Math.abs), 1e-6);
   const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": o.label || "Wochenraster" }, box);
@@ -1273,13 +1384,15 @@ function heatmap(box, grid, o = {}) {
     el("text", { x: 0, y: d * cellH + 14 }, svg).textContent = WEEKDAYS[d];
     row.forEach((v, h) => {
       const none = v === null || v === undefined;
-      let fill = o.color || "var(--series-1)", op;
-      if (none) { fill = "var(--grid)"; op = 0.6; }
-      else if (o.diverging) { fill = v >= 0 ? "var(--series-2)" : "var(--series-1)"; op = 0.08 + 0.92 * Math.abs(v) / amax; }
-      else op = (v - lo) / (hi - lo) <= 0.02 ? 0.05 : 0.12 + 0.88 * (v - lo) / (hi - lo);
+      let fill;
+      if (none) fill = "none";  // fehlende Daten: nur Rahmen – nicht mit „wenig“ verwechselbar
+      else if (o.diverging) fill = Math.abs(v) / amax < 0.05 ? "var(--grid)"
+        : seqRamp(v >= 0 ? "var(--series-2)" : "var(--series-1)")[Math.min(SEQ_N - 1, Math.floor(Math.abs(v) / amax * SEQ_N))];
+      else fill = seqRamp(o.color || "var(--series-1)")[seqStep(v, lo, hi, o.breaks)];
       const isNow = o.now && o.now[0] === d && o.now[1] === h;
-      const r = el("rect", { x: 30 + h * cellW, y: d * cellH, width: Math.max(cellW - 1.5, 1), height: cellH - 2, rx: 2, fill, "fill-opacity": op,
-        stroke: isNow ? "var(--text-primary)" : "none", "stroke-width": isNow ? 1.5 : 0 }, svg);
+      const r = el("rect", { x: 30 + h * cellW + (none ? 0.5 : 0), y: d * cellH + (none ? 0.5 : 0), width: Math.max(cellW - (none ? 2.5 : 1.5), 1),
+        height: cellH - (none ? 3 : 2), rx: 2, fill,
+        stroke: isNow ? "var(--text-primary)" : none ? "var(--border)" : "none", "stroke-width": isNow ? 1.5 : none ? 1 : 0 }, svg);
       r.addEventListener("mousemove", (e) => showTip(e, `${WEEKDAYS[d]} ${String(h).padStart(2, "0")}:00${isNow ? " (jetzt)" : ""}<br>` +
         (none ? "zu wenig Daten" : o.tip ? o.tip(v, d, h) : `<b>${fmt(v, o.digits ?? 1)}</b> ${o.unit || ""}`)));
       r.addEventListener("mouseleave", hideTip);
@@ -1287,8 +1400,30 @@ function heatmap(box, grid, o = {}) {
     if (o.totals && o.totals[d] !== null && o.totals[d] !== undefined)
       el("text", { x: W - 2, y: d * cellH + 14, "text-anchor": "end" }, svg).textContent = fmt(o.totals[d], o.totalDigits ?? 0) + (o.totalUnit ? " " + o.totalUnit : "");
   });
-  [0, 6, 12, 18, 23].forEach((h) => { el("text", { x: 30 + h * cellW + cellW / 2, y: H - 4, "text-anchor": "middle" }, svg).textContent = String(h).padStart(2, "0"); });
-  if (o.totals && o.totalsLabel) el("text", { x: W - 2, y: H - 4, "text-anchor": "end" }, svg).textContent = o.totalsLabel;
+  const axisY = H - 4 - legH;
+  [0, 6, 12, 18, 23].forEach((h) => { el("text", { x: 30 + h * cellW + cellW / 2, y: axisY, "text-anchor": "middle" }, svg).textContent = String(h).padStart(2, "0"); });
+  if (o.totals && o.totalsLabel) el("text", { x: W - 2, y: axisY, "text-anchor": "end" }, svg).textContent = o.totalsLabel;
+  heatLegend(svg, H - legH + 4, o, lo, hi, amax);
+}
+// Legende unter dem Raster: die Stufen mit Anfangs- und Endwert, dazu „keine Daten“
+function heatLegend(svg, y, o, lo, hi, amax) {
+  const sw = 16, gap = 2, txt = (x, s, anchor = "start") => {
+    const e = el("text", { x, y: y + 10, "text-anchor": anchor, fill: "var(--text-muted)" }, svg); e.textContent = s; return e; };
+  const val = (v) => o.legendFmt ? o.legendFmt(v) : fmt(v, o.digits ?? 1) + (o.unit ? " " + o.unit : "");
+  let x = 30;
+  if (o.diverging) {
+    txt(x, val(-amax)); x += 52;
+    for (let i = SEQ_N - 1; i >= 0; i--) { el("rect", { x, y, width: sw, height: 12, rx: 2, fill: seqRamp("var(--series-1)")[i] }, svg); x += sw + gap; }
+    el("rect", { x, y, width: sw, height: 12, rx: 2, fill: "var(--grid)" }, svg); x += sw + gap;
+    for (let i = 0; i < SEQ_N; i++) { el("rect", { x, y, width: sw, height: 12, rx: 2, fill: seqRamp("var(--series-2)")[i] }, svg); x += sw + gap; }
+    txt(x + 4, "+" + val(amax)); x += 64;
+  } else {
+    txt(x, val(lo)); x += 44;
+    for (let i = 0; i < SEQ_N; i++) { el("rect", { x, y, width: sw, height: 12, rx: 2, fill: seqRamp(o.color || "var(--series-1)")[i] }, svg); x += sw + gap; }
+    txt(x + 4, val(hi)); x += 60;
+  }
+  el("rect", { x: x + 16.5, y: y + 0.5, width: sw - 1, height: 11, rx: 2, fill: "none", stroke: "var(--border)" }, svg);
+  txt(x + 16 + sw + 6, "keine Daten");
 }
 const nowCell = () => { const d = new Date(); return [(d.getDay() + 6) % 7, d.getHours()]; };
 
@@ -1383,6 +1518,7 @@ async function loadPresence() {
     else timeChart(box, s.ts, [{ name: "Entfernung", values: s.dist_km, color: "var(--series-1)", unit: "km" }],
       { yMin: 0, height: 150, bands: [{ name: "zu Hause", values: s.home, color: "var(--band-home)" }], label: "Entfernung " + p.name });
     heatmap($("hm-pers-" + i), p.habit, { color: "var(--series-3)", min: 0, max: 1, now: nowCell(), label: "Gewohnheit " + p.name,
+      breaks: [0.1, 0.25, 0.4, 0.5, 0.65, 0.85], legendFmt: (v) => fmt(v * 100, 0) + " %",
       tip: (v) => `<b>${fmt(v * 100, 0)} %</b> zu Hause`, totals: p.habit.map((r) => r.reduce((x, y) => x + y, 0)), totalUnit: "h", totalsLabel: "h/Tag" });
   });
 }
@@ -1579,6 +1715,7 @@ function showTab(name) {
     $("tab-" + t).classList.toggle("active", t === name);
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
+  else if (name === "settings") loadReadiness();  // schon gezeichnet: nur die Zustandsbox frisch (0.36.1)
   if (name === "live") loadLive().catch(liveError);
   if (name === "heat") loadHeat().catch(heatError);
   if (name === "overview") { if (OV_STALE) load().catch(() => {}); else { drawWeek(); drawDhwProfile(); } }  // Raster erst bei sichtbarer Breite richtig
@@ -1731,6 +1868,7 @@ function controlCard(s) {
   const effPlan = (SCHED && SCHED.effective && SCHED.effective.plan) || [];
   const missing = SLEEP ? power.filter((p) => !(SLEEP.sensors || []).includes(p)) : [];
   return `<p>Was HeatPilot mit den Räumen tut. <b>Beobachten</b>: lernen, empfehlen, Tado nur auf Knopfdruck. <b>HeatPilot steuert</b>: HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst – Komfort, Nacht nach Wochenplan, Abwesenheit, rechtzeitig vorheizen.</p>
+    <div class="ready-box" id="ready-box"></div>
     <div class="seg" id="f-control_mode">
       <label><input type="radio" name="control_mode" value="beobachten" ${mode === "beobachten" ? "checked" : ""} onchange="modeHint()"> Beobachten</label>
       <label><input type="radio" name="control_mode" value="heatpilot" ${mode === "heatpilot" ? "checked" : ""} onchange="modeHint()"> HeatPilot steuert</label></div>
@@ -1763,6 +1901,87 @@ function modeHint() {
     : "Wie bisher: HeatPilot lernt, empfiehlt und schaltet Tado nur auf Knopfdruck im Reiter Heizen – nie von selbst.";
 }
 
+// Bereit für die Steuerung? (0.36.1): Ampel grün/gelb/grau je Stufe, Kurzwort fürs Badge in der Übersicht
+const READY = { bereit: { dot: "dot-ok", css: "var(--good)", word: "bereit" },
+  "eingeschränkt": { dot: "dot-warn", css: "var(--warn)", word: "eingeschränkt" },
+  "nicht bereit": { dot: "", css: "var(--text-muted)", word: "nicht bereit" } };
+const ROOM_READY_CSS = { bereit: "var(--good)", akzeptiert: "var(--text-secondary)", lernt: "var(--warn)",
+  "nicht erreichbar": "#e34948", "nicht dabei": "var(--text-muted)" };
+const readyDot = (cls) => `<span class="dot${cls ? " " + cls : ""}"></span>`;
+// Headline ohne die Stufe vorn („Eingeschränkt bereit – …“ → „…“) – für die Statuszeile im Heizen-Reiter
+const readyRest = (h) => String(h || "").replace(/^(?:Bereit|Eingeschränkt bereit|Nicht bereit|Läuft)\s+–\s+(?:eingeschränkt:\s+)?/, "");
+let READY_OPEN = false;  // Link „Einzelheiten“: Box beim nächsten Zeichnen aufklappen und hinscrollen
+// Aufgeklappt bleibt aufgeklappt – auch wenn die Einstellungen nach dem Speichern ganz neu gezeichnet werden
+const READY_SHOW = { details: false, boiler: false };
+function openReadiness() {
+  READY_OPEN = true;
+  showTab("settings");
+  if ($("ready-box")) renderReadyBox(HEAT && HEAT.readiness);
+}
+// Daten aus GET api/heat (readiness) – beim Öffnen der Einstellungen frisch, ohne auf die Antwort zu warten;
+// bis dahin der Stand aus dem Heizen-Reiter. Fehler → „Status nicht verfügbar“, der Rest der Seite bleibt bedienbar.
+async function loadReadiness() {
+  try {
+    const j = await getJSON("api/heat");
+    if (j.starting) return renderReadyBox(null, `HeatPilot startet noch (${j.status || "…"})`);
+    HEAT = j;
+    renderReadyBox(j.readiness || null, j.readiness ? "" : "keine Angabe vom Add-on");
+  } catch (e) { renderReadyBox(null, e.message || String(e)); }
+}
+function renderReadyBox(r, err = "") {
+  const box = $("ready-box"); if (!box) return;
+  if (READY_OPEN) READY_SHOW.details = true;
+  box.innerHTML = readyBoxHtml(r, err, READY_SHOW.details, READY_SHOW.boiler);
+  if (!READY_OPEN) return;
+  if (r || err) READY_OPEN = false;  // erst mit Daten erledigt – „Lade Status …“ hat noch nichts zum Aufklappen
+  const c = box.closest("details.card"); if (c) c.open = true;
+  box.scrollIntoView({ block: "start" });
+}
+function readyBoxHtml(r, err, open, openBoiler) {
+  const head = "<h3>Bereit für die Steuerung?</h3>";
+  if (!r) return head + `<div class="ready-head">${readyDot("")}<span>${err ? "Status nicht verfügbar" : "Lade Status …"}</span></div>` +
+    (err ? `<p class="muted" style="margin:4px 0 0">${esc(err)}</p>` : "");
+  const lv = READY[r.level] || READY["nicht bereit"], c = r.counts || {};
+  const bl = r.blockers || [], li = r.limits || [], no = r.notes || [];
+  const items = (cls, list) => list.map((t) => `<li class="${cls}">${esc(t)}</li>`).join("");
+  const many = (n, one, more) => `${n} ${n === 1 ? one : more}`;
+  const sum = [many(c.managed || 0, "Raum macht", "Räume machen") + " mit", bl.length ? many(bl.length, "Hindernis", "Hindernisse") : "",
+    li.length ? many(li.length, "Einschränkung", "Einschränkungen") : "", no.length ? many(no.length, "Hinweis", "Hinweise") : ""].filter(Boolean).join(" · ");
+  const col = (st) => ROOM_READY_CSS[st] || "var(--text-secondary)";
+  const rooms = (r.rooms || []).map((x) => `<tr${x.managed ? "" : ' class="muted"'}><td>${esc(x.name)}${x.managed ? ` <span class="muted">${fmt(x.comfort)} °C</span>` : ""}</td>` +
+    `<td><span class="badge" style="border-color:${col(x.state)};color:${col(x.state)}">${esc(x.state)}</span></td><td>${esc(x.text)}</td></tr>`).join("");
+  return head + `<div class="ready-head">${readyDot(lv.dot)}<span id="ready-headline">${esc(r.headline)}</span></div>` +
+    `<details id="ready-details"${open ? " open" : ""} ontoggle="READY_SHOW.details = this.open"><summary>Einzelheiten <span class="muted">(${sum})</span></summary>` +
+    (bl.length + li.length + no.length ? `<ul class="ready-list">${items("block", bl)}${items("limit", li)}${items("note", no)}</ul>` : "") +
+    (rooms ? `<div class="scroll"><table class="ready-t"><tr><th>Raum</th><th>Zustand</th><th></th></tr>${rooms}</table></div>` : "") +
+    `<p class="muted" style="margin:6px 0 0">Stand der gespeicherten Einstellungen – nach dem Speichern neu geprüft.` +
+    `${r.managing ? "" : " Bei Beobachten: so stünde es mit „HeatPilot steuert“."} Räume, die ihr Soll nicht erreichen, heißen „akzeptiert“ – sie sind kein Hindernis.</p></details>` +
+    boilerHtml(r.boiler, openBoiler);
+}
+// Kessel über EMS-ESP (0.36.1, nur Anzeige): hätte HeatPilot alle nötigen Steuerungen? Ampel grün = alle da und
+// schreibbar, gelb = abgefragt, aber es fehlt etwas, grau = nicht eingerichtet oder noch nicht abgefragt
+// Einheiten, wie EMS-ESP sie meldet, in der üblichen Kurzform
+const EMS_UOM = { C: "°C", minutes: "min", seconds: "s", hours: "h" };
+function boilerHtml(b, open) {
+  if (!b) return "";
+  const dot = b.ready ? "dot-ok" : b.configured && b.polled ? "dot-warn" : "";
+  const val = (v) => v === null || v === undefined ? "–" : typeof v === "boolean" ? (v ? "an" : "aus") : typeof v === "number" ? fmt(v, 1) : esc(v);
+  const unit = (x, v) => x.uom && v !== null && v !== undefined && typeof v !== "boolean" ? " " + esc(EMS_UOM[x.uom] || x.uom) : "";
+  const has = (v) => v !== null && v !== undefined;
+  const range = (x) => !has(x.min) && !has(x.max) ? "–" : `${val(x.min)} – ${val(x.max)}${unit(x, has(x.max) ? x.max : x.min)}`;
+  const can = (x) => !x.found ? "–" : x.writeable === true ? '<span class="msg-ok">ja</span>'
+    : x.writeable === false ? `<span class="${x.required ? "msg-err" : "muted"}">nein</span>` : '<span class="muted">unbekannt</span>';
+  const rows = (b.controls || []).map((x) => `<tr${x.found === false ? ' class="muted"' : ""}><td>${esc(x.name)}<div class="muted"><code>${esc(x.key)}</code></div></td>` +
+    `<td>${x.found === false ? "nicht gefunden" : val(x.value) + unit(x, x.value)}${range(x) === "–" ? "" : `<div class="muted rt-narrow">${range(x)}</div>`}</td>` +
+    `<td class="rt-wide">${range(x)}</td><td>${can(x)}</td><td>${x.required ? "nötig" : "Info"}</td></tr>`).join("");
+  const need = (b.controls || []).filter((x) => x.required).length;
+  const when = b.polled_at ? ` <span class="muted">· abgefragt ${clock(b.polled_at)}, stündlich</span>` : "";
+  return `<div class="ready-boiler" id="ready-boiler"><h3>Kessel über EMS-ESP</h3><div class="ready-head">${readyDot(dot)}<span>${esc(b.text)}${when}</span></div>` +
+    `<details id="ready-boiler-details"${open ? " open" : ""} ontoggle="READY_SHOW.boiler = this.open"><summary>Steuerungen <span class="muted">(${need} nötig, ${(b.controls || []).length - need} zur Info)</span></summary>` +
+    `<div class="scroll"><table class="ready-t"><tr><th>Steuerung</th><th>Wert</th><th class="rt-wide">Bereich</th><th>schreibbar</th><th></th></tr>${rows}</table></div></details>` +
+    `<p class="muted" style="margin:6px 0 0">Nur Anzeige. Was HeatPilot damit täte, steht in der Planung (docs/planung-vorlauf-ems.md); geschrieben wird erst mit einem eigenen Schalter in einer späteren Version.</p></div>`;
+}
+
 function renderSettings() {
   const s = SET;
   const discovered = (role) => (DISC.boiler || {})[role] || (DISC.thermostat || {})[role] || "";
@@ -1775,7 +1994,7 @@ function renderSettings() {
     card("Messwerte", `<div class="form-grid">
       ${field("Außenfühler", `<div id="outdoor-list">${outdoor.map((o, i) => `<div class="row" style="margin-bottom:4px">${ent("f-out-" + i, o, "temp")}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`).join("")}</div><button class="btn small" onclick="addOutdoor()">+ Fühler</button>`, "Einer oder mehrere – es zählt das Minimum. Leer = Außenfühler der Therme.")}
       ${field("Gaszähler", ent("f-gas_sensor", s.gas_sensor || SUG.gas || "", "sensor", "sensor.…"), "Zählerstand in m³ oder kWh. Leer = Energie-Schätzung von EMS-ESP.")}
-      ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Für die Vorhersage beim Vorheizen.")}
+      ${field("Wetter", ent("f-weather_entity", s.weather_entity || SUG.weather || "", "weather", "weather.…"), "Vorhersage für den Vorheizplan zur Ankunft (Außentemperatur zum Zielzeitpunkt) und Bewölkung für die Sonnenanteile; Rückfall für die aktuelle Außentemperatur. Die Steuerung nutzt die Vorhersage ab 0.37.")}
       ${field("Heizungsanforderung", ent("f-demand_sensor", s.demand_sensor, "sensor", "optional"), "Optional – Sensor einer bestehenden Automation, wird nur aufgezeichnet.")}
     </div>`) +
     card("Räume", `<p>Häkchen = Raum wird gelernt. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
@@ -1829,6 +2048,7 @@ function renderSettings() {
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
   $("f-gas_calorific_value").oninput = upd; $("f-gas_z_number").oninput = upd; upd();
   modeHint();
+  renderReadyBox(HEAT && HEAT.readiness); loadReadiness();  // Zustandsbox (0.36.1): sofort der letzte Stand, dann frisch
 }
 
 let outdoorN = 100;

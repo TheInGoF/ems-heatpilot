@@ -6,6 +6,7 @@ import asyncio
 import json
 import logging
 import math
+import time
 from datetime import date, datetime
 from pathlib import Path
 
@@ -13,7 +14,7 @@ from aiohttp import web
 
 from .config import CONTROL_MODES, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
-from . import advice, certificate, control as control_mod, controlloop, diagnostics, live
+from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, readiness
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -266,7 +267,9 @@ def make_app(app) -> web.Application:
                                            "pause_max_h": controlloop.PAUSE_MAX_H},
                 "control": loop.as_dict() if loop else {"mode": app.cfg.control_mode, "active": False,
                                                         "paused_until": None, "rooms": {}, "log": [],
-                                                        "warnings": [], "status_text": "Beobachten"}}
+                                                        "warnings": [], "status_text": "Beobachten"},
+                # seit 0.36.1: „Bereit für die Steuerung?“ – auch bei Beobachten, mit Kessel über EMS-ESP
+                "readiness": readiness.assess(eng, int(time.time()))}
 
     async def heat_get(_req):
         if app.eng is None:
