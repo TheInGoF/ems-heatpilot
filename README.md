@@ -26,6 +26,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Haus:** Wärmeverlust (W/K), Fremdwärme und Heizgrenze, Trägheit, Heizlast bei jeder Außentemperatur
 - **Räume:** Aufheizen und Auskühlen je Raum, auch Fußbodenheizung ohne Stellventil; Sonne je Raum ohne Sensor, aus Sonnenstand und Bewölkung
 - **Fremdwärme je Raum:** Kamin, Ofen oder viele Gäste werden erkannt – diese Zeit lernen weder Raum- noch Hausmodell
+- **Ventilverhalten je Raum (seit 0.39):** wie das Thermostat sein Ventil abhängig vom Abstand zum Soll stellt – Kennlinie, Reaktionszeit auf Soll-Sprünge, kleines Reglermodell mit Vorhersagefehler; bei Thermostaten ohne Ventilwert die Schaltpunkte. Gelernt aus den eigenen Messwerten, ohne Gerätedaten
 - **Warmwasser:** Bereitschaftsverlust je Temperatur, Ladekosten, Zapfprofil; Legionellenschaltung und Einmalladung laufen mit, ohne gelernt zu werden
 - **Anwesenheit:** Gewohnheiten je Person und Ankunft per GPS-Annäherung, beliebig viele Personen; Reisen und regelmäßiges Pendeln werden erkannt, die Vorhersage wird bei jeder Heimkehr kontrolliert
 - **Nachtzeiten:** aus dem Tado-Zeitplan und – mit Leistungssensoren des Hauses – aus dem Stromverbrauch je Wochentag: wann das Haus schlafen geht und aufsteht
@@ -55,6 +56,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Desinfektion (Legionellen) mit Terminvorschlag:** Termin in den Einstellungen, Temperatur vom Kessel; HeatPilot schlägt die Zeit kurz vor deiner größten regelmäßigen Zapfung vor („So 18 Uhr zapfst du am meisten – Desinfektion So 17:30“) und plant sie ein, sobald der Regler zu dieser Zeit desinfiziert – ausgelöst wird sie noch nicht
 - **Vorhersage sichtbar:** Minimum und Trend der nächsten 12 h; der Vorheizplan nennt die Außentemperatur, mit der er rechnet
 - **Vorschau (Trockenlauf):** welchen Vorlauf, welchen Heizbetrieb und welches Warmwasser-Soll HeatPilot in den nächsten 24 h je Stunde am Kessel setzen würde – aus Raummodellen, Anwesenheit, Nachtplan, Vorhersage und Warmwasser-Empfehlung, mit den Schreibvorgängen, die es gäbe. Nur Anzeige – am Kessel schreibt HeatPilot davon nur das Warmwasser-Soll, und nur mit „HeatPilot setzt“ (seit 0.38)
+- **Ventile im Trockenlauf (seit 0.39):** wie oft HeatPilot ein Raum-Soll früh um einen Schritt gesenkt hätte (der Raum würde überschwingen) oder Räume gemeinsam hätte anfordern lassen, wenn der Kessel für einen Raum allein taktet – mit geschätzter Wirkung, wo die Modelle belastbar sind. Nur Protokoll, geschrieben wird nichts
 - **Trockenlauf gegen Regler und Automation:** der stündlich gemerkte Plan neben dem, was Regler (z. B. ES73) und Warmwasser-Automation tatsächlich gesetzt haben – je Tag und über 7 Tage, mit Unterschied in K und Zahl der Schreibvorgänge
 - **Zertifikat als PDF:** Haus und Heizung auf einer Seite – Heizlast, Kesselgröße, Takten, Energieklasse und Gesamtbewertung, bezogen auf die letzten 12 Monate
 - **Diagnose und Export:** Selbsttest, Log und alle gelernten Werte als Datei zum Gegenprüfen – ohne Koordinaten und Zugangsdaten
@@ -97,7 +99,7 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 | 2 | Räume steuern: Komfort, Nacht nach Wochenplan bzw. Stromverbrauch, Abwesenheit, Vorheizen; „Bereit für die Steuerung?“ | erfüllt (0.34–0.36.1) |
 | 3 | Vorschau (Trockenlauf): welcher Vorlauf und welches Warmwasser-Soll je Stunde, Vorhersage in der Steuerung | erfüllt (0.37) |
 | 4 | Warmwasser am Kessel: Speicher-Soll nur bei Änderung, Prüfung nach 60 s, Fehler in HA melden, Desinfektion nach Termin | 0.36.3 / 0.38 – Warmwasser-Soll gebaut, Desinfektion auslösen folgt mit Weg B |
-| 5 | Thermostate als Stellglied: Ventilverhalten lernen, Soll in voller Auflösung, Räume gemeinsam anfordern (weniger Takten) | 0.39 |
+| 5 | Thermostate als Stellglied: Ventilverhalten lernen, Soll in voller Auflösung, Räume gemeinsam anfordern (weniger Takten) | 0.39 – Ventilverhalten und Trockenlauf gebaut, Steuern folgt (0.40) |
 | 6 | Kessel übernehmen: Vorlauf live und Heizbetrieb über EMS-ESP, eigene Witterungsführung – der Regler (z. B. ES73) entfällt | geplant |
 | 7 | Wirkungsgrad je Vorlauf gelernt statt fester Richtwert (Vorlauf-Studie → Planung) | teilweise (gemessen) |
 | 8 | Offene Thermostate (Zigbee, Z-Wave, Matter, Homematic) getestet | optional |

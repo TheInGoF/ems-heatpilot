@@ -128,36 +128,43 @@ class SampleMixin:
             "pump_on": (int(num(self._boiler("pump_mod")) > 0) if num(self._boiler("pump_mod")) is not None
                         else flag(self._boiler("heating_pump"))),
         }
+        self.valve_subst = set()  # Räume mit Ersatz-Ventilwert in diesem Messpunkt (room_reading)
         rooms = [row for row in (self.room_reading(r) for r in self.found.rooms) if row is not None]
         return self._check_ranges(sample, rooms, persons)
 
     # ------------------------------------------------------------------ Räume
     def _device_reading(self, dev: dict) -> tuple | None:
-        """(Temperatur, Soll, Ventil, Feuchte) eines Thermostats; None, wenn es keinen Zustand hat."""
+        """(Temperatur, Soll, Ventil, Feuchte, Ersatzwert) eines Thermostats; None, wenn es keinen Zustand hat.
+        Ersatzwert: Das Gerät hat einen Ventilsensor, der gerade nichts meldet – das Ventil kommt dann aus
+        ``hvac_action``."""
         st = self.states.get(dev["climate"])
         if not st:
             return None
         a = st.get("attributes", {})
         valve = num(self._val(dev.get("heating_power")))
+        subst = valve is None and bool(dev.get("heating_power"))
         if valve is None:
             valve = 100.0 if a.get("hvac_action") == "heating" else 0.0
         hum = num(self._val(dev.get("humidity")))
         if hum is None:
             hum = num(a.get("current_humidity"))
         target = num(a.get("temperature")) if st.get("state") != "off" else None
-        return num(a.get("current_temperature")), target, valve, hum
+        return num(a.get("current_temperature")), target, valve, hum, subst
 
     def room_reading(self, r) -> tuple | None:
         """(climate, Temperatur, Soll, Ventil, Feuchte) eines logischen Raums.
 
         Mit Raumregler zählen dessen Temperatur und Soll; sonst ist die Raumtemperatur das Mittel
         aller Geräte der Gruppe, das Soll das des Schlüssels. Das Ventil ist immer das Mittel aller
-        Geräte (Fehlt der Schlüssel, fehlt der Raum – wie bisher.)
+        Geräte (Fehlt der Schlüssel, fehlt der Raum – wie bisher.) Ist ein Ventilwert ein Ersatzwert, merkt sich der
+        Raum das in ``valve_subst`` (das Ventilmodell lernt ihn nicht, seit 0.39).
         """
         head = self._device_reading(r.devices[0])
         if head is None:
             return None
         others = [x for x in (self._device_reading(d) for d in r.members) if x is not None]
+        if any(x[4] for x in (head, *others)):
+            self.__dict__.setdefault("valve_subst", set()).add(r.climate)
         temps = [head[0]] if r.controller else [x[0] for x in (head, *others) if x[0] is not None]
         valves = [x[2] for x in (head, *others) if x[2] is not None]
         hums = [x[3] for x in (head, *others) if x[3] is not None]

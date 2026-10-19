@@ -23,6 +23,14 @@ from heatpilot.web import clean
 
 from test_control34 import FRI, MON, SUN, at, climate, make, run, slow_room, ts_of, wz
 
+
+# Die Testhäuser dieser Datei brauchen 28–32 °C Vorlauf. Seit 0.39 heizt die Vorschau erst ab 35 °C (darunter
+# „Heizbetrieb aus“, Wunsch Ingo) – diese Tests prüfen anderes (Vorhersage, Gewohnheit, Protokoll …) und laufen
+# deshalb mit der alten Untergrenze; die 35-°C-Regel selbst prüft tests/test_flow_min39.py.
+@pytest.fixture(autouse=True)
+def _old_flow_floor(monkeypatch):
+    monkeypatch.setattr(pv, "FLOW_MIN", 25.0)
+
 TUE = (2026, 10, 13)
 
 

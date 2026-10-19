@@ -378,7 +378,8 @@ Phasenwechsel.
   „Pause · 21°“. Heizt der Raum gerade, ist die Kachel orange; aus = grau mit
   Ausschalt-Symbol. Antippen öffnet den Dialog mit Soll (−/+), Betriebsart, Ventil, Restzeit
   eines Timers, den Geräten des Raums und – bei „HeatPilot steuert“ – Phase, Wunschsoll,
-  Grund und nächster Änderung.
+  Grund und nächster Änderung; darunter das gelernte Ventilverhalten des Raums (seit 0.39, siehe
+  [Ventilverhalten](#ventilverhalten)).
 - **Protokoll** (aufklappbar unter den Kacheln): die letzten 20 Schreibvorgänge mit Zeit,
   Raum, Aktion, Wert und Grund – egal ob Regelschleife oder Knopfdruck.
 
@@ -664,12 +665,13 @@ Gerechnet wird in 5-min-Schritten von jetzt bis zum Ende der 24. vollen Stunde:
   der niedrigste Vorlauf (1 K genau), mit dem der Raum ab dem Beginn des Vorheizens rechtzeitig warm wird.
   Den Beginn bestimmt die Steuerung mit der Aufheizzeit bei maximalem Vorlauf (Nachtende bzw. Ankunft,
   gedeckelt mit „Vorheizen höchstens“) – meist ist es deshalb der maximale Vorlauf. Sonst beim Aufheizen 5 K
-  mehr. Immer zwischen 25 °C und dem maximalen Vorlauf, auf 1 K gerundet. **Braucht kein Raum Wärme** (alle
+  mehr. Immer zwischen 35 °C und dem maximalen Vorlauf, auf 1 K gerundet. **Braucht kein Raum mindestens 35 °C
+  Vorlauf**, steht dort „Heizbetrieb aus“ – darunter lohnt Heizen nicht. **Braucht kein Raum Wärme** (alle
   am oder über dem Soll, oder Fremdwärme reicht), steht dort „Heizbetrieb aus“ statt eines Vorlaufs – typisch
   zu Beginn der Nacht. Das gilt auch für Räume, die den Vorlauf nicht bestimmen: Fußbodenräume mit
   plausiblem Modell zählen wie die übrigen, Räume ohne plausibles Modell nach dem Messwert – mehr als 0,3 K
   unter dem Soll oder ohne Temperatur hält der Heizbetrieb an („Bad unter Soll (ohne Raummodell) –
-  Heizbetrieb bleibt an“, mindestens 25 °C). Ohne plausibles Raummodell gibt es kein Vorlauf-Soll, mit Grund.
+  Heizbetrieb bleibt an“, mindestens 35 °C). Ohne plausibles Raummodell gibt es kein Vorlauf-Soll, mit Grund.
 - **Warmwasser-Soll:** die Warmwasser-Empfehlung für jeden Zeitpunkt (Komfort plus Reserve vor erwarteten
   Zapfungen, sonst das Minimum, niemand zu Hause bzw. Ankunft), mit dem Desinfektionstermin aus den
   Einstellungen; auf 1 K gerundet. Die Stunde des Termins ist markiert.
@@ -706,6 +708,128 @@ Regler aber heizt. Beim Warmwasser gibt es eine grobe Energie-Einschätzung aus 
 Bereitschaftsverlust des Speichers (nur mit plausiblem Warmwasser-Modell), beim Vorlauf keine kWh. Ohne Daten:
 „sammelt – erste Werte nach einer Stunde“. Das Protokoll bleibt 90 Tage, „Lernstand neu berechnen“ lässt es
 stehen (es ist Messung, nichts Gelerntes); es steht im Export („trockenlauf“) und im Diagnosepaket.
+
+## Ventilverhalten
+
+Seit 0.39 lernt HeatPilot je Raum, **wie das Thermostat sein Ventil stellt** – Stufe 1 von „Thermostate als
+Stellglied“ (Planungspapier): Der eingebaute Regler des Thermostats soll später über fein verschobene Sollwerte das
+Ventil führen, damit es moduliert statt nur auf- und zuzugehen. Dafür muss HeatPilot das Ventil nachbilden. In dieser
+Version wird das nur **gelernt, gezeigt und im Trockenlauf protokolliert – HeatPilot schreibt dafür nichts**, weder an
+die Thermostate noch an den Kessel. Das Steuern kommt in 0.40 mit eigenem Schalter.
+
+Gelernt wird aus den eigenen Messwerten je Raum (Raumtemperatur, Soll, Ventil in %), ohne Gerätedaten eines
+Herstellers. Bei einer Gruppe zählt das Mittel aller Ventile – gezählt werden Räume, nicht Ventile; der Satz sagt dann
+„2 Ventile, Mittel: …“ (nur an/aus: „ein mit dem ersten, aus mit dem letzten“). Mischt eine Gruppe Ventile mit und
+ohne Sensor, beschreibt das Mittel keines davon – sie wird gekennzeichnet und gilt nicht als belastbar. Der Ventilwert
+kommt aus dem Ventil- bzw. Heizleistungssensor (Tado-Cloud); ohne Sensor (z. B. nur HomeKit) aus `hvac_action` als
+0 oder 100 % – dann gilt das Ventil als **„nur an/aus“**, ebenso, wenn ein Sensor nur 0 und 100 % meldet (gezählt
+werden dafür nur Messpunkte, die etwas sagen: Heizbetrieb an, Ventil offen oder Raum nicht über dem Soll – ein Sommer
+mit geschlossenem Ventil zählt nicht; wechselt die Art, beginnen Sprünge und Gütemaß neu). Meldet ein vorhandener
+Ventilsensor gerade nichts (Cloud-Ausfall), nimmt der Messpunkt zwar `hvac_action` wie bisher, das Ventilmodell lernt
+diesen Ersatzwert aber nicht (gemerkt in der Tabelle `valve_subst`). Der Heizkreis von EMS-ESP bekommt kein
+Ventilmodell – er ist kein Thermostat mit Ventil.
+
+- **Kennlinie:** Ventil (Median) je Abstand Soll − Raumtemperatur in 0,1-K-Stufen von 1 K über bis 2 K unter dem
+  Soll. Nur Beharrung: kein Soll-Wechsel in den letzten 30 min, Heizbetrieb an, kein Fenster offen (die
+  Raumtemperatur fällt in 15 min um mindestens 0,5 K – von 15 min davor bis 45 min danach), keine Fremdwärme (Kamin,
+  Ofen). Die Kennlinie steigt immer an (geglättet) und vergisst langsam (Halbwertszeit 30 Tage). Daraus: **öffnet
+  ab** (über 5 %), **halb offen**, **ganz offen** (ab 90 %) und das Totband. Die Beharrung zählt jeden Messpunkt
+  mit seiner Messpause (bis 20 min) – bei 15 min Messpause also so viele Stunden wie bei 5 min.
+- **Sprungantwort:** Bei jedem Soll-Sprung ab 0,5 K (Zeitplan, Boost, Hand, HeatPilot) die Totzeit, bis sich das
+  Ventil um 5 Prozentpunkte bewegt, und die Zeit bis 63 % der neuen Stellung – Median der letzten Sprünge, getrennt
+  für auf und zu. Der Zeitpunkt des Sprungs liegt zwischen zwei Messpunkten, die 63-%-Zeit wird zwischen zwei
+  Messpunkten geradlinig eingesetzt: Bei kurzer Messpause stimmen die Zeiten auf etwa eine Messpause; ist die
+  Messpause länger als die halbe 63-%-Zeit (z. B. 10 oder 15 min), sind sie nur grob und eher zu lang – dann steht
+  „grob – Messpause … min“ dabei.
+- **Kleines Reglermodell:** Ventil = Kp · Abstand + Integrator, begrenzt auf 0–100 % (der Integrator läuft an der
+  Grenze nicht weiter), mit der Totzeit und dem Stellmotor (Zeitkonstante aus der Sprungantwort). Kp und Ki lernt
+  HeatPilot auf halbstündigen Abschnitten ohne Sättigung und ohne Soll-Sprung. Das **Messrauschen** der
+  Raumtemperatur schätzt es aus je drei Messpunkten und rechnet es heraus – sonst wäre Kp viel zu klein (Rauschen
+  0,1 K drückte Kp sonst auf ein Viertel). Überdeckt das Rauschen die Änderungen fast ganz, steht „Kp unsicher“ dabei.
+- **P-Regler oder mit Integrator:** HeatPilot rechnet beide Vorhersagen mit – die Kennlinie entlang (mit Stellmotor)
+  und das Reglermodell mit Integrator – und nimmt die, die über 30 min besser trifft (bis beide genug Vergleiche haben:
+  Nachstellzeit Kp/Ki ab 3 h wie ein P-Regler). Bei einem **P-Regler** gehört die Kennlinie zum Gerät, der Satz nennt
+  ihre Punkte. **Mit Integrator** hängt die Kennlinie von der Last ab (Außentemperatur, Zeitplan – dasselbe
+  Thermostat ist mal bei 0,5 K über, mal bei 0,5 K unter dem Soll halb offen): Dann nennt der Satz die Reglerwerte
+  („regelt mit Integrator, Ruhepunkt am Soll (Kp 55 %/K, Nachstellzeit 130 min) – die Kennlinie hängt von der Last
+  ab“), der Graf ist so gekennzeichnet, und die Vorhersage nutzt die Kennlinie nicht.
+- **Gütemaß:** Wie weit lag die Vorhersage der Ventilstellung einen Messschritt und 30 min voraus daneben – gemittelt
+  über 14 Tage, in Prozentpunkten, vorhergesagt mit dem Modell, wie es vorher war. Zum Vergleich steht daneben, wie
+  weit „Ventil bleibt, wie es ist“ daneben lag.
+- **Nur an/aus:** statt Kennlinie und Reglermodell die **Schaltpunkte** (ein ab …, aus ab … – mit Hysterese) und wie
+  lange es nach einem Soll-Sprung bis zum Schalten dauert.
+- **Belastbar** ab 8 Soll-Sprüngen (mindestens 4 je Richtung, die Reaktionszeiten einer Richtung streuen nicht mehr
+  als ihr Median – Abstand der Quartile), 48 h Beharrung und höchstens 20 Prozentpunkten Fehler über 30 min, der
+  zudem höchstens das 0,7-Fache von „Ventil bleibt, wie es ist“ sein darf (sonst sagt das Modell nichts, was nicht
+  auch ohne es klar wäre). Beim P-Regler darf „halb offen“ in 14 Tagen nicht mehr als 0,3 K wandern; mit Integrator
+  muss Kp sicher sein. Sonst steht dort „lernt“ mit dem Grund („erst 5 von 8 Soll-Sprüngen“, „erst 3 Soll-Sprünge
+  nach unten“, „Vorhersage kaum besser als „Ventil bleibt, wie es ist““).
+- **Schrittweite:** aus Home Assistant (`target_temp_step` des Thermostats; bei Gruppen der gröbste Schritt der
+  Thermostate, die beschrieben würden; mit Raumregler dessen). Meldet ein Gerät keine, gilt 0,5 K („angenommen“).
+
+**Aus der Historie und laufend:** Beim ersten Start mit 0.39 lernen die Ventilmodelle aus den gespeicherten
+Messwerten der letzten 60 Tage nach – im Takt in Abschnitten von höchstens einem Tag, höchstens 1 s je Takt, damit
+Messen und Steuern nicht warten. Bis dahin steht beim Raum „lernt aus der gespeicherten Historie nach“. Danach lernt
+jedes Modell je abgeschlossener halber Stunde dazu. Raum-, Haus- und alle anderen Modelle bleiben dabei, wie sie
+sind; „Lernstand neu berechnen“ verwirft auch die Ventilmodelle, sie lernen danach wieder aus den Messwerten.
+
+**Anzeige je Raum** (Abfragen `api/heat` und `api/summary`, Feld `valve_model`): die Kennlinie als kleiner Graf und
+ein Satz, z. B. „öffnet ab 0,2 K unter Soll, halb offen bei 0,6 K, ganz bei 1,2 K · reagiert auf +0,5 K in ≈ 8 min,
+schließt in ≈ 12 min · Schritt 0,5 K · belastbar“ (öffnet es schon über dem Soll, sagt jeder Punkt „über“ bzw.
+„unter Soll“ dazu; Minuten wie in der Tabelle, Halbe aufgerundet); mit Integrator „regelt mit Integrator …“; nur
+an/aus: „schaltet ein bei 0,3 K unter Soll, aus bei 0,1 K über Soll · …“. Zu finden im Reiter **Heizen → Raum antippen**, Abschnitt „Ventilverhalten“: der Graf zeigt das Ventil in %
+über dem Abstand zum Soll (rechts von „Soll“ ist der Raum kälter, links wärmer; der Punkt markiert „halb offen“),
+gestrichelt, solange das Modell lernt; mit Integrator steht „hängt von der Last ab“ darüber; bei „nur an/aus“ die
+beiden Schaltpunkte als geschlossene Schleife (unten zu bis „ein“, oben offen bis „aus“). Zeiger oder Finger auf dem
+Graf zeigen den Wert je 0,1 K und wie viele Stunden dahinterstehen. Unter „Einzelheiten“ stehen Gruppe, Soll-Sprünge
+je Richtung, Sprungantwort (mit „grob“ bei langer Messpause), Beharrung, Vorhersagefehler neben „Ventil bleibt“,
+Reglermodell (Kp, Ki, Nachstellzeit, P-Regler oder mit Integrator, Messrauschen) bzw. Schaltpunkte, Schrittweite, was
+ausgelassen wurde und die Kennlinie als Tabelle. Ohne genug Daten gibt es keinen Graf, nur den Satz („Kennlinie lernt noch“). In der **Übersicht → Räume** steht
+unter der Tabelle der Raummodelle die Tabelle „Ventilverhalten“ mit einer Zeile je Raum (Kennlinie in Zahlen, Reaktion
+auf/zu, Fehler über 30 min, Schritt, Stand mit Grund); der Raumname öffnet den Dialog mit dem Graf.
+
+### Ventile im Trockenlauf
+
+Was HeatPilot mit den Thermostaten als Stellglied tun würde – **nur Protokoll, es wird nichts geschrieben**, auch
+nicht bei „HeatPilot steuert“. Gezählt wird nach Räumen; der Heizkreis von EMS-ESP ist nie dabei. Zwei Regeln:
+
+- **Früh drosseln:** Nähert sich ein Raum seinem Soll wirklich – gemessen deutlich steigend (mindestens 0,3 K/h und
+  dreimal über der Unsicherheit aus dem Messrauschen) und seit einem Soll-Anstieg (Zeitplan, Boost) noch nicht
+  erreicht oder noch mindestens 0,2 K bzw. einen halben Schritt darunter –, erreicht er es laut Raum- und Ventilmodell
+  (gemeinsam Minute für Minute gerechnet, das Ventil mit Totzeit und Stellmotor) in weniger als 20 min, wäre das
+  Ventil dann noch über 30 % offen und sagen die Modelle mindestens 0,2 K Überschwingen voraus, würde HeatPilot das
+  Soll jetzt um einen Schritt senken und zurücksetzen, sobald der Raum das eigentliche Soll erreicht – spätestens
+  nach 60 min. Danach drosselt es den Raum erst wieder nach einem neuen Soll oder wenn er 0,5 K ausgekühlt ist. So
+  löst ein Thermostat mit Integrator, das das Soll mit offenem Ventil hält, nicht alle paar Minuten aus, und ein
+  P-Regler, der vor dem Soll schließt, bekommt keinen Vorschlag.
+- **Gemeinsam anfordern:** Fordert nur ein Raum Wärme an (Ventil über 5 %) und taktet der Kessel (mindestens 3
+  Brennerstarts in der letzten Stunde, Läufe im Mittel unter 10 min – ohne Brennerereignisse aus dem Startzähler),
+  würde HeatPilot Räume, die in den nächsten 60 min ohnehin heizen würden, um einen Schritt anheben, damit mehrere
+  zugleich anfordern und der Kessel durchläuft. „Würde heizen“ heißt: Das Ventilmodell öffnet das Ventil von jetzt
+  aus entlang des Abkühlens (Raummodell, sonst gemessener Abfall) – ein geschlossenes Ventil über dem Soll öffnet
+  dabei auch mit Integrator nicht. Zurück, sobald der anfordernde Raum nicht mehr anfordert, spätestens nach 60 min.
+
+Ohne plausibles Raummodell rechnet der Trockenlauf mit dem gemessenen Verlauf der letzten 30 min (bei langer
+Messpause der letzten drei Messpunkte), ohne Ventilvorhersage mit der Ventilstellung von jetzt bzw. bis zur
+Öffnungsschwelle, mindestens bis zum Soll. Mitgezählt nach den abgesprochenen Regeln: nur bei Änderung, in der vollen
+Auflösung des Thermostats (Schrittweite oben), 5 min Haltezeit je Raum. Ändern Zeitplan oder Hand das Soll, endet ein
+Eingriff ohne Zurückschreiben.
+
+**Auswertung** (Übersicht → Vorschau, Abschnitt „Ventile (Trockenlauf)“ am Ende der Vorschau; Abfrage `api/preview`,
+Feld `valves`): wie oft je Regel in 7 Tagen, die Schreibvorgänge, die es gegeben hätte, je Raum und Tag, Beispiele mit
+Grund und die gerade laufenden Eingriffe – oben ein Satz und die Kennzahlen, darunter die Eingriffe je Tag als Balken
+(blau früh drosseln, orange gemeinsam anfordern), aufklappbar die Beispiele, je Raum und Tag und die Regeln. Die
+**geschätzte Wirkung** – weniger Überschwingen in K (Raum- und Ventilmodell rechnen beide Fälle) und grob ein
+Brennerstart weniger je Raum, der sonst später allein angefordert hätte – gibt es nur, wo das Raummodell plausibel und
+das Ventilmodell belastbar ist; sonst wird nur gezählt. Eine Stunde nach jedem Eingriff trägt HeatPilot nach, was
+wirklich geschah (höchstes Überschwingen über das Soll, Brennerstarts der Stunde aus den Brennerereignissen bzw. dem
+Startzähler) – es wurde ja nichts geschrieben. Genau das prüft die Schätzung nach: Beim Eingriff merkt sich HeatPilot
+auch das vorhergesagte Überschwingen **ohne** Eingriff; die Schätzung „≈ x K weniger“ zeigt es für einen Raum erst,
+wenn diese Vorhersage dreimal nachgemessen im Mittel höchstens 0,2 K daneben lag (über 30 Tage). Bis dahin steht beim
+Beispiel „vorhergesagt ohne Eingriff ≈ … K (Schätzung wird nachgeprüft)“.
+Ein Ventil, das nur an/aus kennt, gewinnt durch frühes Drosseln kaum etwas: Es schaltet nur früher ab und nach dem
+Zurücksetzen wieder voll an – die Schätzung zeigt das so. Das Protokoll bleibt 90 Tage, „Lernstand neu berechnen“
+lässt es stehen; es steht im Export („ventile“) und im Diagnosepaket.
 
 ## Warmwasser über HeatPilot (Weg W)
 
@@ -768,8 +892,9 @@ im Code hart ab. Bei „Aus“ und „Trockenlauf“ gibt es den Schreibweg gar 
   Hinweis und eine Meldung da; nach **2 fremden Änderungen in 1 h pausiert** Weg W – zwei Schreiber sollen
   nicht gegeneinander schreiben. Übernimmt der Kessel einen Wert von HeatPilot nur verspätet, ist das kein
   fremder Schreiber.
-- **Höchstens 24 Schreibvorgänge in 24 h:** Schwankt die Empfehlung (flatternde Anwesenheit, Zapf-Schwelle), schriebe
-  die Haltezeit allein alle 5 min. Beim 25. pausiert Weg W mit Meldung, bis du ihn wieder einschaltest.
+- **Keine Zählsperre:** Ändert sich die Empfehlung um 1 K, wird nach der Haltezeit geschrieben – egal wie oft am
+  Tag. Sonst bliebe der Speicher z. B. auf 60 °C stehen, nur weil an dem Tag viel los war. Die Zahl der
+  Schreibvorgänge der letzten 24 h steht nur zur Info in der Anzeige.
 - **Fällt HeatPilot aus**, bleibt das zuletzt geschriebene Soll stehen – deshalb nie unter dem Minimum. Liegt das
   Minimum unter 50 °C, zeigt „Bereit für die Steuerung?“ das ohne Desinfektionstermin als Einschränkung
   (Legionellen: so tiefe Werte stehen dann wirklich am Kessel), mit Termin als Hinweis. Das Minimum entscheidest du.
@@ -806,8 +931,8 @@ nicht speichern. Gemeldet wird nur an die gewählten und gespeicherten Ziele; �
 genau diese (`POST api/notify/test`) – solange geänderte Häkchen nicht gespeichert sind, ist der Knopf gesperrt.
 Gewählte Ziele, die es in Home Assistant nicht mehr gibt, stehen mit „fehlt“ in der Liste zum Abwählen. Ohne Ziele gibt es keine Meldungen – der Problem-Sensor läuft trotzdem.
 
-Was gemeldet wird: Warmwasser-Soll nicht übernommen, Weg W pausiert (3 Fehlschläge, 2 fremde Änderungen in 1 h oder
-24 Schreibvorgänge in 24 h), anderer Schreiber am Speicher-Soll und Thermostat-Schreibfehler der Raumsteuerung ab drei
+Was gemeldet wird: Warmwasser-Soll nicht übernommen, Weg W pausiert (3 Fehlschläge oder 2 fremde Änderungen in 1 h),
+anderer Schreiber am Speicher-Soll und Thermostat-Schreibfehler der Raumsteuerung ab drei
 in Folge. Titel „HeatPilot“, Text kurz und konkret. Je
 Ereignis eine Meldung – nicht bei jedem Takt – und einmal „wieder in Ordnung“; höchstens eine Meldung je Art in
 6 h.
@@ -833,6 +958,8 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
   Warmwasser-Solls, nur ganze Grad zwischen Minimum und Maximum, nur bei Änderung ab 1 K, mit Haltezeit und Prüfung
   nach 60 s (siehe [Weg W](#warmwasser-über-heatpilot-weg-w)). Jede andere `number`-Entität weist der Code hart ab.
 - Meldungen schickt es nur an die gewählten Ziele (Einstellungen → Benachrichtigungen, siehe dort).
+- Das Ventilverhalten (seit 0.39) lernt und zeigt es nur; was es mit den Thermostaten als Stellglied tun würde,
+  protokolliert es im Trockenlauf – geschrieben wird dafür nichts (siehe [Ventilverhalten](#ventilverhalten)).
 
 1. **Daten übernehmen:** Beim ersten Start holt sich das Add-on selbst die
    vorhandenen Daten aus Home Assistant. Ein Export ist nicht nötig.
@@ -872,6 +999,9 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
      wärmer, ohne dass der Heizkörper es erklären kann (Kamin, Backofen, viele Gäste), gilt
      das als **Fremdwärme-Ereignis**: diese Schritte lernt das Raummodell nicht (siehe
      „Fremdwärme“ unten).
+   - *Ventilmodell* (je Raum, halbstündlich, seit 0.39): wie das Thermostat sein Ventil abhängig vom Abstand
+     zum Soll stellt – Kennlinie, Sprungantwort, kleines Reglermodell bzw. Schaltpunkte (siehe
+     [Ventilverhalten](#ventilverhalten)). Lernt beim ersten Start aus den gespeicherten Messwerten nach.
    - *Anwesenheit* (je Person): Wochenraster der Gewohnheiten und
      Heimfahrt-Geschwindigkeit. Annäherung und Ankunftszeit berechnet das
      Add-on selbst aus den GPS-Daten der `person.*`-Entitäten.

@@ -1,7 +1,7 @@
 """Prüfung von 0.38 (Weg W): die nachgestellten Funde als Tests für das behobene Verhalten.
 
 R1 nur ein Warmwasser-Soll ist Schreibziel (kein Vorlauf-Soll, keine Heizkurve, keine Entität ohne Einheit) ·
-R2 Schwelle auch für die ungerundete Empfehlung, höchstens 24 Schreibvorgänge in 24 h · R3 EMS-ESP nur mit frischen
+R2 Schwelle auch für die ungerundete Empfehlung (Zählsperre seit 0.39 entfernt, Wunsch Ingo) · R3 EMS-ESP nur mit frischen
 Werten, die beschriebene Entität zuerst, Widerspruch = unklar · R4 erledigter Fehlschlag schließt Hinweis, Meldung und
 Problem-Sensor · R5 „wieder einschalten“ nur bei einer Pause · R6 Neustart (Gegenprobe) · R7 Benachrichtigungsziele in
 Kleinbuchstaben · R8 „nicht bereit“ heißt: nichts schreiben · R9 Minimum unter 50 °C sichtbar · R10 Doku und Sperrtext ·
@@ -26,7 +26,7 @@ from heatpilot import preview as pv
 from heatpilot import readiness
 from heatpilot.config import Config, validate
 from heatpilot.control import Control
-from heatpilot.dhw_control import DAY_MAX, HOLD_S, K_FAIL, DhwControl, target_entity
+from heatpilot.dhw_control import HOLD_S, K_FAIL, DhwControl, target_entity
 from heatpilot.dhw_entity import picker
 from heatpilot.discovery import Discovered
 from heatpilot.ems_lock import LOCK_TEXT
@@ -165,7 +165,9 @@ def test_r1_picker_offers_only_fitting_entities(tmp_path):
 
 
 # ------------------------------------------------------------------ R2: Schwelle und Tageslimit
-def test_r2_flapping_recommendation_pauses_after_day_limit(tmp_path):
+def test_r2_flapping_recommendation_writes_after_each_hold_without_count_lock(tmp_path):
+    """Keine Zählsperre (Ingo, 0.39): Springt die Empfehlung, wird nach jeder Haltezeit von 5 min geschrieben –
+    nie öfter, aber auch nie gesperrt, nur weil es viele Wechsel waren."""
     eng, ha, dc = make(tmp_path, sample_interval_s=60)
     t0 = ts_of(MON, 8)
     for i in range(3 * 60):                  # 3 h mit 60-s-Takt, die Empfehlung springt jede Minute
@@ -174,14 +176,12 @@ def test_r2_flapping_recommendation_pauses_after_day_limit(tmp_path):
         if dc.state.get("check"):            # Kessel übernimmt sofort
             boiler(eng, dc.state["check"]["value"])
             dc.verify(dc.state["check"]["due"])
-    assert len(ha.writes()) == DAY_MAX == 24 and dc.paused()
-    assert dc.state["paused"]["reason"] == "24 Schreibvorgänge in 24 h"
-    run(eng.notifier.flush())
-    assert any("24× in 24 h geschrieben – die Empfehlung schwankt" in p["service_data"]["message"] for p in ha.notes())
-    assert dc.as_dict(t0 + 3 * 3600)["writes_24h"] == 24
-    assert dc.resume(t0 + 3 * 3600) is True    # wieder einschalten: ab jetzt neu gezählt
-    other = 45 if float(eng.states[ENT]["state"]) == 55 else 55
-    assert step(eng, dc, t0 + 3 * 3600 + 400, other) is True
+    stamps = [w["ts"] for w in ha.writes()] if ha.writes() and isinstance(ha.writes()[0], dict) and "ts" in ha.writes()[0] \
+        else None
+    assert len(ha.writes()) > 24 and not dc.paused()
+    assert len(ha.writes()) <= 3 * 60 // (HOLD_S // 60) + 1   # höchstens einmal je Haltezeit
+    assert dc.as_dict(t0 + 3 * 3600)["writes_24h"] == len(ha.writes())
+    assert stamps is None or all(b - a >= HOLD_S for a, b in zip(stamps, stamps[1:]))
 
 
 def test_r2_jitter_at_rounding_boundary_does_not_alternate(tmp_path):

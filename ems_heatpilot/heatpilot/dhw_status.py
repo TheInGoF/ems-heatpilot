@@ -16,7 +16,7 @@ import logging
 import time
 
 from .config import DHW_MODES
-from .dhw_rule import (CHECK_MAX_S, CHECK_S, CHECK_TOL_K, DAY_MAX, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_AUTOMATION,
+from .dhw_rule import (CHECK_MAX_S, CHECK_S, CHECK_TOL_K, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_AUTOMATION,
                        HINT_FAILSAFE, HINT_S, HOLD_S, MAX_FAILS, STEP_K, _ago, _c, _iso, limits)
 from .values import local
 
@@ -156,6 +156,6 @@ class DhwStatus:
             "warnings": self.warnings(now_ts), "notes": [HINT_AUTOMATION, HINT_FAILSAFE],
             "rules": {"min": lo, "max": hi, "step_k": STEP_K, "hold_min": HOLD_S // 60, "check_s": CHECK_S,
                       "check_max_s": CHECK_MAX_S, "tolerance_k": CHECK_TOL_K, "max_fails": MAX_FAILS,
-                      "foreign_max": FOREIGN_MAX, "foreign_window_min": FOREIGN_WINDOW_S // 60, "day_max": DAY_MAX},
+                      "foreign_max": FOREIGN_MAX, "foreign_window_min": FOREIGN_WINDOW_S // 60},
             "log": self.log_rows(),
         }

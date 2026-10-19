@@ -1,5 +1,8 @@
 """Weboberfläche (über Ingress direkt in der HA-Seitenleiste).
 
+Seit 0.39 enthalten ``api/heat`` und ``api/summary`` je Raum das gelernte Ventilverhalten (``valve_model``) und
+``api/preview`` den Trockenlauf der Ventile (``valves``) – nur Anzeige.
+
 Seit 0.38 dazu Weg W und Benachrichtigungen: ``GET api/dhw`` (Status und Bereitschaft des Warmwasser-Solls),
 ``POST api/dhw/resume`` („wieder einschalten“ – nur bei einer Pause, sonst 409), ``GET api/notify`` (Ziele zur
 Auswahl) und ``POST api/notify/test`` (Testnachricht nur an die gespeicherten Ziele). ``api/entities`` sagt je
@@ -21,7 +24,7 @@ from aiohttp import web
 from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
-from . import dhw_control, dhw_entity, notify
+from . import dhw_control, dhw_entity, notify, valve_dry
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -273,7 +276,8 @@ def make_app(app) -> web.Application:
         if app.eng is None:
             return json_response({"starting": True, "status": app.status})
         now = int(time.time())
-        return json_response({"preview": preview.cached(app.eng, now), "compare": preview_log.compare_for(app.eng, now)})
+        return json_response({"preview": preview.cached(app.eng, now), "compare": preview_log.compare_for(app.eng, now),
+                              "valves": valve_dry.summary(app.eng, now)})  # 0.39: Ventile im Trockenlauf
 
     def heat_state() -> dict:
         eng, ctl, loop = app.eng, app.control, app.eng.control_loop
@@ -309,6 +313,7 @@ def make_app(app) -> web.Application:
                 "ems": r.ems,  # 0.36.3: Heizkreis von EMS-ESP – Bedienung gesperrt
                 "climates": r.climates, "devices": devices,
                 "control": ctl_rooms.get(r.climate),
+                "valve_model": eng.valve_info(r.climate, int(time.time())),  # 0.39: Ventilverhalten (Raum-Dialog)
             })
         return {"rooms": rooms, "limits": {"temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX,
                                            "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX,
