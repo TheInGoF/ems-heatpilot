@@ -1,6 +1,7 @@
 # Planung: Vorlauftemperatur über EMS führen (Diskussionspapier)
 
-Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden). Nichts davon ist gebaut; EMS-ESP bleibt bis auf Weiteres **nur lesend**.
+Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden). Gebaut ist bisher nur **Weg W** (Warmwasser-Soll über Home
+Assistant, 0.38, siehe unten); alles andere nicht. EMS-ESP bleibt bis auf Weiteres **nur lesend**.
 Dieses Papier sammelt Wege, Risiken und offene Fragen, damit die Entscheidung nebenbei reifen kann.
 
 ## Ausgangslage
@@ -69,14 +70,25 @@ geht also nur ohne ES73. Ingo baut den ES73 ab, sobald HeatPilot den Kessel übe
    - Vorschau/Trockenlauf je Stunde: Vorlauf-Soll, Heizbetrieb an/aus, Warmwasser-Soll (0.37) – verglichen
      mit dem, was der ES73 tatsächlich setzt (`sel_flow`, Speicher-Soll), mindestens einige Wochen Heizbetrieb.
    - Eigene Witterungsführung (Heizkurve aus Haus- und Raummodellen) als Grundlage der Vorschau.
-   - Warmwasser-Soll über HeatPilot statt HA-Automation (Weg W, unten) und Desinfektion als Einstellung
-     in HeatPilot (0.36.3), Termin zunächst wie im ES73.
+   - Warmwasser-Soll über HeatPilot statt HA-Automation (Weg W, unten – gebaut (0.38)) und Desinfektion als
+     Einstellung in HeatPilot (0.36.3), Termin zunächst wie im ES73.
    - „Bereit für die Steuerung?“ zeigt alle nötigen Kessel-Steuerungen als vorhanden und schreibbar.
 3. **Umstieg:** eigener Schalter „Kessel: HeatPilot“, erst Trockenlauf mit Protokoll, dann schreiben.
    ES73 erst danach abbauen. Wächter in HA (HeatPilot-Sensor älter als 1 h → Kessel auf festen Vorlauf
    45 °C und Warmwasser 50 °C).
 
-## Warmwasser-Soll schon vor Weg B (Weg W)
+## Warmwasser-Soll schon vor Weg B (Weg W) – gebaut (0.38)
+
+**Stand 0.38:** gebaut wie unten beschrieben – Schalter „Warmwasser-Soll“ (Aus, Trockenlauf, HeatPilot setzt;
+Standard aus), geschrieben über Home Assistant (`number.set_value` auf die Entität des Speicher-Solls, nicht per
+REST an EMS-ESP), nur bei Änderung ab 1 K, 5 min Haltezeit, Prüfung nach 60 s, Pause nach 3 Fehlschlägen bzw. 2
+fremden Änderungen in 1 h, Meldungen über die Benachrichtigungsziele und `binary_sensor.heatpilot_problem`. Die
+Raumsteuerung meldet ihre Schreibfehler über dieselbe Stelle. Offen bleibt das Auslösen der Desinfektion (mit Weg B).
+Nach der Prüfung von 0.38 zusätzlich abgesichert (die Regeln oben bleiben): geschrieben wird nur auf eine Entität, die
+nach dem Speicher-Soll aussieht (°C, kein Heizkreis, keine andere Rolle wie das Vorlauf-Soll), nur ohne Hindernis in
+„Bereit für die Steuerung?“; die 1-K-Schwelle gilt auch für die ungerundete Empfehlung; höchstens 24 Schreibvorgänge in
+24 h, sonst Pause; Werte direkt von EMS-ESP zählen nur frisch, widersprechen sie der Entität, wird nicht geschrieben;
+ein Minimum unter 50 °C steht als Einschränkung da (Legionellen) – entschieden wird es in den Einstellungen.
 
 Weil HA das Speicher-Soll heute schon schreibt und der ES73 es stehen lässt, kann HeatPilot diese Aufgabe
 **vor** dem Abbau des ES73 übernehmen – als kleiner, eigener Schritt. **Entschieden** (Ingo, 19.10.2026):

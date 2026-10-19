@@ -247,6 +247,26 @@ table.pv-t tr.pv-why td { font-size: 12px; color: var(--text-secondary); padding
 table.pv-t .muted { font-size: 11px; }
 #cmp-mode[hidden] { display: none; }  /* .row setzt display: flex */
 ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
+/* Warmwasser über HeatPilot (0.38): Statuszeile in Heizen/Übersicht, Schalter mit drei Stellungen und Statusbox in
+   Einstellungen → Warmwasser, Block in „Bereit für die Steuerung?“, Ring „schreibt“ in der Vorschau;
+   Benachrichtigungen: Zielliste mit Häkchen */
+#heat-dhw { margin: -4px 0 12px; } #ov-dhw { margin: -10px 0 16px; }
+.dhw-line .dot, .dhw-box .dot { margin-right: 6px; vertical-align: 0; }
+.dhw-line .warn, .dhw-box .warn { color: #e34948; display: block; margin-top: 3px; }
+.dhw-line .btn { margin: 6px 8px 0 0; }
+.dhw-note { display: block; margin-top: 4px; color: var(--text-primary); }
+.dhw-ico svg { display: inline-block; width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; color: var(--series-4); }
+.seg.seg3 { max-width: 480px; }
+@media (max-width: 440px) { .seg.seg3 label { padding: 8px 2px; font-size: 13px; } }
+h3.sec-h { font-size: 13px; margin: 14px 0 4px; }
+.dhw-box { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px 12px; margin: 10px 0; font-size: 13px; }
+.card .dhw-box p { margin: 6px 0 0; font-size: 13px; }
+.card .dhw-box p.dhw-ready { color: var(--text-primary); }
+.legend i.ring.own { background: var(--series-4); border-color: var(--series-4); }
+table.notify-t td { vertical-align: middle; overflow-wrap: anywhere; }
+.msg-warn { color: var(--warn); }
+.card .notify-state p { margin: 8px 0 0; } .notify-state ul.cmp-facts { margin: 4px 0 0; }
+code { font-size: 12px; overflow-wrap: anywhere; }
 </style>
 </head>
 <body>
@@ -296,6 +316,7 @@ ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(
   </section>
   <section id="view-heat">
     <p class="sub" id="heat-status"></p>
+    <p class="sub dhw-line" id="heat-dhw" hidden></p>
     <div class="acts" id="heat-acts"></div>
     <p class="muted" id="heat-msg" style="margin:0 0 10px;min-height:15px"></p>
     <div class="room-tiles" id="heat-rooms"></div>
@@ -342,6 +363,7 @@ ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(
   </section>
   <section id="view-overview" hidden>
   <p class="sub" id="status">Lade …</p>
+  <p class="sub dhw-line" id="ov-dhw" hidden></p>
 
   <div class="tiles" id="tiles"></div>
   <div class="card" id="pv" style="margin-bottom:12px" hidden>
@@ -905,13 +927,25 @@ function readyLine(r, pil) {
   return `<span class="ready-line" id="ready-line">${readyDot(lv.dot)}${text} <a href="#" onclick="openReadiness();return false">Einzelheiten unter Einstellungen → Steuerung</a></span>`;
 }
 const ACTION_NAME = { set_temperature: "Soll", set_hvac_mode: "Betriebsart", set_climate_timer: "Tado-Timer" };
-function renderHeatLog(c) {
-  const box = $("heat-log-box"), rows = (c.log || []).slice(0, 20);
+// Weg W (0.38): Warmwasser-Zeilen im Protokoll (kind „dhw“, Name „Warmwasser-Soll“) mit eigenen Aktionen
+const DHW_ACTION = { set_value: "gesetzt", dry_run: "würde schreiben", check_failed: "nicht übernommen",
+  foreign: "fremde Änderung", paused: "pausiert", resumed: "wieder eingeschaltet" };
+// Raum- und Warmwasser-Zeilen: control.log enthält seit 0.38 beide (neueste zuerst); ist es leer (keine
+// Regelschleife), die letzten Warmwasser-Zeilen aus dhw.log
+function heatLogRows(c, d) {
+  const rows = (c.log || []).slice(0, 20);
+  return rows.length ? rows : ((d && d.log) || []).slice(0, 20);
+}
+function renderHeatLog(c, d) {
+  const box = $("heat-log-box"), rows = heatLogRows(c, d);
   box.hidden = !rows.length;
   if (!rows.length) return;
-  $("heat-log").innerHTML = "<tr><th>Zeit</th><th>Raum</th><th>Aktion</th><th>Wert</th><th>Grund</th></tr>" + rows.map((l) =>
-    `<tr><td style="white-space:nowrap">${esc(timeOf(l.time))}</td><td>${esc(shortName(l.name || l.room))}</td><td>${ACTION_NAME[l.action] || esc(l.action)}</td>` +
-    `<td>${l.value === null || l.value === undefined ? "–" : fmt(l.value) + " °C"}</td><td>${esc(l.reason || "")}</td></tr>`).join("");
+  $("heat-log").innerHTML = "<tr><th>Zeit</th><th>Raum</th><th>Aktion</th><th>Wert</th><th>Grund</th></tr>" + rows.map((l) => {
+    const w = l.kind === "dhw";
+    return `<tr${w ? ' class="log-dhw"' : ""}><td style="white-space:nowrap">${esc(timeOf(l.time))}</td>` +
+      `<td>${w ? DROP + esc(l.name || "Warmwasser-Soll") : esc(shortName(l.name || l.room))}</td><td>${(w ? DHW_ACTION : ACTION_NAME)[l.action] || esc(l.action)}</td>` +
+      `<td>${l.value === null || l.value === undefined ? "–" : fmt(l.value) + " °C"}</td><td>${esc(l.reason || "")}</td></tr>`;
+  }).join("");
 }
 async function loadHeat() {
   clearTimeout(heatTimer);
@@ -924,7 +958,7 @@ function heatError(e) { heatMsg(`<span class="msg-err">${esc(e.message || e)}</s
 function heatMsg(html) { $("heat-msg").innerHTML = html; const d = $("dlg-msg"); if (d) d.innerHTML = html; }
 // Heizkreis von EMS-ESP (0.36.3, rooms[].ems): wird angezeigt, aber nie bedient – Boost, Zeitplan, Ausschalten,
 // Soll und Betriebsart lassen ihn aus (das Backend weist es ohnehin ab: EMS-ESP nur lesen)
-const EMS_LOCK = "Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel";
+const EMS_LOCK = "Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Heizkreis";
 const ctlRooms = (j) => (j ? j.rooms.filter((r) => !r.ems) : []);
 function allRooms() { return ctlRooms(HEAT).map((r) => r.climate); }
 function renderHeat() {
@@ -936,6 +970,7 @@ function renderHeat() {
   const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
   const c = ctl(), pil = managing();
   $("heat-status").innerHTML = heatStatus(c, j.readiness);
+  renderDhwLine("heat-dhw", j.dhw);  // Warmwasser über HeatPilot (0.38)
   $("heat-acts").className = "acts" + (pil ? " four" : "");  // vierte Kachel „Pause“ nur bei Steuerung heatpilot
   $("heat-acts").innerHTML =
     act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
@@ -946,7 +981,7 @@ function renderHeat() {
   $("heat-foot").textContent = pil
     ? "Antippen öffnet die Bedienung. HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst; was du von Hand einstellst, gilt bis zum nächsten Wechsel."
     : "Antippen öffnet die Bedienung. Geschaltet wird nur auf Knopfdruck – HeatPilot schaltet nie von selbst.";
-  renderHeatLog(c);
+  renderHeatLog(c, j.dhw);
   if (DLG) renderDlg();  // offener Dialog zeigt den neuen Stand
 }
 function act(kind, title, sub, on) {
@@ -1086,7 +1121,7 @@ async function heatPost(action, body, busy) {
   heatMsg(busy);
   try {
     const j = await getJSON("api/heat/" + action, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    HEAT = { rooms: j.rooms, limits: j.limits, control: j.control, readiness: j.readiness }; renderHeat();
+    HEAT = { rooms: j.rooms, limits: j.limits, control: j.control, readiness: j.readiness }; HEAT.dhw = j.dhw; renderHeat();
     heatMsg(j.ok ? `<span class="msg-ok">Erledigt.</span>${j.hint ? " " + esc(j.hint) : ""}` : `<span class="msg-err">Teilweise fehlgeschlagen: ${esc((j.errors || []).join(" · "))}</span>`);
   } catch (e) { heatError(e); }
 }
@@ -1267,6 +1302,7 @@ async function load() {
     ` · Regler: ${s.hc_mode ?? "–"}` +
     (s.emsesp ? ` · <span class="badge">EMS-ESP direkt</span>` : "") +
     (s.vacation.active ? ` · <span class="badge">Urlaub${s.vacation.until ? " bis " + timeOf(s.vacation.until) : ""} – Gewohnheiten pausiert</span>` : "");
+  renderDhwLine("ov-dhw", s.dhw_control);  // Warmwasser über HeatPilot (0.38): Statuszeile unter dem Status
   const fc = forecastTile(s.forecast, (s.discovered || {}).weather);  // gemessen statt gelernt: auch ohne Hausmodell
   $("tiles").innerHTML = [
     // Hauswerte erst, wenn das Modell plausibel ist – vorher wären es Zahlen ohne Aussage
@@ -1383,6 +1419,7 @@ async function load() {
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
 let DIS = null;  // Desinfektion (0.36.3): GET api/settings → disinfect
+let DHWC = null, NOTIFY = null;  // 0.38: GET api/settings → dhw_control (Weg W) und notify (Benachrichtigungen)
 function sunText(g, updates) {
   if (!g || updates < 96) return '<span class="muted">lernt noch</span>';
   const names = ["Ost", "Süd", "West"], best = g.indexOf(Math.max(...g));
@@ -1616,7 +1653,7 @@ function renderPreview(p) {
   const box = $("pv");
   box.hidden = !p || !(p.hours || []).length;
   if (box.hidden) return;
-  $("pv-note").innerHTML = `<b>${esc(p.note || PV_NOTE)}.</b> Die Vorschau ist ein Vorschlag zum Vergleichen – wann und ob umgestellt wird, entscheidest du.`;
+  $("pv-note").innerHTML = pvNote(p);
   $("pv-sum").innerHTML = pvSummary(p);
   $("pv-basis").innerHTML = pvBasis(p);
   $("pv-miss").innerHTML = [["Vorlauf", p.flow_note], ["Warmwasser", p.dhw_note]].filter((x) => x[1])
@@ -1629,12 +1666,22 @@ function renderPreview(p) {
   $("pv-table").innerHTML = pvTable(p);
   $("pv-foot").textContent = p.hours.some((h) => h.t_out_src === "aktuell") ? "* aktuelle Außentemperatur – für diese Stunde kein Vorhersagepunkt." : "";
 }
-// Satz über der Grafik: Schreibvorgänge in 24 h nach den Regeln, dazu was heute am Kessel steht (Startwert der Zählung)
+// Hinweis über der Grafik: Trockenlauf – bei „HeatPilot setzt“ (0.38) außer dem Warmwasser-Soll, das HeatPilot selbst setzt
+function pvNote(p) {
+  const own = p.dhw_writes === "schreibt";
+  const dhw = own ? " Das Warmwasser-Soll setzt HeatPilot selbst (Einstellungen → Warmwasser: „HeatPilot setzt“) – seine Schreibvorgänge heißen hier „schreibt“."
+    : p.dhw_paused ? " Warmwasser über HeatPilot ist pausiert – auch das Warmwasser-Soll ist hier nur Vorschau." : "";
+  return `<b>${esc(p.note || PV_NOTE)}${own ? " – außer dem Warmwasser-Soll" : ""}.</b>${dhw} Die Vorschau ist ein Vorschlag zum Vergleichen – wann und ob umgestellt wird, entscheidest du.`;
+}
+// Satz über der Grafik: Schreibvorgänge in 24 h nach den Regeln, dazu was heute am Kessel steht (Startwert der Zählung);
+// bei „HeatPilot setzt“ (0.38) das Warmwasser getrennt: „schreibt“ statt „würde schreiben“
 function pvSummary(p) {
-  const w = p.writes_24h || {}, r = p.rules || {}, s = p.start || {};
-  const n = (w.flow || 0) + (w.heating || 0) + (w.dhw || 0);
-  const parts = Object.keys(PV_WHAT).filter((k) => w[k]).map((k) => `${PV_WHAT[k]} ${w[k]}×`).join(", ");
-  const head = n ? `In den nächsten 24 h würde HeatPilot <b>${n}× schreiben</b> (${parts})` : "In den nächsten 24 h würde HeatPilot <b>nichts schreiben</b>";
+  const w = p.writes_24h || {}, r = p.rules || {}, s = p.start || {}, own = p.dhw_writes === "schreibt";
+  const keys = Object.keys(PV_WHAT).filter((k) => !(own && k === "dhw")), n = keys.reduce((a, k) => a + (w[k] || 0), 0);
+  const parts = keys.filter((k) => w[k]).map((k) => `${PV_WHAT[k]} ${w[k]}×`).join(", ");
+  let head = n ? `In den nächsten 24 h würde HeatPilot <b>${n}× schreiben</b> (${parts})` : "In den nächsten 24 h würde HeatPilot <b>nichts schreiben</b>";
+  if (own) head = (n ? head : "In den nächsten 24 h würde HeatPilot an Vorlauf und Heizbetrieb nichts schreiben") +
+    (w.dhw ? ` und <b>schreibt das Warmwasser-Soll ${w.dhw}×</b>` : " und schreibt das Warmwasser-Soll nicht neu");
   const rules = `nur bei Änderung (Vorlauf ab ${fmt(r.flow_k ?? 1)} K, Warmwasser ab ${fmt(r.dhw_k ?? 1)} K, Heizbetrieb an/aus), danach ${fmt(r.hold_min ?? 5, 0)} min Haltezeit`;
   const now = [s.flow === null || s.flow === undefined ? "" : `Vorlauf-Soll ${degC(s.flow)}`,
     s.dhw === null || s.dhw === undefined ? "" : `Warmwasser-Soll ${degC(s.dhw)}`,
@@ -1665,8 +1712,10 @@ function pvLegend(p) {
   if (p.hours.some((h) => h.night)) it.push(["band", "var(--band-night)", "Nacht"]);
   if (p.hours.some((h) => !h.night && (h.home === 0 || h.vacation))) it.push(["band", "var(--band-away)", p.hours.some((h) => h.vacation) ? "niemand zu Hause / Urlaub" : "niemand zu Hause"]);
   if ((p.steps || []).some((s) => s.heating === false)) it.push(["strip", "var(--text-muted)", "Heizbetrieb aus"]);
+  const ws = p.hours.flatMap((h) => h.writes), own = p.dhw_writes === "schreibt";  // 0.38: „schreibt“ als gefüllter Ring
   $("lg-pv").innerHTML = it.map(([cls, c, name]) => `<span><i class="${cls}" style="${cls.startsWith("lk") ? "border-top-color" : "background"}:${c}"></i>${name}</span>`).join("") +
-    (p.hours.some((h) => h.writes.length) ? `<span><i class="ring"></i>würde schreiben</span>` : "");
+    (ws.some((w) => !own || w.what !== "dhw") ? `<span><i class="ring"></i>würde schreiben</span>` : "") +
+    (own && ws.some((w) => w.what === "dhw") ? `<span><i class="ring own"></i>schreibt</span>` : "");
 }
 
 function pvFlowChart(box, p, hours, x0, x1) {
@@ -1698,7 +1747,7 @@ function pvDhwChart(box, p, hours, x0, x1) {
     el("text", { x: right ? x - 4 : x + 4, y: f.m.t + 10, "text-anchor": right ? "end" : "start" }, f.svg).textContent = `Desinfektion ${clock(d.at)}`;
   }
   el("path", { d: stepPath(st, ends, vals, f.sx, f.sy), fill: "none", stroke: PV_C.dhw, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" }, f.svg);
-  pvMarks(f, p.hours.flatMap((h) => h.writes).filter((w) => w.what === "dhw"), PV_C.dhw);
+  pvMarks(f, p.hours.flatMap((h) => h.writes).filter((w) => w.what === "dhw"), PV_C.dhw, p.dhw_writes === "schreibt");
   hourHover("pv", f, hours, (i) => pvTip(p, i));
 }
 // Stufenlinie: Wert i gilt von ts[i] bis ends[i]; anschließende Stufen verbunden, Lücken (null, fehlende Stunde) offen
@@ -1730,13 +1779,14 @@ function pvStrip(f, ts, ends, on) {
     if (b > a) el("rect", { x: a, y, width: b - a, height: 4, fill: "var(--text-muted)", "fill-opacity": 0.6 }, f.svg);
   });
 }
-// „würde schreiben“: Ring auf der Linie zum Zeitpunkt (Heizbetrieb an/aus auf dem Streifen)
-function pvMarks(f, writes, color) {
+// „würde schreiben“: Ring auf der Linie zum Zeitpunkt (Heizbetrieb an/aus auf dem Streifen); „schreibt“ (0.38,
+// Warmwasser bei „HeatPilot setzt“): gefüllt
+function pvMarks(f, writes, color, own = false) {
   for (const w of writes) {
     const x = f.sx(w.ts);
     if (x < f.m.l - 1 || x > f.W - f.m.r + 1) continue;
     const heat = w.what === "heating";
-    el("circle", { cx: x, cy: heat ? f.H - f.m.b - 2 : f.sy(w.value), r: 3.5, fill: "var(--surface-1)",
+    el("circle", { cx: x, cy: heat ? f.H - f.m.b - 2 : f.sy(w.value), r: 3.5, fill: own ? color : "var(--surface-1)",
       stroke: heat ? "var(--text-secondary)" : color, "stroke-width": 1.5 }, f.svg);
   }
 }
@@ -1773,12 +1823,17 @@ function pvTip(p, i) {
     `${tipKey(PV_C.dhw)}Warmwasser-Soll: ${h.dhw === null || h.dhw === undefined ? "–" : `<b>${h.dhw} °C</b>`}`,
     `<span class="tip-why">${esc(h.dhw_reason)}</span>`];
   if (h.disinfect) rows.push(`Desinfektion ${clock(h.disinfect.at)} · ${fmt(h.disinfect.temp, 0)} °C`);
-  rows.push(h.writes.length ? "würde schreiben:" : "würde nichts schreiben", ...h.writes.map(pvWrite));
+  const own = p.dhw_writes === "schreibt", mine = h.writes.filter((w) => own && w.what === "dhw");  // 0.38: schreibt wirklich
+  const would = h.writes.filter((w) => !mine.includes(w));
+  if (would.length) rows.push("würde schreiben:", ...would.map(pvWrite));
+  if (mine.length) rows.push("schreibt:", ...mine.map(pvWrite));
+  if (!h.writes.length) rows.push(own ? "nichts zu schreiben" : "würde nichts schreiben");
   return `${wday(t)} ${tclock(t)}–${tclock(t + 3600)}${state.length ? " · " + state.join(" · ") : ""}<br>${rows.join("<br>")}`;
 }
 // Tabelle je Stunde: Werte in einer Zeile, darunter Gründe, Raum-Soll (nur Änderungen) und Schreibvorgänge
 function pvTable(p) {
   let prevDay = null;
+  const own = p.dhw_writes === "schreibt";  // 0.38: Warmwasser bei „HeatPilot setzt“ als „schreibt“
   const rows = p.hours.map((h, i) => {
     const t = tsOf(h.t), day = new Date(t * 1000).toDateString(), prev = i ? p.hours[i - 1] : null;
     const twice = prev && tclock(tsOf(prev.t)) === tclock(t);  // Zeitumstellung im Herbst: dieselbe Uhrzeit zweimal
@@ -1786,9 +1841,11 @@ function pvTable(p) {
     prevDay = day;
     const state = [h.night ? "Nacht" : "", h.vacation ? "Urlaub" : h.home === 0 ? "weg" : ""].filter(Boolean).join(", ");
     const flow = h.heating === false ? "aus" : degC(h.flow) + (h.flow_max > h.flow ? `<div class="muted">bis ${h.flow_max} °C</div>` : "");
+    const mine = h.writes.filter((w) => own && w.what === "dhw"), would = h.writes.filter((w) => !mine.includes(w));
     const why = [`Vorlauf: ${esc(h.flow_reason)}`, `Warmwasser: ${esc(h.dhw_reason)}`, pvRooms(h, prev),
       h.disinfect ? `Desinfektion ${clock(h.disinfect.at)}` : "",
-      h.writes.length ? `würde schreiben: ${h.writes.map(pvWrite).join(", ")}` : ""].filter(Boolean).join(" · ");
+      would.length ? `würde schreiben: ${would.map(pvWrite).join(", ")}` : "",
+      mine.length ? `schreibt: ${mine.map(pvWrite).join(", ")}` : ""].filter(Boolean).join(" · ");
     return `<tr class="pv-h"><td>${label}${state ? `<div class="muted">${state}</div>` : ""}</td>` +
       `<td>${fmt(h.t_out)} °C${h.t_out_src === "aktuell" ? "*" : ""}</td><td>${flow}</td><td>${degC(h.dhw)}</td>` +
       `<td>${h.writes.length ? `<b>${h.writes.length}×</b>` : "–"}</td></tr><tr class="pv-why"><td colspan="5">${why}</td></tr>`;
@@ -2186,12 +2243,16 @@ const PICKERS = {
   weather: { filter: (e) => e.id.startsWith("weather."), label: "Wetter" },
   climate: { filter: (e) => e.id.startsWith("climate."), label: "Thermostate" },
   toggle: { filter: (e) => /^(input_boolean|switch|binary_sensor)\./.test(e.id), label: "Schalter" },
+  // Warmwasser-Soll (0.38): nur number mit °C ohne andere Rolle (api/entities: dhw.fits), Vorschlag und Namen mit
+  // Warmwasser-Hinweis zuerst
+  dhw: { filter: (e) => !!(e.dhw && e.dhw.fits), sort: (a, b) => dhwRank(b) - dhwRank(a), label: "Warmwasser-Soll (number, °C)" },
   any: { filter: () => true, label: "Alle" },
 };
 
+const dhwRank = (e) => (e.id === (DHWC || {}).suggested ? 2 : 0) + (e.dhw && e.dhw.hint ? 1 : 0);
 function datalists() {
   return Object.entries(PICKERS).map(([key, p]) =>
-    `<datalist id="dl-${key}">${ENT.filter(p.filter).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}${e.state != null ? " · " + esc(e.state) + (e.unit ? " " + esc(e.unit) : "") : ""}</option>`).join("")}</datalist>`).join("");
+    `<datalist id="dl-${key}">${ENT.filter(p.filter).sort(p.sort || (() => 0)).map((e) => `<option value="${esc(e.id)}">${esc(e.name)}${e.state != null ? " · " + esc(e.state) + (e.unit ? " " + esc(e.unit) : "") : ""}</option>`).join("")}</datalist>`).join("");
 }
 const ent = (id, value, picker, ph = "") => `<input id="${id}" list="dl-${picker}" value="${esc(value)}" placeholder="${esc(ph)}" autocomplete="off">`;
 const field = (label, inner, hint = "") => `<div class="field"><label>${label}</label>${inner}${hint ? `<div class="hint">${hint}</div>` : ""}</div>`;
@@ -2367,7 +2428,7 @@ function modeHint() {
   if (!box) return;
   const managed = [...document.querySelectorAll("tr.room")].filter((tr) => tr.querySelector(".r-on").checked && tr.querySelector(".r-managed").checked).length;
   box.textContent = m && m.value === "heatpilot"
-    ? `HeatPilot schreibt nur in Räume mit Häkchen „macht mit“ (zurzeit ${managed}), nur Solltemperaturen zwischen 5 und 25 °C. Boost, Soll und Betriebsart von Hand gelten bis zum nächsten Wechsel. EMS-ESP und Kessel bleiben unberührt.`
+    ? `HeatPilot schreibt nur in Räume mit Häkchen „macht mit“ (zurzeit ${managed}), nur Solltemperaturen zwischen 5 und 25 °C. Boost, Soll und Betriebsart von Hand gelten bis zum nächsten Wechsel. EMS-ESP und Kessel bleiben unberührt – das Warmwasser-Soll hat einen eigenen Schalter (Einstellungen → Warmwasser).`
     : "Wie bisher: HeatPilot lernt, empfiehlt und schaltet Tado nur auf Knopfdruck im Reiter Heizen – nie von selbst.";
 }
 
@@ -2402,6 +2463,7 @@ function renderReadyBox(r, err = "") {
   const box = $("ready-box"); if (!box) return;
   if (READY_OPEN) READY_SHOW.details = true;
   box.innerHTML = readyBoxHtml(r, err, READY_SHOW.details, READY_SHOW.boiler);
+  if (r && r.dhw) box.insertAdjacentHTML("beforeend", dhwReadyHtml(r.dhw, READY_SHOW.dhw));  // Weg W (0.38)
   if (!READY_OPEN) return;
   if (r || err) READY_OPEN = false;  // erst mit Daten erledigt – „Lade Status …“ hat noch nichts zum Aufklappen
   const c = box.closest("details.card"); if (c) c.open = true;
@@ -2451,7 +2513,8 @@ function boilerHtml(b, open) {
   return `<div class="ready-boiler" id="ready-boiler"><h3>Kessel über EMS-ESP</h3><div class="ready-head">${readyDot(dot)}<span>${esc(b.text)}${when}</span></div>` +
     `<details id="ready-boiler-details"${open ? " open" : ""} ontoggle="READY_SHOW.boiler = this.open"><summary>Steuerungen <span class="muted">(${need} nötig, ${(b.controls || []).length - need} zur Info)</span></summary>` +
     `<div class="scroll"><table class="ready-t"><tr><th>Steuerung</th><th>Wert</th><th class="rt-wide">Bereich</th><th>schreibbar</th><th></th></tr>${rows}</table></div></details>` +
-    `<p class="muted" style="margin:6px 0 0">Nur Anzeige. Was HeatPilot damit täte, steht in der Planung (docs/planung-vorlauf-ems.md); geschrieben wird erst mit einem eigenen Schalter in einer späteren Version.</p></div>`;
+    `<p class="muted" style="margin:6px 0 0">Nur Anzeige. Was HeatPilot damit täte, steht in der Planung (docs/planung-vorlauf-ems.md); geschrieben wird erst mit einem eigenen Schalter in einer späteren Version. ` +
+    `Ausnahme seit 0.38: das Warmwasser-Soll über Home Assistant – siehe „Warmwasser über HeatPilot“.</p></div>`;
 }
 
 // Desinfektion (0.36.3) in Einstellungen → Warmwasser (GET api/settings → disinfect): Tag („aus“ = kein Termin),
@@ -2515,6 +2578,216 @@ function applyDisinfect() {
   $("save-msg").className = ""; $("save-msg").textContent = `Desinfektion ${sg.day} ${sg.time} eingetragen – prüfen und speichern.`;
 }
 
+// ---------------------------------------------------------------- Warmwasser über HeatPilot (Weg W, 0.38)
+// Schalter „Warmwasser-Soll“ (Aus / Trockenlauf / HeatPilot setzt) mit Entität, Warnhinweis und Statusbox in
+// Einstellungen → Warmwasser (GET api/settings → dhw_control), Statuszeile in Heizen (api/heat → dhw) und Übersicht
+// (api/summary → dhw_control), „wieder einschalten“ (POST api/dhw/resume – schreibt selbst nichts), Block in „Bereit
+// für die Steuerung?“ (readiness.dhw). Die Texte kommen aus dem Backend, hier werden sie nur angeordnet.
+const DHW_LABEL = { aus: "Aus", trocken: "Trockenlauf", heatpilot: "HeatPilot setzt" };
+const DHW_NOTES = ["HA-Automation für das Speicher-Soll abschalten – zwei Schreiber gleichzeitig darf es nicht geben",
+  "Fällt HeatPilot aus, bleibt das zuletzt geschriebene Soll stehen – deshalb nie unter dem Minimum"];  // wie dhw_control
+const DROP = `<span class="dhw-ico">${ICON.drop}</span>`;
+const DHW_PAUSE = /^Warmwasser über HeatPilot pausiert/;  // Hinweis zur Pause: steht schon im Status
+// Statuszeile (as_dict → status): Platzhalter {since}/{next} mit Uhrzeiten in der Zeitzone des Browsers – wie alle
+// anderen Uhrzeiten hier; ältere Antworten ohne Vorlage: status_text
+const dhwStatus = (d) => d.status && d.status.text ? String(d.status.text).replace(/\{(\w+)\}/g, (m, k) => clock((d.status.times || {})[k]))
+  : String(d.status_text || "");
+const dhwDecision = (d) => d.decision_until ? `Haltezeit bis ${clock(d.decision_until)}` : d.decision;
+const dhwWarnings = (d) => (d.warnings || []).filter((w) => !(d.paused && DHW_PAUSE.test(w)));
+const dhwDot = (d) => d.paused || dhwWarnings(d).length || (d.writes && !d.entity) ? "dot-warn" : d.active ? "dot-ok" : "";
+let DHW_OPEN = false;  // Link „Einstellungen → Warmwasser“: nach dem Zeichnen der Einstellungen dorthin springen
+
+// Statuszeile für Heizen und Übersicht: bei „Aus“ nur, solange ein Hinweis gilt (z. B. nach dem Zurückschalten);
+// pausiert mit Knopf „wieder einschalten“, bei Problemen ein Link zu den Einstellungen
+function dhwLine(d, note = "") {
+  if (!d || (d.mode === "aus" && !dhwWarnings(d).length && !note)) return "";
+  const t = dhwStatus(d), pause = d.paused && d.mode === "heatpilot";
+  const text = (/^Warmwasser/.test(t) ? t : `Warmwasser-Soll: ${t}`) + (pause && d.paused_since ? ` · seit ${clock(d.paused_since)}` : "");
+  return `${readyDot(dhwDot(d))}${esc(text)}` + dhwWarnings(d).map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join("") +
+    (pause ? '<button class="btn small" onclick="dhwResume()">wieder einschalten</button>' : "") +
+    (dhwDot(d) === "dot-warn" ? '<a href="#" onclick="dhwOpenSettings();return false">Einstellungen → Warmwasser</a>' : "") +
+    (note ? `<span class="dhw-note">${esc(note)}</span>` : "");
+}
+function renderDhwLine(id, d, note = "") {
+  const box = $(id); if (!box) return;
+  const h = dhwLine(d, note);
+  box.hidden = !h; box.innerHTML = h;
+}
+async function dhwResume() {
+  try {
+    const j = await getJSON("api/dhw/resume", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    dhwUpdate(j.dhw, j.readiness, "Wieder eingeschaltet – HeatPilot entscheidet im nächsten Takt neu.");
+  } catch (e) { dhwUpdate(null, null, "Nicht eingeschaltet: " + (e.message || e)); }
+}
+// Neuer Stand nach „wieder einschalten“: überall zeichnen, wo der Warmwasser-Status steht
+function dhwUpdate(d, rd, note) {
+  d = d || (HEAT && HEAT.dhw) || (DHWC && DHWC.status) || null;
+  if (HEAT && d) { HEAT.dhw = d; if (HEAT.readiness && rd) HEAT.readiness.dhw = rd; }
+  if (DHWC && d) { DHWC.status = d; if (rd) DHWC.readiness = rd; }
+  renderDhwLine("heat-dhw", d, note); renderDhwLine("ov-dhw", d, note);
+  if ($("dhw-box") && DHWC) $("dhw-box").innerHTML = dhwBoxHtml(DHWC.status, DHWC.readiness, note);
+  if ($("ready-box") && HEAT && HEAT.readiness) renderReadyBox(HEAT.readiness);
+}
+function dhwOpenSettings() { DHW_OPEN = true; showTab("settings"); dhwScroll(); }
+function dhwScroll() {
+  const h = $("dhw-head"); if (!DHW_OPEN || !h) return;
+  DHW_OPEN = false;
+  const c = h.closest("details.card"); if (c) c.open = true;
+  h.scrollIntoView({ block: "start" });
+}
+
+// Abschnitt oben in Einstellungen → Warmwasser: Schalter, Entität (leer = erkannt), Warnhinweis, Statusbox
+function dhwSectionHtml(s, x) {
+  x = x || {};
+  const mode = DHW_LABEL[s.dhw_control] ? s.dhw_control : "aus", notes = (x.status || {}).notes || DHW_NOTES;
+  const radio = (m) => `<label><input type="radio" name="dhw_control" value="${m}" ${m === mode ? "checked" : ""} onchange="dhwModeHint()"> ${DHW_LABEL[m]}</label>`;
+  const input = `<input id="f-dhw_set_entity" list="dl-dhw" value="${esc(s.dhw_set_entity || "")}" placeholder="${esc(x.suggested || "number.…")}" autocomplete="off" oninput="dhwModeHint()">`;
+  return `<h3 class="sec-h" id="dhw-head" style="margin-top:0">Warmwasser-Soll über HeatPilot</h3>` +
+    `<p class="muted" style="margin:0 0 6px">HeatPilot kann das Speicher-Soll des Kessels selbst setzen – statt einer Automation in Home Assistant, ` +
+    `unabhängig vom Schalter unter „Steuerung“. Geschrieben wird nur über Home Assistant (<code>number.set_value</code>) auf die eine Entität unten, ` +
+    `nur ganze Grad zwischen Minimum und Maximum, nur bei Änderung ab 1 K, danach 5 min Haltezeit; 60 s später prüft HeatPilot, ob der Kessel den Wert zeigt.</p>` +
+    `<div class="seg seg3" id="f-dhw_control">${Object.keys(DHW_LABEL).map(radio).join("")}</div>` +
+    `<p class="hint" id="dhw-mode-hint" style="margin:6px 0 0"></p>` +
+    `<div class="form-grid" style="margin-top:10px">${field("Entität des Warmwasser-Solls", input, dhwEntityHint(s, x))}</div>` +
+    `<div class="warnbox" id="dhw-warn">${notes.map((n) => esc(n) + ".").join(" ")} Zurück auf „Aus“ oder „Trockenlauf“: HeatPilot schreibt nichts zurück – ` +
+    `der Kessel behält den letzten Wert, die Automation dann ggf. wieder einschalten.</div>` +
+    `<div class="dhw-box" id="dhw-box">${dhwBoxHtml(x.status, x.readiness)}</div>`;
+}
+// Unter dem Feld: woher die Entität kommt (eingestellt / erkannt), ihr Wert und ihre Grenzen in Home Assistant
+function dhwEntityHint(s, x) {
+  const rd = x.readiness || {}, sug = x.suggested, has = (v) => v !== null && v !== undefined;
+  const src = s.dhw_set_entity ? `Eingestellt${sug && sug !== s.dhw_set_entity ? ` – leer = erkannt: ${esc(sug)}` : ""}.`
+    : sug ? `Leer = erkannt: ${esc(sug)}.` : "Keine number-Entität fürs Warmwasser-Soll erkannt – bitte wählen (nur number.*, z. B. die von EMS-ESP).";
+  const info = rd.entity && rd.entity_ok ? ` ${esc(rd.entity_name || rd.entity)}: jetzt ${has(rd.value) ? degC(rd.value) : "–"}` +
+    (has(rd.entity_min) && has(rd.entity_max) ? ` · in Home Assistant ${fmt(rd.entity_min, 0)}–${fmt(rd.entity_max, 0)} °C` : "") : "";
+  return src + info + (rd.entity && rd.entity_problem ? ` <span class="msg-err">${esc(rd.entity_problem)}</span>` : "") +
+    (rd.entity && rd.entity_doubt ? ` <span class="msg-warn">${esc(rd.entity_doubt)}</span>` : "");
+}
+// Statusbox: Status, Kessel-Soll und Wunsch, was gerade entschieden wurde, letztes Schreiben und Prüfen, Hinweise, Pause
+function dhwBoxHtml(d, rd, note = "") {
+  if (!d) return '<span class="muted">Status nicht verfügbar</span>';
+  const has = (v) => v !== null && v !== undefined, lw = d.last_write, lc = d.last_check, dry = d.dry_last;
+  const facts = [has(d.current) ? `Kessel-Soll jetzt ${degC(d.current)}` : "Kessel-Soll unbekannt",
+    has(d.wish) ? `Empfehlung ${degC(d.wish)}${d.reason ? ` (${esc(d.reason)})` : ""}` : "",
+    d.mode !== "aus" && !d.paused && d.decision ? `Entscheidung: ${esc(dhwDecision(d))}` : ""].filter(Boolean);
+  const hist = [lw ? `zuletzt geschrieben ${clock(lw.time)}: ${has(lw.from) ? fmt(lw.from, 0) + " → " : ""}${lw.value} °C` : "",
+    lc ? `Prüfung ${clock(lc.time)}: ${lc.value} °C ${lc.ok ? "übernommen" : `nicht übernommen (${has(lc.seen) ? "Kessel zeigt " + degC(lc.seen) : "Kessel-Soll unbekannt"})`}` : "",
+    d.mode === "trocken" && dry ? `Trockenlauf zuletzt ${clock(dry.time)}: würde ${dry.value} °C schreiben` : ""].filter(Boolean);
+  const lv = rd ? READY[rd.level] || READY["nicht bereit"] : null;
+  return `<div class="ready-head">${readyDot(dhwDot(d))}<b id="dhw-status">${esc(dhwStatus(d))}</b></div>` +
+    `<p class="muted">${facts.join(" · ")}${hist.length ? `<br>${hist.join(" · ")}` : ""}</p>` +
+    dhwWarnings(d).map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join("") +
+    (d.paused ? `<p>Pausiert seit ${clock(d.paused_since)}${d.pause_reason ? ` (${esc(d.pause_reason)})` : ""} – bis du es wieder einschaltest, ` +
+      `auch nach dem Umschalten. <button class="btn small" id="dhw-resume" onclick="dhwResume()">wieder einschalten</button></p>` : "") +
+    (note ? `<span class="dhw-note">${esc(note)}</span>` : "") +
+    (rd ? `<p class="dhw-ready">${readyDot(lv.dot)}${esc(rd.headline)} <a href="#" onclick="dhwOpenReady();return false">Einzelheiten unter „Bereit für die Steuerung?“</a></p>` : "");
+}
+// Hinweis unter dem Schalter je Stellung; beim Zurückschalten von „HeatPilot setzt“: nichts wird zurückgeschrieben
+function dhwModeHint() {
+  const m = document.querySelector('input[name="dhw_control"]:checked'), box = $("dhw-mode-hint");
+  if (!m || !box) return;
+  const x = DHWC || {}, entity = ($("f-dhw_set_entity") || {}).value || x.suggested || "";
+  box.innerHTML = dhwModeText(m.value, (SET || {}).dhw_control, entity.trim(), x.status || {});
+}
+function dhwModeText(mode, saved, entity, st) {
+  const kept = st.current !== null && st.current !== undefined ? degC(st.current) : "das letzte Soll";
+  const back = saved === "heatpilot" && mode !== "heatpilot"
+    ? ` Beim Zurückschalten schreibt HeatPilot nichts zurück – der Kessel behält ${kept}; die HA-Automation ggf. wieder einschalten.` : "";
+  if (mode === "aus") return "Wie bisher: HeatPilot empfiehlt das Warmwasser-Soll nur (Übersicht, Vorschau) und schreibt nichts." + back;
+  if (mode === "trocken") return "HeatPilot rechnet in jedem Takt nach denselben Regeln und schreibt ins Protokoll (Reiter Heizen), " +
+    "was es schreiben würde – am Kessel ändert sich nichts." + back;
+  if (!entity) return '<span class="msg-err">Keine Entität für das Warmwasser-Soll – unten wählen, sonst schreibt HeatPilot nichts.</span>';
+  return `HeatPilot schreibt das Warmwasser-Soll auf <code>${esc(entity)}</code> – nach den Regeln oben. Vorher die HA-Automation ` +
+    "für das Speicher-Soll abschalten.";
+}
+// Umschalten auf „HeatPilot setzt“: einmal nachfragen – zwei Schreiber am Speicher-Soll darf es nicht geben
+function dhwConfirm(body) {
+  if (body.dhw_control !== "heatpilot" || (SET || {}).dhw_control === "heatpilot") return true;
+  return confirm("Ab jetzt schreibt HeatPilot das Warmwasser-Soll des Kessels.\n\nIst die Automation in Home Assistant, die bisher " +
+    "das Speicher-Soll setzt, abgeschaltet? Zwei Schreiber gleichzeitig darf es nicht geben.");
+}
+// Block „Warmwasser über HeatPilot“ in „Bereit für die Steuerung?“ (readiness.dhw, nur Anzeige – ändert die Stufe der
+// Raumsteuerung nicht); der Hinweis „HA-Automation abschalten“ steht sichtbar, solange in 24 h Fremdes kam
+function dhwReadyHtml(x, open) {
+  if (!x) return "";
+  const lv = READY[x.level] || READY["nicht bereit"], has = (v) => v !== null && v !== undefined;
+  const items = (cls, list) => (list || []).map((t) => `<li class="${cls}">${esc(t)}</li>`).join("");
+  const ok = (v, yes, no) => v ? `<span class="msg-ok">${yes}</span>` : `<span class="msg-err">${no}</span>`;
+  const lc = x.last_check, fl = x.foreign_last, list = items("block", x.blockers) + items("limit", x.limits) + items("note", x.notes);
+  const rows = [["Schalter", esc(DHW_LABEL[x.mode] || x.mode) + (x.writes ? "" : ' <span class="muted">– schreibt nicht</span>')],
+    ["Entität", (x.entity ? `<code>${esc(x.entity)}</code> <span class="muted">${esc(x.entity_source || "")}</span>` : "–") +
+      (x.entity_problem ? `<div class="msg-err">${esc(x.entity_problem)}</div>` : "")],
+    ["Wert", (has(x.value) ? degC(x.value) : "–") + (has(x.entity_min) && has(x.entity_max) ? ` <span class="muted">(${fmt(x.entity_min, 0)}–${fmt(x.entity_max, 0)} °C)</span>` : "")],
+    ["schreibbar laut EMS-ESP", x.writeable_polled && has(x.writeable) ? ok(x.writeable, "ja", "nein") : '<span class="muted">unbekannt – die Prüfung nach 60 s zeigt es</span>'],
+    ["letzte Prüfung", lc ? `${clock(lc.time)}: ${lc.value} °C ${ok(lc.ok, "übernommen", "nicht übernommen")}` : '<span class="muted">noch keine</span>'],
+    ["pausiert", x.paused ? `<span class="msg-err">ja</span> – ${esc(x.pause_reason || "")}${x.paused_since ? ` · seit ${esc(timeOf(x.paused_since))}` : ""}` : "nein"],
+    ["fremder Schreiber", fl ? `zuletzt ${esc(timeOf(fl.time))}: ${fmt(fl.from)} → ${fmt(fl.to)} °C · ${x.foreign_24h || 0}× in 24 h` : "in den letzten 24 h keiner"]];
+  return `<div class="ready-boiler" id="ready-dhw"><h3>Warmwasser über HeatPilot</h3><div class="ready-head">${readyDot(lv.dot)}<span id="ready-dhw-headline">${esc(x.headline)}</span></div>` +
+    (x.hint ? `<div class="warnbox" id="ready-dhw-hint">${esc(x.hint)}</div>` : "") +
+    `<details id="ready-dhw-details"${open ? " open" : ""} ontoggle="READY_SHOW.dhw = this.open"><summary>Einzelheiten <span class="muted">(Schalter: ${esc(DHW_LABEL[x.mode] || x.mode)})</span></summary>` +
+    (list ? `<ul class="ready-list">${list}</ul>` : "") +
+    `<div class="scroll"><table class="ready-t">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table></div></details>` +
+    `<p class="muted" style="margin:6px 0 0">Nur Anzeige – ändert die Stufe der Raumsteuerung nicht. Schalter und Entität unter Einstellungen → Warmwasser.</p></div>`;
+}
+function dhwOpenReady() {
+  READY_SHOW.dhw = true;
+  renderReadyBox(HEAT && HEAT.readiness);
+  const b = $("ready-dhw"), c = b && b.closest("details.card");
+  if (c) c.open = true;
+  if (b) b.scrollIntoView({ block: "start" });
+}
+
+// ---------------------------------------------------------------- Benachrichtigungen (0.38)
+// Ziele aus GET api/settings → notify.available: notify-Entitäten (notify.send_message) und -Dienste (z. B. die
+// Handy-App, auch bei älterem Home Assistant), Häkchen = gespeichert. Gesendet wird nur an gespeicherte Ziele –
+// „Testnachricht senden“ (POST api/notify/test) deshalb erst, wenn die Häkchen gespeichert sind.
+const NOTIFY_KIND = { entity: "Entität", service: "Dienst", fehlt: "fehlt in Home Assistant – abwählen" };
+function notifyHtml(n) {
+  if (!n) return '<p class="muted">Benachrichtigungen nicht verfügbar – startet das Add-on noch?</p>';
+  const rows = (n.available || []).map((a) => `<tr><td><input type="checkbox" class="n-on" data-id="${esc(a.id)}" ${a.selected ? "checked" : ""} onchange="notifySync()"></td>` +
+    `<td>${esc(a.name)}<div class="hint">${esc(a.id)}</div></td><td>${a.kind === "fehlt" ? `<span class="msg-err">${NOTIFY_KIND.fehlt}</span>` : esc(NOTIFY_KIND[a.kind] || a.kind)}` +
+    `${a.kind === "entity" ? '<div class="hint">über notify.send_message</div>' : ""}</td></tr>`).join("");
+  return `<p>Wohin HeatPilot Probleme meldet: Warmwasser-Soll nicht übernommen, Warmwasser über HeatPilot pausiert, anderer Schreiber am ` +
+    `Speicher-Soll, Thermostat-Schreibfehler ab drei in Folge. Je Ereignis eine Meldung und einmal „wieder in Ordnung“ – höchstens eine je ` +
+    `Art in ${n.repeat_h || 6} h, Titel „${esc(n.title || "HeatPilot")}“. Ohne Häkchen gibt es keine Meldungen.</p>` +
+    (rows ? `<div class="scroll"><table class="form notify-t" id="notify-list"><tr><th></th><th>Ziel</th><th>Art</th></tr>${rows}</table></div>`
+      : '<p class="muted" id="notify-list">Keine Ziele in Home Assistant gefunden – weder notify-Entitäten noch notify-Dienste (z. B. die Handy-App).</p>') +
+    (n.services_error ? `<p class="muted" id="notify-services">${esc(n.services_error)}</p>` : "") +
+    `<div class="row" style="margin-top:8px"><button class="btn small" id="notify-test" onclick="notifyTest()">Testnachricht senden</button><span class="hint" id="notify-msg"></span></div>` +
+    `<div class="notify-state" id="notify-state">${notifyState(n)}</div>`;
+}
+// Letzte Sendung und offene Probleme (die auch der Sensor binary_sensor.heatpilot_problem zeigt)
+function notifyState(n) {
+  const l = n.last, p = n.problems || [], errs = (l && l.errors) || [];
+  const last = l ? `Zuletzt ${esc(timeOf(l.ts * 1000))}: „${esc(l.text)}“ an ${(l.sent || []).length ? l.sent.map(esc).join(", ") : "niemand"}` +
+    (errs.length ? ` · <span class="msg-err">Fehler: ${errs.map(esc).join("; ")}</span>` : "") + "." : "Noch nichts gesendet.";
+  const sensor = "<code>binary_sensor.heatpilot_problem</code>";
+  return `<p class="muted">${last}</p>` + (p.length ? `<p class="muted">Gerade offen – ${sensor} ist an:</p>` +
+    `<ul class="cmp-facts">${p.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : `<p class="muted">Kein Problem offen – ${sensor} ist aus.</p>`);
+}
+// Testknopf nur mit gespeicherten Zielen und unveränderten Häkchen – sonst ginge der Test woandershin als gezeigt
+function notifySync() {
+  const btn = $("notify-test"), msg = $("notify-msg"); if (!btn || !msg || !NOTIFY) return;
+  const saved = [...(NOTIFY.targets || [])].sort(), now = [...document.querySelectorAll("#notify-list input.n-on:checked")].map((i) => i.dataset.id).sort();
+  const changed = saved.join("|") !== now.join("|");
+  btn.disabled = changed || !saved.length;
+  msg.className = "hint";
+  msg.textContent = changed ? "Häkchen geändert – erst speichern; die Testnachricht geht nur an gespeicherte Ziele."
+    : !saved.length ? "Erst Ziele wählen und speichern." : saved.length === 1 ? "Geht an das gespeicherte Ziel." : `Geht an die ${saved.length} gespeicherten Ziele.`;
+}
+async function notifyTest() {
+  const btn = $("notify-test"), msg = $("notify-msg");
+  btn.disabled = true; msg.className = "hint"; msg.textContent = "Sende …";
+  try {
+    const r = await fetch("api/notify/test", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const j = await readJSON(r), sent = j.sent || [], errs = j.errors || [];
+    msg.className = "hint " + (j.ok ? "msg-ok" : "msg-err");
+    msg.textContent = sent.length ? `Gesendet an ${sent.join(", ")}${errs.length ? ` · Fehler: ${errs.join("; ")}` : " – kommt sie an?"}`
+      : `Nicht gesendet: ${errs.join("; ") || "unbekannter Fehler"}`;
+  } catch (e) { msg.className = "hint msg-err"; msg.textContent = "Nicht gesendet: " + (e.message || e); }
+  btn.disabled = false;
+}
+
 function renderSettings() {
   const s = SET;
   const discovered = (role) => (DISC.boiler || {})[role] || (DISC.thermostat || {})[role] || "";
@@ -2556,11 +2829,12 @@ function renderSettings() {
       ${field("Nennleistung Kessel (kW)", num("f-boiler_nominal_kw", s.boiler_nominal_kw, "0.1"), "Typenschild, z. B. 18")}
       ${field("Kleinste Leistung (%)", num("f-boiler_min_power_pct", s.boiler_min_power_pct, "1"), "Untere Modulationsgrenze, z. B. 30")}
     </div>`) +
-    card("Warmwasser", `<div class="form-grid">
+    card("Warmwasser", dhwSectionHtml(s, DHWC) + `<h3 class="sec-h">Temperaturen</h3><div class="form-grid">
       ${field("Minimum (°C)", num("f-dhw_min_temp", s.dhw_min_temp, "1"), "Darunter nie, z. B. wenn niemand zu Hause ist")}
       ${field("Komfort (°C)", num("f-dhw_comfort_temp", s.dhw_comfort_temp, "1"), "Mindestens zu Beginn einer Nutzung")}
       ${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}
     </div>${disinfectHtml(s, DIS)}`) +
+    card("Benachrichtigungen", notifyHtml(NOTIFY)) +
     card("Urlaub", `<p>Im Urlaub lernt das Add-on keine Gewohnheiten. Ohne Uhrzeit beim Ende gilt die Standard-Rückkehrzeit. Kommt jemand per GPS sicher heim, zählt die GPS-Ankunft.</p>
       <div id="vac-list">${(s.vacations || []).map(vacRow).join("")}</div><button class="btn small" onclick="addVac()">+ Urlaub</button>
       <div class="form-grid" style="margin-top:10px">
@@ -2581,6 +2855,7 @@ function renderSettings() {
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
   $("f-gas_calorific_value").oninput = upd; $("f-gas_z_number").oninput = upd; upd();
   modeHint(); disinfectSync();
+  dhwModeHint(); notifySync(); dhwScroll();  // 0.38: Hinweis zum Schalter, Testknopf, Sprung aus Heizen/Übersicht
   renderReadyBox(HEAT && HEAT.readiness); loadReadiness();  // Zustandsbox (0.36.1): sofort der letzte Stand, dann frisch
 }
 
@@ -2628,6 +2903,12 @@ function collect() {
     return `${g(".v-sd")}${g(".v-st") ? " " + g(".v-st") : ""} - ${g(".v-ed")}${g(".v-et") ? " " + g(".v-et") : ""}`;
   }).filter(Boolean);
   out.overrides = [...document.querySelectorAll("input.ov")].filter((i) => i.value.trim()).map((i) => `${i.dataset.role}=${i.value.trim()}`);
+  // Weg W und Benachrichtigungen (0.38): Schalter, Entität (leer = erkannt), Ziele mit Häkchen – fehlt ein Teil, bleibt
+  // das Gespeicherte
+  const dc = document.querySelector('input[name="dhw_control"]:checked');
+  if (dc) out.dhw_control = dc.value;
+  if ($("f-dhw_set_entity")) out.dhw_set_entity = v("f-dhw_set_entity");
+  if ($("notify-list")) out.notify_targets = [...document.querySelectorAll("#notify-list input.n-on:checked")].map((i) => i.dataset.id);
   return out;
 }
 
@@ -2635,6 +2916,7 @@ async function saveSettings() {
   const msg = $("save-msg");
   msg.className = ""; msg.textContent = "Speichere …";
   const body = collect();
+  if (!dhwConfirm(body)) { msg.textContent = "Nicht gespeichert."; return; }
   // Leistungssensoren geändert (0.36): das Backend liest die Historie neu ein, die Nächte kommen erst danach
   const same = (k) => JSON.stringify([...new Set(body[k])]) === JSON.stringify((SET || {})[k] || []);
   const reload = !same("power_sensors") || !same("power_exclude");
@@ -2645,6 +2927,7 @@ async function saveSettings() {
   const note = saveNote(j);
   const hist = reload ? ' <span class="muted">Historie wird neu eingelesen – die gelernten Nachtzeiten erscheinen danach.</span>' : "";
   SET = null; await loadSettings(); load().catch(() => {});
+  loadHeat().catch(() => {});  // Statuszeile Warmwasser (0.38) im Heizen-Reiter mit dem neuen Schalter
   $("save-msg").className = "msg-ok"; $("save-msg").innerHTML = "Gespeichert und übernommen." + note + hist;
 }
 // Nach dem Speichern (0.35): bei mehreren Geräten in einem Raum, welches das Schlüsselgerät ist (Raumregler, sonst
@@ -2710,6 +2993,7 @@ async function loadSettings() {
   DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
   SLEEP = j.sleep || null;  // Nachtzeiten aus dem Stromverbrauch (0.36)
   DIS = j.disinfect || null;  // Desinfektion (0.36.3): Termin, Temperatur, Vorschlag
+  DHWC = j.dhw_control || null; NOTIFY = j.notify || null;  // 0.38: Weg W und Benachrichtigungen
   renderSettings();
 }
 

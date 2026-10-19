@@ -14,13 +14,15 @@ from .backfill import run_backfill
 from .control import Control
 from .controlloop import ControlLoop
 from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
+from .dhw_control import DhwControl, target_entity
 from .diagnostics import set_debug, setup_logging
 from .discovery import Registry, discover
 from .emsesp import EmsEsp
 from .engine import Engine
 from .ha_client import HAClient
 from .live import STEP_S as LIVE_STEP_S
-from .publisher import publish
+from .notify import Notifier
+from .publisher import publish, publish_problem
 from .store import Store
 from .web import make_app
 
@@ -129,13 +131,29 @@ class App:
                 if old.cfg.emsesp_host == eng.cfg.emsesp_host:  # Kesselsteuerungen bis zur nächsten Abfrage
                     eng.ems_controls, eng.ems_controls_ts = old.ems_controls, old.ems_controls_ts
             self.eng = eng
-            # Steuerung (0.34): Control kennt die Gruppen (Raumregler/Mitläufer) und die HA-Zustände
-            self.control = Control(self.ha, self.store, found.rooms, states=eng.states)
-            eng.control_loop = ControlLoop(eng, self.control)
-            if old is not None and old.control_loop is not None:
-                old.control_loop.stop()  # ein noch laufendes apply() der alten Schleife schreibt nichts mehr
+            self._build_control(eng, found, old)
             self._restart_emsesp()
             self.status = "läuft"
+
+    def _build_control(self, eng: Engine, found, old: Engine | None) -> None:
+        """Schreibstellen neu aufbauen: Control (Gruppen, HA-Zustände; seit 0.38 die eine Entität des
+        Warmwasser-Solls – nur mit Schalter „heatpilot“ – und die Benachrichtigungsziele), Regelschleife, Weg W und
+        Meldungen. Stand von Weg W und Meldungen geht von der alten Engine über; die alten Schleifen schreiben nichts
+        mehr."""
+        cfg = self.cfg
+        entity = target_entity(cfg, found, eng.states)
+        self.control = Control(self.ha, self.store, found.rooms, states=eng.states,
+                               dhw_entity=entity[0] if cfg.writes_dhw() else None,
+                               dhw_limits=(cfg.dhw_min_temp, cfg.dhw_max_temp), notify_targets=cfg.notify_targets)
+        eng.notifier = Notifier(self.store, self.control, cfg.notify_targets,
+                                carry=old.notifier if old is not None else None)
+        eng.control_loop = ControlLoop(eng, self.control)
+        eng.dhw_control = DhwControl(eng, self.control, eng.notifier, entity,
+                                     carry=old.dhw_control if old is not None else None)
+        if old is not None and old.control_loop is not None:
+            old.control_loop.stop()  # ein noch laufendes apply() der alten Schleife schreibt nichts mehr
+        if old is not None and old.dhw_control is not None:
+            old.dhw_control.stop()
 
     def _restart_emsesp(self) -> None:
         if self._ems_task:
@@ -228,14 +246,39 @@ async def main() -> None:
 
 
 async def live_loop(app: App) -> None:
-    """Alle 30 s die Live-Werte merken (Reiter „Live“)."""
+    """Alle 30 s die Live-Werte merken (Reiter „Live“) und eine fällige Prüfung des Warmwasser-Solls (0.38)."""
     while True:
         try:
             if app.eng is not None:
                 app.eng.record_live()
         except Exception:  # noqa: BLE001
             log.exception("Live-Werte nicht erfasst")
+        try:
+            await check_dhw(app)
+        except Exception:  # noqa: BLE001
+            log.exception("Prüfung des Warmwasser-Solls fehlgeschlagen")
         await asyncio.sleep(LIVE_STEP_S)
+
+
+async def check_dhw(app: App, now: float | None = None) -> bool:
+    """Weg W (0.38): 60 s nach dem Schreiben prüfen, ob der Kessel das Warmwasser-Soll zeigt – im 30-s-Takt, ohne den
+    Messtakt aufzuhalten. Danach Meldungen senden und den Problem-Sensor setzen. True, wenn geprüft wurde."""
+    eng = app.eng
+    if eng is None or eng.dhw_control is None or not eng.dhw_control.verify(time.time() if now is None else now):
+        return False
+    await send_notes(app, eng)
+    return True
+
+
+async def send_notes(app: App, eng: Engine) -> None:
+    """Vorgemerkte Meldungen schicken und den Problem-Sensor setzen (0.38) – Fehler nur loggen."""
+    if eng.notifier is None:
+        return
+    await eng.notifier.flush()
+    try:
+        await publish_problem(app.ha, eng.notifier.problem_state())
+    except Exception as err:  # noqa: BLE001
+        log.warning("Problem-Sensor nicht gesetzt: %s", err)
 
 
 async def run(app: App) -> None:
@@ -260,6 +303,9 @@ async def run(app: App) -> None:
             eng.tick()
             if eng.control_loop is not None:  # Steuerung (0.34): vorgemerkte Schreibvorgänge ausführen
                 await eng.control_loop.apply()
+            if eng.dhw_control is not None:  # Weg W (0.38): vorgemerktes Warmwasser-Soll schreiben
+                await eng.dhw_control.apply()
+            await send_notes(app, eng)  # Meldungen (0.38), Problem-Sensor
             summary = eng.summary()
             eng.note_changes(summary)
             await publish(app.ha, summary)

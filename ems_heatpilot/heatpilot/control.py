@@ -1,4 +1,5 @@
-"""Schreibzugriffe auf die Thermostate: Bedienung im Reiter „Heizen“ und Regelschleife (0.34).
+"""Schreibzugriffe über Home Assistant: Thermostate (Bedienung im Reiter „Heizen“, Regelschleife, seit 0.34),
+das Warmwasser-Soll (Weg W, seit 0.38) und Benachrichtigungen (seit 0.38). Die einzige Stelle, die Dienste aufruft.
 
 Erlaubt sind ausschließlich diese Aufrufe auf die ``climate.*``-Entitäten der gewählten Räume:
 
@@ -7,12 +8,21 @@ Erlaubt sind ausschließlich diese Aufrufe auf die ``climate.*``-Entitäten der 
 * ``climate.set_temperature`` – Soll eines Raums (Bedienung, Regelschleife, lokaler Boost),
 * ``climate.set_hvac_mode`` – Zeitplan (``auto``), Aus (``off``) oder Manuell (``heat``).
 
-Alles andere – andere Dienste und Entitäten außerhalb der gewählten Räume – wird hart abgewiesen.
+Dazu seit 0.38 genau ein Schreibweg zum Kessel: ``number.set_value`` auf die eine eingestellte Entität des
+Warmwasser-Solls (``dhw_entity``, nur mit Schalter „heatpilot“ gesetzt), ganzzahlig und nur zwischen Minimum und
+Maximum aus den Einstellungen (``set_dhw``; die Regel dazu steht in ``dhw_control``) – und nur, wenn die Entität
+taugt (``dhw_entity.entity_problem``: verfügbar, Einheit °C, kein Heizkreis, kein anderer Kesselwert wie das
+Vorlauf-Soll). Und Meldungen nur an die eingestellten Ziele (``notify``): notify-Entitäten über
+``notify.send_message``, ältere Dienste als ``notify.<dienst>``.
+
+Alles andere – andere Dienste, andere ``number``-Entitäten, Werte außerhalb der Grenzen, Entitäten außerhalb der
+gewählten Räume – wird hart abgewiesen (``PermissionError``).
 Ebenso seit 0.36.3 jeder Schreibvorgang auf den Heizkreis von EMS-ESP (``climate.…_thermostat_hc1``),
 auch wenn er als Raum gewählt ist: Gehört das Ziel zu einem Raum mit ``Room.ems`` (Gerät von EMS-ESP,
 siehe ``ems_lock``), wird es hart abgewiesen (``PermissionError``) – sonst ginge ``climate.set_temperature``
 über Home Assistant an den Regler. An EMS-ESP selbst schickt HeatPilot nur Lese-Anfragen (``emsesp.py``,
-GET). Jeder erfolgreiche Schreibvorgang landet im Protokoll ``control_log`` (Raum, Dienst, Wert, Grund).
+GET); auch das Warmwasser-Soll geht über Home Assistant. Jeder erfolgreiche Schreibvorgang landet im Protokoll
+``control_log`` (Raum bzw. Entität, Dienst, Wert, Grund).
 
 Ein Raum ist eine Gruppe (``discovery.Room``): mit Raumregler wird nur dieser beschrieben,
 sonst alle Ventile des Raums. Boost auf Knopfdruck: Tado-Cloud-Entitäten über den Tado-Timer,
@@ -27,12 +37,18 @@ from __future__ import annotations
 import logging
 import time
 
+from .config import NOTIFY_TARGET
+from .dhw_entity import entity_problem
 from .discovery import Room
 from .ems_lock import LOCK_TEXT
 
 log = logging.getLogger(__name__)
 
-ALLOWED = {("tado", "set_climate_timer"), ("climate", "set_temperature"), ("climate", "set_hvac_mode")}
+# ("number", "set_value") nur für das eingestellte Warmwasser-Soll (``dhw_entity``, Weg W seit 0.38)
+ALLOWED = {("tado", "set_climate_timer"), ("climate", "set_temperature"), ("climate", "set_hvac_mode"),
+           ("number", "set_value")}
+NOTIFY_ENTITY_SERVICE = "send_message"   # Aktion für notify-Entitäten (HA ab 2024.6)
+NOTIFY_MAX = 1000                        # Meldungen kürzen
 MODES = ("auto", "off", "heat")
 TEMP_MIN, TEMP_MAX = 5.0, 25.0
 DUR_MIN, DUR_MAX = 15, 12 * 60
@@ -58,11 +74,18 @@ def _num(value) -> float | None:
 
 
 class Control:
-    def __init__(self, ha, store, rooms: list, states: dict | None = None) -> None:
+    def __init__(self, ha, store, rooms: list, states: dict | None = None, dhw_entity: str | None = None,
+                 dhw_limits: tuple[float, float] | None = None, notify_targets=()) -> None:
         """``rooms``: ``discovery.Room`` (Gruppen) oder nur climate-IDs (jede ihr eigener Raum).
-        ``states``: HA-Zustände (``engine.states``), um Betriebsart und Soll vor dem Schreiben zu kennen."""
+        ``states``: HA-Zustände (``engine.states``), um Betriebsart und Soll vor dem Schreiben zu kennen.
+        ``dhw_entity``/``dhw_limits`` (0.38): die eine ``number``-Entität des Warmwasser-Solls und (Minimum, Maximum)
+        – nur mit Schalter „heatpilot“ gesetzt, sonst None (dann ist ``set_dhw`` gesperrt).
+        ``notify_targets`` (0.38): die eingestellten Benachrichtigungsziele (``notify.*``)."""
         self.ha = ha
         self.store = store
+        self.dhw_entity = dhw_entity if dhw_entity and dhw_entity.startswith("number.") else None
+        self.dhw_limits = dhw_limits
+        self.notify_targets: set[str] = {t for t in notify_targets or () if NOTIFY_TARGET.match(str(t))}
         self.groups: dict[str, Room] = {}
         for r in rooms:
             room = r if isinstance(r, Room) else Room(name=r, climate=r)
@@ -96,7 +119,7 @@ class Control:
         before = b.get("before")
         back = f"auf {before:g} °C " if isinstance(before, (int, float)) else ""
         return (f"{name}: Boost {b.get('temp', 0):g} °C aus einer früheren Version steht noch am Regler – HeatPilot "
-                f"schreibt nicht an den Kessel, Regler-Soll von Hand {back}zurückstellen")
+                f"schreibt nicht an den Heizkreis, Regler-Soll von Hand {back}zurückstellen")
 
     def notes(self) -> list[str]:
         """Hinweise für den Reiter „Heizen“: verworfene Boosts auf den Heizkreis von EMS-ESP, deren Soll noch am
@@ -161,13 +184,69 @@ class Control:
     async def _call(self, domain: str, service: str, entity_id: str, data: dict, reason: str = "Knopfdruck") -> None:
         if entity_id in self.ems:  # EMS-ESP nur lesen – auch als Raum gewählt (0.36.3)
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt: {LOCK_TEXT}")
-        if (domain, service) not in ALLOWED or entity_id not in self.rooms:
+        if (domain, service) not in ALLOWED:
+            raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt")
+        if domain == "number":
+            self._check_dhw(entity_id, data)  # nur das eingestellte Warmwasser-Soll, nur in den Grenzen (0.38)
+        elif entity_id not in self.rooms:
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt")
         await self.ha.call({"type": "call_service", "domain": domain, "service": service,
                             "service_data": data, "target": {"entity_id": entity_id}}, timeout=30)
         if service == "set_hvac_mode":
             reason = f"{reason} ({data.get('hvac_mode')})"
-        self.store.add_control_log(int(time.time()), entity_id, service, data.get("temperature"), reason)
+        self.store.add_control_log(int(time.time()), entity_id, service, data.get("temperature", data.get("value")),
+                                   reason)
+
+    def _check_dhw(self, entity_id: str, data: dict) -> None:
+        """Warmwasser-Soll (Weg W): nur die eine eingestellte ``number``-Entität, nur ``value``, ganzzahlig,
+        Minimum ≤ Wert ≤ Maximum (Einstellungen und, wenn HA sie meldet, die Grenzen der Entität); die Entität muss
+        taugen (``dhw_entity.entity_problem``: verfügbar, Einheit °C, kein Heizkreis, kein anderer Kesselwert).
+        Alles andere hart abgewiesen."""
+        if not self.dhw_entity or entity_id != self.dhw_entity or not self.dhw_limits:
+            raise PermissionError(f"number.set_value auf {entity_id} ist gesperrt – nur das eingestellte "
+                                  "Warmwasser-Soll bei „HeatPilot setzt“")
+        value = data.get("value")
+        lo, hi = self.dhw_limits
+        if set(data) != {"value"} or isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+            raise PermissionError(f"Warmwasser-Soll {value!r} gesperrt – nur ganze Grad von {lo:g} bis {hi:g} °C")
+        problem = entity_problem(entity_id, self._state(entity_id))
+        if problem:
+            raise PermissionError(f"{problem} – gesperrt")
+        attrs = self._state(entity_id).get("attributes") or {}
+        e_lo, e_hi = _num(attrs.get("min")), _num(attrs.get("max"))
+        if (e_lo is not None and value < e_lo) or (e_hi is not None and value > e_hi):
+            raise PermissionError(f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id} "
+                                  f"({e_lo:g}…{e_hi:g} °C)" if e_lo is not None and e_hi is not None
+                                  else f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id}")
+
+    async def set_dhw(self, value: int, reason: str) -> None:
+        """Warmwasser-Soll schreiben (Weg W, seit 0.38): ``number.set_value`` auf ``dhw_entity`` – die Prüfung
+        macht ``_call``/``_check_dhw``; ohne eingestellte Entität (Schalter nicht „heatpilot“) gesperrt."""
+        if not self.dhw_entity:
+            raise PermissionError("Warmwasser-Soll: Schreiben gesperrt (Schalter nicht „HeatPilot setzt“ oder keine "
+                                  "Entität)")
+        await self._call("number", "set_value", self.dhw_entity, {"value": value}, reason)
+
+    async def notify(self, target: str, title: str, message: str) -> None:
+        """Meldung an ein eingestelltes Ziel (seit 0.38). notify-Entität (steht in den Zuständen von HA):
+        ``notify.send_message`` mit ``entity_id``; sonst der Dienst ``notify.<name>`` (z. B. die Handy-App).
+        Andere Ziele hart abgewiesen. Kennt eine ältere HA den Titel bei ``send_message`` nicht, einmal ohne."""
+        if target not in self.notify_targets:
+            raise PermissionError(f"Benachrichtigung an {target} ist gesperrt – nur eingestellte Ziele")
+        message = str(message)[:NOTIFY_MAX]
+        if target in self.states:
+            payload = {"type": "call_service", "domain": "notify", "service": NOTIFY_ENTITY_SERVICE,
+                       "service_data": {"message": message, "title": title}, "target": {"entity_id": target}}
+            try:
+                await self.ha.call(payload, timeout=30)
+            except Exception as err:  # noqa: BLE001 – HA 2024.6/2024.7 kennen „title“ bei send_message nicht
+                if "title" not in str(err) and "extra keys" not in str(err):
+                    raise  # anderer Fehler (Zeitüberlauf, Verbindung): nicht doppelt schicken
+                log.debug("notify.send_message mit Titel abgelehnt (%s) – ohne Titel", err)
+                await self.ha.call({**payload, "service_data": {"message": f"{title}: {message}"}}, timeout=30)
+            return
+        await self.ha.call({"type": "call_service", "domain": "notify", "service": target.split(".", 1)[1],
+                            "service_data": {"message": message, "title": title}}, timeout=30)
 
     async def _ensure_heat(self, entity_id: str, reason: str) -> None:
         """Vor einem Soll: Betriebsart ``heat`` sicherstellen (HomeKit-Räume stehen sonst evtl. auf ``off``,

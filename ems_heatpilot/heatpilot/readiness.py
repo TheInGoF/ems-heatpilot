@@ -16,17 +16,26 @@ einstellbar), 2. Schreibfehler der Regelschleife, 3. Raummodell plausibel, 4. So
 Der Abschnitt ``boiler`` sagt, ob EMS-ESP alle Kesselsteuerungen hätte, die eine spätere Kesselsteuerung
 bräuchte – nur Anzeige. Er ändert die Stufe der Raumsteuerung nicht: Tado braucht keinen Kessel. Seit 0.36.3
 ist die Desinfektion (``wwdisinfecting``) dort nötig, sobald ein Desinfektionstermin eingestellt ist. Der
-Heizkreis von EMS-ESP als Raum (``Room.ems``) ist immer „nicht dabei“ – HeatPilot schreibt nicht an den Kessel.
+Heizkreis von EMS-ESP als Raum (``Room.ems``) ist immer „nicht dabei“ – HeatPilot schreibt nicht an den Heizkreis.
+
+Seit 0.38 sagt der Abschnitt ``dhw`` („Warmwasser über HeatPilot“, Weg W), ob HeatPilot das Warmwasser-Soll setzen
+kann: Entität gefunden und tauglich (``dhw_entity``: number mit °C, kein Heizkreis, kein anderer Kesselwert; ein Name
+ohne Warmwasser-Hinweis ist eine Einschränkung), schreibbar laut EMS-ESP (``wwseltemp``), Schalterstand, letzte
+Prüfung, Pause, fremder Schreiber, Kessel-Soll unklar (Entität und EMS-ESP verschieden) und ein Minimum unter 50 °C
+ohne Desinfektionstermin (Legionellen) – mit dem Hinweis „HA-Automation für das Speicher-Soll abschalten“, solange in
+den letzten 24 h fremde Änderungen kamen. Dieselben Hindernisse hält ``DhwControl.blocker`` beim Schreiben ein. Auch
+er ändert die Stufe der Raumsteuerung nicht. Texte ohne Uhrzeit des Add-ons – Zeiten als ISO-Felder.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from . import guards
+from . import dhw_control, dhw_entity, guards
 from .controlloop import MAX_FAILS, preheat_hours, reach_c
 from .emsesp import BOILER_CONTROLS
 from .ems_lock import LOCK_TEXT
+from .values import num
 
 LEVELS = ("bereit", "eingeschränkt", "nicht bereit")
 ROOM_STATES = ("bereit", "akzeptiert", "lernt", "nicht erreichbar", "nicht dabei")
@@ -38,6 +47,8 @@ TARGET_TEMPERATURE = 1     # Home Assistant: ClimateEntityFeature.TARGET_TEMPERA
 # Desinfektion (0.36.3): mit eingestelltem Termin ist diese Kesselsteuerung nötig
 DISINFECT_CONTROL = "wwdisinfecting"
 DISINFECT_NOTE = "Desinfektion braucht WWK Desinfizieren (schreibbar)"
+# Weg W (0.38): Minimum des Warmwasser-Solls darunter – Legionellen, nur mit regelmäßiger Desinfektion
+HYGIENE_C = 50.0
 
 
 def _num(value: float) -> str:
@@ -146,7 +157,7 @@ def boiler(eng) -> dict:
         text = "noch nicht abgefragt" + ("" if eng.ems else " – EMS-ESP antwortet bisher nicht")
     elif not missing:
         text = (f"Alle {n_required} nötigen Steuerungen vorhanden und schreibbar – eine Kesselsteuerung wäre "
-                "möglich (nicht gebaut, HeatPilot schreibt nichts)")
+                "möglich (nicht gebaut; am Kessel schreibt HeatPilot nur das Warmwasser-Soll, mit „HeatPilot setzt“)")
     else:
         text = "Es fehlen: " + ", ".join(missing)
     return {
@@ -319,4 +330,101 @@ def assess(eng, now_ts: int) -> dict:
         "counts": {"managed": managed, "writable": writable, "models_ok": models_ok, "unreachable": unreachable,
                    "accepted": len(accepted), "learning": len(learning)},
         "boiler": boiler(eng),
+        "dhw": dhw(eng, now_ts),
+    }
+
+
+def _dhw_entity(eng, entity: str | None, cfg) -> tuple[dict, list[str], list[str]]:
+    """Entität des Warmwasser-Solls: Angaben (Name, Wert, Grenzen), Hindernisse, Einschränkungen."""
+    state = eng.states.get(entity) if entity else None
+    attrs = (state or {}).get("attributes") or {}
+    problem = dhw_entity.entity_problem(entity, state, eng.found)
+    lo, hi = num(attrs.get("min")), num(attrs.get("max"))
+    info = {"entity_ok": problem is None, "entity_problem": problem,
+            "entity_name": attrs.get("friendly_name") or entity, "entity_min": lo, "entity_max": hi,
+            "entity_step": num(attrs.get("step")), "unit": attrs.get("unit_of_measurement")}
+    doubt = dhw_entity.entity_doubt(entity, state) if problem is None else None
+    info["entity_doubt"] = doubt
+    blockers, limits = ([problem] if problem else []), ([doubt] if doubt else [])
+    if problem is None and ((lo is not None and cfg.dhw_min_temp < lo) or (hi is not None and cfg.dhw_max_temp > hi)):
+        limits.append(f"Minimum…Maximum der Einstellungen ({_num(cfg.dhw_min_temp)}–{_num(cfg.dhw_max_temp)} °C) "
+                      f"geht über die Grenzen von {entity} hinaus ({_num(lo if lo is not None else cfg.dhw_min_temp)}–"
+                      f"{_num(hi if hi is not None else cfg.dhw_max_temp)} °C) – solche Werte weist HeatPilot ab")
+    return info, blockers, limits
+
+
+def _dhw_hygiene(cfg) -> tuple[list[str], list[str]]:
+    """Minimum unter ``HYGIENE_C``: HeatPilot schreibt es wirklich an den Kessel, und bei einem Ausfall bleibt es
+    stehen. Ohne Desinfektionstermin eine Einschränkung, mit Termin nur ein Hinweis. (Einschränkungen, Hinweise)"""
+    if cfg.dhw_min_temp >= HYGIENE_C:
+        return [], []
+    text = (f"Minimum {_num(cfg.dhw_min_temp)} °C liegt unter {_num(HYGIENE_C)} °C – HeatPilot schreibt so tiefe Werte "
+            "wirklich an den Kessel, und bei einem Ausfall bleiben sie stehen (Legionellen)")
+    if getattr(cfg, "dhw_disinfect_day", ""):
+        return [], [text + "; die wöchentliche Desinfektion ist eingetragen"]
+    return [text + " – nur mit regelmäßiger Desinfektion (Termin unter Einstellungen → Warmwasser)"], []
+
+
+def _iso(ts) -> str | None:
+    return None if ts is None else datetime.fromtimestamp(ts).astimezone().isoformat()
+
+
+def _dhw_state(eng, ctl, now_ts: int) -> tuple[list[str], list[str], list[str]]:
+    """Laufender Stand von Weg W: schreibbar laut EMS-ESP, Pause, letzte Prüfung, Kessel-Soll unklar, fremde
+    Änderungen, Minimum (Hygiene). (Hindernisse, Einschränkungen, Hinweise) – Texte ohne Uhrzeit."""
+    cfg, st = eng.cfg, ctl.state if ctl is not None else {}
+    blockers, limits, notes = [], [], []
+    writeable = dhw_entity.boiler_control(eng)["writeable"]
+    if writeable is False:
+        blockers.append(dhw_entity.write_blocked(eng))
+    elif writeable is None:
+        notes.append("Ob EMS-ESP das Warmwasser-Soll schreiben lässt, ist unbekannt"
+                     + ("" if cfg.emsesp_host else " (EMS-ESP nicht eingerichtet)") + " – die Prüfung nach 60 s zeigt es")
+    paused, lc = st.get("paused"), st.get("last_check")
+    if paused:
+        blockers.append(f"Pausiert ({paused['reason']}) – prüfen und „wieder einschalten“")
+    if lc and not lc.get("ok"):
+        limits.append(f"Letzte Prüfung: {lc['value']} °C nicht übernommen")
+    r = ctl.readings() if ctl is not None else {}
+    if r.get("unclear"):
+        limits.append(f"Kessel-Soll unklar: Home Assistant zeigt {_num(r['ha'])} °C, EMS-ESP {_num(r['ems'])} °C – "
+                      "HeatPilot schreibt erst, wenn beide gleich sind")
+    foreign = [t for t in st.get("foreign") or [] if t > now_ts - dhw_control.HINT_S]
+    if foreign:
+        limits.append(f"Fremde Änderungen am Speicher-Soll in den letzten 24 h: {len(foreign)}")
+    hyg_limits, hyg_notes = _dhw_hygiene(cfg)
+    return blockers, limits + hyg_limits, notes + hyg_notes
+
+
+def dhw(eng, now_ts: int) -> dict:
+    """Warmwasser über HeatPilot (Weg W, 0.38) – nur Anzeige, ändert die Stufe der Raumsteuerung nicht."""
+    cfg, ctl = eng.cfg, getattr(eng, "dhw_control", None)
+    entity, source = ((ctl.entity_id, ctl.entity_source) if ctl is not None
+                      else dhw_entity.target_entity(cfg, eng.found, eng.states))
+    st = ctl.state if ctl is not None else {}
+    info, blockers, limits = _dhw_entity(eng, entity, cfg)
+    more_blockers, more_limits, notes = _dhw_state(eng, ctl, now_ts)
+    blockers, limits = blockers + more_blockers, limits + more_limits
+    notes.append(dhw_control.HINT_FAILSAFE)
+    mode, writes = cfg.dhw_control, cfg.writes_dhw()
+    level = "nicht bereit" if blockers else ("eingeschränkt" if limits else "bereit")
+    if blockers:
+        headline = f"Nicht bereit – {blockers[0]}."
+    elif limits:
+        headline = ("Läuft – eingeschränkt: " if writes else "Eingeschränkt bereit – ") + limits[0] + "."
+    else:
+        headline = f"{'Läuft' if writes else 'Bereit'} – {info['entity_name']} schreibbar."
+    paused, lc, fl = st.get("paused"), st.get("last_check"), st.get("foreign_last")
+    bc = dhw_entity.boiler_control(eng)
+    foreign = [t for t in st.get("foreign") or [] if t > now_ts - dhw_control.HINT_S]
+    return {
+        "level": level, "headline": headline, "mode": mode, "writes": writes,
+        "entity": entity, "entity_source": source, **info, "value": ctl.current() if ctl is not None else None,
+        "writeable": bc["writeable"], "writeable_polled": bc["polled"],
+        "last_check": None if not lc else {**lc, "time": _iso(lc["ts"])},
+        "paused": bool(paused), "pause_reason": (paused or {}).get("reason"),
+        "paused_since": _iso(paused["ts"]) if paused else None,
+        "foreign_last": None if not fl else {**fl, "time": _iso(fl["ts"])},
+        "foreign_24h": len(foreign), "hint": dhw_control.HINT_AUTOMATION if foreign else None,
+        "blockers": blockers, "limits": limits, "notes": notes,
     }

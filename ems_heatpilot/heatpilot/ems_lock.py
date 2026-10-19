@@ -2,9 +2,9 @@
 
 EMS-ESP meldet den Heizkreis des Reglers als climate-Entität (``climate.thermostat_hc1``). Wählt jemand sie als
 Raum mit „macht mit“, ginge ``climate.set_temperature`` über Home Assistant an den Regler – das widerspricht
-„EMS-ESP nur lesen“. Hier steht, woran HeatPilot diesen Heizkreis erkennt; ``discovery`` setzt damit
-``Room.ems`` (der Raum macht nie mit), ``control`` weist jeden Schreibvorgang darauf hart ab, ``readiness``
-nennt ihn „nicht dabei“.
+„EMS-ESP nur lesen“ (am Kessel schreibt HeatPilot seit 0.38 nur das Warmwasser-Soll, siehe ``dhw_control``).
+Hier steht, woran HeatPilot diesen Heizkreis erkennt; ``discovery`` setzt damit ``Room.ems`` (der Raum macht nie
+mit), ``control`` weist jeden Schreibvorgang darauf hart ab, ``readiness`` nennt ihn „nicht dabei“.
 
 Erkannt wird am Gerät laut Geräteregistry, nicht am Namen: Tado-Zonen und HomeKit-Ventile heißen oft auch
 „…_thermostat“ und bleiben beschreibbar. Nur wenn Home Assistant kein Gerät kennt, zählt der Name – und nur bei
@@ -28,7 +28,7 @@ EMS_DEVICE_TEXT = "ems-esp"
 EMS_MANUFACTURER = "proddy"
 EMS_PLATFORM = "mqtt"
 # Hinweis für Oberfläche, Protokoll und Bereitschaft
-LOCK_TEXT = "Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel"
+LOCK_TEXT = "Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Heizkreis"
 
 
 def ems_device(dev: dict | None) -> bool:

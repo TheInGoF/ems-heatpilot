@@ -22,7 +22,8 @@ BOILER_ROLES: dict[str, tuple[str, ...]] = {
     "heating_active": ("heatingactive", "heating_active"),
     "dhw_active": ("dhw_charging", "wwcharging", "dhw_active", "dhw_chargepump", "wwchargepump", "dhw_charge_pump",
                    "dhw_3wayvalve"),
-    "dhw_seltemp": ("dhw_seltemp", "dhw_selected_temperature"),
+    # Speicher-Soll; ältere EMS-ESP (vor 3.6) melden es als „wwseltemp“ (0.38, Weg W)
+    "dhw_seltemp": ("dhw_seltemp", "dhw_selected_temperature", "wwseltemp"),
     "dhw_temp": ("dhw_curtemp", "dhw_current_intern_temperature"),
     "boiler_outdoor": ("outdoortemp", "outside_temperature"),
     "min_period": ("burnminperiod", "burner_min_period"),

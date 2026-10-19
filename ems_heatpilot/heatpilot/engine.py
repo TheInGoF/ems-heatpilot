@@ -1,13 +1,15 @@
 """Herzstück: Zustände sammeln, Modelle lernen, Auswertungen berechnen.
 
-Phase 1 = Beobachten: Das Add-on liest nur und schreibt nichts an die Therme.
-Es veröffentlicht eigene ``sensor.heatpilot_*``-Sensoren und eine Weboberfläche.
+Beobachten ist der Kern: Das Add-on liest, lernt und veröffentlicht eigene ``sensor.heatpilot_*``-Sensoren und
+eine Weboberfläche. Geschrieben wird nur über ``control.Control`` – das Raum-Soll der Thermostate (Steuerung, 0.34)
+und, nur mit eigenem Schalter, das Warmwasser-Soll des Kessels (Weg W, 0.38, ``dhw_control``).
 
 Diese Datei ist der Kern: ``Engine`` baut die Modelle auf, nimmt Zustände an, treibt den Takt und
 speichert. Die Arbeit steckt nach Thema in Mixins – Messpunkt (``engine_sample``), Kessel live
 (``engine_boiler``), Warmwasser (``engine_dhw``), Lernen (``engine_learn``) und Auswertung
 (``engine_summary``); die Wertehelfer stehen in ``values``. Seit 0.37 merkt sich der Takt stündlich den Plan der
-Vorschau (``preview_log``, Trockenlauf – nur Anzeige).
+Vorschau (``preview_log``, Trockenlauf – nur Anzeige). Seit 0.38 prüft der Takt nach ``dhw_step`` das Warmwasser-Soll
+(``dhw_control.plan`` – merkt einen Schreibvorgang nur vor, geschrieben wird danach in ``main``).
 """
 
 from __future__ import annotations
@@ -58,6 +60,8 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.found = found
         self.states: dict[str, dict] = {}
         self.ems: dict[str, dict] = {}  # direkt von EMS-ESP gelesen (optional)
+        # Zeit der letzten Antwort von EMS-ESP (0.38): Weg W nimmt EMS-ESP-Werte nur frisch (dhw_control.readings)
+        self.ems_ts: float | None = None
         # Kesselsteuerungen laut EMS-ESP (seit 0.36.1, nur Anzeige): {Kurzname: {found, writeable, value …}},
         # main.poll_emsesp liest sie beim Start und stündlich; ohne EMS-ESP bleibt es leer
         self.ems_controls: dict[str, dict] = {}
@@ -118,6 +122,8 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         off = store.query("SELECT MAX(ts) AS t FROM burner_events WHERE state = 0")
         self._last_off_ts: float | None = off[0]["t"] if off else None
         self.control_loop = None  # controlloop.ControlLoop, von main gesetzt (Steuerung seit 0.34)
+        self.dhw_control = None   # dhw_control.DhwControl, von main gesetzt (Weg W seit 0.38)
+        self.notifier = None      # notify.Notifier, von main gesetzt (Meldungen, Problem-Sensor seit 0.38)
         self._live_entities = {
             *found.climate_ids(),
             *(found.boiler.get(k) for k in ("burner_on", "burner_power", "dhw_active", "min_period")),
@@ -142,7 +148,9 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
             self.update_live()
 
     def set_ems(self, values: dict[str, dict]) -> None:
+        """Neue Werte von EMS-ESP (main.poll_emsesp, nur bei einer Antwort) – mit Zeitstempel ``ems_ts``."""
         self.ems = values
+        self.ems_ts = time.time()
         self.update_live()
 
     def _val(self, entity_id: str | None):
@@ -203,6 +211,12 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.store.add_room_samples((ts, *r) for r in rooms)
         self.store.add_person_samples((ts, *p) for p in persons)
         self.dhw_step(ts, sample)
+        if self.dhw_control is not None:  # Weg W (0.38): Warmwasser-Soll prüfen, ggf. vormerken – schreibt nichts
+            try:
+                self.dhw_control.plan(ts, sample, now=now_ts)
+            except Exception:  # noqa: BLE001 – Lernen und Raumsteuerung laufen weiter, es wird nichts geschrieben
+                self.dhw_control.pending = None
+                log.exception("Warmwasser-Soll: Takt fehlgeschlagen")
         self.update_sleep(now_ts)  # Nachtzeiten aus dem Strom (0.36) – vor dem Wunschzustand, stündlich
         if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
             self.control_loop.plan(ts, sample, rooms)

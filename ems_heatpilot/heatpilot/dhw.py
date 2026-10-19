@@ -161,6 +161,11 @@ class DhwModel:
         return (1 - w) * self.hit_daily[hour] + w * self.hit[weekday * 24 + hour]
 
     @property
+    def special_running(self) -> bool:
+        """Läuft gerade eine Sonderladung (Legionellen, Einmalladung, weit über das Soll) samt Nachlauf? (0.38)"""
+        return bool(self._charge and self._charge.get("special"))
+
+    @property
     def last_special(self) -> datetime | None:
         """Ende der zuletzt erkannten Sonderladung (Legionellenschaltung, Einmalladung) – None, wenn noch keine."""
         return self._last_special

@@ -16,7 +16,9 @@ Geschrieben wird nur bei einer Änderung des Wunsch-Sollwerts (Phasenwechsel), n
 Hat jemand von Hand gedreht (Soll ≠ zuletzt geschrieben, auch „aus“), bleibt das bis zum nächsten
 Phasenwechsel – dann schreibt HeatPilot den Wunschzustand auch, wenn er sich dabei nicht ändert
 (vorheizen → komfort). Pause hält alle Schreibvorgänge an; ein Boost, der in der Pause abläuft,
-endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS`` Hinweis.
+endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS`` Hinweis – seit 0.38 auch als
+Meldung über die Benachrichtigungsziele und im Problem-Sensor (``notify``), einmal je Ereignis; der erste Erfolg
+danach meldet „wieder in Ordnung“.
 ``plan()`` läuft im Takt der Engine (nach ``dhw_step``) und sammelt die Schreibvorgänge,
 ``apply()`` führt sie danach aus (asynchron, nur über ``Control``). ``stop()`` (main.build beim
 Neuaufbau) hält ein noch laufendes ``apply()`` an, damit die alte Schleife nicht weiterschreibt.
@@ -33,6 +35,8 @@ from typing import NamedTuple
 
 from . import guards
 from .control import TEMP_MAX, TEMP_MIN
+from .dhw_control import ACTIONS as DHW_ACTIONS
+from .dhw_control import LOG_NAME as DHW_LOG_NAME
 from .presence import arrival_unknown, next_arrival
 
 log = logging.getLogger(__name__)
@@ -47,6 +51,7 @@ PAUSE_MAX_H = 48
 LOG_SHOW = 20             # Protokollzeilen im Heizen-Reiter
 KV_STATE = "control.state"
 KV_PAUSE = "control.pause_until"
+NOTIFY_KEY = "room_write_failed:"  # + climate: Schreibfehler eines Raums ab MAX_FAILS (notify, seit 0.38)
 
 
 @dataclass
@@ -257,6 +262,7 @@ class ControlLoop:
             if self.state:  # Schalter zurück auf beobachten: Schreibzustand vergessen
                 self.state = {}
                 self.store.put(KV_STATE, {})
+            self._settle_problems()
             return
 
         for room in eng.found.rooms:
@@ -297,6 +303,35 @@ class ControlLoop:
                          "retry_at": None if not retry_at or ts >= retry_at else _iso(local(retry_at))})
         self.state = {c: s for c, s in self.state.items() if c in self.rooms}
         self.store.put(KV_STATE, self.state)
+        self._settle_problems()
+
+    # ------------------------------------------------------------------ Meldungen (0.38)
+    def _notifier(self):
+        return getattr(self.eng, "notifier", None)
+
+    def _fail_text(self, climate: str, fails: int) -> str:
+        room = self.eng.found.room_of(climate)
+        return f"{room.name if room else climate}: {fails} Schreibfehler in Folge – Thermostat prüfen"
+
+    def _settle_problems(self) -> None:
+        """Offene Schreibfehler-Meldungen abgleichen: Räume ohne ``MAX_FAILS`` Fehler (entfernt, macht nicht mehr mit,
+        Schalter beobachten) still schließen."""
+        n = self._notifier()
+        if n is not None:
+            keep = {NOTIFY_KEY + c: self._fail_text(c, int(s.get("fails", 0)))
+                    for c, s in self.state.items() if int(s.get("fails", 0)) >= MAX_FAILS}
+            n.settle(NOTIFY_KEY, keep)
+
+    def _report(self, climate: str, fails: int) -> None:
+        """Nach einem Schreibvorgang: ab ``MAX_FAILS`` Fehlern in Folge melden, nach Erfolg „wieder in Ordnung“."""
+        n = self._notifier()
+        if n is None:
+            return
+        if fails >= MAX_FAILS:
+            n.problem(NOTIFY_KEY + climate, self._fail_text(climate, fails))
+        elif fails == 0:
+            room = self.eng.found.room_of(climate)
+            n.solved(NOTIFY_KEY + climate, f"{room.name if room else climate}: Thermostat nimmt das Soll wieder an")
 
     async def apply(self) -> None:
         """Vorgemerkte Schreibvorgänge ausführen – nur über Control (erlaubte Dienste, gewählte Räume)."""
@@ -314,12 +349,14 @@ class ControlLoop:
                 st.pop("retry_at", None)
                 info.update({"last_written": setpoint, "errors": 0, "retry_at": None})
                 log.info("HeatPilot: %s → %.1f °C (%s)", climate, setpoint, reason)
+                self._report(climate, 0)
             except Exception as err:  # noqa: BLE001 – loggen, später erneut
                 st["fails"] = int(st.get("fails", 0)) + 1
                 st["retry_at"] = now + RETRY_MIN * 60
                 info.update({"errors": st["fails"], "retry_at": _iso(datetime.fromtimestamp(st["retry_at"]).astimezone())})
                 log.warning("HeatPilot: %s nicht auf %.1f °C gesetzt (%s) – Versuch %d, erneut in %d min",
                             climate, setpoint, err, st["fails"], RETRY_MIN)
+                self._report(climate, st["fails"])
         for climate, setpoint in restores:
             if self.stopped:
                 break  # die neue Schleife übernimmt den abgelaufenen Boost (steht noch in kv)
@@ -381,8 +418,11 @@ class ControlLoop:
             "hint": ("Zurück zu Tado nur über den Schalter in den Einstellungen; danach in der Tado-App den "
                      "Zeitplan fortsetzen. Fällt HeatPilot aus, bleibt das zuletzt geschriebene Soll stehen."
                      if managing else None),
+            # seit 0.38 auch die Zeilen des Warmwasser-Solls (Weg W): kind „dhw“, Name „Warmwasser-Soll“
             "log": [{**row, "time": local(row["ts"]).isoformat(),
-                     "name": names.get(row["room"]) or names.get(self._key_of(row["room"]), row["room"])}
+                     **({"kind": "dhw", "name": DHW_LOG_NAME} if row["action"] in DHW_ACTIONS else
+                        {"kind": "room",
+                         "name": names.get(row["room"]) or names.get(self._key_of(row["room"]), row["room"])})}
                     for row in self.store.control_log(LOG_SHOW)],
             "rooms": self.rooms,
         }
