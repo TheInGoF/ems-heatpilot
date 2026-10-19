@@ -59,10 +59,11 @@ VALVE_DRY_KEEP_DAYS = 90    # Ventil-Trockenlauf (0.39) so lange aufheben
 VALVE_SUBST_KEEP_DAYS = 90  # Ventil-Ersatzwerte (0.39): Sensor still, Ventil aus hvac_action – so lange merken
 # Ventil-Trockenlauf (0.39) je Eintrag: Regel (drosseln/gemeinsam), Aktion (senken/anheben/zurück), was HeatPilot
 # geschrieben hätte und warum, die Schätzung (nur mit belastbaren Modellen; pred_over_k: vorhergesagtes Überschwingen
-# ohne Eingriff, zum Nachprüfen) und später, was wirklich geschah
+# ohne Eingriff, zum Nachprüfen) und später, was wirklich geschah. Seit 0.40 ``written`` = 1: wirklich geschrieben
+# (Ventile führen, ``valve_control``) – dann ist pred_over_k das vorhergesagte Überschwingen mit dem Eingriff
 VALVE_DRY_COLS = ("ts", "room", "rule", "action", "setpoint", "base", "temp", "valve", "eta_min", "valve_pred",
                   "est_k", "est_starts", "reliable", "managed", "reason", "starts_h", "act_over_k", "act_starts",
-                  "checked", "pred_over_k")
+                  "checked", "pred_over_k", "written")
 # Trockenlauf (0.37) je Stunde: Plan (flow, heating, dhw, t_out aus SCHEMA) und dazu Schreibvorgänge des Plans,
 # nach der Stunde der Ist-Wert (Mittel der Messpunkte, Anteil Heizbetrieb an), dessen Wechsel und die Zahl der Messpunkte
 PREVIEW_COLS = ("w_flow", "w_heating", "w_dhw", "act_flow", "act_heating", "act_dhw",
@@ -115,6 +116,9 @@ class Store:
         for col in PREVIEW_COLS:
             if col not in have:
                 self.db.execute(f"ALTER TABLE preview_log ADD COLUMN {col} REAL")
+        have = {r["name"] for r in self.db.execute("PRAGMA table_info(valve_dry_log)")}
+        if "written" not in have:  # 0.40: Ventile führen – alte Einträge sind Trockenlauf (leer = nicht geschrieben)
+            self.db.execute("ALTER TABLE valve_dry_log ADD COLUMN written INTEGER")
         self.db.commit()
 
     # --- Schlüssel/Wert ---
@@ -271,7 +275,8 @@ class Store:
 
     # --- Ventil-Trockenlauf (0.39) ---
     def add_valve_dry(self, entry: dict) -> None:
-        """Ein Eintrag „würde schreiben“ an ein Thermostat (Spalten ``VALVE_DRY_COLS``, fehlende leer)."""
+        """Ein Eintrag „würde schreiben“ bzw. (0.40, ``written``) „geschrieben“ an ein Thermostat (Spalten
+        ``VALVE_DRY_COLS``, fehlende leer)."""
         self.db.execute(f"INSERT INTO valve_dry_log({', '.join(VALVE_DRY_COLS)}) "
                         f"VALUES({', '.join('?' * len(VALVE_DRY_COLS))})", tuple(entry.get(c) for c in VALVE_DRY_COLS))
         self.db.execute("DELETE FROM valve_dry_log WHERE ts < ?", (int(entry["ts"]) - VALVE_DRY_KEEP_DAYS * 86400,))

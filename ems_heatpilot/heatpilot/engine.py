@@ -11,7 +11,8 @@ speichert. Die Arbeit steckt nach Thema in Mixins – Messpunkt (``engine_sample
 Vorschau (``preview_log``, Trockenlauf – nur Anzeige). Seit 0.38 prüft der Takt nach ``dhw_step`` das Warmwasser-Soll
 (``dhw_control.plan`` – merkt einen Schreibvorgang nur vor, geschrieben wird danach in ``main``). Seit 0.39 lernt der
 Takt das Ventilverhalten je Raum (``valve_model``/``valve_learn``) und protokolliert im Trockenlauf, was HeatPilot an
-den Thermostaten verstellen würde (``valve_dry`` – schreibt nichts).
+den Thermostaten verstellen würde (``valve_dry`` – schreibt nichts). Seit 0.40 führt die Regelschleife mit eigenem
+Schalter die Ventile wirklich (``valve_control``); diese Räume lässt der Trockenlauf aus.
 """
 
 from __future__ import annotations
@@ -256,14 +257,16 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
 
     def valve_step(self, ts: int, sample: dict, rooms: list[tuple]) -> None:
         """Ventile (0.39): Modelle bis zum letzten Raumschritt lernen (die Historie in Abschnitten, ``learn_valves``),
-        dann den Trockenlauf protokollieren (``valve_dry``). Schreibt nichts an Thermostate oder Kessel; ein Fehler
-        hält Lernen und Steuerung nicht auf."""
+        dann den Trockenlauf protokollieren (``valve_dry``). Schreibt nichts an Thermostate oder Kessel – das tut nur
+        die Regelschleife mit „Ventile führen“ (0.40, ``valve_control``); ein Fehler hält Lernen und Steuerung nicht
+        auf."""
         try:
             self.learn_valves()
         except Exception:  # noqa: BLE001
             log.exception("Ventilmodelle: Lernen fehlgeschlagen")
-        try:
-            valve_dry.step(self, ts, sample, rooms)
+        try:  # Räume, die HeatPilot gerade wirklich führt (Ventile führen, 0.40), rechnet der Trockenlauf nicht mit
+            loop = self.control_loop
+            valve_dry.step(self, ts, sample, rooms, loop.guided_rooms() if loop is not None else ())
         except Exception:  # noqa: BLE001
             log.exception("Ventil-Trockenlauf fehlgeschlagen")
 

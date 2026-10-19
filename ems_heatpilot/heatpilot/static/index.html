@@ -264,6 +264,7 @@ table.valve-t td:first-child { color: var(--text-secondary); white-space: nowrap
 #valve-rooms td:last-child { white-space: normal; min-width: 300px; }
 svg text.halo { paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
 .badge.vb-ok { border-color: var(--good); color: var(--good); }
+.badge.vd-w { border-color: var(--good); color: var(--good); }  /* 0.40: Eingriff wirklich geschrieben */
 #vd { border-top: 1px solid var(--border); margin-top: 14px; }
 #vd h3 { font-size: 14px; margin: 12px 0 6px; }
 #lg-vd[hidden] { display: none; }  /* .legend setzt display: flex */
@@ -1153,7 +1154,7 @@ function schedDlg(j) {
 function pauseDlg() {
   const c = ctl(), morn = hoursUntilMorning();
   const btn = (h, label) => `<button class="btn big" onclick="heatPost('pause', { hours: ${h} }, 'Pausiere …')">${label}</button>`;
-  return `<h2>HeatPilot pausieren</h2><p>Solange schreibt HeatPilot keine Solltemperaturen – was eingestellt ist, bleibt stehen. Boost und Bedienung von Hand gehen weiter; ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher. Danach geht es mit dem Wunschzustand weiter.</p>` +
+  return `<h2>HeatPilot pausieren</h2><p>Solange schreibt HeatPilot keine Solltemperaturen – was eingestellt ist, bleibt stehen. Laufende Schritte von „Ventile führen“ nimmt HeatPilot vorher einmal zurück aufs Wunschsoll (endet einer in der Pause, auch dann). Boost und Bedienung von Hand gehen weiter; ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher. Danach geht es mit dem Wunschzustand weiter.</p>` +
     (c.paused_until ? `<p>Pausiert noch <b>${leftText(c.pause_left_min || 1)}</b> (bis ${clock(c.paused_until)}).</p>` : "") +
     `<div class="pause-grid">${btn(1, "1 h")}${btn(2, "2 h")}${btn(4, "4 h")}${btn(morn, `bis morgen früh (${String(PAUSE_MORNING_H).padStart(2, "0")}:00)`)}</div>` +
     (c.paused_until ? `<button class="btn primary big" onclick="heatPost('pause', { hours: 0 }, 'Weiter …')">▶ Weiter</button>` : "");
@@ -1202,11 +1203,19 @@ function ctlInfo(r) {
   if (!r.managed || !c || !c.phase) return devices + `<div class="ctl-info">Macht nicht mit – HeatPilot schreibt hier nichts (Einstellungen → Räume → „macht mit“).</div>`;
   let h = `<div class="ctl-info">HeatPilot: <b>${PHASE[c.phase] || c.phase}</b> → Soll <b>${fmt(c.desired)} °C</b>${c.reason ? ` · ${esc(c.reason)}` : ""}`;
   if (c.next_change) h += `<br>nächste Änderung ${clock(c.next_change)}${c.next_phase ? " " + (PHASE[c.next_phase] || c.next_phase) : ""}`;
+  if (c.valve) h += "<br>" + valveGuideLine(c.valve);  // Ventile führen (0.40): laufender Schritt, sonst nichts
   if (c.manual) h += `<br>von Hand geändert – gilt bis ${clock(c.manual_until)}, dann schreibt HeatPilot wieder`;
   if (unreachable(c)) h += `<br>Ziel laut Raummodell nicht erreichbar – erreicht ≈ ${fmt(c.reach_c)} °C bei maximalem Vorlauf`;
   if (c.paused) h += "<br>Pause – HeatPilot schreibt gerade nicht";
   if (c.errors >= 3) h += `<br><span class="msg-err">${c.errors} Schreibfehler in Folge – Thermostat prüfen${c.retry_at ? `, nächster Versuch ${clock(c.retry_at)}` : ""}</span>`;
   return devices + h + "</div>";
+}
+// Ventile führen (0.40) im Raum-Dialog: „Ventil geführt: 20,5 statt 21 °C – früh drosseln, zurück ≈ 15:40“; beim
+// gemeinsamen Anfordern „zurück spätestens …“ (der Auslöser kann früher enden)
+function valveGuideLine(v) {
+  if (!v) return "";
+  const back = v.back_at ? `, zurück ${v.back_latest ? "spätestens" : "≈"} ${clock(v.back_at)}` : "";
+  return `<span id="dlg-valve-guide">Ventil geführt: <b>${fmt(v.setpoint)}</b> statt ${fmt(v.base)} °C – ${esc(v.rule_text || VD_RULE[v.rule] || v.rule)}${back}</span>`;
 }
 function boostRoom(c) { BOOST.rooms = BOOST.rooms.includes(c) ? BOOST.rooms.filter((x) => x !== c) : [...BOOST.rooms, c]; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
 function boostAll() { const ids = allRooms(); BOOST.rooms = BOOST.rooms.length === ids.length ? [] : ids; store.set("hp-boost-rooms", BOOST.rooms); renderHeat(); }
@@ -2240,6 +2249,8 @@ function openValve(c) {
 // Was HeatPilot mit den Thermostaten als Stellglied tun würde (api/preview → valves): Abschnitt am Ende der Vorschau.
 // Nur Protokoll – HeatPilot schreibt dafür nichts. Eingriffe je Tag als gestapelte Balken (früh drosseln blau,
 // gemeinsam anfordern orange, Legende), Tabellen je Raum und Tag als Zwilling, Beispiele mit Grund.
+// Seit 0.40 mit „Ventile führen“ (valves.live): „schreibt“ statt „würde schreiben“ – geschriebene Eingriffe
+// (written) mit Kennzeichen „geschrieben“, gemessen mit dem Eingriff; die übrigen Räume weiter im Trockenlauf.
 const VD_NOTE = "Trockenlauf – HeatPilot schreibt nichts an die Thermostate";  // wie valve_dry.NOTE
 const VD_RULE = { drosseln: "früh drosseln", gemeinsam: "gemeinsam anfordern" };
 const VD_C = { drosseln: "var(--series-1)", gemeinsam: "var(--series-2)" };
@@ -2248,33 +2259,42 @@ function renderValves(v, now = new Date()) {
   box.hidden = !v;  // ältere Version ohne „valves“: Abschnitt weg
   if (!v) return;
   const any = (v.writes || 0) > 0, days = vdDays(v, now);
-  $("vd-note").innerHTML = `<b>${esc(v.note || VD_NOTE)}.</b> Gezählt wird, was HeatPilot mit den Thermostaten als Stellglied tun würde – in den letzten ${v.window_days || 7} Tagen, nach Räumen.`;
+  const head = box.querySelector ? box.querySelector("h3") : null;  // 0.40: „schreibt“ bzw. Trockenlauf
+  if (head) head.textContent = v.live ? "Ventile – HeatPilot schreibt" : "Ventile (Trockenlauf)";
+  $("vd-note").innerHTML = v.live
+    ? `<b>${esc(v.note)}.</b> Gezählt wird, was HeatPilot mit den Thermostaten als Stellglied tut („geschrieben“) bzw. in den übrigen Räumen tun würde – in den letzten ${v.window_days || 7} Tagen, nach Räumen.`
+    : `<b>${esc(v.note || VD_NOTE)}.</b> Gezählt wird, was HeatPilot mit den Thermostaten als Stellglied tun würde – in den letzten ${v.window_days || 7} Tagen, nach Räumen.`;
   $("vd-text").textContent = v.text || "";
   $("vd-facts").innerHTML = any ? vdFacts(v) : "";
-  $("vd-rules").innerHTML = vdRules(v.rules || {});
+  $("vd-rules").innerHTML = vdRules(v.rules || {}) + (v.live ? vdLiveRules(v.rules || {}) : "");
   $("vd-active").innerHTML = vdActive(v.active || []);
   for (const id of ["lg-vd", "ch-vd", "vd-ex-box", "vd-days-box"]) $(id).hidden = !any;
   if (!any) return;
   $("lg-vd").innerHTML = Object.keys(VD_RULE).map((k) => `<span><i style="background:${VD_C[k]}"></i>${VD_RULE[k]}</span>`).join("") + "<span>Eingriffe je Tag</span>";
   vdDayChart($("ch-vd"), days);
-  $("vd-ex").innerHTML = vdExamples(v.examples || []);
-  $("vd-rooms").innerHTML = vdTable("Raum", (v.rooms || []).map((r) => [esc(shortName(r.name)), r]));
-  $("vd-days").innerHTML = vdTable("Tag", days.slice().reverse().map((d) => [vdDayName(d.day, true), d]));
+  $("vd-ex").innerHTML = vdExamples(v.examples || [], v.live);
+  const w = (v.written || 0) > 0;  // Spalte „geschrieben“ nur, wenn HeatPilot wirklich geschrieben hat (0.40)
+  $("vd-rooms").innerHTML = vdTable("Raum", (v.rooms || []).map((r) => [esc(shortName(r.name)), r]), w);
+  $("vd-days").innerHTML = vdTable("Tag", days.slice().reverse().map((d) => [vdDayName(d.day, true), d]), w);
 }
 // Kennzahlen: je Regel Zahl, Schätzung (nur belastbar) und was danach gemessen wurde; Schreibvorgänge; „macht mit“
 function vdFacts(v) {
   const n = v.interventions || {}, wb = v.writes_by || {}, ef = v.effect || {}, d = ef.drosseln || {}, g = ef.gemeinsam || {};
   const has = (x) => x !== null && x !== undefined;
   const ck = d.check || {};
+  // gemessen in der Stunde danach: im Trockenlauf ohne Eingriff, geschrieben (0.40) mit ihm
+  const meas = [has(d.act_over_k_mean) ? `ohne Eingriff gemessen: im Mittel bis ${fmt(d.act_over_k_mean, 1)} K über Soll in der Stunde danach` : "",
+    has(d.act_over_k_written_mean) ? `mit Eingriff gemessen: im Mittel bis ${fmt(d.act_over_k_written_mean, 1)} K über Soll in der Stunde danach` : ""].filter(Boolean);
   const drosseln = !n.drosseln ? "Früh drosseln: kein Eingriff." : `Früh drosseln: ${n.drosseln}× (${d.reliable || 0} belastbar)` +
     (has(d.est_k_mean) ? ` – geschätzt ≈ ${fmt(d.est_k_mean, 1)} K weniger Überschwingen je Eingriff (${d.checked} nachgeprüft)`
-      : d.reliable ? ` – Schätzung erst, wenn das vorhergesagte Überschwingen ohne Eingriff ${ck.min_n ?? 3}× nachgemessen stimmt (bisher ${ck.n || 0}×${has(ck.mae_k) ? `, im Mittel ${fmt(ck.mae_k, 2)} K daneben` : ""})`
-      : " – nur gezählt") +
-    (has(d.act_over_k_mean) ? `; ohne Eingriff gemessen: im Mittel bis ${fmt(d.act_over_k_mean, 1)} K über Soll in der Stunde danach.` : ".");
+      : d.reliable ? ` – Schätzung erst, wenn das vorhergesagte Überschwingen${v.written ? "" : " ohne Eingriff"} ${ck.min_n ?? 3}× nachgemessen stimmt (bisher ${ck.n || 0}×${has(ck.mae_k) ? `, im Mittel ${fmt(ck.mae_k, 2)} K daneben` : ""})`
+      : " – nur gezählt") + (meas.length ? `; ${meas.join("; ")}.` : ".");
   const gemeinsam = !n.gemeinsam ? "Gemeinsam anfordern: kein Eingriff." : `Gemeinsam anfordern: ${n.gemeinsam}× (${g.reliable || 0} belastbar)` +
     (g.starts_saved_est ? ` – geschätzt ≈ ${fmt(g.starts_saved_est, 0)} Brennerstarts weniger (grob einer je mit angefordertem Raum)` : " – nur gezählt") +
     (has(g.starts_h_mean) ? `; der Kessel startete dabei im Mittel ${fmt(g.starts_h_mean, 1)}× je Stunde.` : ".");
-  const writes = `Schreibvorgänge: ${v.writes} – früh drosseln ${wb.drosseln || 0}, gemeinsam ${wb.gemeinsam || 0}, jeweils mit dem Zurücksetzen; nichts davon geschrieben.` +
+  const wn = v.written || 0;
+  const done = !wn ? "nichts davon geschrieben" : wn === v.writes ? "alle geschrieben" : `davon ${wn} geschrieben, ${v.writes - wn} nur im Trockenlauf`;
+  const writes = `Schreibvorgänge: ${v.writes} – früh drosseln ${wb.drosseln || 0}, gemeinsam ${wb.gemeinsam || 0}, jeweils mit dem Zurücksetzen; ${done}.` +
     (v.managed ? ` ${v.managed} der Eingriffe in Räumen mit „macht mit“.` : "");
   return [drosseln, gemeinsam, writes].map((t) => `<li>${t}</li>`).join("");
 }
@@ -2288,10 +2308,17 @@ function vdRules(r) {
     `${fmt(r.cycle_run_min ?? 10, 0)} min), würde HeatPilot Räume, die in den nächsten ${r.join_ahead_min ?? 60} min ohnehin heizen würden, einen Schritt anheben – ` +
     `höchstens ${r.join_max_min ?? 60} min. Gezählt wie beim Schreiben: nur bei Änderung, in der Schrittweite des Thermostats, ${r.hold_min ?? 5} min Haltezeit je Raum.`;
 }
+// Mit „Ventile führen“ (0.40) gelten beim wirklichen Schreiben strengere Regeln (valve_control)
+function vdLiveRules(r) {
+  return ` <b>Ventile führen:</b> In Räumen mit „macht mit“ und belastbarem Raum- und Ventilmodell schreibt HeatPilot das wirklich – ` +
+    `höchstens einen Schritt vom Wunschsoll (Schritt des Thermostats, höchstens ${fmt(r.max_step_k ?? 0.5, 1)} K); früh drosseln nur bei Komfort und Vorheizen ` +
+    `und höchstens ${fmt(r.below_k ?? 0.3, 1)} K unter dem Soll – fällt der Raum darunter, sofort zurück, auch in der Haltezeit. Hand und Phasenwechsel gehen vor.`;
+}
 function vdActive(active) {
-  if (!active.length) return "";
-  return "<b>Läuft gerade</b> (nur im Protokoll): " + active.map((a) =>
-    `${esc(shortName(a.name))} – ${VD_RULE[a.rule] || esc(a.rule)}, Soll ${fmt(a.base)} → ${fmt(a.setpoint)} °C seit ${clock(a.since)}`).join(" · ");
+  const one = (a) => `${esc(shortName(a.name))} – ${VD_RULE[a.rule] || esc(a.rule)}, Soll ${fmt(a.base)} → ${fmt(a.setpoint)} °C seit ${clock(a.since)}`;
+  const live = active.filter((a) => a.written), dry = active.filter((a) => !a.written);  // 0.40: geschrieben
+  return [live.length ? "<b>Läuft gerade</b> (geschrieben): " + live.map(one).join(" · ") : "",
+    dry.length ? "<b>Läuft gerade</b> (nur im Protokoll): " + dry.map(one).join(" · ") : ""].filter(Boolean).join("<br>");
 }
 // Alle Tage des Fensters (bis heute), auch ohne Eingriff – die Achse zeigt dann eine Lücke statt sie zu überspringen
 function vdDays(v, now = new Date()) {
@@ -2327,24 +2354,27 @@ function vdDayChart(box, days) {
   });
 }
 // Je Raum bzw. Tag: Eingriffe je Regel und Schreibvorgänge
-function vdTable(head, rows) {
-  return `<tr><th>${head}</th><th>drosseln</th><th>gemeinsam</th><th>Schreib&shy;vorgänge</th></tr>` +
-    rows.map(([name, r]) => `<tr><td>${name}</td><td>${r.drosseln || 0}</td><td>${r.gemeinsam || 0}</td><td>${r.writes || 0}</td></tr>`).join("");
+// written (0.40): in Klammern, wie viele davon wirklich geschrieben – vier Spalten, passt auch am Handy
+function vdTable(head, rows, written = false) {
+  return `<tr><th>${head}</th><th>drosseln</th><th>gemeinsam</th><th>Schreib&shy;vorgänge${written ? ' <span class="muted">(davon ge&shy;schrie&shy;ben)</span>' : ""}</th></tr>` +
+    rows.map(([name, r]) => `<tr><td>${name}</td><td>${r.drosseln || 0}</td><td>${r.gemeinsam || 0}</td><td>${r.writes || 0}${written ? ` <span class="muted">(${r.written || 0})</span>` : ""}</td></tr>`).join("");
 }
 // Beispiele (neueste zuerst) als Liste – passt auch am Handy: Zeit, Raum, Regel, Soll vorher → würde; Grund und Stand
 // des Raums; Wirkung (geschätzt, danach gemessen)
-function vdExamples(ex) {
-  return ex.map((x) => `<li><b>${esc(timeOf(x.t))} · ${esc(shortName(x.name))}</b>${x.managed ? ' <span class="badge">macht mit</span>' : ""} – ` +
+function vdExamples(ex, live = false) {
+  // 0.40: geschrieben bzw. – wenn Ventile führen an ist – „würde schreiben“ für Räume im Trockenlauf
+  const tag = (x) => x.written ? ' <span class="badge vd-w">geschrieben</span>' : live ? ' <span class="badge">würde schreiben</span>' : "";
+  return ex.map((x) => `<li><b>${esc(timeOf(x.t))} · ${esc(shortName(x.name))}</b>${x.managed ? ' <span class="badge">macht mit</span>' : ""}${tag(x)} – ` +
     `${VD_RULE[x.rule] || esc(x.rule)}, Soll ${fmt(x.base)} → ${fmt(x.setpoint)} °C` +
     `<div class="muted">${esc(x.reason || "")} · Raum ${fmt(x.temp)} °C, Ventil ${fmt(x.valve, 0)} %</div><div>${vdEffect(x)}</div></li>`).join("");
 }
 function vdEffect(x) {
-  const has = (v) => v !== null && v !== undefined, thr = x.rule === "drosseln";
+  const has = (v) => v !== null && v !== undefined, thr = x.rule === "drosseln", how = x.written ? "mit" : "ohne";  // 0.40
   const est = thr ? (has(x.est_k) && x.est_checked !== false ? `geschätzt ≈ ${fmt(x.est_k, 1)} K weniger Überschwingen`
-      : has(x.pred_over_k) ? `vorhergesagt ohne Eingriff ≈ ${fmt(x.pred_over_k, 1)} K über Soll (Schätzung wird nachgeprüft)` : "")
+      : has(x.pred_over_k) ? `vorhergesagt ${how} Eingriff ≈ ${fmt(x.pred_over_k, 1)} K über Soll (Schätzung wird nachgeprüft)` : "")
     : (has(x.est_starts) ? `geschätzt ≈ ${fmt(x.est_starts, 0)} Brennerstart weniger` : "");
-  const act = thr ? (has(x.act_over_k) ? `ohne Eingriff gemessen: bis ${fmt(x.act_over_k, 1)} K über Soll` : "")
-    : (has(x.act_starts) ? `ohne Eingriff gemessen: ${fmt(x.act_starts, 0)} Brennerstarts in der Stunde` : "");
+  const act = thr ? (has(x.act_over_k) ? `${how} Eingriff gemessen: bis ${fmt(x.act_over_k, 1)} K über Soll` : "")
+    : (has(x.act_starts) ? `${how} Eingriff gemessen: ${fmt(x.act_starts, 0)} Brennerstarts in der Stunde` : "");
   return [est || (x.reliable ? "" : "nur gezählt (Modelle lernen noch)"), act || "gemessen wird nach 1 h"].filter(Boolean).join(" · ");
 }
 
@@ -2783,7 +2813,8 @@ function controlCard(s) {
       <label><input type="radio" name="control_mode" value="beobachten" ${mode === "beobachten" ? "checked" : ""} onchange="modeHint()"> Beobachten</label>
       <label><input type="radio" name="control_mode" value="heatpilot" ${mode === "heatpilot" ? "checked" : ""} onchange="modeHint()"> HeatPilot steuert</label></div>
     <p class="hint" id="mode-hint" style="margin:6px 0 0"></p>
-    <div class="warnbox">Zurück zu Tado nur hier über den Schalter – danach in der Tado-App den Zeitplan fortsetzen (HeatPilot stellt ihn nicht wieder her). Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt geschriebene Soll stehen. Es gibt keinen Zwischenmodus und keinen automatischen Rückfall.</div>
+    <div class="warnbox">Zurück zu Tado nur hier über den Schalter – danach in der Tado-App den Zeitplan fortsetzen (HeatPilot stellt ihn nicht wieder her). Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt geschriebene Soll stehen – mit „Ventile führen“ auch ein laufender Schritt (höchstens einer neben dem Wunschsoll). Es gibt keinen Zwischenmodus und keinen automatischen Rückfall.</div>
+    ${valveSwitchHtml(s)}
     <h3 style="font-size:13px;margin:12px 0 4px">Nachtabsenkung – Wochenplan</h3>
     <p class="muted" style="margin:0 0 6px">Je Wochentag: Beginn am Abend dieses Tages, Ende am Morgen dieses Tages (die Nacht Fr → Sa steht also bei Fr „ab“ und Sa „bis“). Gilt bei „HeatPilot steuert“; nachts bekommen alle Räume mit „macht mit“ die Nachttemperatur.</p>
     <div class="scroll"><table class="form plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th>${learned ? "<th>gelernt ab</th><th>gelernt bis</th>" : ""}</tr>${WEEKDAYS.map((d, i) =>
@@ -2801,6 +2832,21 @@ function controlCard(s) {
       ${field("Gelernte Zeiten verwenden", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-night_plan_auto" ${s.night_plan_auto ? "checked" : ""}> gelernte Nachtzeiten statt des Wochenplans</label>`, "Sonst nur Vorschlag; wo nichts Belastbares gelernt ist, gilt der Wochenplan oben.")}
     </div>`;
 }
+// Ventile führen (0.40): eigener Schalter unter dem Hauptschalter, Standard aus – wirkt nur bei „HeatPilot steuert“
+// (der Hinweis darunter folgt dem Hauptschalter, modeHint). Gespeichert als valve_control (bool).
+const VC_TEXT = "HeatPilot führt den Regler der Thermostate über das Soll – höchstens einen Schritt des Thermostats " +
+  "(Tado 0,5 K) vom Wunschsoll, nur in Räumen mit „macht mit“, deren Raum- und Ventilmodell belastbar sind. " +
+  "<b>Früh drosseln:</b> einen Schritt tiefer, wenn ein Raum laut den Modellen in unter 20 min am Soll ist und sein Ventil dann " +
+  "noch weit offen wäre (er würde überschwingen) – nie nachts oder bei Abwesenheit, nie mehr als 0,3 K unter dem Soll; zurück am Soll, " +
+  "spätestens nach 60 min, sofort, wenn der Raum Wärme braucht. <b>Gemeinsam anfordern:</b> einen Schritt höher für Räume, die " +
+  "ohnehin bald heizen würden, wenn nur ein Raum anfordert und der Kessel taktet. Nur bei Änderung, 5 min Haltezeit; Hand und " +
+  "Phasenwechsel gehen vor. Vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt HeatPilot laufende Schritte einmal zurück.";
+function valveSwitchHtml(s) {
+  return `<h3 style="font-size:13px;margin:12px 0 4px">Ventile führen</h3><p class="muted" style="margin:0 0 6px" id="vc-text">${VC_TEXT}</p>` +
+    `<div class="form-grid">${field("Schalter", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-valve_control" ${s.valve_control ? "checked" : ""} onchange="modeHint()"> früh drosseln, gemeinsam anfordern</label>`,
+      "Standard aus – dann zählt HeatPilot nur, was es täte (Übersicht → Vorschau → Ventile). Welche Räume es führen kann, steht in „Bereit für die Steuerung?“.")}</div>` +
+    `<p class="hint" id="vc-hint" style="margin:4px 0 0"></p>`;
+}
 // Leistungssensoren (0.39.1 auf der Seite „Entitäten“, Gruppe Strom): hier nur, was gewählt ist, und der Weg dorthin
 function powerRef(power, powerEx, missing) {
   const list = (ids) => ids.map((p) => `<code>${esc(p)}</code>`).join(", ");
@@ -2815,6 +2861,10 @@ function modeHint() {
   box.textContent = m && m.value === "heatpilot"
     ? `HeatPilot schreibt nur in Räume mit Häkchen „macht mit“ (zurzeit ${managed}), nur Solltemperaturen zwischen 5 und 25 °C. Boost, Soll und Betriebsart von Hand gelten bis zum nächsten Wechsel. EMS-ESP und Kessel bleiben unberührt – das Warmwasser-Soll hat einen eigenen Schalter (Einstellungen → Warmwasser).`
     : "Wie bisher: HeatPilot lernt, empfiehlt und schaltet Tado nur auf Knopfdruck im Reiter Heizen – nie von selbst.";
+  const vc = $("f-valve_control"), vh = $("vc-hint");  // Ventile führen (0.40): wirkt nur mit „HeatPilot steuert“
+  if (vc && vh) vh.textContent = !vc.checked ? "" : m && m.value === "heatpilot"
+    ? "An: HeatPilot schreibt die Schritte über denselben Weg wie das Wunschsoll – jeder steht im Protokoll (Grund „Ventil: …“)."
+    : "An, wirkt aber erst mit „HeatPilot steuert“ – bis dahin nur Trockenlauf.";
 }
 
 // Bereit für die Steuerung? (0.36.1): Ampel grün/gelb/grau je Stufe, Kurzwort fürs Badge in der Übersicht
@@ -2849,6 +2899,7 @@ function renderReadyBox(r, err = "") {
   const box = $("ready-box"); if (!box) return;
   if (READY_OPEN) READY_SHOW.details = true;
   box.innerHTML = readyBoxHtml(r, err, READY_SHOW.details, READY_SHOW.boiler);
+  if (r && r.valves) box.insertAdjacentHTML("beforeend", valveReadyHtml(r.valves, READY_SHOW.valves));  // 0.40
   if (r && r.dhw) box.insertAdjacentHTML("beforeend", dhwReadyHtml(r.dhw, READY_SHOW.dhw));  // Weg W (0.38)
   if (!READY_OPEN) return;
   if (r || err) READY_OPEN = false;  // erst mit Daten erledigt – „Lade Status …“ hat noch nichts zum Aufklappen
@@ -3091,6 +3142,21 @@ function dhwConfirm(body) {
   if (body.dhw_control !== "heatpilot" || (SET || {}).dhw_control === "heatpilot") return true;
   return confirm("Ab jetzt schreibt HeatPilot das Warmwasser-Soll des Kessels.\n\nIst die Automation in Home Assistant, die bisher " +
     "das Speicher-Soll setzt, abgeschaltet? Zwei Schreiber gleichzeitig darf es nicht geben.");
+}
+// Block „Ventile führen“ in „Bereit für die Steuerung?“ (0.40, readiness.valves – nur Anzeige, ändert die Stufe der
+// Raumsteuerung nicht): je Raum mit „macht mit“ bereit oder lernt (mit Grund), Schalter, laufende Eingriffe, Regeln
+function valveReadyHtml(x, open) {
+  if (!x) return "";
+  const lv = READY[x.level] || READY["nicht bereit"], c = x.counts || {};
+  const col = (st) => ROOM_READY_CSS[st] || "var(--text-secondary)";
+  const rows = (x.rooms || []).map((r) => `<tr><td>${esc(r.name)}</td><td><span class="badge" style="border-color:${col(r.state)};color:${col(r.state)}">${esc(r.state)}</span></td><td>${esc(r.text)}</td></tr>`).join("");
+  const run = (x.running || []).map((a) => `<li class="note">Läuft: ${esc(shortName(a.name))} – ${VD_RULE[a.rule] || esc(a.rule)}, Soll ${fmt(a.setpoint)} statt ${fmt(a.base)} °C seit ${clock(a.since)}</li>`).join("");
+  const notes = (x.notes || []).map((t) => `<li class="note">${esc(t)}</li>`).join("");
+  return `<div class="ready-boiler" id="ready-valves"><h3>Ventile führen</h3><div class="ready-head">${readyDot(lv.dot)}<span id="ready-valves-headline">${esc(x.headline)}</span></div>` +
+    `<details id="ready-valves-details"${open ? " open" : ""} ontoggle="READY_SHOW.valves = this.open"><summary>Einzelheiten <span class="muted">(${c.ready || 0} bereit, ${c.learning || 0} lernen noch · Schalter ${x.switch ? "an" : "aus"})</span></summary>` +
+    (run + notes ? `<ul class="ready-list">${run}${notes}</ul>` : "") +
+    (rows ? `<div class="scroll"><table class="ready-t"><tr><th>Raum</th><th>Zustand</th><th></th></tr>${rows}</table></div>` : "") + "</details>" +
+    `<p class="muted" style="margin:6px 0 0">Nur Anzeige – ändert die Stufe der Raumsteuerung nicht. Schalter unter Einstellungen → Steuerung → „Ventile führen“; was HeatPilot dabei schreibt bzw. schreiben würde, steht in der Übersicht → Vorschau → Ventile.</p></div>`;
 }
 // Block „Warmwasser über HeatPilot“ in „Bereit für die Steuerung?“ (readiness.dhw, nur Anzeige – ändert die Stufe der
 // Raumsteuerung nicht); der Hinweis „HA-Automation abschalten“ steht sichtbar, solange in 24 h Fremdes kam
@@ -3582,6 +3648,7 @@ function collect() {
   out.night_plan = [...document.querySelectorAll("tr.np")].map((tr) => ({ start: tr.querySelector(".np-start").value, end: tr.querySelector(".np-end").value }));
   // Nachtzeiten aus dem Stromverbrauch (0.36): Häkchen als bool – die Sensoren stehen seit 0.39.1 unter „Entitäten“
   out.night_plan_auto = $("f-night_plan_auto").checked;
+  if ($("f-valve_control")) out.valve_control = $("f-valve_control").checked;  // Ventile führen (0.40)
   // Personen (seit 0.39.1 unter „Entitäten“): nur, wenn die Tabelle gezeichnet ist – sonst bleibt das Gespeicherte
   if ($("em-persons")) out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
   out.rooms = []; out.floor_heating_rooms = [];

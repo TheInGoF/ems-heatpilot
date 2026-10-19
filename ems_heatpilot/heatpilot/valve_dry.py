@@ -24,6 +24,10 @@ Regeln wie abgesprochen, im Trockenlauf mitgezählt: nur bei Änderung, in der v
 nie den Vorlauf – die Fußboden-Grenze (``floor_limit``, 0.39.1) kann kein Vorschlag überschreiten; ein späterer
 Takt-Boost am Vorlauf muss sie vor jedem Schreiben einhalten (Planungspapier, Weg B).
 
+Seit 0.40 schreibt HeatPilot mit dem Schalter „Ventile führen“ wirklich (``valve_control`` – dieselben Regeln, die
+Funktionen hier): Räume, die es führt (``skip``), rechnet der Trockenlauf dann nicht mit; ihre echten Eingriffe stehen
+mit ``written`` = 1 in derselben Tabelle, und die Auswertung zählt beide – „schreibt“ statt „würde schreiben“.
+
 Protokoll: Tabelle ``valve_dry_log`` (90 Tage; „Lernstand neu berechnen“ lässt sie stehen). Eine Stunde danach trägt
 ``fill_actuals`` nach, was wirklich geschah (Überschwingen über das Soll, Brennerstarts – aus den Brennerereignissen
 oder dem Startzähler). ``summary`` wertet aus: wie oft, Schreibvorgänge, je Raum und Tag, Beispiele; die geschätzte
@@ -68,6 +72,8 @@ DAYS = 7
 EXAMPLES = 6
 KV_STATE = "valve_dry.state"
 NOTE = "Trockenlauf – HeatPilot schreibt nichts an die Thermostate"
+NOTE_LIVE = ("Ventile führen ist an – HeatPilot schreibt an die Thermostate der Räume, die es führt; die übrigen nur "
+             "im Trockenlauf")
 RULES = ("drosseln", "gemeinsam")
 
 
@@ -268,8 +274,11 @@ def _throttle(eng, r: _Room, sample: dict, cur: dict | None, ts: int, locked: bo
             "reason": f"erreicht {_de(r.target)} °C {when}, Ventil dann noch ≈ {math.ceil(v_reach)} % offen"}
 
 
-def _join(eng, infos: list[_Room], act: dict, wishes: dict, sample: dict, ts: int) -> dict | None:
-    """Regel „gemeinsam anfordern“: laufende weiterführen, neue vormerken. Gibt die Taktung zurück (oder None)."""
+def _join(eng, infos: list[_Room], act: dict, wishes: dict, sample: dict, ts: int,
+          candidates: set | None = None, leads: set | None = None) -> dict | None:
+    """Regel „gemeinsam anfordern“: laufende weiterführen, neue vormerken – angehoben werden nur ``candidates`` (None:
+    alle Räume; angefordert zählen immer alle), auslösen darf nur ein Raum aus ``leads`` (None: jeder). Gibt die
+    Taktung zurück (oder None)."""
     demanding = [r for r in infos if r.target is not None and (r.valve or 0) > OPEN_PCT]
     running = {c: a for c, a in act.items() if a["rule"] == "gemeinsam"}
     if not running and len(demanding) != 1:
@@ -278,12 +287,12 @@ def _join(eng, infos: list[_Room], act: dict, wishes: dict, sample: dict, ts: in
     for c, a in running.items():
         if any(d.climate == a.get("for") for d in demanding) and ts - a["since"] < JOIN_MAX_MIN * 60:
             wishes[c] = {"rule": "gemeinsam", "sp": a["sp"]}
-    if len(demanding) != 1 or not cyc["cycling"]:
+    if len(demanding) != 1 or not cyc["cycling"] or (leads is not None and demanding[0].climate not in leads):
         return cyc
     lead = demanding[0]
     for r in infos:
         if (r is lead or r.climate in act or r.climate in wishes or r.temp is None or r.target is None
-                or (r.valve or 0) > OPEN_PCT):
+                or (r.valve or 0) > OPEN_PCT or (candidates is not None and r.climate not in candidates)):
             continue
         sp = _grid(r.target + r.step, r.step)
         if sp <= r.target or not _would_heat(eng, r, sample, ts):
@@ -321,24 +330,26 @@ def _unlock(lock: dict, by: dict) -> None:
             del lock[c]
 
 
-def step(eng, ts: int, sample: dict, rooms: list[tuple]) -> list[dict]:
+def step(eng, ts: int, sample: dict, rooms: list[tuple], skip=()) -> list[dict]:
     """Im Takt der Engine: Wünsche nach beiden Regeln bestimmen, nach den Schreibregeln zählen und protokollieren.
-    Schreibt nur in die eigene Datenbank. Gibt die neuen Protokolleinträge zurück."""
+    Schreibt nur in die eigene Datenbank. ``skip`` (0.40): Räume, die HeatPilot gerade wirklich führt
+    (``valve_control``) – für sie nichts im Trockenlauf; als anfordernder Raum zählen sie weiter. Gibt die neuen
+    Protokolleinträge zurück."""
     st = _state(eng)
     act, last, lock = st["active"], st["last"], st["lock"]
     infos = _rooms(eng, {r[0]: r for r in rooms}, ts)
     by = {r.climate: r for r in infos}
     for c in list(act):  # Soll von außen geändert (Zeitplan, Hand) oder Raum weg: Eingriff endet ohne Schreiben
         r = by.get(c)
-        if r is None or r.target is None or abs(r.target - act[c]["base"]) >= 0.05:
+        if r is None or c in skip or r.target is None or abs(r.target - act[c]["base"]) >= 0.05:
             del act[c]
     _unlock(lock, by)
     wishes: dict[str, dict] = {}
     for r in infos:
-        w = _throttle(eng, r, sample, act.get(r.climate), ts, r.climate in lock)
+        w = None if r.climate in skip else _throttle(eng, r, sample, act.get(r.climate), ts, r.climate in lock)
         if w is not None:
             wishes[r.climate] = w
-    _join(eng, infos, act, wishes, sample, ts)
+    _join(eng, infos, act, wishes, sample, ts, {r.climate for r in infos} - set(skip))
     entries = _apply(st, by, wishes, ts)
     for e in entries:
         eng.store.add_valve_dry(e)
@@ -379,13 +390,13 @@ def _entry(ts: int, r: _Room, w: dict, base: float, action: str) -> dict:
             "valve_pred": w.get("valve_pred"), "est_k": w.get("est_k"), "est_starts": w.get("est_starts"),
             "pred_over_k": w.get("pred_over_k"),
             "reliable": None if action == "zurück" else int(bool(w.get("reliable"))), "managed": int(r.managed),
-            "reason": w.get("reason"), "starts_h": w.get("starts_h")}
+            "reason": w.get("reason"), "starts_h": w.get("starts_h"), "written": 0}
 
 
 def fill_actuals(store, now_ts: int) -> int:
-    """Eine Stunde nach jedem Eingriff nachtragen, was wirklich geschah (es wurde ja nichts geschrieben): beim Drosseln
-    das höchste Überschwingen über das Soll, beim gemeinsamen Anfordern die Brennerstarts der Stunde (Ereignisse oder
-    Startzähler, wie ``cycling``)."""
+    """Eine Stunde nach jedem Eingriff nachtragen, was wirklich geschah (im Trockenlauf ohne Eingriff, bei Ventile führen
+    mit ihm): beim Drosseln das höchste Überschwingen über das Soll, beim gemeinsamen Anfordern die Brennerstarts der
+    Stunde (Ereignisse oder Startzähler, wie ``cycling``)."""
     open_rows = store.valve_dry_open(now_ts - CHECK_S)
     for e in open_rows:
         over = starts = None
@@ -407,8 +418,8 @@ def _mean(values: list[float]) -> float | None:
 
 
 def checked_rooms(rows: list[dict]) -> dict[str, dict]:
-    """Je Raum: Wie gut war das Überschwingen ohne Eingriff vorhergesagt? (vorhergesagt beim Eingriff, eine Stunde
-    später gemessen – es wurde nichts geschrieben). ``ok``: oft genug und im Mittel nah genug dran."""
+    """Je Raum: Wie gut war das Überschwingen vorhergesagt? (vorhergesagt beim Eingriff – im Trockenlauf ohne, bei
+    Ventile führen mit ihm –, eine Stunde später gemessen). ``ok``: oft genug und im Mittel nah genug dran."""
     devs: dict[str, list[float]] = {}
     for r in rows:
         if r["rule"] == "drosseln" and r.get("pred_over_k") is not None and r.get("act_over_k") is not None:
@@ -429,7 +440,11 @@ def _effect(starts: list[dict], checked: dict) -> dict:
         "drosseln": {"n": len(d), "reliable": len(d_rel), "checked": len(d_ok),
                      "est_k_mean": _mean([r["est_k"] for r in d_ok]),
                      "est_k_sum": round(sum(r["est_k"] for r in d_ok), 2) if d_ok else None,
-                     "act_over_k_mean": _mean([r["act_over_k"] for r in d if r["act_over_k"] is not None]),
+                     # gemessen ohne Eingriff (Trockenlauf) bzw. mit ihm (geschrieben, 0.40)
+                     "act_over_k_mean": _mean([r["act_over_k"] for r in d
+                                               if r["act_over_k"] is not None and not r.get("written")]),
+                     "act_over_k_written_mean": _mean([r["act_over_k"] for r in d
+                                                       if r["act_over_k"] is not None and r.get("written")]),
                      "check": {"n": pairs, "mae_k": mae, "min_n": CAL_MIN_N, "max_k": CAL_MAX_K}},
         "gemeinsam": {"n": len(g), "reliable": len(g_rel),
                       "starts_saved_est": round(sum(r["est_starts"] for r in g_rel), 1) if g_rel else None,
@@ -437,20 +452,40 @@ def _effect(starts: list[dict], checked: dict) -> dict:
     }
 
 
+def _head(s: dict) -> str:
+    """Anfang des Satzes: wie oft, Schreibvorgänge – „hätte“ im Trockenlauf, „hat“ für Geschriebenes (0.40)."""
+    n, days, written = s["interventions"], s["window_days"], s.get("written", 0)
+    if not s["writes"]:
+        verb = "hat" if s.get("live") else "hätte"
+        return f"Noch kein Eingriff – in {days} Tagen {verb} HeatPilot an den Thermostaten nichts verstellt"
+    if not written:
+        return (f"In {days} Tagen hätte HeatPilot {n['drosseln']}× früh gedrosselt und {n['gemeinsam']}× Räume "
+                f"gemeinsam anfordern lassen – {s['writes']} Schreibvorgänge, nichts davon geschrieben")
+    w = s["interventions_written"]
+    out = (f"In {days} Tagen hat HeatPilot {w['drosseln']}× früh gedrosselt und {w['gemeinsam']}× Räume gemeinsam "
+           f"anfordern lassen – {written} Schreibvorgänge")
+    if s["writes"] > written:
+        out += (f"; im Trockenlauf dazu {n['drosseln'] - w['drosseln']}× früh drosseln und "
+                f"{n['gemeinsam'] - w['gemeinsam']}× gemeinsam anfordern – {s['writes'] - written} Schreibvorgänge, "
+                "nicht geschrieben")
+    return out
+
+
 def text(s: dict) -> str:
     """Ein Satz: „In 7 Tagen hätte HeatPilot 12× früh gedrosselt und 5× Räume gemeinsam anfordern lassen – 34
-    Schreibvorgänge, nichts davon geschrieben; geschätzt …“."""
-    n = s["interventions"]
+    Schreibvorgänge, nichts davon geschrieben; geschätzt …“ – mit Ventile führen (0.40) „hat HeatPilot …“."""
+    out = _head(s)
     if not s["writes"]:
-        return f"Noch kein Eingriff – in {s['window_days']} Tagen hätte HeatPilot an den Thermostaten nichts verstellt"
-    out = (f"In {s['window_days']} Tagen hätte HeatPilot {n['drosseln']}× früh gedrosselt und {n['gemeinsam']}× Räume "
-           f"gemeinsam anfordern lassen – {s['writes']} Schreibvorgänge, nichts davon geschrieben")
+        return out
     d, g = s["effect"]["drosseln"], s["effect"]["gemeinsam"]
     if d["est_k_mean"] is not None:
         out += f"; geschätzt ≈ {_de(d['est_k_mean'])} K weniger Überschwingen je Drosseln ({d['checked']} belastbar)"
     elif d["reliable"]:
-        out += (f"; Schätzung des Überschwingens erst, wenn die Vorhersage ohne Eingriff nachgemessen stimmt "
-                f"({d['check']['n']} von {CAL_MIN_N} Nachmessungen)")
+        ck = d["check"]
+        so_far = (f"{ck['n']} von {CAL_MIN_N} Nachmessungen" if ck["n"] < CAL_MIN_N or ck["mae_k"] is None
+                  else f"bisher im Mittel {ck['mae_k']:.2f} K daneben, höchstens {_de(CAL_MAX_K)} K".replace(".", ","))
+        out += (f"; Schätzung des Überschwingens erst, wenn die Vorhersage{'' if s.get('written') else ' ohne Eingriff'} "
+                f"nachgemessen stimmt ({so_far})")
     if g["starts_saved_est"]:
         out += f"; ≈ {g['starts_saved_est']:.0f} Brennerstarts weniger"
     if s["counted_only"]:
@@ -458,25 +493,30 @@ def text(s: dict) -> str:
     return out
 
 
-def summary(eng, now_ts: int, days: int = DAYS) -> dict:
+def summary(eng, now_ts: int, days: int = DAYS, live: dict | None = None) -> dict:
     """Auswertung für ``GET api/preview`` (Schlüssel ``valves``): Zahl der Eingriffe und Schreibvorgänge, je Raum und
     Tag, Wirkung (geschätzt nur mit belastbaren und nachgeprüften Modellen, dazu das gemessene Überschwingen),
-    Beispiele, laufende."""
+    Beispiele, laufende. ``live`` (0.40, von ``valve_control.summary``): {"on": Ventile führen wirkt, "active":
+    laufende echte Eingriffe} – dann „schreibt“ statt „würde schreiben“."""
     names = {r.climate: r.name for r in eng.found.rooms}
     since = midnight(local(now_ts) - timedelta(days=days - 1))
     rows = eng.store.valve_dry_log(since)
     checked = checked_rooms(eng.store.valve_dry_log(min(since, now_ts - CAL_DAYS * 86400)))
     starts = [r for r in rows if r["action"] != "zurück"]
+    on = bool(live and live.get("on"))
     out = {
-        "dry_run": True, "note": NOTE, "window_days": days, "writes": len(rows),
+        "dry_run": not on, "live": on, "note": NOTE_LIVE if on else NOTE, "window_days": days, "writes": len(rows),
+        "written": sum(1 for r in rows if r.get("written")),
         "interventions": {k: sum(1 for r in starts if r["rule"] == k) for k in RULES},
+        "interventions_written": {k: sum(1 for r in starts if r["rule"] == k and r.get("written")) for k in RULES},
         "writes_by": {k: sum(1 for r in rows if r["rule"] == k) for k in RULES},
         "counted_only": sum(1 for r in starts if not r["reliable"]),
         "managed": sum(1 for r in starts if r["managed"]),
         "effect": _effect(starts, checked), **_tables(rows, names),
         "examples": [_example(r, names, checked) for r in reversed(starts[-EXAMPLES:])],
         "active": [{"climate": c, "name": names.get(c, c), "rule": a["rule"], "setpoint": a["sp"], "base": a["base"],
-                    "since": local(a["since"]).isoformat()} for c, a in _state(eng)["active"].items()],
+                    "since": local(a["since"]).isoformat(), "written": False}
+                   for c, a in _state(eng)["active"].items()] + list((live or {}).get("active") or []),
         "rules": {"throttle_eta_min": THROTTLE_ETA_MIN, "throttle_valve_pct": THROTTLE_VALVE_PCT,
                   "throttle_max_min": THROTTLE_MAX_MIN, "overshoot_k": OVERSHOOT_K, "approach_k": APPROACH_K,
                   "rise_kh": RISE_KH, "rearm_k": REARM_K, "join_ahead_min": JOIN_AHEAD_MIN,
@@ -488,15 +528,18 @@ def summary(eng, now_ts: int, days: int = DAYS) -> dict:
 
 
 def _tables(rows: list[dict], names: dict) -> dict:
-    """Je Raum und je Tag: Eingriffe je Regel und Schreibvorgänge (mit dem Zurücksetzen)."""
+    """Je Raum und je Tag: Eingriffe je Regel und Schreibvorgänge (mit dem Zurücksetzen; ``written``: davon wirklich
+    geschrieben, 0.40)."""
     rooms: dict[str, dict] = {}
     days_out: dict[str, dict] = {}
     for r in rows:
         room = rooms.setdefault(r["room"], {"climate": r["room"], "name": names.get(r["room"], r["room"]),
-                                            "drosseln": 0, "gemeinsam": 0, "writes": 0})
-        day = days_out.setdefault(local(r["ts"]).date().isoformat(), {"drosseln": 0, "gemeinsam": 0, "writes": 0})
-        room["writes"] += 1
-        day["writes"] += 1
+                                            "drosseln": 0, "gemeinsam": 0, "writes": 0, "written": 0})
+        day = days_out.setdefault(local(r["ts"]).date().isoformat(),
+                                  {"drosseln": 0, "gemeinsam": 0, "writes": 0, "written": 0})
+        for x in (room, day):
+            x["writes"] += 1
+            x["written"] += bool(r.get("written"))
         if r["action"] != "zurück":
             room[r["rule"]] += 1
             day[r["rule"]] += 1
@@ -510,4 +553,4 @@ def _example(r: dict, names: dict, checked: dict) -> dict:
             "temp": r["temp"], "valve": r["valve"], "reason": r["reason"], "reliable": bool(r["reliable"]),
             "managed": bool(r["managed"]), "est_k": r["est_k"], "est_starts": r["est_starts"],
             "pred_over_k": r["pred_over_k"], "est_checked": bool(checked.get(r["room"], {}).get("ok")),
-            "act_over_k": r["act_over_k"], "act_starts": r["act_starts"]}
+            "act_over_k": r["act_over_k"], "act_starts": r["act_starts"], "written": bool(r.get("written"))}

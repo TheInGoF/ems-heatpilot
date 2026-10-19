@@ -29,13 +29,17 @@ er ändert die Stufe der Raumsteuerung nicht. Texte ohne Uhrzeit des Add-ons –
 Seit 0.39.1 steht unter ``floor`` die Fußboden-Grenze für den Vorlauf (``floor_limit.status``): wirksame Grenze jetzt,
 je Raum Anschluss, Anforderung und Grund; als Hinweise die wirksame Grenze und „Anschluss wählen“ für Räume mit
 Fußbodenheizung ohne Anschluss (Einstellungen vor 0.39.1, gelten wie direkt am Kessel). Ändert die Stufe nicht.
+
+Seit 0.40 sagt der Abschnitt ``valves`` („Ventile führen“, ``valve_control.readiness``), welche Räume mit „macht mit“
+HeatPilot führen kann (Raum- und Ventilmodell belastbar, Schritt bis 0,5 K) und welche noch lernen – mit Grund,
+Schalterstand und laufenden Eingriffen. Ändert die Stufe der Raumsteuerung nicht.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from . import dhw_control, dhw_entity, floor_limit, guards
+from . import dhw_control, dhw_entity, floor_limit, guards, valve_control
 from .controlloop import MAX_FAILS, preheat_hours, reach_c
 from .emsesp import BOILER_CONTROLS
 from .ems_lock import LOCK_TEXT
@@ -339,6 +343,7 @@ def assess(eng, now_ts: int) -> dict:
         "boiler": boiler(eng),
         "dhw": dhw(eng, now_ts),
         "floor": floor,
+        "valves": valve_control.readiness(eng, now_ts),  # 0.40: Ventile führen – nur Anzeige
     }
 
 

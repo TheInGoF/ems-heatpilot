@@ -425,7 +425,8 @@ Phasenwechsel.
   andere Räume bekommen bei „HeatPilot steuert“ den Wunschzustand, bei „Beobachten“ erscheint
   der Hinweis, den Zeitplan in der Tado-App fortzusetzen. **Ausschalten** – alle Räume aus,
   Tado hält dann nur den Frostschutz. **Pause** (nur bei „HeatPilot steuert“) – 1 h, 2 h, 4 h
-  oder bis morgen früh (06:00) schreibt HeatPilot nichts; „Weiter“ hebt die Pause auf.
+  oder bis morgen früh (06:00) schreibt HeatPilot nichts (außer dem Zurück eines Schritts von
+  [Ventile führen](#ventile-führen) aufs Wunschsoll); „Weiter“ hebt die Pause auf.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
   Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
   HeatPilot steuert: „HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell 22° bis 21:00“
@@ -453,6 +454,12 @@ keinen Zwischenmodus und keinen automatischen Rückfall:
   Zeitplan in der Tado-App selbst fortsetzen (HeatPilot stellt ihn nicht wieder her). Fällt
   HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt
   geschriebene Soll stehen.
+
+Darunter steht seit 0.40 ein eigener Schalter **„Ventile führen“** (Standard aus): Mit ihm verschiebt HeatPilot
+das Soll um höchstens einen Schritt des Thermostats, um das Ventil früh zu drosseln bzw. Räume gemeinsam anfordern zu
+lassen – nur bei „HeatPilot steuert“, siehe [Ventile führen](#ventile-führen). Schaltest du auf „Beobachten“, nimmt
+HeatPilot einen laufenden Schritt vorher einmal zurück aufs Wunschsoll; fällt es mitten in einem Schritt aus, bleibt
+dieser stehen (höchstens ein Schritt neben dem Wunschsoll).
 
 ### Bereit für die Steuerung?
 
@@ -543,6 +550,14 @@ Minimum unter 50 °C ohne Desinfektionstermin – und der Hinweis „HA-Automati
 solange in den letzten 24 h fremde Änderungen kamen. Was dort ein Hindernis ist, verhindert auch das Schreiben. Siehe
 [Weg W](#warmwasser-über-heatpilot-weg-w).
 
+Seit 0.40 steht davor der Block **„Ventile führen“** (nur Anzeige, ändert die Stufe der Raumsteuerung nicht): je Raum
+mit „macht mit“ **bereit** (Raum- und Ventilmodell belastbar, Schritt bis 0,5 K) oder **lernt** mit dem Grund
+(„Ventilmodell lernt noch (erst 5 von 8 Soll-Sprüngen)“, „Raummodell lernt noch (…)“, „Schritt 1,0 K – zu grob zum
+Führen“), dazu Schalterstand, laufende Eingriffe und die Regeln. Der Satz sagt, was gilt: „Läuft – führt 3 Räume
+(Wohnzimmer, Bad und Kinderzimmer); Küche lernt noch.“, „Aus – 3 Räume wären bereit (…); bis zum Einschalten nur
+Trockenlauf“, „Eingeschaltet, wirkt erst mit „HeatPilot steuert““ oder „Nicht bereit – noch kein Raum mit belastbarem
+Raum- und Ventilmodell“. Siehe [Ventile führen](#ventile-führen).
+
 ### Räume und Geräte
 
 - Je Raum: **„macht mit“** (nur dann wird geschrieben) und die **Komforttemperatur**
@@ -615,17 +630,24 @@ heißen solche Räume „akzeptiert“ – sie sind kein Hindernis.
   Tado-App oder im Heizen-Reiter, auch „aus“): HeatPilot lässt es stehen bis zum nächsten
   Phasenwechsel („manuell bis …“) und schreibt dann den Wunschzustand – auch, wenn der sich beim
   Wechsel nicht ändert (Vorheizen → Komfort). Ob ein Soll wirklich angekommen ist, prüft HeatPilot
-  nicht nach; meldet Home Assistant danach etwas anderes, gilt das als Handänderung.
+  nicht nach; meldet Home Assistant danach etwas anderes, gilt das als Handänderung. Seit 0.40 nicht,
+  solange Home Assistant bis zu zwei Takte nach dem Schreiben noch den Wert von vorher meldet (die
+  Meldung kommt verzögert), und nicht, wenn dort steht, was HeatPilot zuletzt schreiben wollte (etwa
+  wenn in einer Gruppe ein Ventil das Soll annahm und ein anderes nicht – nach der Wartezeit bekommen
+  beide den Wunschzustand). Als verschieden gelten Sollwerte ab 0,1 K Unterschied.
 - **Boost** läuft immer zu Ende, HeatPilot greift währenddessen nicht ein; danach gilt wieder der
   Wunschzustand.
 - **Pause** (Heizen → Pause, bis 48 h) hält alle Schreibvorgänge an; der Schalter bleibt dabei
   auf „HeatPilot steuert“. Ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher.
+  Ausgenommen ist seit 0.40 das Zurück eines Schritts von [Ventile führen](#ventile-führen): Der Knopf
+  „Pause“ nimmt laufende Schritte vorher einmal zurück aufs Wunschsoll, und endet ein Schritt in der
+  Pause, geht sein Zurück trotzdem hinaus.
 - **Fehler** beim Schreiben werden protokolliert und nach 15 min erneut versucht; ab drei
   Fehlschlägen in Folge steht eine Warnung im Heizen-Reiter – seit 0.38 auch als Meldung an die
   [Benachrichtigungsziele](#benachrichtigungen) und im Problem-Sensor (einmal je Ereignis; der erste Erfolg
   danach meldet „wieder in Ordnung“).
 - **Protokoll:** jeder Schreibvorgang (Zeit, Raum, Aktion, Wert, Grund; seit 0.38 auch die Zeilen des
-  Warmwasser-Solls) wird 90 Tage gespeichert
+  Warmwasser-Solls, seit 0.40 die Schritte der Ventilführung mit „Ventil: …“) wird 90 Tage gespeichert
   – die letzten 20 im Heizen-Reiter, 200 in der Diagnose-Datei, alle im Export der gelernten
   Werte (`steuerung`), ohne Koordinaten.
 - Der Zustand der Regelschleife überlebt einen Neustart; beim Zurückschalten auf „Beobachten“
@@ -783,9 +805,10 @@ stehen (es ist Messung, nichts Gelerntes); es steht im Export („trockenlauf“
 
 Seit 0.39 lernt HeatPilot je Raum, **wie das Thermostat sein Ventil stellt** – Stufe 1 von „Thermostate als
 Stellglied“ (Planungspapier): Der eingebaute Regler des Thermostats soll später über fein verschobene Sollwerte das
-Ventil führen, damit es moduliert statt nur auf- und zuzugehen. Dafür muss HeatPilot das Ventil nachbilden. In dieser
-Version wird das nur **gelernt, gezeigt und im Trockenlauf protokolliert – HeatPilot schreibt dafür nichts**, weder an
-die Thermostate noch an den Kessel. Das Steuern kommt in 0.40 mit eigenem Schalter.
+Ventil führen, damit es moduliert statt nur auf- und zuzugehen. Dafür muss HeatPilot das Ventil nachbilden. Ohne
+den Schalter „Ventile führen“ wird das nur **gelernt, gezeigt und im Trockenlauf protokolliert – HeatPilot schreibt
+dafür nichts**, weder an die Thermostate noch an den Kessel. Seit 0.40 führt HeatPilot mit diesem Schalter die Ventile
+wirklich (Stufe 2, siehe [Ventile führen](#ventile-führen)).
 
 Gelernt wird aus den eigenen Messwerten je Raum (Raumtemperatur, Soll, Ventil in %), ohne Gerätedaten eines
 Herstellers. Bei einer Gruppe zählt das Mittel aller Ventile – gezählt werden Räume, nicht Ventile; der Satz sagt dann
@@ -861,7 +884,8 @@ auf/zu, Fehler über 30 min, Schritt, Stand mit Grund); der Raumname öffnet den
 ### Ventile im Trockenlauf
 
 Was HeatPilot mit den Thermostaten als Stellglied tun würde – **nur Protokoll, es wird nichts geschrieben**, auch
-nicht bei „HeatPilot steuert“. Gezählt wird nach Räumen; der Heizkreis von EMS-ESP ist nie dabei. Zwei Regeln:
+nicht bei „HeatPilot steuert“, solange der Schalter „Ventile führen“ aus ist (mit ihm rechnet der Trockenlauf nur noch
+die Räume, die HeatPilot nicht führt). Gezählt wird nach Räumen; der Heizkreis von EMS-ESP ist nie dabei. Zwei Regeln:
 
 - **Früh drosseln:** Nähert sich ein Raum seinem Soll wirklich – gemessen deutlich steigend (mindestens 0,3 K/h und
   dreimal über der Unsicherheit aus dem Messrauschen) und seit einem Soll-Anstieg (Zeitplan, Boost) noch nicht
@@ -900,6 +924,71 @@ Beispiel „vorhergesagt ohne Eingriff ≈ … K (Schätzung wird nachgeprüft)�
 Ein Ventil, das nur an/aus kennt, gewinnt durch frühes Drosseln kaum etwas: Es schaltet nur früher ab und nach dem
 Zurücksetzen wieder voll an – die Schätzung zeigt das so. Das Protokoll bleibt 90 Tage, „Lernstand neu berechnen“
 lässt es stehen; es steht im Export („ventile“) und im Diagnosepaket.
+
+### Ventile führen
+
+Stufe 2 von „Thermostate als Stellglied“ (seit 0.40): Mit dem Schalter **„Ventile führen“** unter **Einstellungen →
+Steuerung** (Standard aus) schreibt HeatPilot die Regeln des Trockenlaufs wirklich – über denselben Weg wie das
+Wunschsoll (`climate.set_temperature` auf die Thermostate des Raums, mit Raumregler nur auf ihn), mit denselben
+Fehlerregeln. Ohne den Schalter bleibt alles wie in 0.39: nur Trockenlauf, keine zusätzlichen Schreibvorgänge.
+
+**Wo es wirkt:** nur bei „HeatPilot steuert“, nur in Räumen mit „macht mit“, deren Raummodell plausibel und deren
+Ventilmodell belastbar ist (wie im Abschnitt „Ventilverhalten“; nicht beim Nachlernen aus der Historie, nicht bei
+gemischten Gruppen) und deren Thermostat in Schritten bis 0,5 K einstellbar ist – gröber wäre ein Schritt schon auf
+oder zu. Der Heizkreis von EMS-ESP ist nie dabei. Welche Räume es sind und warum die anderen noch lernen, steht in
+„Bereit für die Steuerung?“ (Block „Ventile führen“).
+
+**Was geschrieben wird:** Die Steuerung rechnet wie immer das Wunschsoll (Komfort, Nacht, Abwesenheit, Vorheizen).
+Darauf legt die Ventilführung **höchstens einen Schritt** des Thermostats (Tado 0,5 K, auf den Schritt gerundet,
+5–25 °C):
+
+- **Früh drosseln** (ein Schritt tiefer): die Regel des Trockenlaufs (echte Annäherung, Soll laut Raum- und
+  Ventilmodell in unter 20 min erreicht, Ventil dann noch über 30 % offen, mindestens 0,2 K Überschwingen vorhergesagt),
+  dazu strenger: nur in den Phasen Komfort und Vorheizen – nie nachts, bei Abwesenheit oder im Urlaub, dort ist das
+  Soll ohnehin tief –, nur wenn der Raum höchstens 0,3 K unter dem Soll ist, und nur mit der gemeinsamen Vorhersage
+  beider Modelle. Zurück aufs Wunschsoll, sobald der Raum am Soll ist, spätestens nach 60 min – und **sofort**, auch in
+  der Haltezeit, wenn er unter Soll − 0,3 K fällt (Fenster auf, Tür offen): Wer Wärme braucht, bekommt sie. Danach
+  drosselt HeatPilot den Raum erst wieder nach einem neuen Soll oder 0,5 K Auskühlen.
+- **Gemeinsam anfordern** (ein Schritt höher): Fordert nur ein Raum an und taktet der Kessel, hebt HeatPilot Räume an,
+  die laut Raummodell in den nächsten 60 min ohnehin heizen würden (nur mit Außentemperatur) – zurück, sobald der
+  Auslöser endet, spätestens nach 60 min. Der anfordernde Raum wartet auf nichts; gezählt wird nach Räumen, auch Räume
+  ohne „macht mit“ zählen als anfordernd (angehoben werden sie nie). Keine Kette und kein Pendeln: Auslösen darf kein
+  Raum, den HeatPilot gerade drosselt oder in den letzten 60 min angehoben hat – sein Ventil schließt dann gleich bzw.
+  steht seinetwegen offen; angehoben wird kein Raum, der nach dem Drosseln gesperrt ist (bis zum neuen Soll bzw. 0,5 K
+  Auskühlen) oder in den letzten 60 min schon angehoben war.
+
+**Schreibregeln:** nur bei Änderung, 5 min Haltezeit je Raum nach jedem Schreibvorgang (auch nach einem
+Phasenwechsel); ausgenommen das sofortige Zurück. **Phasenwechsel gehen vor:** Wechselt die Steuerung die Phase (z. B.
+Nacht), gilt sofort das neue Wunschsoll, die Führung beginnt neu. **Hand vor Automatik:** Dreht jemand am Soll (App,
+Ventil, Heizen-Reiter, Boost, aus – auch „Alle aus“ oder die Fenster-offen-Erkennung des Thermostats, auch genau aufs
+Wunschsoll), vergisst die Führung ihren Schritt und lässt den Raum bis zum nächsten Phasenwechsel in Ruhe, wie die
+Steuerung – „aus“ bleibt aus. Was HeatPilot selbst geschrieben hat, zählt dabei nie als Hand: auch nicht, wenn Home
+Assistant es bis zu zwei Takte später meldet, wenn in einer Gruppe ein Ventil es nicht annahm oder wenn die
+Einstellungen während des Schreibens gespeichert wurden – spätestens nach der Wartezeit steht dann wieder das
+Wunschsoll. **Pause:** In der Pause beginnt HeatPilot keinen Schritt; der Knopf „Pause“ nimmt laufende Schritte vorher
+einmal zurück aufs Wunschsoll („Ventil: zurück (Pause)“), und endet ein Schritt in der Pause (Soll erreicht, nach 60 min,
+Raum braucht Wärme), geht sein Zurück trotzdem hinaus. Schalter aus oder ein Modell nicht mehr belastbar: sofort zurück
+aufs Wunschsoll („Ventil: zurück (Ventile führen aus)“). **„Beobachten“ oder „macht mit“ aus:** Beim Speichern nimmt
+HeatPilot einen laufenden Schritt noch unter den alten Einstellungen einmal zurück („Ventil: zurück (Steuerung
+„Beobachten“)“ bzw. „… (macht nicht mehr mit)“) – nur wenn er noch am Thermostat steht; danach schreibt es in diesem
+Raum nichts mehr. Fällt HeatPilot mitten in einem Schritt aus, bleibt der Schritt stehen (höchstens einer neben dem
+Wunschsoll), bis HeatPilot wieder läuft. Schlägt ein Schreibvorgang fehl, gilt der Schritt nicht – erneut nach 15 min,
+ab drei Fehlschlägen in Folge die Meldung wie bei jedem Raum.
+
+**Protokoll:** jeder Schritt im Schreibprotokoll (Heizen-Reiter, Diagnose, Export) mit „Ventil: früh drosseln (erreicht
+21,0 °C in ≈ 7 min, Ventil dann noch ≈ 64 % offen)“, „Ventil: gemeinsam anfordern (nur Wohnzimmer fordert an, Kessel
+taktet (5 Starts/h) – Bad würde in 60 min ohnehin heizen)“ bzw. „Ventil: zurück (Soll erreicht)“, dazu als geschriebener
+Eintrag im Ventil-Protokoll. Eine Stunde danach trägt HeatPilot nach, was wirklich geschah – jetzt **mit** dem Eingriff;
+vorhergesagt und nachgeprüft wird entsprechend das Überschwingen mit dem Eingriff.
+
+**Anzeige:** Heizen → Raum antippen zeigt während eines Schritts „Ventil geführt: 20,5 statt 21 °C – früh drosseln,
+zurück ≈ 15:40“ (beim gemeinsamen Anfordern „zurück spätestens …“), sonst nichts. In der Übersicht → Vorschau heißt der
+Abschnitt bei aktivem Schalter **„Ventile – HeatPilot schreibt“**: der Satz („In 7 Tagen hat HeatPilot 2× früh
+gedrosselt …“, dazu, was in den übrigen Räumen nur im Trockenlauf gezählt wurde), die Kennzahlen mit „davon …
+geschrieben“ und dem Überschwingen mit bzw. ohne Eingriff, Beispiele mit „geschrieben“ bzw. „würde schreiben“, je Raum
+und Tag „Schreibvorgänge (davon geschrieben)“, laufende Eingriffe und die Regeln. Ohne Schalter bleibt der Abschnitt
+„Ventile (Trockenlauf)“ wie bisher. Abfragen: `api/heat` (je Raum `control.valve`, `control.valve_guided`;
+`readiness.valves`), `api/preview` (`valves.live`, `valves.written`), Export „ventile → fuehren“.
 
 ## Warmwasser über HeatPilot (Weg W)
 

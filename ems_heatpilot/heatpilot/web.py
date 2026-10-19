@@ -1,7 +1,10 @@
 """Weboberfläche (über Ingress direkt in der HA-Seitenleiste).
 
 Seit 0.39 enthalten ``api/heat`` und ``api/summary`` je Raum das gelernte Ventilverhalten (``valve_model``) und
-``api/preview`` den Trockenlauf der Ventile (``valves``) – nur Anzeige.
+``api/preview`` den Trockenlauf der Ventile (``valves``) – nur Anzeige. Seit 0.40 (Ventile führen, ``valve_control``)
+steht in ``api/preview`` → ``valves`` auch, was HeatPilot wirklich geschrieben hat („schreibt“), in ``api/heat`` je Raum
+unter ``control.valve`` der laufende Eingriff und unter ``readiness.valves`` der Block „Ventile führen“; die Pause
+(``POST api/heat/pause``) nimmt laufende Schritte vorher einmal zurück aufs Wunschsoll (``ControlLoop.release``).
 
 Seit 0.38 dazu Weg W und Benachrichtigungen: ``GET api/dhw`` (Status und Bereitschaft des Warmwasser-Solls),
 ``POST api/dhw/resume`` („wieder einschalten“ – nur bei einer Pause, sonst 409), ``GET api/notify`` (Ziele zur
@@ -27,7 +30,7 @@ from aiohttp import web
 from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
-from . import dhw_control, dhw_entity, entity_map, notify, valve_dry
+from . import dhw_control, dhw_entity, entity_map, notify, valve_control
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -293,7 +296,7 @@ def make_app(app) -> web.Application:
             return json_response({"starting": True, "status": app.status})
         now = int(time.time())
         return json_response({"preview": preview.cached(app.eng, now), "compare": preview_log.compare_for(app.eng, now),
-                              "valves": valve_dry.summary(app.eng, now)})  # 0.39: Ventile im Trockenlauf
+                              "valves": valve_control.summary(app.eng, now)})  # Ventile: Trockenlauf, ab 0.40 geführt
 
     def heat_state() -> dict:
         eng, ctl, loop = app.eng, app.control, app.eng.control_loop
@@ -408,6 +411,8 @@ def make_app(app) -> web.Application:
                     until = loop.pause(body.get("hours", 0))
                 except (TypeError, ValueError) as err:
                     return json_response({"error": str(err) or "Stunden fehlen"}, status=400)
+                if until:  # Ventile führen (0.40): laufende Schritte vorher einmal zurück aufs Wunschsoll
+                    await loop.release(set(), "Pause")
                 return json_response({"ok": True, "paused_until": until and
                                       datetime.fromtimestamp(until).astimezone().isoformat(), **heat_state()})
             elif action == "temp":

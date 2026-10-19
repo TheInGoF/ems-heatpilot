@@ -148,9 +148,12 @@ class Control:
         return rooms
 
     @staticmethod
-    def _temp(value) -> float:
+    def _temp(value, step: float = 0.5) -> float:
+        """Auf den Schritt gerundet (Standard 0,5 K; die Ventilführung, 0.40, nutzt den des Geräts), 5–25 °C."""
+        if not 0 < step <= 5:
+            raise ControlError("Schrittweite muss zwischen 0 und 5 K liegen")
         try:
-            t = round(float(value) * 2) / 2
+            t = round(round(float(value) / step) * step, 2)
         except (TypeError, ValueError):
             raise ControlError("Temperatur fehlt") from None
         if not TEMP_MIN <= t <= TEMP_MAX:
@@ -355,10 +358,11 @@ class Control:
         return await self._each(rs, f"Betriebsart {mode}", one)
 
     # ------------------------------------------------------------------ Regelschleife
-    async def apply(self, room: str, temp: float, reason: str) -> None:
+    async def apply(self, room: str, temp: float, reason: str, step: float = 0.5) -> None:
         """Automatischer Schreibvorgang der Regelschleife: Betriebsart ``heat`` sicherstellen, dann Soll.
-        Nur für gewählte Räume; Temperatur 5–25 °C; Fehler werden dem Aufrufer gemeldet."""
-        r, t = self._check_rooms([room])[0], self._temp(temp)
+        Nur für gewählte Räume; Temperatur 5–25 °C, auf ``step`` gerundet (seit 0.40: die Ventilführung schreibt in
+        der Schrittweite des Thermostats, sonst 0,5 K); Fehler werden dem Aufrufer gemeldet."""
+        r, t = self._check_rooms([room])[0], self._temp(temp, step)
         for e in self.groups[r].write_targets:
             await self._set(e, t, reason)
 
