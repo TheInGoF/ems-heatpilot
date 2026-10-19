@@ -114,26 +114,28 @@ Nachkommastellen nicht jedes Mal schreiben). Wie beim Warmwasser: nur bei Änder
 zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/aus bekommt dieselbe
 5-min-Haltezeit wie das Warmwasser, damit der Kessel nicht hin und her schaltet.
 
-**Schwellen fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll in
-ganzen Schritten von 1 K – siehe nächster Abschnitt.
+**Auflösung fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll in
+**0,1 K** – die Ventile brauchen die volle Auflösung, siehe nächster Abschnitt.
 
 ## Thermostate als Stellglied: Ventilverhalten lernen (0.39)
 
-Idee Ingo: HeatPilot „missbraucht“ den eingebauten PID-Regler der Thermostate. Statt das Ventil direkt zu
-stellen (geht bei Tado nicht), verschiebt es das Raum-Soll um **volle 1 K**, damit das Ventil spürbar
-nachregelt – z. B. 1 K unter das Ziel, wenn ein Raum schnell heizt und das Ventil früh schließen soll,
-oder 1 K darüber, wenn mehrere Räume gemeinsam anfordern sollen (weniger Takten). Kleinere Schritte
-gehen im Regler unter.
+Idee Ingo: HeatPilot „missbraucht“ den eingebauten PID-Regler der Thermostate. Tado lässt das Ventil nicht
+direkt stellen – aber über ein fein verschobenes Raum-Soll lässt sich die Ventilöffnung führen. Dafür
+braucht es die **volle Auflösung von 0,1 K**: Mit groben Schritten (0,5 oder 1 K) springt der Regler nur
+zwischen auf und zu, das Ventil kennt dann praktisch nur an und aus. Mit 0,1 K moduliert es.
 
 Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineering aus den eigenen Daten,
 `room_samples`: Raumtemperatur, Soll, Ventil in %):
-- Antwort auf einen Soll-Sprung: wie weit und wie schnell öffnet/schließt das Ventil bei +1 K / −1 K
-  (Verstärkung, Nachstellzeit, Totzeit), Sättigung 0–100 %, Totband um das Soll.
-- Gelernt aus den vorhandenen Soll-Wechseln (Zeitplan, Boost, HeatPilot), je Ventil, mit Vorhersage-
-  fehler; erst wenn die Vorhersage trägt, nutzt die Steuerung es.
-- Anzeige je Raum: „Ventil reagiert auf +1 K mit ≈ 35 % nach 10 min, schließt bei −1 K in ≈ 15 min“.
-- Umgekehrt genutzt: Welche Soll-Verschiebung (ganze K) bringt die gewünschte Ventilstellung zur rechten
-  Zeit – mit der 5-min-Haltezeit nach jedem Schreiben und nur bei Änderung.
+- Wie öffnet das Ventil abhängig vom Abstand Soll − Raumtemperatur und von der Zeit (Verstärkung,
+  Nachstellzeit, Totzeit), Sättigung 0–100 %, Totband um das Soll.
+- Gelernt aus den vorhandenen Soll-Wechseln und dem normalen Verlauf, je Ventil, mit Vorhersagefehler;
+  erst wenn die Vorhersage trägt, nutzt die Steuerung es.
+- Anzeige je Raum: „Ventil öffnet bei 0,3 K unter Soll auf ≈ 40 %, schließt ab ≈ 0,1 K darüber“.
+- Umgekehrt genutzt: Welches Soll (in 0,1 K) bringt die gewünschte Ventilstellung – z. B. das Ventil
+  früh drosseln, wenn ein Raum schnell heizt, oder mehrere Räume gleichzeitig öffnen (weniger Takten).
+- Schreibweg und Schrittweite je Thermostat aus HA prüfen (`target_temp_step`; Tado über HomeKit oder
+  Cloud) – kann ein Gerät nur gröber, nutzt HeatPilot dort dessen Schritt und sagt das in der Anzeige.
+- Nur bei Änderung schreiben, 5 min Haltezeit, Protokoll.
 
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
 
