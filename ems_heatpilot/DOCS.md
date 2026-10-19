@@ -477,6 +477,10 @@ Stufe der Raumsteuerung nicht – die Tado-Steuerung braucht ihn nicht.
   Zeitplan und keinen Timer. Vor dem ersten Schreiben stellt HeatPilot deshalb die
   Betriebsart auf „heizen“. Räume der Tado-Cloud-Integration behalten Timer und Zeitplan.
 - Der Vorlauf am Regler (EMS-ESP) bleibt außen vor: EMS-ESP wird weiterhin nur gelesen.
+  Den Heizkreis von EMS-ESP (`climate.…_thermostat_hc1`) deshalb nicht als Raum wählen: Er steht
+  in der Raum-Tabelle, weil dort alle climate-Entitäten stehen, wird aber nicht vorgeschlagen. Als
+  Raum gewählt, ginge ein Soll (Knopfdruck oder „macht mit“) über Home Assistant an den Regler –
+  eine eigene Sperre dafür gibt es noch nicht.
 
 ### Wunschzustand (jeder Takt, nur bei „HeatPilot steuert“)
 

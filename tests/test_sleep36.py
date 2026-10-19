@@ -392,7 +392,9 @@ def test_learned_times_replace_plan_only_with_auto_and_where_reliable():
 def test_engine_learns_plan_sets_config_and_survives_rebuild(tmp_path, monkeypatch):
     store = fill(Store(tmp_path / "e.db"), days=28)
     now = int(datetime(2026, 9, 28, 13, 0).timestamp())
-    monkeypatch.setattr(engine_mod, "time", SimpleNamespace(time=lambda: now))
+    # Uhr für die ganze Engine anhalten: time.time selbst ersetzen – die Teile der Engine (engine_*.py) binden
+    # time jeweils selbst, ein Ersatz von heatpilot.engine.time erreichte nur den Kern (wie test_dhw_v32)
+    monkeypatch.setattr(engine_mod.time, "time", lambda: now)
     cfg = Config(control_mode="heatpilot", power_sensors=["sensor.l1"], night_plan_auto=True)
     found = Discovered(rooms=[Room("Wz", "climate.wz")], power=["sensor.l1"])
     eng = Engine(cfg, store, found)
