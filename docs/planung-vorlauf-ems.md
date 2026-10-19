@@ -93,9 +93,13 @@ Weg W als eigene Version.
 - **Schreiben nur bei Änderung** (Ingo): kein „55, 55, 55“ – nur wenn sich das Soll ändert, und höchstens
   alle 15 min. Der Kessel hält den Wert dann selbst.
 - **Nach 60 s prüfen**, ob der Kessel ihn übernommen hat (`wwseltemp` zurücklesen). Wenn nicht: Fehler im
-  Protokoll, Hinweis in der Oberfläche und eine Meldung in HA (Benachrichtigung bzw. Problem-Sensor
-  `binary_sensor.heatpilot_problem` mit Grund), kein endloses Nachschreiben – nach 3 Fehlschlägen
-  hintereinander pausiert Weg W, bis jemand nachsieht.
+  Protokoll, Hinweis in der Oberfläche und eine Meldung in HA, kein endloses Nachschreiben – nach 3
+  Fehlschlägen hintereinander pausiert Weg W, bis jemand nachsieht.
+- **Meldung in HA über Benachrichtigungsgeräte** (Ingo): In den Einstellungen wählbare Ziele – `notify.*`-
+  Entitäten über die Aktion `notify.send_message`, dazu ältere Dienste wie `notify.mobile_app_…` für die
+  Handy-App. Gemeldet wird je Ereignis einmal (nicht bei jedem Takt) und einmal „wieder in Ordnung“.
+  Zusätzlich `binary_sensor.heatpilot_problem` mit Grund für eigene Dashboards/Automationen. Dieselben
+  Meldungen nutzt auch die Raumsteuerung (Schreibfehler am Thermostat) und später Weg B.
 - Jeder Schreibvorgang mit Grund im Protokoll wie `control_log`.
 - Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
   `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an).
