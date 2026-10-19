@@ -46,6 +46,8 @@ from typing import NamedTuple
 
 from . import guards, valve_control
 from .control import TEMP_MAX, TEMP_MIN
+from .boiler_status import ACTIONS as BOILER_ACTIONS
+from .boiler_status import LOG_NAME as BOILER_LOG_NAME
 from .dhw_control import ACTIONS as DHW_ACTIONS
 from .dhw_control import LOG_NAME as DHW_LOG_NAME
 from .presence import arrival_unknown, next_arrival
@@ -547,9 +549,11 @@ class ControlLoop:
             "hint": ("Zurück zu Tado nur über den Schalter in den Einstellungen; danach in der Tado-App den "
                      "Zeitplan fortsetzen. Fällt HeatPilot aus, bleibt das zuletzt geschriebene Soll stehen."
                      if managing else None),
-            # seit 0.38 auch die Zeilen des Warmwasser-Solls (Weg W): kind „dhw“, Name „Warmwasser-Soll“
+            # seit 0.38 auch die Zeilen des Warmwasser-Solls (Weg W): kind „dhw“, Name „Warmwasser-Soll“; seit 0.41
+            # die des Kessels (Weg B, Vorlauf-Soll und Heizbetrieb): kind „boiler“, Name „Kessel“
             "log": [{**row, "time": local(row["ts"]).isoformat(),
                      **({"kind": "dhw", "name": DHW_LOG_NAME} if row["action"] in DHW_ACTIONS else
+                        {"kind": "boiler", "name": BOILER_LOG_NAME} if row["action"] in BOILER_ACTIONS else
                         {"kind": "room",
                          "name": names.get(row["room"]) or names.get(self._key_of(row["room"]), row["room"])})}
                     for row in self.store.control_log(LOG_SHOW)],

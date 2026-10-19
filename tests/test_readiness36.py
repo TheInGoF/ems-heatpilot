@@ -277,8 +277,8 @@ def test_boiler_section_texts_and_level_untouched(tmp_path):
     eng.ems_controls, eng.ems_controls_ts = _controls(), time.time()
     b = readiness.boiler(eng)
     assert b["ready"] and b["polled"] and b["polled_at"]
-    assert b["text"] == ("Alle 5 nötigen Steuerungen vorhanden und schreibbar – eine Kesselsteuerung wäre möglich "
-                         "(nicht gebaut; am Kessel schreibt HeatPilot nur das Warmwasser-Soll, mit „HeatPilot setzt“)")
+    assert b["text"] == ("Alle 5 nötigen Steuerungen vorhanden und schreibbar – HeatPilot kann den Kessel übernehmen "
+                         "(Schalter „Kessel über HeatPilot“, Block unten)")  # seit 0.41 gebaut (Weg B)
     first = b["controls"][0]
     assert first == {"key": "selflowtemp", "name": "Vorlauf-Soll", "required": True, "found": True,
                      "writeable": True, "value": 1, "min": 0, "max": 90, "uom": "°C"}
@@ -381,12 +381,12 @@ def test_poll_reads_controls_at_start_then_hourly_errors_only_logged(caplog):
         except asyncio.CancelledError:
             pass
 
-    eng = SimpleNamespace(ems_controls={}, ems_controls_ts=None, set_ems=lambda v: None,
+    eng = SimpleNamespace(ems_controls={}, ems_controls_ts=None, set_ems=lambda v, status=None: None,
                           store=SimpleNamespace(commit=lambda: None))
     ems = FakeEms()
     run(ems, eng)
     assert ems.calls == 1 and ems.closed and eng.ems_controls == _controls() and eng.ems_controls_ts
-    bad, eng2 = FakeEms(fail=True), SimpleNamespace(ems_controls={}, ems_controls_ts=None, set_ems=lambda v: None,
+    bad, eng2 = FakeEms(fail=True), SimpleNamespace(ems_controls={}, ems_controls_ts=None, set_ems=lambda v, status=None: None,
                                                    store=SimpleNamespace(commit=lambda: None))
     run(bad, eng2)
     assert bad.calls == 1 and eng2.ems_controls == {} and "Kesselsteuerungen nicht lesbar" in caplog.text

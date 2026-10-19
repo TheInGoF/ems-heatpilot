@@ -14,6 +14,11 @@ Seit 0.36.1 fragt ``controls()`` zusätzlich einzelne Kesselsteuerungen ab
 (``writeable``). Das ist nur Anzeige für „Bereit für die Steuerung?“ – was eine spätere
 Kesselsteuerung bräuchte (``BOILER_CONTROLS``, siehe docs/planung-vorlauf-ems.md).
 
+Seit der Prüfung von 0.41 merkt sich ``read()`` je Gerät von Kessel und Regler, wie die Abfrage ausging
+(``status``): beantwortet (``OK``), laut EMS-ESP nicht vorhanden (``ABSENT`` – eine ausdrückliche Meldung statt
+Werten) oder Fehler (``FAILED`` – Zeitüberlauf, keine Verbindung, Serverfehler, unlesbar, leer). Eine fehlende Antwort
+ist damit nicht mehr dasselbe wie „kein Regler am Bus“ (``regulator``).
+
 Diese Klasse kann ausschließlich lesen (GET) – auch diese Abfragen. Es gibt bewusst keinen Code,
 der Werte an EMS-ESP sendet, auch keinen vorbereiteten – Einstellungen der Therme bleiben unangetastet.
 """
@@ -32,6 +37,9 @@ EXTRA_DEVICES = ("mixer", "solar", "heatpump", "heatsource", "switch", "controll
                  "extension", "alert", "ventilation", "water", "pool", "temperaturesensor", "analogsensor",
                  "custom")
 EXTRA_EVERY = 10  # weitere Geräte nur bei jeder 10. Abfrage (alle 5 min)
+# Ausgang einer Abfrage je Gerät (``EmsEsp.status``): Werte, ausdrücklich nicht vorhanden, Fehler bzw. unbekannt
+OK, ABSENT, FAILED = "ok", "fehlt", "fehler"
+MESSAGE_KEYS = {"message", "error"}  # so antwortet EMS-ESP auf ein Gerät, das es nicht gibt
 
 # Kesselsteuerungen, die eine spätere Kesselsteuerung bräuchte (seit 0.36.1, nur Anzeige, nichts schreiben):
 # Schlüssel (EMS-ESP-Kurzname) → (Anzeige, nötig?, Pfade unter /api/boiler/). Neuere EMS-ESP (ab 3.6) führen
@@ -119,20 +127,31 @@ class EmsEsp:
         self.extra: list[str] | None = None  # gefundene weitere Geräte (None = noch nicht gesucht)
         self._extra_values: dict[str, dict] = {}
         self._calls = 0
+        self.status: dict[str, str] = {}  # Ausgang der letzten Abfrage je Gerät aus DEVICES (OK, ABSENT, FAILED)
 
-    async def _get(self, device: str) -> dict | None:
+    async def _fetch(self, device: str) -> tuple[dict | None, str]:
+        """``GET /api/<gerät>`` (nur lesen): (Werte, Ausgang). ``ABSENT`` nur bei einer ausdrücklichen Meldung von
+        EMS-ESP statt Werten (z. B. 400 „unknown device“); Zeitüberlauf, keine Verbindung, Serverfehler, eine
+        unlesbare oder leere Antwort sind ``FAILED`` – dann ist unbekannt, ob es das Gerät gibt."""
         try:
             async with self._session.get(f"{self.base}/api/{device}") as resp:
-                if resp.status != 200:
-                    return None
-                data = await resp.json(content_type=None)
-        except (aiohttp.ClientError, TimeoutError, ValueError) as err:
+                code = resp.status
+                try:
+                    data = await resp.json(content_type=None)
+                except ValueError:
+                    data = None
+        except (aiohttp.ClientError, TimeoutError) as err:
             if self.ok and device in DEVICES:
                 log.warning("EMS-ESP %s nicht erreichbar: %s", device, err)
-            return None
-        if not isinstance(data, dict) or not data or set(data) <= {"message", "error"}:
-            return None
-        return flatten(data)
+            return None, FAILED
+        if isinstance(data, dict) and data and set(data) <= MESSAGE_KEYS:
+            return None, ABSENT if code < 500 else FAILED
+        if code != 200 or not isinstance(data, dict) or not data:
+            return None, FAILED
+        return flatten(data), OK
+
+    async def _get(self, device: str) -> dict | None:
+        return (await self._fetch(device))[0]
 
     def _open(self) -> aiohttp.ClientSession:
         if self._session is None:
@@ -140,12 +159,16 @@ class EmsEsp:
         return self._session
 
     async def read(self) -> dict[str, dict]:
+        """Kessel und Regler (immer), weitere Geräte (seltener). Je Gerät aus ``DEVICES`` steht in ``status``, wie die
+        Abfrage ausging – Engine.set_ems braucht das für „Regler am Bus“."""
         self._open()
         out: dict[str, dict] = {}
+        status: dict[str, str] = {}
         for device in DEVICES:
-            values = await self._get(device)
+            values, status[device] = await self._fetch(device)
             if values:
                 out[device] = values
+        self.status = status
         self.ok = bool(out)
         if self.ok and (self.extra is None or self._calls % EXTRA_EVERY == 0):
             found = []

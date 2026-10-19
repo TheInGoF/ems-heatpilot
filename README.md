@@ -39,6 +39,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Vorheizen** vor der Ankunft und vor dem Nachtende, so früh, wie der Raum laut Modell braucht – gedeckelt; Räume, die ihr Soll nicht schaffen, werden akzeptiert statt hochgedreht. Die Vorheizdauer rechnet mit der Außentemperatur zum Zielzeitpunkt laut Vorhersage: Wird es bis dahin kälter, beginnt das Vorheizen früher
 - **Hand, Pause, Protokoll:** von Hand Gedrehtes bleibt bis zum nächsten Phasenwechsel, Pause (1 h, 2 h, 4 h oder bis morgen früh), jeder Schreibvorgang mit Grund im Protokoll
 - **Ventile führen (seit 0.40, eigener Schalter, Standard aus):** HeatPilot verschiebt das Soll um höchstens einen Schritt des Thermostats – früh drosseln, wenn ein Raum gleich am Soll ist und sonst überschwingen würde, gemeinsam anfordern, wenn der Kessel für einen Raum allein taktet. Nur in Räumen mit „macht mit“ und belastbaren Modellen, nur bei Änderung mit 5 min Haltezeit; Hand und Phasenwechsel gehen vor, wer Wärme braucht, bekommt sie sofort
+- **Kessel über HeatPilot (seit 0.41, Weg B, eigener Schalter, Standard aus):** HeatPilot führt den Kessel selbst – Vorlauf-Soll live alle 30 s aus dem anspruchsvollsten Raum (nur bei Änderung ab 1 K, höchstens einmal je Minute), Heizbetrieb an/aus mit 5 min Haltezeit, ohne Pendeln (anheben sofort, senken bzw. ausschalten erst, wenn es 10 bzw. 15 min dabei bleibt), Mindest-Vorlauf aus der Abnahme der offenen Räume, Takt-Boost in 2-K-Schritten bis +10 K, wenn der Kessel taktet und ein Raum wartet, Fußboden-Grenze hart vor jedem Schreiben (steht der Kessel darüber, sofort zurück). Erst Trockenlauf (nur Protokoll), dann schreiben – aber nur ohne Regler am Bus; Prüfung nach 60 s, Pause bei Fehlschlägen oder fremden Änderungen, beim Zurückschalten ein fester Rückfall-Vorlauf. Für den Ausfall ein Wächter in Home Assistant (`sensor.heatpilot_heartbeat`, Anleitung in der Oberfläche)
 - **Räume aus Home Assistant:** Bereiche und Geräte werden gelesen und vorgeschlagen; mehrere Thermostate bilden einen Raum, ein Wandthermostat kann Raumregler sein
 - **Tado lokal über HomeKit:** die Ventile der Tado-Bridge auch ohne Tado-Cloud – der Boost läuft dann als Timer in HeatPilot
 - **Heizen per Knopfdruck:** Boost für gewählte Räume (oder alle), Zeitplan und Ausschalten für alle Räume, Soll und Betriebsart je Raum – aufgebaut wie die Tado-App
@@ -78,7 +79,10 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
   denselben Schalter. An EMS-ESP schickt HeatPilot nur Lese-Anfragen (GET); geschrieben
   wird nur auf die Thermostate, die du als Raum wählst, und – nur mit dem eigenen Schalter
   „HeatPilot setzt“ (seit 0.38) – über Home Assistant auf die eine Entität des Warmwasser-Solls
-  (ganze Grad zwischen Minimum und Maximum, nur bei Änderung, Prüfung nach 60 s). Den Heizkreis von EMS-ESP
+  (ganze Grad zwischen Minimum und Maximum, nur bei Änderung, Prüfung nach 60 s); mit dem Schalter „Kessel über
+  HeatPilot“ (seit 0.41) zusätzlich auf die eine Entität des Vorlauf-Solls (ganze Grad, 35 °C bis zum höchsten Vorlauf
+  und zur Fußboden-Grenze) und die eine des Heizbetriebs – nie, solange ein Regler am Bus ist; die Antipendelzeit
+  bleibt, wie sie ist. Den Heizkreis von EMS-ESP
   (`climate.…_thermostat_hc1`) erkennt HeatPilot am Gerät: Er macht nie mit, und jeder Schreibversuch
   darauf wird hart abgewiesen (siehe [Räume und Geräte](ems_heatpilot/DOCS.md#räume-und-geräte)).
 - **Sparen ja, übertreiben nein.** Komfort ist eine feste Grenze, gezählt wird am
@@ -101,7 +105,7 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 | 3 | Vorschau (Trockenlauf): welcher Vorlauf und welches Warmwasser-Soll je Stunde, Vorhersage in der Steuerung | erfüllt (0.37) |
 | 4 | Warmwasser am Kessel: Speicher-Soll nur bei Änderung, Prüfung nach 60 s, Fehler in HA melden, Desinfektion nach Termin | 0.36.3 / 0.38 – Warmwasser-Soll gebaut, Desinfektion auslösen folgt mit Weg B |
 | 5 | Thermostate als Stellglied: Ventilverhalten lernen, Soll in voller Auflösung, Räume gemeinsam anfordern (weniger Takten) | 0.39 – Ventilverhalten und Trockenlauf gebaut; 0.40 – Ventile führen gebaut (eigener Schalter) |
-| 6 | Kessel übernehmen: Vorlauf live und Heizbetrieb über EMS-ESP, eigene Witterungsführung – der Regler (z. B. ES73) entfällt | geplant |
+| 6 | Kessel übernehmen: Vorlauf live und Heizbetrieb über Home Assistant, eigene Witterungsführung – der Regler entfällt | 0.41 – Weg B gebaut (Vorlauf live, Heizbetrieb, Abnahme, Takt-Boost, Wächter; eigener Schalter); Desinfektion auslösen folgt 0.42 |
 | 7 | Wirkungsgrad je Vorlauf gelernt statt fester Richtwert (Vorlauf-Studie → Planung) | teilweise (gemessen) |
 | 8 | Offene Thermostate (Zigbee, Z-Wave, Matter, Homematic) getestet | optional |
 
@@ -111,6 +115,9 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 - [EMS-ESP](https://github.com/emsesp/EMS-ESP32) am Kessel (empfohlen ≥ 3.7, [Doku](https://emsesp.org)),
   in HA eingebunden; optional direkter Zugriff per IP
 - Tado-Integration in HA oder HomeKit-Controller mit der Tado-Bridge (lokal, ohne Cloud)
+- Thermostate, die das Soll in **0,5 K oder feiner** stellen (Tado: 0,5 K). „Ventile führen“ arbeitet mit einem
+  Schritt dieser Größe – Thermostate mit gröberen Schritten (z. B. 1 K) werden dafür nicht genutzt; solche besser
+  nicht einsetzen
 - Gaszähler in HA (z. B. Reed-Kontakt am EMS-ESP-Zähleingang), sonst Schätzung aus EMS-ESP
 - Außentemperatur (Fühler oder Wetter-Integration)
 - Optional: Personen mit der Home-Assistant-App (Anwesenheit), eine Wetter-Integration

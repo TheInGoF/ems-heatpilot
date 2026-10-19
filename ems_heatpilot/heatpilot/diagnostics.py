@@ -160,6 +160,10 @@ def self_check(app) -> list[dict]:
     if ctl is not None and app.cfg.dhw_control != "aus":
         level = "warn" if ctl.paused() or (ctl.mode == "heatpilot" and not ctl.entity_id) else "ok"
         add(level, "Warmwasser-Soll", ctl.status_text(int(time.time())))
+    bctl = getattr(eng, "boiler_control", None)  # Weg B (0.41): Kessel über HeatPilot
+    if bctl is not None and app.cfg.boiler_control != "aus":
+        level = "warn" if bctl.paused() or (bctl.mode == "heatpilot" and bctl.view.get("blocked")) else "ok"
+        add(level, "Kessel über HeatPilot", bctl.as_dict()["status_text"])
 
     critical = [f.gas, *f.outdoor, f.boiler.get("flow_temp"), *(r.climate for r in f.rooms)]
     for eid in filter(None, critical):
@@ -340,6 +344,7 @@ def bundle(app, hours: int = 48) -> dict:
     data["valve_subst"] = _rows(eng, "SELECT * FROM valve_subst WHERE ts >= ? ORDER BY ts", (since,))  # Ersatzwerte
     data["control"] = eng.control_loop.as_dict() if eng.control_loop else None
     data["dhw_control"] = eng.dhw_control.as_dict() if getattr(eng, "dhw_control", None) else None  # Weg W (0.38)
+    data["boiler_control"] = eng.boiler_control.as_dict() if getattr(eng, "boiler_control", None) else None  # 0.41
     data["daily"] = _rows(eng, "SELECT * FROM daily ORDER BY day DESC LIMIT 400")
     data["kv"] = {r["key"]: r["value"] for r in _rows(eng, "SELECT key, value FROM kv")
                   if not r["key"].startswith("model.")}

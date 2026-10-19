@@ -144,13 +144,16 @@ def test_available_lists_entities_and_services(tmp_path):
     services = {"notify": {"send_message": {}, "mobile_app_tablet": {}, "persistent_notification": {}},
                 "light": {"turn_on": {}}}
     got = available(states, services, ["notify.handy", "notify.alt"])
+    # seit 0.41: Dienste der Handy-App oben, „empfohlen“
     assert got == [
-        {"id": "notify.handy", "name": "Handy", "kind": "entity", "selected": True},
-        {"id": "notify.mobile_app_tablet", "name": "mobile app tablet", "kind": "service", "selected": False},
+        {"id": "notify.mobile_app_tablet", "name": "mobile app tablet", "kind": "service", "selected": False,
+         "recommended": True},
+        {"id": "notify.handy", "name": "Handy", "kind": "entity", "selected": True, "recommended": False},
         {"id": "notify.persistent_notification", "name": "persistent notification", "kind": "service",
-         "selected": False},
-        {"id": "notify.alt", "name": "notify.alt", "kind": "fehlt", "selected": True}]
-    assert available(states, None) == [{"id": "notify.handy", "name": "Handy", "kind": "entity", "selected": False}]
+         "selected": False, "recommended": False},
+        {"id": "notify.alt", "name": "notify.alt", "kind": "fehlt", "selected": True, "recommended": False}]
+    assert available(states, None) == [{"id": "notify.handy", "name": "Handy", "kind": "entity", "selected": False,
+                                         "recommended": False}]
     assert notify_mod.kind_of("notify.handy", states) == "entity" and notify_mod.kind_of("notify.x", states) == "service"
 
 
@@ -220,8 +223,8 @@ def test_api_dhw_resume_and_notify(tmp_path):
             assert r.status == 200 and j["ok"] and j["was_paused"] and j["dhw"]["paused"] is False
             j = await (await client.get("/api/notify")).json()
             assert j["targets"] == TARGETS and j["services_error"] is None
-            assert [(a["id"], a["kind"], a["selected"]) for a in j["available"]] == [
-                ("notify.handy", "entity", True), ("notify.mobile_app_tablet", "service", True)]
+            assert [(a["id"], a["kind"], a["selected"]) for a in j["available"]] == [  # Handy-App oben (0.41)
+                ("notify.mobile_app_tablet", "service", True), ("notify.handy", "entity", True)]
             r = await client.post("/api/notify/test", json={"targets": ["notify.fremd"]})
             j = await r.json()
             assert r.status == 200 and j["ok"] and j["sent"] == TARGETS  # nur die gespeicherten Ziele
@@ -231,7 +234,7 @@ def test_api_dhw_resume_and_notify(tmp_path):
             s = await (await client.get("/api/settings")).json()
             assert s["settings"]["dhw_control"] == "heatpilot" and s["settings"]["notify_targets"] == TARGETS
             assert s["dhw_control"]["suggested"] == ENT and s["dhw_control"]["modes"] == ["aus", "trocken", "heatpilot"]
-            assert s["notify"]["available"][0]["id"] == "notify.handy"
+            assert s["notify"]["available"][0]["id"] == "notify.mobile_app_tablet"  # empfohlen, oben (0.41)
             summ = await (await client.get("/api/summary")).json()
             assert summ["dhw_control"]["status_text"].startswith("HeatPilot setzt")
         finally:

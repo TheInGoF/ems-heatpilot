@@ -262,8 +262,9 @@ def test_boiler_block_table_and_traffic_light(tmp_path):
     assert rows[3] == "Warmwasser-Einmalladung wwonetime nicht gefunden – – nötig"
     assert rows[4] == "Antipendelzeit burnminperiod 10 min 0 – 120 min nein Info"
     assert '<tr class="muted"><td>Warmwasser-Einmalladung' in w
-    assert ("Nur Anzeige. Was HeatPilot damit täte, steht in der Planung (docs/planung-vorlauf-ems.md); geschrieben "
-            "wird erst mit einem eigenen Schalter in einer späteren Version.") in plain(w)
+    assert ("Nur Anzeige. Was HeatPilot damit tut, steht in der Planung (docs/planung-vorlauf-ems.md). Geschrieben "
+            "wird nie über EMS-ESP, nur über Home Assistant und nur mit eigenem Schalter: Vorlauf-Soll und Heizbetrieb "
+            "seit 0.41 – siehe „Kessel über HeatPilot“") in plain(w)  # 0.41: Weg B
     assert r["none"] == ""
 
 

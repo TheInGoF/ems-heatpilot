@@ -11,6 +11,12 @@ Seit 0.38 dazu Weg W und Benachrichtigungen: ``GET api/dhw`` (Status und Bereits
 Auswahl) und ``POST api/notify/test`` (Testnachricht nur an die gespeicherten Ziele). ``api/entities`` sagt je
 ``number``-Entität, ob sie als Warmwasser-Soll taugt (``dhw``: fits, hint – für die Auswahl).
 
+Seit 0.41 Weg B (Kessel über HeatPilot): ``GET api/boiler`` (Status und Bereitschaft), ``POST api/boiler/resume``
+(„wieder einschalten“ – nur bei einer Pause, sonst 409), ``boiler`` in ``api/heat`` und ``api/summary``
+(``boiler_control``), ``boiler_control`` in ``api/settings`` (Schalter, Vorschläge, Status, Bereitschaft, Anleitung
+Wächter) und in ``api/entities`` je ``number`` ``flow``, je ``switch`` ``heating`` (taugt als Vorlauf-Soll bzw.
+Heizbetrieb – ``boiler_entity``).
+
 Seit 0.39.1 ``GET api/entity_map`` (nur lesen): alle Rollen in Gruppen mit Zweck, nötig/optional, Filter und dem, was
 gilt (``entity_map``) – für die Seite „Entitäten“ in den Einstellungen. Gespeichert wird weiter über ``api/settings``.
 """
@@ -30,7 +36,7 @@ from aiohttp import web
 from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
-from . import dhw_control, dhw_entity, entity_map, notify, valve_control
+from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -87,7 +93,8 @@ def make_app(app) -> web.Application:
         if app.eng is None:
             return json_response({"starting": True, "status": app.status})
         return json_response({**app.eng.summary(), "configured": app.configured,
-                              "dhw_control": dhw_state()})  # 0.38: Statuszeile Warmwasser (Weg W)
+                              "dhw_control": dhw_state(),  # 0.38: Statuszeile Warmwasser (Weg W)
+                              "boiler_control": boiler_state()})  # 0.41: Statuszeile Kessel (Weg B)
 
     def dhw_state() -> dict:
         """Status von Weg W (``DhwControl.as_dict``); ohne Instanz nur der Schalter."""
@@ -97,6 +104,16 @@ def make_app(app) -> web.Application:
         mode = getattr(app.cfg, "dhw_control", "aus")
         return {"mode": mode, "modes": list(DHW_MODES), "active": False, "writes": mode == "heatpilot",
                 "paused": False, "warnings": [], "log": [], "status_text": "Warmwasser-Soll: aus – HeatPilot empfiehlt nur"}
+
+    def boiler_state() -> dict:
+        """Status von Weg B (``BoilerControl.as_dict``); ohne Instanz nur der Schalter."""
+        ctl = getattr(app.eng, "boiler_control", None)
+        if ctl is not None:
+            return ctl.as_dict()
+        mode = getattr(app.cfg, "boiler_control", "aus")
+        return {"mode": mode, "modes": list(boiler_rule.BOILER_MODES), "active": False, "writes": mode == "heatpilot",
+                "paused": False, "warnings": [], "log": [],
+                "status_text": "Kessel: aus – Regler bzw. Kessel regeln selbst"}
 
     async def notify_info() -> dict:
         """Benachrichtigungsziele zur Auswahl (Entitäten aus den Zuständen, Dienste aus ``get_services``) mit Stand."""
@@ -153,6 +170,12 @@ def make_app(app) -> web.Application:
                             "suggested": dhw_control.suggest_entity(app.eng.found, app.eng.states),
                             "status": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time()))},
             "notify": await notify_info(),
+            # Weg B (0.41): Schalter, Vorschläge der Erkennung, Status (mit Anleitung Wächter), Bereitschaft
+            "boiler_control": {"modes": list(boiler_rule.BOILER_MODES),
+                               "suggested": {"flow": boiler_entity.suggest_flow(app.eng.found, app.eng.states),
+                                             "heating": boiler_entity.suggest_heat(app.eng.found, app.eng.states)},
+                               "fallback_range": [boiler_rule.FALLBACK_MIN, boiler_rule.FALLBACK_MAX],
+                               "status": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))},
         })
 
     async def entities(_req):
@@ -187,7 +210,9 @@ def make_app(app) -> web.Application:
                 **({k: v for k, v in climate_info(eid, idx, app.eng.states).items()
                     if k in ("device_name", "device_model", "controller", "siblings", "ems")}
                    if eid.startswith("climate.") else {}),
-                **({"dhw": dhw_entity.picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
+                **({"dhw": dhw_entity.picker(eid, st, app.eng.found),
+                    "flow": boiler_entity.flow_picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
+                **({"heating": boiler_entity.heat_picker(eid, st, app.eng.found)} if eid.startswith("switch.") else {}),
             })
         return json_response(out)
 
@@ -343,7 +368,9 @@ def make_app(app) -> web.Application:
                 # seit 0.36.1: „Bereit für die Steuerung?“ – auch bei Beobachten, mit Kessel über EMS-ESP
                 "readiness": readiness.assess(eng, int(time.time())),
                 # seit 0.38: Warmwasser-Soll über HeatPilot (Weg W) – Statuszeile, Hinweise, Protokoll
-                "dhw": dhw_state()}
+                "dhw": dhw_state(),
+                # seit 0.41: Kessel über HeatPilot (Weg B) – Statuszeile, Hinweise, Protokoll, Wächter
+                "boiler": boiler_state()}
 
     async def dhw_get(_req):
         """Weg W (0.38): Status und Bereitschaft des Warmwasser-Solls."""
@@ -361,6 +388,26 @@ def make_app(app) -> web.Application:
         body = {"ok": was, "was_paused": was, "dhw": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time()))}
         if not was:
             return json_response({**body, "error": "Warmwasser über HeatPilot ist nicht pausiert – nichts geändert"},
+                                 status=409)
+        return json_response(body)
+
+    async def boiler_get(_req):
+        """Weg B (0.41): Status und Bereitschaft von „Kessel über HeatPilot“."""
+        if app.eng is None:
+            return json_response({"starting": True, "status": app.status})
+        return json_response({"boiler": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))})
+
+    async def boiler_resume(_req):
+        """„Wieder einschalten“ nach einer Pause von Weg B – schreibt selbst nichts, der nächste Schritt entscheidet.
+        Ohne Pause ändert sich nichts (409)."""
+        ctl = getattr(app.eng, "boiler_control", None)
+        if ctl is None:
+            return json_response({"error": f"HeatPilot startet noch ({app.status})"}, status=503)
+        was = ctl.resume()
+        body = {"ok": was, "was_paused": was, "boiler": boiler_state(),
+                "readiness": boiler_status.ready(app.eng, int(time.time()))}
+        if not was:
+            return json_response({**body, "error": "Kessel über HeatPilot ist nicht pausiert – nichts geändert"},
                                  status=409)
         return json_response(body)
 
@@ -502,6 +549,8 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/preview", preview_data)
     web_app.router.add_get("/api/dhw", dhw_get)
     web_app.router.add_post("/api/dhw/resume", dhw_resume)
+    web_app.router.add_get("/api/boiler", boiler_get)
+    web_app.router.add_post("/api/boiler/resume", boiler_resume)
     web_app.router.add_get("/api/notify", notify_get)
     web_app.router.add_post("/api/notify/test", notify_test)
     web_app.router.add_get("/api/certificate", cert_json)

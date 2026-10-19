@@ -612,10 +612,9 @@ def test_version_changelog_docs_and_files():
     from heatpilot import __version__
 
     root = Path(__file__).resolve().parents[1]
-    assert __version__ == "0.40.0"
-    assert 'version: "0.40.0"' in (root / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
-    head = (root / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1].split("\n## ")[0]
-    assert head.startswith("0.40.0") and "Ventile führen" in head and "Standard aus" in head
+    assert __version__ >= "0.40.0"  # seit 0.41 prüft test_boiler41 die genaue Version
+    head = (root / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.40.0\n")[1].split("\n## ")[0]
+    assert "Ventile führen" in head and "Standard aus" in head
     for personal in ("Ingo", "55 °C", "BK15", "ES73", "Tado-App"):  # keine persönlichen Werte
         assert personal not in head, personal
     src = (root / "ems_heatpilot" / "heatpilot" / "valve_control.py").read_text(encoding="utf-8")
