@@ -6,7 +6,8 @@ Es veröffentlicht eigene ``sensor.heatpilot_*``-Sensoren und eine Weboberfläch
 Diese Datei ist der Kern: ``Engine`` baut die Modelle auf, nimmt Zustände an, treibt den Takt und
 speichert. Die Arbeit steckt nach Thema in Mixins – Messpunkt (``engine_sample``), Kessel live
 (``engine_boiler``), Warmwasser (``engine_dhw``), Lernen (``engine_learn``) und Auswertung
-(``engine_summary``); die Wertehelfer stehen in ``values``.
+(``engine_summary``); die Wertehelfer stehen in ``values``. Seit 0.37 merkt sich der Takt stündlich den Plan der
+Vorschau (``preview_log``, Trockenlauf – nur Anzeige).
 """
 
 from __future__ import annotations
@@ -14,7 +15,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import plausibility, schedule, sleep
+from . import plausibility, preview_log, schedule, sleep
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -223,6 +224,10 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
             if local(self._last_hour).hour == 0:
                 self.take_snapshot(self._last_hour)
         self.update_schedule(now_ts)
+        try:  # Trockenlauf (0.37): Plan der begonnenen Stunde merken, Ist-Werte nachtragen – schreibt nichts an den Kessel
+            preview_log.record(self, now_ts)
+        except Exception:  # noqa: BLE001 – das Protokoll darf Lernen und Steuerung nie aufhalten
+            log.exception("Trockenlauf-Protokoll fehlgeschlagen")
         self.save()
 
     def observe_persons(self, ts: int, persons: list[tuple], vacation: bool) -> bool:

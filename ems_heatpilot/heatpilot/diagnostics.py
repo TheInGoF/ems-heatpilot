@@ -329,6 +329,7 @@ def bundle(app, hours: int = 48) -> dict:
     data["hourly"] = _rows(eng, "SELECT * FROM hourly WHERE ts >= ? ORDER BY ts", (since - 5 * 86400,))
     data["burner_events"] = _rows(eng, "SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,))
     data["control_log"] = eng.store.control_log(200)  # Steuerung (0.34): Schreibvorgänge
+    data["preview_log"] = eng.store.preview_log(since)  # Trockenlauf (0.37): Plan und Ist je Stunde
     data["control"] = eng.control_loop.as_dict() if eng.control_loop else None
     data["daily"] = _rows(eng, "SELECT * FROM daily ORDER BY day DESC LIMIT 400")
     data["kv"] = {r["key"]: r["value"] for r in _rows(eng, "SELECT key, value FROM kv")
@@ -458,6 +459,8 @@ def export(app, days: int = 14) -> dict:
             "schalter": app.cfg.control_mode,
             "protokoll": _table(q("SELECT * FROM control_log WHERE ts >= ? ORDER BY ts", (since,)), None),
             "zustand": eng.control_loop.as_dict() if eng.control_loop else None}),
+        # seit 0.37: Trockenlauf – Plan der Vorschau je Stunde neben Regler/Automation (nichts davon geschrieben)
+        "trockenlauf": _safe(lambda: _table(q("SELECT * FROM preview_log WHERE ts >= ? ORDER BY ts", (since,)), None)),
         # seit 0.35: Hydraulik – gemerkte Änderungen der Voreinstellung (Raum, Stufe, Vorlauf vorher; ohne Ort)
         "abgleich_aenderungen": _safe(lambda: eng.store.get("balance.changes", [])),
         # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen

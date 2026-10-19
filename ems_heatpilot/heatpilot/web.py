@@ -14,7 +14,7 @@ from aiohttp import web
 
 from .config import CONTROL_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
-from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, readiness
+from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -232,6 +232,13 @@ def make_app(app) -> web.Application:
         hours = min(max(float(req.query.get("hours", "24")), 1), 168)
         return json_response(app.eng.presence(hours))
 
+    async def preview_data(_req):
+        """Vorschau der nächsten 24 h und Trockenlauf-Vergleich (seit 0.37) – nur Anzeige, schreibt nichts."""
+        if app.eng is None:
+            return json_response({"starting": True, "status": app.status})
+        now = int(time.time())
+        return json_response({"preview": preview.cached(app.eng, now), "compare": preview_log.compare_for(app.eng, now)})
+
     def heat_state() -> dict:
         eng, ctl, loop = app.eng, app.control, app.eng.control_loop
         targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
@@ -394,6 +401,7 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/heat", heat_get)
     web_app.router.add_post("/api/heat/{action}", heat_post)
     web_app.router.add_get("/api/presence", presence_data)
+    web_app.router.add_get("/api/preview", preview_data)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
     return web_app
