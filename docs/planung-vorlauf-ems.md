@@ -90,8 +90,10 @@ Weg W als eigene Version.
   in 0.37 zeigt, was geschrieben würde, neben dem, was die Automation tatsächlich setzt), dann schreiben.
 - Grenzen: `dhw_min_temp` bis `dhw_max_temp` aus den Einstellungen. Fällt HeatPilot aus, bleibt das
   letzte Soll stehen – darum nie unter das Minimum.
-- **Schreiben nur bei Änderung** (Ingo): kein „55, 55, 55“ – nur wenn sich das Soll ändert, und höchstens
-  alle 15 min. Der Kessel hält den Wert dann selbst.
+- **Schreiben nur bei Änderung** (Ingo): kein „55, 55, 55“ – nur wenn sich das Soll ändert. Der Kessel
+  hält den Wert dann selbst.
+- **Haltezeit 5 min nach jedem Schreiben**, kein Viertelstunden-Raster: Schreibt HeatPilot um 15:03 55 °C
+  (jemand kommt bald heim), darf es bis 15:08 nicht umentscheiden; danach sofort, wenn nötig.
 - **Nach 60 s prüfen**, ob der Kessel ihn übernommen hat (`wwseltemp` zurücklesen). Wenn nicht: Fehler im
   Protokoll, Hinweis in der Oberfläche und eine Meldung in HA, kein endloses Nachschreiben – nach 3
   Fehlschlägen hintereinander pausiert Weg W, bis jemand nachsieht.
@@ -103,6 +105,14 @@ Weg W als eigene Version.
 - Jeder Schreibvorgang mit Grund im Protokoll wie `control_log`.
 - Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
   `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an).
+
+## Takt der Heizung (Weg B)
+
+Der Vorlauf braucht mehr als das Warmwasser (Ingo): **live** – HeatPilot rechnet bei jedem EMS-ESP-Abruf
+(30 s) neu und schreibt, sobald sich das Vorlauf-Soll ändert (Vorschlag: ab 1 K Unterschied, damit
+Nachkommastellen nicht jedes Mal schreiben). Wie beim Warmwasser: nur bei Änderung, 60 s danach
+zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/aus bekommt dieselbe
+5-min-Haltezeit wie das Warmwasser, damit der Kessel nicht hin und her schaltet.
 
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
 
