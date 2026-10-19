@@ -320,6 +320,7 @@ def bundle(app, hours: int = 48) -> dict:
     data["models"] = {
         "house": eng.house.to_dict(),
         "rooms": {c: m.to_dict() for c, m in eng.rooms.items()},
+        "valves": {c: m.to_dict() for c, m in getattr(eng, "valves", {}).items()},  # 0.39
         "dhw": {k: v for k, v in eng.dhw.to_dict().items() if k not in ("profile", "profile_n")},
         "persons": {p: {k: v for k, v in l.to_dict().items() if k != "week"} for p, l in eng.persons.items()},
     }
@@ -334,6 +335,8 @@ def bundle(app, hours: int = 48) -> dict:
     data["burner_events"] = _rows(eng, "SELECT * FROM burner_events WHERE ts >= ? ORDER BY ts", (since,))
     data["control_log"] = eng.store.control_log(200)  # Steuerung (0.34): Schreibvorgänge
     data["preview_log"] = eng.store.preview_log(since)  # Trockenlauf (0.37): Plan und Ist je Stunde
+    data["valve_dry_log"] = eng.store.valve_dry_log(since)  # Ventile im Trockenlauf (0.39)
+    data["valve_subst"] = _rows(eng, "SELECT * FROM valve_subst WHERE ts >= ? ORDER BY ts", (since,))  # Ersatzwerte
     data["control"] = eng.control_loop.as_dict() if eng.control_loop else None
     data["dhw_control"] = eng.dhw_control.as_dict() if getattr(eng, "dhw_control", None) else None  # Weg W (0.38)
     data["daily"] = _rows(eng, "SELECT * FROM daily ORDER BY day DESC LIMIT 400")
@@ -466,6 +469,12 @@ def export(app, days: int = 14) -> dict:
             "zustand": eng.control_loop.as_dict() if eng.control_loop else None}),
         # seit 0.37: Trockenlauf – Plan der Vorschau je Stunde neben Regler/Automation (nichts davon geschrieben)
         "trockenlauf": _safe(lambda: _table(q("SELECT * FROM preview_log WHERE ts >= ? ORDER BY ts", (since,)), None)),
+        # seit 0.39: Ventilverhalten je Raum (gelernt) und Ventil-Trockenlauf (was HeatPilot verstellt hätte)
+        "ventile": _safe(lambda: {
+            "modelle": {c: eng.valve_info(c) for c in eng.valves},
+            "trockenlauf": _table(q("SELECT * FROM valve_dry_log WHERE ts >= ? ORDER BY ts", (since,)), None),
+            # Messpunkte mit Ersatz-Ventilwert (Sensor still, Ventil aus hvac_action) – nicht gelernt
+            "ersatzwerte": _table(q("SELECT * FROM valve_subst WHERE ts >= ? ORDER BY ts", (since,)), None)}),
         # seit 0.35: Hydraulik – gemerkte Änderungen der Voreinstellung (Raum, Stufe, Vorlauf vorher; ohne Ort)
         "abgleich_aenderungen": _safe(lambda: eng.store.get("balance.changes", [])),
         # seit 0.25: alles, was die Oberfläche aus den Modellen ableitet – zum Gegenprüfen

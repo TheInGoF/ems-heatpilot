@@ -86,8 +86,8 @@ fremden Änderungen in 1 h, Meldungen über die Benachrichtigungsziele und `bina
 Raumsteuerung meldet ihre Schreibfehler über dieselbe Stelle. Offen bleibt das Auslösen der Desinfektion (mit Weg B).
 Nach der Prüfung von 0.38 zusätzlich abgesichert (die Regeln oben bleiben): geschrieben wird nur auf eine Entität, die
 nach dem Speicher-Soll aussieht (°C, kein Heizkreis, keine andere Rolle wie das Vorlauf-Soll), nur ohne Hindernis in
-„Bereit für die Steuerung?“; die 1-K-Schwelle gilt auch für die ungerundete Empfehlung; höchstens 24 Schreibvorgänge in
-24 h, sonst Pause; Werte direkt von EMS-ESP zählen nur frisch, widersprechen sie der Entität, wird nicht geschrieben;
+„Bereit für die Steuerung?“; die 1-K-Schwelle gilt auch für die ungerundete Empfehlung; eine Zählsperre gibt es seit
+0.39 nicht mehr (Ingo: nach jeder Haltezeit darf bei 1 K Änderung geschrieben werden); Werte direkt von EMS-ESP zählen nur frisch, widersprechen sie der Entität, wird nicht geschrieben;
 ein Minimum unter 50 °C steht als Einschränkung da (Legionellen) – entschieden wird es in den Einstellungen.
 
 Weil HA das Speicher-Soll heute schon schreibt und der ES73 es stehen lässt, kann HeatPilot diese Aufgabe
@@ -151,7 +151,7 @@ zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/a
 **Auflösung fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll in
 der **vollen Auflösung des Thermostats** – bei Tado 0,5 K, siehe nächster Abschnitt.
 
-## Thermostate als Stellglied: Ventilverhalten lernen (0.39)
+## Thermostate als Stellglied: Ventilverhalten lernen – Stufe 1 gebaut (0.39)
 
 Idee Ingo: HeatPilot „missbraucht“ den eingebauten PID-Regler der Thermostate. Tado lässt das Ventil nicht
 direkt stellen – aber über ein fein verschobenes Raum-Soll lässt sich die Ventilöffnung führen. Dafür
@@ -172,7 +172,47 @@ Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineerin
   Schritt nutzen ihren Schritt. Geschrieben wird immer auf den Schritt gerundet.
 - Nur bei Änderung schreiben, 5 min Haltezeit, Protokoll.
 
+**Stand 0.39 – Stufe 1 gebaut: lernen, anzeigen, Trockenlauf; es wird nichts Neues geschrieben.**
+- Ventilmodell je Raum (`valve_model.py`, Lernen in `valve_learn.py`, angebunden in `engine_learn`): Kennlinie im
+  Beharren (Median je 0,1-K-Klasse von −1 bis +2 K, monoton geglättet; Öffnungsbeginn, halb, ganz offen, Totband),
+  Sprungantwort (Totzeit, 63 %-Zeit, auf/zu getrennt, „grob“ bei langer Messpause), PI mit Sättigung, Totzeit,
+  Stellmotor und Nullpunkt des Integrators (kleinste Quadrate auf 30-min-Abschnitten ohne Sättigung und Soll-Sprung,
+  Messrauschen herausgerechnet), Gütemaß über 14 Tage (ein Messschritt und 30 min voraus, neben „Ventil bleibt, wie es
+  ist“). Vorhersage (`valve_predict.py`) als P-Regler entlang der Kennlinie oder mit Integrator – es gilt, was besser
+  trifft; mit Integrator hängt die Kennlinie von der Last ab und wird nur gezeigt. Nur an/aus: Schaltpunkte. Belastbar
+  ab 8 Sprüngen (4 je Richtung, wenig Streuung), 48 h Beharrung, ≤ 20 Prozentpunkten Fehler und deutlich besser als
+  „Ventil bleibt“.
+- Lernt beim ersten Start aus den gespeicherten Messwerten der letzten 60 Tage in Abschnitten nach (eigener
+  Modellstand statt Neuberechnung), danach je Raumschritt. Fenster, Fremdwärme, Heizbetrieb aus werden ausgelassen.
+- Schrittweite je Gerät aus `target_temp_step` (Gruppe: gröbster Schritt der Schreibziele, sonst 0,5 K angenommen).
+- Trockenlauf (`valve_dry.py`, Tabelle `valve_dry_log`): **früh drosseln** (Raum nähert sich gemessen dem Soll, nach
+  einem Soll-Anstieg oder deutlich darunter; Soll laut Raum- und Ventilmodell in < 20 min erreicht, Ventil dann noch
+  > 30 % offen, ≥ 0,2 K Überschwingen vorhergesagt → einen Schritt tiefer, beim Erreichen zurück, danach erst nach
+  neuem Soll wieder) und **gemeinsam anfordern** (nur ein Raum fordert an, Kessel taktet → Räume, deren Ventil beim
+  Abkühlen in 60 min ohnehin öffnen würde, einen Schritt höher). Nur bei Änderung, volle Auflösung, 5 min Haltezeit –
+  mitgezählt. Auswertung mit geschätzter Wirkung nur bei belastbaren Modellen, dazu nach einer Stunde gemessen, was
+  wirklich geschah; die Schätzung erst, wenn das vorhergesagte Überschwingen ohne Eingriff dreimal stimmte.
+- Erkenntnis aus den Testthermostaten: Ein Ventil, das nur an/aus kennt, gewinnt durch frühes Drosseln kaum etwas;
+  der Hebel liegt bei stetigen Ventilen mit Integrator, die am Soll noch offen sind – und auch dort ist er klein
+  (im Simulator ≈ 0,05 K weniger Überschwingen je Eingriff bei 0,8 K Überschwingen). Ein P-Regler schließt vor dem
+  Soll und braucht kein Drosseln. Ob sich Stufe 2 lohnt, zeigen die nachgemessenen Daten.
+- **Stufe 2 (0.40, eigener Schalter, nach Ingos Blick auf die Daten):** wirklich so steuern – nur Räume mit „macht
+  mit“, dieselben Schreibregeln, Protokoll im Schreibprotokoll.
+
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
+
+**Festgelegt (Ingo, 19.10.2026):**
+- **Untergrenze 35 °C**, wenn geheizt wird. Braucht kein Raum so viel, ist der Heizbetrieb aus – darunter lohnt
+  Heizen nicht (gilt seit 0.39 in Vorschau und Trockenlauf).
+- **Mindest-Vorlauf aus der Abnahme:** Der Kessel kann nicht unter seine Mindestleistung (BK15 ≈ 30 % von 18 kW).
+  Aus den Raummodellen rechnen, ab welchem Vorlauf die offenen Räume diese Leistung abnehmen; liegt das über 35 °C,
+  gilt der höhere Wert. Reicht auch das nicht, lieber lange Pausen als viele kurze Läufe.
+- **Wer Wärme braucht, bekommt sie sofort.** Braucht nur ein Raum Wärme, wird DIESER Raum warm – der Takt-Boost hebt
+  den Vorlauf dafür an. Kein Warten, bis andere Räume auskühlen und mitanfordern. „Gemeinsam anfordern“ zieht nur
+  Räume vor, die ohnehin bald heizen würden, und lässt nie einen Raum warten.
+- **Fußbodenheizung je Raum** (0.39.1): Anschluss Mischer (keine Grenze aus diesem Raum), RTL-Ventil (Grenze gilt,
+  solange der Raum Wärme anfordert) oder direkt am Kessel (Grenze gilt immer, auch ohne Modell); die Grenze legt
+  der Nutzer fest (Ingo: RTL, 55 °C). Takt-Boost, Vorheizen und jeder Vorlauf in Weg B halten sie ein.
 
 1. **Takt-Boost** (Idee Ingo): Taktet der Kessel stark (z. B. mehr als 3 Starts je Stunde, Brennerläufe
    unter 5 min) und wartet dabei ein Raum mit offenem Ventil unter Soll, den Vorlauf in 2-K-Schritten um
@@ -198,8 +238,8 @@ fordern drei Räume zusammen an, läuft er durch.
 
 ## Schutzregeln, falls geschrieben wird
 
-- Weiße Liste der erlaubten Befehle und Werte (wie heute bei Tado in `control.py`), Grenzen 30 °C bis
-  `max_flow_temp`, höchstens ein Schreibvorgang je 10 min je Wert, Kurvenparameter höchstens 3× am Tag.
+- Weiße Liste der erlaubten Befehle und Werte (wie heute bei Tado in `control.py`), Grenzen 35 °C bis
+  `max_flow_temp` (Ingo: braucht kein Raum mindestens 35 °C, Heizbetrieb aus), Fußboden-Grenze je Raum (unten), höchstens ein Schreibvorgang je 10 min je Wert, Kurvenparameter höchstens 3× am Tag.
 - Trockenlauf-Modus: HeatPilot rechnet und protokolliert, was es schreiben würde, schreibt aber nicht.
 - Jeder Schreibvorgang im Protokoll (wie `control_log`), Anzeige im Heizen-Reiter.
 - Ausfall-Verhalten dokumentiert: Weg A → ES73 regelt weiter; Weg B → Kesselknopf bzw. HA-Wächter.

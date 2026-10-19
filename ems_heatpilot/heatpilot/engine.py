@@ -9,7 +9,9 @@ speichert. Die Arbeit steckt nach Thema in Mixins – Messpunkt (``engine_sample
 (``engine_boiler``), Warmwasser (``engine_dhw``), Lernen (``engine_learn``) und Auswertung
 (``engine_summary``); die Wertehelfer stehen in ``values``. Seit 0.37 merkt sich der Takt stündlich den Plan der
 Vorschau (``preview_log``, Trockenlauf – nur Anzeige). Seit 0.38 prüft der Takt nach ``dhw_step`` das Warmwasser-Soll
-(``dhw_control.plan`` – merkt einen Schreibvorgang nur vor, geschrieben wird danach in ``main``).
+(``dhw_control.plan`` – merkt einen Schreibvorgang nur vor, geschrieben wird danach in ``main``). Seit 0.39 lernt der
+Takt das Ventilverhalten je Raum (``valve_model``/``valve_learn``) und protokolliert im Trockenlauf, was HeatPilot an
+den Thermostaten verstellen würde (``valve_dry`` – schreibt nichts).
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import plausibility, preview_log, schedule, sleep
+from . import plausibility, preview_log, schedule, sleep, valve_dry, valve_learn
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -32,6 +34,7 @@ from .models import ROOM_STEP_H, HouseModel, RoomModel
 from .presence import PersonLearner, household_long_away
 from .store import Store
 from .vacation import Vacation
+from .valve_model import ValveModel
 from .values import local
 
 # Durchgereicht sind genau die Namen, die Module und Tests aus heatpilot.engine holen: die Wertehelfer
@@ -80,6 +83,11 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
             model.room = room.name  # Umbenennen in den Einstellungen gilt auch für gelernte Modelle
             self.rooms[room.climate] = model
         self.seed_room_priors()
+        # Ventilmodelle (0.39): neu oder anderer Modellstand → lernt im Takt aus der gespeicherten Historie nach.
+        # Nicht für den Heizkreis von EMS-ESP – er ist kein Thermostat mit Ventil
+        self.valves: dict[str, ValveModel] = {
+            r.climate: ValveModel.from_dict(store.get(f"model.valve.{r.climate}"), valve_learn.binary_device(r))
+            for r in found.rooms if not r.ems}
         self.vacation = Vacation(cfg.vacations, cfg.vacation_entity, cfg.vacation_arrival_time)
         self.vacation.returned = set(store.get("vacation_returned", []))
         self.persons: dict[str, PersonLearner] = {}
@@ -209,6 +217,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         sample["away_long"] = int(self.observe_persons(ts, persons, vacation))
         self.store.add_sample(ts, sample)
         self.store.add_room_samples((ts, *r) for r in rooms)
+        self.store.add_valve_subst(ts, sorted(self.__dict__.get("valve_subst", ())))  # Ventil-Ersatzwerte (0.39)
         self.store.add_person_samples((ts, *p) for p in persons)
         self.dhw_step(ts, sample)
         if self.dhw_control is not None:  # Weg W (0.38): Warmwasser-Soll prüfen, ggf. vormerken – schreibt nichts
@@ -242,7 +251,21 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
             preview_log.record(self, now_ts)
         except Exception:  # noqa: BLE001 – das Protokoll darf Lernen und Steuerung nie aufhalten
             log.exception("Trockenlauf-Protokoll fehlgeschlagen")
+        self.valve_step(ts, sample, rooms)  # Ventile (0.39): lernen und Trockenlauf – schreibt nichts
         self.save()
+
+    def valve_step(self, ts: int, sample: dict, rooms: list[tuple]) -> None:
+        """Ventile (0.39): Modelle bis zum letzten Raumschritt lernen (die Historie in Abschnitten, ``learn_valves``),
+        dann den Trockenlauf protokollieren (``valve_dry``). Schreibt nichts an Thermostate oder Kessel; ein Fehler
+        hält Lernen und Steuerung nicht auf."""
+        try:
+            self.learn_valves()
+        except Exception:  # noqa: BLE001
+            log.exception("Ventilmodelle: Lernen fehlgeschlagen")
+        try:
+            valve_dry.step(self, ts, sample, rooms)
+        except Exception:  # noqa: BLE001
+            log.exception("Ventil-Trockenlauf fehlgeschlagen")
 
     def observe_persons(self, ts: int, persons: list[tuple], vacation: bool) -> bool:
         """Personen verfolgen (live und bei der Neuberechnung gleich); True = alle lange weg.
@@ -272,6 +295,8 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.store.put("model.house", self.house.to_dict())
         for climate, m in self.rooms.items():
             self.store.put(f"model.room.{climate}", m.to_dict())
+        for climate, v in self.valves.items():
+            self.store.put(f"model.valve.{climate}", v.to_dict())
         for p, learner in self.persons.items():
             self.store.put(f"model.person.{p}", learner.to_dict())
         self.store.put("model.room_ext", self.room_ext)

@@ -10,6 +10,8 @@ Vorhersage für jetzt; README auf Stand 0.37. Nichts davon schreibt an den Kesse
 from datetime import timedelta
 from pathlib import Path
 
+import pytest
+
 from heatpilot import preview as pv, preview_log as pl
 from heatpilot.config import Config
 from heatpilot.discovery import Room
@@ -19,6 +21,14 @@ from heatpilot.values import local
 
 from test_control34 import MON, at, climate, slow_room, ts_of, wz
 from test_preview37 import TUE, _habit, _state, by_hour, forecast, house
+
+
+# Die Testhäuser dieser Datei brauchen 28–32 °C Vorlauf. Seit 0.39 heizt die Vorschau erst ab 35 °C (darunter
+# „Heizbetrieb aus“, Wunsch Ingo) – diese Tests prüfen anderes (Vorhersage, Gewohnheit, Protokoll …) und laufen
+# deshalb mit der alten Untergrenze; die 35-°C-Regel selbst prüft tests/test_flow_min39.py.
+@pytest.fixture(autouse=True)
+def _old_flow_floor(monkeypatch):
+    monkeypatch.setattr(pv, "FLOW_MIN", 25.0)
 
 ROOT = Path(__file__).resolve().parents[1]
 H12 = ts_of(MON, 12)

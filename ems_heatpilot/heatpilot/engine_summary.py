@@ -155,7 +155,9 @@ class SummaryMixin:
             "rooms": [
                 {**self.rooms[c].summary(t_out if t_out is not None else 5.0, self.cfg.max_flow_temp),
                  "temp": temp, "target": target, "valve": valve, "humidity": hum,
-                 "check": room_checks[c], **ext[c]}
+                 "check": room_checks[c], **ext[c],
+                 # seit 0.39: Schlüssel und Ventilverhalten (Kennlinie, Sprungantwort, Güte, Text)
+                 "climate": c, "valve_model": self.valve_info(c, now_ts)}
                 for c, temp, target, valve, hum in rooms if c in self.rooms
             ],
             "cycling": cycling,

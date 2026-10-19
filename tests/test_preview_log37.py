@@ -10,11 +10,21 @@ from types import SimpleNamespace
 
 from aiohttp.test_utils import TestClient, TestServer
 
+import pytest
+
 from heatpilot import preview as pv, preview_log as pl
 from heatpilot.store import PREVIEW_COLS, PREVIEW_LOG_KEEP_DAYS, Store
 
 from test_control34 import MON, at, ts_of
 from test_preview37 import dhw_model, house
+
+
+# Die Testhäuser dieser Datei brauchen 28–32 °C Vorlauf. Seit 0.39 heizt die Vorschau erst ab 35 °C (darunter
+# „Heizbetrieb aus“, Wunsch Ingo) – diese Tests prüfen anderes (Vorhersage, Gewohnheit, Protokoll …) und laufen
+# deshalb mit der alten Untergrenze; die 35-°C-Regel selbst prüft tests/test_flow_min39.py.
+@pytest.fixture(autouse=True)
+def _old_flow_floor(monkeypatch):
+    monkeypatch.setattr(pv, "FLOW_MIN", 25.0)
 
 H12 = ts_of(MON, 12)
 

@@ -247,6 +247,30 @@ table.pv-t tr.pv-why td { font-size: 12px; color: var(--text-secondary); padding
 table.pv-t .muted { font-size: 11px; }
 #cmp-mode[hidden] { display: none; }  /* .row setzt display: flex */
 ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
+/* Ventile (0.39): Abschnitt „Ventilverhalten“ im Raum-Dialog (Graf, Satz, Einzelheiten), Tabelle in Übersicht → Räume,
+   Abschnitt „Ventile (Trockenlauf)“ am Ende der Vorschau */
+.valve { border-top: 1px solid var(--border); margin-top: 12px; }
+.valve h3.sec-h { margin-top: 10px; }
+dialog.hp p.valve-text { color: var(--text-primary); margin: 6px 0 4px; }
+.valve-more { font-size: 12px; margin-top: 4px; }
+.valve-more .valve-more { margin-top: 6px; }
+table.valve-t { margin-top: 4px; }
+table.valve-t th, table.valve-t td { padding: 3px 6px; font-size: 12px; vertical-align: top; }
+table.valve-t td:first-child { color: var(--text-secondary); white-space: nowrap; }
+#valve-rooms td { vertical-align: top; white-space: nowrap; }
+#valve-rooms td:last-child { white-space: normal; min-width: 300px; }
+svg text.halo { paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px; stroke-linejoin: round; }
+.badge.vb-ok { border-color: var(--good); color: var(--good); }
+#vd { border-top: 1px solid var(--border); margin-top: 14px; }
+#vd h3 { font-size: 14px; margin: 12px 0 6px; }
+#lg-vd[hidden] { display: none; }  /* .legend setzt display: flex */
+#vd details { margin-top: 8px; }
+#vd-days { margin-top: 8px; }
+#vd-rooms td:first-child, #vd-days td:first-child { white-space: nowrap; }
+ul.vd-ex { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text-primary); }
+ul.vd-ex li { margin-bottom: 8px; }
+ul.vd-ex .muted { margin-top: 1px; }
+.card p#vd-rules { margin: 6px 0 0; }
 /* Warmwasser über HeatPilot (0.38): Statuszeile in Heizen/Übersicht, Schalter mit drei Stellungen und Statusbox in
    Einstellungen → Warmwasser, Block in „Bereit für die Steuerung?“, Ring „schreibt“ in der Vorschau;
    Benachrichtigungen: Zielliste mit Häkchen */
@@ -377,6 +401,17 @@ code { font-size: 12px; overflow-wrap: anywhere; }
     <div class="pv-title"><i class="lk" style="border-top-color:var(--series-4)"></i>Warmwasser-Soll (°C)</div><div id="ch-pv-dhw"></div>
     <details id="pv-hours" style="margin-top:8px"><summary>Je Stunde – Werte, Gründe und Schreibvorgänge</summary>
       <div class="scroll"><table class="pv-t" id="pv-table"></table></div><p class="muted" id="pv-foot" style="margin-top:6px"></p></details>
+    <div id="vd" hidden>
+      <h3>Ventile (Trockenlauf)</h3>
+      <p class="pv-note" id="vd-note"></p>
+      <p class="cmp-text" id="vd-text"></p>
+      <ul class="cmp-facts" id="vd-facts"></ul>
+      <div class="legend" id="lg-vd"></div><div id="ch-vd"></div>
+      <p class="muted" id="vd-active"></p>
+      <details id="vd-ex-box"><summary>Beispiele – die letzten Eingriffe mit Grund</summary><ul class="vd-ex" id="vd-ex"></ul></details>
+      <details id="vd-days-box"><summary>Je Raum und Tag</summary><div class="scroll"><table class="pv-t" id="vd-rooms"></table><table class="pv-t" id="vd-days"></table></div></details>
+      <details id="vd-rules-box"><summary>Nach welchen Regeln</summary><p class="muted" id="vd-rules"></p></details>
+    </div>
   </div>
   <div class="card" id="cmp" style="margin-bottom:12px" hidden>
     <div class="row" style="justify-content:space-between;margin-bottom:6px"><h2 style="margin:0">Trockenlauf gegen Regler/Automation (7 Tage)</h2>
@@ -483,6 +518,7 @@ code { font-size: 12px; overflow-wrap: anywhere; }
     <h2>Räume</h2>
     <p>Pro Raum gelernt: Zeitkonstante (wie schnell er auskühlt), Aufheizzeit für +2 K bei maximalem Vorlauf, der Vorlauf, der 21 °C hält, und wie stark die Sonne den Raum aus welcher Richtung heizt (K/h bei voller Sonne – Räume ohne Sonnenfenster lernen „kaum Sonne“).</p>
     <div class="scroll"><table id="rooms"></table></div>
+    <div id="rooms-valves"></div>
   </div>
 
   <div class="grid2">
@@ -515,6 +551,9 @@ addEventListener("scroll", () => { if (Date.now() - LAST_TOUCH < 3000) hideTip()
 function showTip(e, html, onHide) {
   if (TIP_ON_HIDE && TIP_ON_HIDE !== onHide) { const f = TIP_ON_HIDE; TIP_ON_HIDE = null; f(); }
   TIP_ON_HIDE = onHide || null;
+  // im offenen Dialog (oberste Ebene, 0.39: Graf „Ventilverhalten“) ins Dialogfeld – sonst läge es darunter
+  const host = (e.target && e.target.closest && e.target.closest("dialog[open]")) || document.body;
+  if (tip.parentNode !== host) host.appendChild(tip);
   tip.innerHTML = html; tip.style.display = "block";
   const touch = e.pointerType === "touch" || e.pointerType === "pen" || Date.now() - LAST_TOUCH < 800;
   const w = tip.offsetWidth, h = tip.offsetHeight;
@@ -1015,7 +1054,7 @@ function roomTile(r) {
     `<div><div class="big">${big}</div><h3>${esc(shortName(r.name))}</h3><div class="state">${roomState(r)}</div></div></button>`;
 }
 // Dialoge: Boost, Zeitplan, Ausschalten, Raum – geschaltet wird erst mit dem Knopf im Dialog
-function openDlg(kind, room) { DLG = { kind, room, built: null }; renderDlg(); const d = $("heat-dlg"); if (!d.open) d.showModal(); }
+function openDlg(kind, room) { DLG = { kind, room, built: null }; renderDlg(); const d = $("heat-dlg"); if (!d.open) d.showModal(); dlgValveChart(); }
 function closeDlg() { DLG = null; const d = $("heat-dlg"); if (d.open) d.close(); }
 function renderDlg() {
   const j = HEAT, d = DLG; if (!j || !d) return;
@@ -1033,6 +1072,7 @@ function renderDlg() {
     $("heat-dlg-body").innerHTML = `<button class="btn dlg-x" onclick="closeDlg()" aria-label="Schließen">✕</button>${h}` +
       `<p class="muted" id="dlg-msg" style="margin:10px 0 0;min-height:15px">${$("heat-msg").innerHTML}</p>`;
     d.built = key;
+    dlgValveChart();  // Ventilverhalten (0.39): Graf, sobald der Dialog offen ist
   }
   if (d.kind === "boost") syncBoost(j);
 }
@@ -1095,7 +1135,7 @@ function roomDlg(r) {
     `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')"${lock ? " disabled" : ""}>${modeName[m]}</button>`).join("")}</div>` +
     (r.boost ? `<p class="muted" style="margin:8px 0 0">Timer läuft noch ${leftText(r.boost.left_min)}${r.boost.local ? " (lokal in HeatPilot)" : ""} – „Zeitplan“ beendet ihn sofort.</p>` : "") +
     (lock ? `<div class="ctl-info ems-lock" id="dlg-ems">${EMS_LOCK} – Soll und Betriebsart nur am Regler.</div>` : "") +
-    ctlInfo(r);
+    ctlInfo(r) + (r.valve_model ? valveHtml(r.valve_model) : "");  // 0.39: gelerntes Ventilverhalten, nur Anzeige
 }
 // Was die Regelschleife mit dem Raum vorhat (nur bei „HeatPilot steuert“)
 function ctlInfo(r) {
@@ -1391,6 +1431,7 @@ async function load() {
           : `<td>${learn}</td><td>${learn}</td><td>${learn}</td><td>${learn}</td>`) +
         `<td>${r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"}</td><td>${r.updates}</td></tr>`;
     }).join("");
+  $("rooms-valves").innerHTML = valveRoomsHtml(s.rooms);  // 0.39: Ventilverhalten je Raum
 
   const src = SRC;
   $("persons").innerHTML = "<tr><th>Person</th><th>Status</th><th>Entfernung</th><th>Erwartet</th><th>Quelle</th></tr>" +
@@ -1647,6 +1688,7 @@ function drawPreview() {
   if (!PV) return;
   renderPreview(PV.preview);
   renderCompare(PV.compare);
+  renderValves(PV.valves);  // 0.39: Ventile im Trockenlauf – fehlt bei älteren Versionen
 }
 
 function renderPreview(p) {
@@ -1981,6 +2023,273 @@ function cmpGrids(c) {
     heatmap(box, grid, { unit: "K", digits: 0, diverging: true, now: nowCell(), label: `${PV_WHAT[plan]}: Plan − ${what}`,
       totals: perDay(key), totalDigits: 0, totalUnit: "K", totalsLabel: "Ø", tip: (v) => `<b>${kelvin(v)}</b> Plan − ${what}` });
   }
+}
+
+// ---------------------------------------------------------------- Ventilverhalten (0.39)
+// Wie das Thermostat sein Ventil stellt (api/heat bzw. api/summary → rooms[].valve_model): im Raum-Dialog des
+// Heizen-Reiters Graf, Satz und Einzelheiten, in Übersicht → Räume eine Zeile je Raum. Nur Anzeige – über diese Felder
+// wird nie etwas geschrieben; ältere Versionen ohne die Felder: die Teile bleiben weg. Graf: x = Soll − Raum („K unter
+// Soll“, negativ = über Soll), y = Ventil in %, eine Linie auf einer Achse; die Tabelle unter „Einzelheiten“ ist der
+// Zwilling ohne Maus. Nur an/aus: die Schaltpunkte als Hystereseschleife.
+const VALVE_E = [-1, 2];  // Klassen der Kennlinie; die Randklassen heißen „so weit oder weiter“
+const kUnder = (e) => e === null || e === undefined ? "–" : `${e < 0 ? "−" : ""}${fmt(Math.abs(e), 1)}`;
+// Abstand zum Soll in Worten: „0,6 K unter Soll“, „0,3 K über Soll“, „am Soll“
+function eText(e) {
+  if (e === null || e === undefined) return "–";
+  if (Math.abs(e) < 0.05) return "am Soll";
+  const more = e <= VALVE_E[0] || e >= VALVE_E[1] ? " oder mehr" : "";
+  return `${fmt(Math.abs(e), 1)} K${more} ${e > 0 ? "unter" : "über"} Soll`;
+}
+const VALVE_REG = { P: "wie ein P-Regler: die Kennlinie gehört zum Gerät", PI: "mit Integrator: die Kennlinie hängt von der Last ab" };
+const switchKnown = (v) => !!(v.switch && v.switch.e_on !== null && v.switch.e_on !== undefined && v.switch.e_off !== null && v.switch.e_off !== undefined);
+const valveGraph = (v) => v.kind === "binär" ? switchKnown(v) : (v.curve || []).length >= 2;
+// Abschnitt im Raum-Dialog: Titel, Graf (gezeichnet erst im offenen Dialog, valveChart), Satz aus dem Backend, Einzelheiten
+function valveHtml(v) {
+  if (!v) return "";
+  const bin = v.kind === "binär";
+  const load = v.load_dependent ? ' <span class="muted">· hängt von der Last ab (Regler mit Integrator)</span>' : "";
+  const title = `<span>${bin ? "Schaltpunkte" : "Kennlinie"}: Ventil (%) je K unter Soll${load}${v.reliable ? "" : ' <span class="muted">· vorläufig, gestrichelt</span>'}</span>`;
+  return `<div class="valve" id="dlg-valve"><h3 class="sec-h">Ventilverhalten${bin ? ' <span class="muted">· nur an/aus</span>' : ""}</h3>` +
+    (valveGraph(v) ? `<div class="pv-title">${title}</div><div class="valve-chart" id="dlg-valve-chart"></div>` : "") +
+    `<p class="valve-text" id="dlg-valve-text">${esc(v.text)}</p>` +
+    `<details class="valve-more"><summary>Einzelheiten</summary>${valveDetails(v)}</details></div>`;
+}
+// Einzelheiten: Sprungantwort, Beharrung, Gütemaß, Reglermodell bzw. Schaltpunkte, Schritt, Ausgelassenes – dazu die
+// Kennlinie als Tabelle (Zwilling des Grafen)
+function valveDetails(v) {
+  const rs = v.response || {}, up = rs.up || {}, dn = rs.down || {}, er = v.error || {}, ru = v.rules || {};
+  const bin = v.kind === "binär", sw = v.switch || {}, sk = v.skipped_h || {};
+  const min = (x) => x === null || x === undefined ? "–" : `${fmt(x, 0)} min`;
+  const pp = (x) => x === null || x === undefined ? "–" : `${fmt(x, 1)} Prozentpunkte`;
+  const coarse = (d) => d.coarse ? ` – grob, Messpause ${min(d.step_min)}` : "";
+  const resp = (d) => (bin ? `schaltet nach ${min(d.dead_min)} (${d.n || 0}×)` : `Totzeit ${min(d.dead_min)}, 63 % nach ${min(d.t63_min)} (${d.n || 0}×)`) + coarse(d);
+  const skipped = [["fenster", "Fenster offen"], ["fremdwaerme", "Fremdwärme"], ["heizung_aus", "Heizbetrieb aus"]]
+    .filter(([k]) => sk[k] > 0).map(([k, n]) => `${n} ${fmt(sk[k], 1)} h`).join(" · ");
+  const pi = v.pi ? `Kp ${fmt(v.pi.kp, 0)} %/K · Ki ${fmt(v.pi.ki, 2)} %/(K·min)` + (v.pi.tn_min ? ` · Nachstellzeit ${fmt(v.pi.tn_min, 0)} min` : "") +
+    ` · Nullpunkt ${kUnder(v.pi.e_i)} K` + (v.regler ? ` – ${VALVE_REG[v.regler] || esc(v.regler)}` : "") +
+    (v.pi.noise_k ? ` · Messrauschen ≈ ${fmt(v.pi.noise_k, 2)} K herausgerechnet${v.pi.kp_uncertain ? " (Kp unsicher)" : ""}` : "") : "noch nicht gelernt";
+  const keep = er.keep_pp_30 === null || er.keep_pp_30 === undefined ? "" : `; „Ventil bleibt, wie es ist“ ${pp(er.keep_pp_30)} (höchstens das ${fmt(ru.vs_keep ?? 0.7, 1)}-Fache)`;
+  const grp = v.group && v.group.n > 1 ? [["Gruppe", `${v.group.n} Geräte – ${v.group.mixed ? "stetige und an/aus gemischt, das Mittel beschreibt keines" : bin ? "ein mit dem ersten, aus mit dem letzten" : "Mittel der Ventile"}`]] : [];
+  const rows = [
+    ["Art", bin ? "nur an/aus – Ventil 0 oder 100 %" : "stetig – Ventil in %"], ...grp,
+    ["Soll-Sprünge", `${v.jumps || 0} (${up.n || 0} auf, ${dn.n || 0} zu; belastbar ab ${ru.jumps ?? 8}, je Richtung ${ru.dir_jumps ?? 4})`],
+    [bin ? "einschalten" : "öffnen (+0,5 K)", resp(up)], [bin ? "ausschalten" : "schließen (−0,5 K)", resp(dn)],
+    ["Beharrung", `${fmt(v.steady_h, 0)} h (belastbar ab ${fmt(ru.steady_h ?? 48, 0)} h)`],
+    ["Vorhersagefehler", `30 min voraus ${pp(er.pp_30)} (höchstens ${fmt(ru.err_pp ?? 20, 0)})${keep}, ein Messschritt ${pp(er.step_pp)} · ${er.n_30 || 0} Vergleiche in ${er.days ?? 14} Tagen`],
+    bin ? ["Schaltpunkte", switchKnown(v) ? `ein bei ${eText(sw.e_on)} (${sw.n_on}×), aus bei ${eText(sw.e_off)} (${sw.n_off}×)` : `lernen noch (${sw.n_on || 0}× ein, ${sw.n_off || 0}× aus gesehen)`]
+      : ["Reglermodell", pi],
+    ["Schritt", `${fmt(v.step_k, 2)} K ${v.step_source === "gerät" ? "(vom Gerät)" : "(angenommen – das Gerät meldet keinen)"}`],
+    ["nicht gelernt", skipped || "nichts ausgelassen"],
+    ["gelernt bis", v.learned_until ? new Date(v.learned_until).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" }) : "–"],
+  ];
+  return `<table class="valve-t">${rows.map(([k, x]) => `<tr><td>${k}</td><td>${x}</td></tr>`).join("")}</table>` + valveCurveTable(v.curve || []);
+}
+function valveCurveTable(curve) {
+  if (!curve.length) return "";
+  return `<details class="valve-more"><summary>Kennlinie als Tabelle (je 0,1 K, Median in Beharrung)</summary><table class="valve-t">` +
+    `<tr><th>Abstand zum Soll</th><th>Ventil</th><th>Daten</th></tr>` +
+    curve.map((p) => `<tr><td>${eText(p.e)}</td><td>${fmt(p.valve, 0)} %</td><td>${fmt(p.hours, 1)} h</td></tr>`).join("") + "</table></details>";
+}
+// Graf im offenen Dialog (vorher hat der Kasten keine Breite): Kennlinie bzw. Schaltpunkte, Soll als Bezugslinie
+function valveChart(box, v) {
+  if (!box || !box.clientWidth || !v || !valveGraph(v)) return;
+  const bin = v.kind === "binär";
+  const f = frame(box, VALVE_E, [0, 100], { yMin: 0, yMax: 100, height: 150, label: bin ? "Schaltpunkte des Ventils" : "Kennlinie des Ventils",
+    xTicks: () => [-1, -0.5, 0, 0.5, 1, 1.5, 2].map((x) => [x, x === 0 ? "Soll" : kUnder(x)]) });
+  el("line", { x1: f.sx(0), x2: f.sx(0), y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-muted)", "stroke-width": 1, "stroke-opacity": 0.6 }, f.svg);
+  const line = { fill: "none", stroke: "var(--series-1)", "stroke-width": 2, "stroke-linejoin": "round", "stroke-linecap": "round",
+    "vector-effect": "non-scaling-stroke", ...(v.reliable ? {} : { "stroke-dasharray": "5 4" }) };
+  if (bin) valveSwitchMarks(f, v.switch, line); else valveCurveMarks(f, v, line);
+  valveHover(f, v);
+}
+function valveCurveMarks(f, v, line) {
+  const pts = v.curve.slice().sort((a, b) => a.e - b.e);
+  el("path", { ...line, d: pts.map((p, i) => `${i ? "L" : "M"}${f.sx(p.e).toFixed(1)},${f.sy(p.valve).toFixed(1)}`).join("") }, f.svg);
+  if (v.e50 === null || v.e50 === undefined || v.e50 < VALVE_E[0] || v.e50 > VALVE_E[1]) return;
+  const x = f.sx(v.e50), y = f.sy(50), left = x - f.m.l > 64;  // Beschriftung oben links (dort liegt die Linie tiefer)
+  el("circle", { cx: x, cy: y, r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2 }, f.svg);
+  el("text", { x: left ? x - 7 : x + 7, y: left ? y - 6 : y + 14, "text-anchor": left ? "end" : "start", class: "halo" }, f.svg).textContent = "halb offen";
+}
+// Hystereseschleife: unten zu bis „ein“, dort auf 100 %; oben offen vom rechten Rand bis „aus“, dort zu
+function valveSwitchMarks(f, sw, line) {
+  const on = Math.min(Math.max(sw.e_on, VALVE_E[0]), VALVE_E[1]), off = Math.min(Math.max(sw.e_off, VALVE_E[0]), VALVE_E[1]);
+  const [x0, x1, y0, y1] = [f.sx(VALVE_E[0]), f.sx(VALVE_E[1]), f.sy(0), f.sy(100)];
+  el("path", { ...line, d: `M${x0},${y0}H${f.sx(on)}V${y1}M${x1},${y1}H${f.sx(off)}V${y0}` }, f.svg);
+  const mid = (y0 + y1) / 2 + 4;
+  el("text", { x: f.sx(on) + 5, y: mid, "text-anchor": "start", class: "halo" }, f.svg).textContent = "ein";
+  el("text", { x: f.sx(off) - 5, y: mid, "text-anchor": "end", class: "halo" }, f.svg).textContent = "aus";
+}
+// Fadenkreuz mit Maus oder Finger: Kennlinie – nächster Punkt; an/aus – was das Ventil bei diesem Abstand tut
+function valveHover(f, v) {
+  const top = f.m.t, bottom = f.H - f.m.b, bin = v.kind === "binär", pts = (v.curve || []).slice().sort((a, b) => a.e - b.e);
+  const cross = el("line", { y1: top, y2: bottom, stroke: "var(--text-muted)", "stroke-width": 1, visibility: "hidden" }, f.svg);
+  const dot = el("circle", { r: 4, fill: "var(--series-1)", stroke: "var(--surface-1)", "stroke-width": 2, visibility: "hidden" }, f.svg);
+  const hit = el("rect", { x: f.m.l, y: top, width: f.W - f.m.l - f.m.r, height: bottom - top, fill: "transparent" }, f.svg);
+  const off = () => { cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); };
+  scrub(f.svg, hit, (e, rel) => {
+    const raw = f.x0 + (rel * f.W - f.m.l) / (f.W - f.m.l - f.m.r) * (f.x1 - f.x0);
+    const x = Math.min(Math.max(Math.round(raw * 10) / 10, VALVE_E[0]), VALVE_E[1]);
+    const p = bin ? null : pts.reduce((a, b) => (Math.abs(b.e - x) < Math.abs(a.e - x) ? b : a));
+    const at = bin ? x : p.e;
+    cross.setAttribute("x1", f.sx(at)); cross.setAttribute("x2", f.sx(at)); cross.setAttribute("visibility", "visible");
+    if (p) { dot.setAttribute("cx", f.sx(p.e)); dot.setAttribute("cy", f.sy(p.valve)); dot.setAttribute("visibility", "visible"); }
+    showTip(e, `${eText(at)}<br>${bin ? valveSwitchTip(v.switch, at) : `Ventil <b>${fmt(p.valve, 0)} %</b> · ${fmt(p.hours, 1)} h in Beharrung`}`, off);
+  });
+}
+const valveSwitchTip = (sw, e) => e >= sw.e_on ? "Ventil <b>an</b> (100 %)" : e <= sw.e_off ? "Ventil <b>aus</b> (0 %)"
+  : `zwischen den Schaltpunkten – <b>bleibt, wie es ist</b>`;
+// Graf im Raum-Dialog zeichnen – nach dem Öffnen und bei jedem Neuaufbau (renderDlg)
+function dlgValveChart() {
+  const r = DLG && DLG.kind === "room" && HEAT ? HEAT.rooms.find((x) => x.climate === DLG.room) : null;
+  if (r && r.valve_model) valveChart($("dlg-valve-chart"), r.valve_model);
+}
+// Übersicht → Räume: eine Zeile je Raum (Kennlinie in Zahlen, Reaktion, Güte, Schritt, Stand); der Name öffnet den
+// Raum-Dialog mit dem Grafen. Ohne valve_model (ältere Version) nichts.
+function valveRoomsHtml(rooms) {
+  const rs = (rooms || []).filter((r) => r.valve_model);
+  if (!rs.length) return "";
+  return `<h3 class="sec-h">Ventilverhalten</h3><p>Wie jedes Thermostat sein Ventil stellt – gelernt aus den eigenen Messwerten, nur Anzeige. ` +
+    `Kennlinie in K unter Soll (− = über Soll), Reaktion: 63 % der neuen Stellung nach einem Soll-Sprung. Der Raumname öffnet den Graf (Heizen → Raum).</p>` +
+    `<div class="scroll"><table id="valve-rooms"><tr><th>Raum</th><th>Kennlinie (K)</th><th>Reaktion auf / zu</th><th>Fehler 30 min</th><th>Schritt</th><th>Stand</th></tr>` +
+    rs.map(valveRoomRow).join("") + "</table></div>";
+}
+function valveRoomRow(r) {
+  const v = r.valve_model, bin = v.kind === "binär", up = (v.response || {}).up || {}, dn = (v.response || {}).down || {};
+  const m = (x) => x === null || x === undefined ? "–" : fmt(x, 0);
+  const pts = [["öffnet", v.e0], ["halb", v.e50], ["ganz", v.e100]].filter(([, x]) => x !== null && x !== undefined);
+  const curve = bin ? (switchKnown(v) ? `an/aus: ein ${kUnder(v.switch.e_on)} · aus ${kUnder(v.switch.e_off)}` : "an/aus, Schaltpunkte lernen noch")
+    : v.load_dependent && v.pi ? `mit Integrator: Kp ${fmt(v.pi.kp, 0)}${v.pi.tn_min ? ` · Tn ${fmt(v.pi.tn_min, 0)} min` : ""}<div class="muted">Kennlinie hängt von der Last ab</div>`
+    : pts.length ? pts.map(([n, x]) => `${n} ${kUnder(x)}`).join(" · ") : "lernt noch";
+  const known = (x) => x !== null && x !== undefined;
+  const react = bin ? (known(up.dead_min) ? `schaltet in ${m(up.dead_min)} min` : "–")
+    : known(up.t63_min) || known(dn.t63_min) ? `${m(up.t63_min)} / ${m(dn.t63_min)} min${up.coarse || dn.coarse ? '<div class="muted">grob (lange Messpause)</div>' : ""}` : "–";
+  const err = (v.error || {}).pp_30, name = esc(shortName(r.room || r.name || r.climate));
+  const link = r.climate ? `<a href="#" onclick="openValve('${esc(r.climate)}');return false">${name}</a>` : name;
+  const state = v.reliable ? '<span class="badge vb-ok">belastbar</span>'
+    : `<span class="badge">lernt</span>${(v.reasons || []).length ? `<div class="muted">${esc(v.reasons.join("; "))}</div>` : ""}`;
+  return `<tr title="${esc(v.text)}"><td>${link}</td><td>${curve}</td><td>${react}</td>` +
+    `<td>${err === null || err === undefined ? "–" : fmt(err, 0) + " %-Punkte"}</td>` +
+    `<td>${fmt(v.step_k, 2)} K${v.step_source === "gerät" ? "" : '<div class="muted">angenommen</div>'}</td><td>${state}</td></tr>`;
+}
+// Name in der Übersicht: Heizen öffnen, Raum-Dialog mit dem Abschnitt „Ventilverhalten“ im Blick
+function openValve(c) {
+  showTab("heat");
+  if (!HEAT || !HEAT.rooms.some((r) => r.climate === c)) return;
+  openDlg("room", c);
+  const v = $("dlg-valve");
+  if (v) v.scrollIntoView({ block: "nearest" });
+}
+
+// ---------------------------------------------------------------- Ventile im Trockenlauf (0.39)
+// Was HeatPilot mit den Thermostaten als Stellglied tun würde (api/preview → valves): Abschnitt am Ende der Vorschau.
+// Nur Protokoll – HeatPilot schreibt dafür nichts. Eingriffe je Tag als gestapelte Balken (früh drosseln blau,
+// gemeinsam anfordern orange, Legende), Tabellen je Raum und Tag als Zwilling, Beispiele mit Grund.
+const VD_NOTE = "Trockenlauf – HeatPilot schreibt nichts an die Thermostate";  // wie valve_dry.NOTE
+const VD_RULE = { drosseln: "früh drosseln", gemeinsam: "gemeinsam anfordern" };
+const VD_C = { drosseln: "var(--series-1)", gemeinsam: "var(--series-2)" };
+function renderValves(v, now = new Date()) {
+  const box = $("vd");
+  box.hidden = !v;  // ältere Version ohne „valves“: Abschnitt weg
+  if (!v) return;
+  const any = (v.writes || 0) > 0, days = vdDays(v, now);
+  $("vd-note").innerHTML = `<b>${esc(v.note || VD_NOTE)}.</b> Gezählt wird, was HeatPilot mit den Thermostaten als Stellglied tun würde – in den letzten ${v.window_days || 7} Tagen, nach Räumen.`;
+  $("vd-text").textContent = v.text || "";
+  $("vd-facts").innerHTML = any ? vdFacts(v) : "";
+  $("vd-rules").innerHTML = vdRules(v.rules || {});
+  $("vd-active").innerHTML = vdActive(v.active || []);
+  for (const id of ["lg-vd", "ch-vd", "vd-ex-box", "vd-days-box"]) $(id).hidden = !any;
+  if (!any) return;
+  $("lg-vd").innerHTML = Object.keys(VD_RULE).map((k) => `<span><i style="background:${VD_C[k]}"></i>${VD_RULE[k]}</span>`).join("") + "<span>Eingriffe je Tag</span>";
+  vdDayChart($("ch-vd"), days);
+  $("vd-ex").innerHTML = vdExamples(v.examples || []);
+  $("vd-rooms").innerHTML = vdTable("Raum", (v.rooms || []).map((r) => [esc(shortName(r.name)), r]));
+  $("vd-days").innerHTML = vdTable("Tag", days.slice().reverse().map((d) => [vdDayName(d.day, true), d]));
+}
+// Kennzahlen: je Regel Zahl, Schätzung (nur belastbar) und was danach gemessen wurde; Schreibvorgänge; „macht mit“
+function vdFacts(v) {
+  const n = v.interventions || {}, wb = v.writes_by || {}, ef = v.effect || {}, d = ef.drosseln || {}, g = ef.gemeinsam || {};
+  const has = (x) => x !== null && x !== undefined;
+  const ck = d.check || {};
+  const drosseln = !n.drosseln ? "Früh drosseln: kein Eingriff." : `Früh drosseln: ${n.drosseln}× (${d.reliable || 0} belastbar)` +
+    (has(d.est_k_mean) ? ` – geschätzt ≈ ${fmt(d.est_k_mean, 1)} K weniger Überschwingen je Eingriff (${d.checked} nachgeprüft)`
+      : d.reliable ? ` – Schätzung erst, wenn das vorhergesagte Überschwingen ohne Eingriff ${ck.min_n ?? 3}× nachgemessen stimmt (bisher ${ck.n || 0}×${has(ck.mae_k) ? `, im Mittel ${fmt(ck.mae_k, 2)} K daneben` : ""})`
+      : " – nur gezählt") +
+    (has(d.act_over_k_mean) ? `; ohne Eingriff gemessen: im Mittel bis ${fmt(d.act_over_k_mean, 1)} K über Soll in der Stunde danach.` : ".");
+  const gemeinsam = !n.gemeinsam ? "Gemeinsam anfordern: kein Eingriff." : `Gemeinsam anfordern: ${n.gemeinsam}× (${g.reliable || 0} belastbar)` +
+    (g.starts_saved_est ? ` – geschätzt ≈ ${fmt(g.starts_saved_est, 0)} Brennerstarts weniger (grob einer je mit angefordertem Raum)` : " – nur gezählt") +
+    (has(g.starts_h_mean) ? `; der Kessel startete dabei im Mittel ${fmt(g.starts_h_mean, 1)}× je Stunde.` : ".");
+  const writes = `Schreibvorgänge: ${v.writes} – früh drosseln ${wb.drosseln || 0}, gemeinsam ${wb.gemeinsam || 0}, jeweils mit dem Zurücksetzen; nichts davon geschrieben.` +
+    (v.managed ? ` ${v.managed} der Eingriffe in Räumen mit „macht mit“.` : "");
+  return [drosseln, gemeinsam, writes].map((t) => `<li>${t}</li>`).join("");
+}
+function vdRules(r) {
+  return `<b>Früh drosseln:</b> Nähert sich ein Raum seinem Soll (gemessen steigend, nach einem Soll-Anstieg oder mindestens ${fmt(r.approach_k ?? 0.2, 1)} K bzw. einen halben Schritt darunter), ` +
+    `erreicht er es laut Raum- und Ventilmodell in weniger als ${r.throttle_eta_min ?? 20} min, wäre das Ventil dann noch über ${fmt(r.throttle_valve_pct ?? 30, 0)} % offen und sagen die Modelle ` +
+    `mindestens ${fmt(r.overshoot_k ?? 0.2, 1)} K Überschwingen voraus, würde HeatPilot das Soll einen Schritt senken – zurück, sobald der Raum es erreicht, spätestens nach ${r.throttle_max_min ?? 60} min; ` +
+    `danach erst wieder nach einem neuen Soll oder ${fmt(r.rearm_k ?? 0.5, 1)} K Auskühlen. Die Schätzung „weniger Überschwingen“ steht erst da, wenn das vorhergesagte Überschwingen ohne Eingriff ` +
+    `${r.check_n ?? 3}× nachgemessen im Mittel höchstens ${fmt(r.check_k ?? 0.2, 1)} K daneben lag. ` +
+    `<b>Gemeinsam anfordern:</b> Fordert nur ein Raum Wärme an und taktet der Kessel (ab ${r.cycle_starts_h ?? 3} Starts je Stunde, Läufe im Mittel unter ` +
+    `${fmt(r.cycle_run_min ?? 10, 0)} min), würde HeatPilot Räume, die in den nächsten ${r.join_ahead_min ?? 60} min ohnehin heizen würden, einen Schritt anheben – ` +
+    `höchstens ${r.join_max_min ?? 60} min. Gezählt wie beim Schreiben: nur bei Änderung, in der Schrittweite des Thermostats, ${r.hold_min ?? 5} min Haltezeit je Raum.`;
+}
+function vdActive(active) {
+  if (!active.length) return "";
+  return "<b>Läuft gerade</b> (nur im Protokoll): " + active.map((a) =>
+    `${esc(shortName(a.name))} – ${VD_RULE[a.rule] || esc(a.rule)}, Soll ${fmt(a.base)} → ${fmt(a.setpoint)} °C seit ${clock(a.since)}`).join(" · ");
+}
+// Alle Tage des Fensters (bis heute), auch ohne Eingriff – die Achse zeigt dann eine Lücke statt sie zu überspringen
+function vdDays(v, now = new Date()) {
+  const by = Object.fromEntries((v.days || []).map((d) => [d.day, d])), n = v.window_days || 7, out = [];
+  const d = new Date(now); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() - (n - 1));
+  for (let i = 0; i < n; i++, d.setDate(d.getDate() + 1)) {
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    out.push({ day: key, drosseln: 0, gemeinsam: 0, writes: 0, ...by[key] });
+  }
+  return out;
+}
+const vdDayName = (day, long) => { const t = Date.parse(day + "T12:00:00") / 1000; return long ? `${wday(t)} ${dateOf(t)}` : wday(t); };
+// Eingriffe je Tag, gestapelt (2 px Fuge), eine Achse; Tooltip je Tag mit beiden Regeln und den Schreibvorgängen
+function vdDayChart(box, days) {
+  const max = Math.max(3, ...days.map((d) => d.drosseln + d.gemeinsam));  // ab 3: ganze Zahlen auf der Achse
+  const f = frame(box, [-0.5, days.length - 0.5], [0, max], { yMin: 0, height: 130, label: "Eingriffe je Tag im Trockenlauf",
+    xTicks: () => days.map((d, i) => [i, vdDayName(d.day)]) });
+  const bw = Math.max(Math.min(f.sx(1) - f.sx(0) - 10, 28), 4);
+  days.forEach((d, i) => {
+    let base = 0;
+    for (const k of Object.keys(VD_RULE)) {
+      if (!d[k]) continue;
+      const y0 = f.sy(base) - (base ? 1 : 0), y1 = f.sy(base + d[k]) + 1;
+      el("rect", { x: f.sx(i) - bw / 2, y: y1, width: bw, height: Math.max(y0 - y1, 1), rx: 2, fill: VD_C[k] }, f.svg);
+      base += d[k];
+    }
+    const hit = el("rect", { x: f.sx(i - 0.5), y: f.m.t, width: f.sx(1) - f.sx(0), height: f.H - f.m.t - f.m.b, fill: "transparent" }, f.svg);
+    const tip = () => `${vdDayName(d.day, true)}<br>` + Object.keys(VD_RULE).map((k) => `<span style="color:${VD_C[k]}">●</span> ${VD_RULE[k]}: <b>${d[k]}×</b>`).join("<br>") +
+      `<br>${d.writes} ${d.writes === 1 ? "Schreibvorgang" : "Schreibvorgänge"} (mit Zurücksetzen)`;
+    hit.addEventListener("pointermove", (e) => showTip(e, tip()));
+    hit.addEventListener("pointerdown", (e) => showTip(e, tip()));
+    hit.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hideTip(); });
+  });
+}
+// Je Raum bzw. Tag: Eingriffe je Regel und Schreibvorgänge
+function vdTable(head, rows) {
+  return `<tr><th>${head}</th><th>drosseln</th><th>gemeinsam</th><th>Schreib&shy;vorgänge</th></tr>` +
+    rows.map(([name, r]) => `<tr><td>${name}</td><td>${r.drosseln || 0}</td><td>${r.gemeinsam || 0}</td><td>${r.writes || 0}</td></tr>`).join("");
+}
+// Beispiele (neueste zuerst) als Liste – passt auch am Handy: Zeit, Raum, Regel, Soll vorher → würde; Grund und Stand
+// des Raums; Wirkung (geschätzt, danach gemessen)
+function vdExamples(ex) {
+  return ex.map((x) => `<li><b>${esc(timeOf(x.t))} · ${esc(shortName(x.name))}</b>${x.managed ? ' <span class="badge">macht mit</span>' : ""} – ` +
+    `${VD_RULE[x.rule] || esc(x.rule)}, Soll ${fmt(x.base)} → ${fmt(x.setpoint)} °C` +
+    `<div class="muted">${esc(x.reason || "")} · Raum ${fmt(x.temp)} °C, Ventil ${fmt(x.valve, 0)} %</div><div>${vdEffect(x)}</div></li>`).join("");
+}
+function vdEffect(x) {
+  const has = (v) => v !== null && v !== undefined, thr = x.rule === "drosseln";
+  const est = thr ? (has(x.est_k) && x.est_checked !== false ? `geschätzt ≈ ${fmt(x.est_k, 1)} K weniger Überschwingen`
+      : has(x.pred_over_k) ? `vorhergesagt ohne Eingriff ≈ ${fmt(x.pred_over_k, 1)} K über Soll (Schätzung wird nachgeprüft)` : "")
+    : (has(x.est_starts) ? `geschätzt ≈ ${fmt(x.est_starts, 0)} Brennerstart weniger` : "");
+  const act = thr ? (has(x.act_over_k) ? `ohne Eingriff gemessen: bis ${fmt(x.act_over_k, 1)} K über Soll` : "")
+    : (has(x.act_starts) ? `ohne Eingriff gemessen: ${fmt(x.act_starts, 0)} Brennerstarts in der Stunde` : "");
+  return [est || (x.reliable ? "" : "nur gezählt (Modelle lernen noch)"), act || "gemessen wird nach 1 h"].filter(Boolean).join(" · ");
 }
 
 // Anwesenheit: wie HeatPilot Entfernung und Heimkehr deutet – zum Nachprüfen

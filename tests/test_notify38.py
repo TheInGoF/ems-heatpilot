@@ -283,10 +283,9 @@ def test_settings_validate_domains_and_defaults(tmp_path):
 
 # ------------------------------------------------------------------ Version, Doku
 def test_version_changelog_docs():
-    assert __version__ == "0.38.0"
-    assert re.search(r'^version: "0\.38\.0"$', (ROOT / "ems_heatpilot" / "config.yaml").read_text(), re.MULTILINE)
+    assert __version__ >= "0.38.0"  # seit 0.39 prüft test_valve_docs39 die genaue Version
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert log.split("\n## ")[1].startswith("0.38.0")
+    assert "\n## 0.38.0\n" in log
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     assert "## Warmwasser über HeatPilot (Weg W)" in docs and "## Benachrichtigungen" in docs
     assert "binary_sensor.heatpilot_problem" in docs and "number.set_value" in docs

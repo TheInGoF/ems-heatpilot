@@ -53,7 +53,7 @@ from .values import flag, local, num
 
 STEP_MIN = 5           # Rechenschritt
 HOURS = 24             # so viele volle Stunden ab der laufenden
-FLOW_MIN = 25.0        # Vorlauf-Soll nie darunter
+FLOW_MIN = 35.0        # Vorlauf-Soll nie darunter; braucht kein Raum so viel, ist der Heizbetrieb aus (Ingo, 0.39)
 FLOW_STEP_K = 1.0      # Schreibschwelle Vorlauf (Planungspapier: ab 1 K)
 DHW_STEP_K = dhw_control.STEP_K        # Schreibschwelle Warmwasser – dieselbe wie Weg W (0.38)
 HOLD_MIN = dhw_control.HOLD_S // 60    # Haltezeit nach jedem Schreiben (5 min) – dieselbe wie Weg W
@@ -326,7 +326,14 @@ class _Run:
         if not needs:
             return None, False, "kein Raum braucht Wärme – Heizbetrieb aus"
         flows = [n for n in needs if n[0] is not None]
-        value, name, why = max(flows) if flows else (FLOW_MIN, *needs[0][1:])  # nur Räume ohne eigenen Vorlauf
+        others = [n for n in needs if n[0] is None]    # Räume ohne eigenen Vorlauf (ohne Modell, Fußboden)
+        if flows and max(flows)[0] < FLOW_MIN and not others:
+            # unter der Untergrenze lohnt Heizen nicht: aus, bis ein Raum mindestens FLOW_MIN braucht
+            return None, False, f"nötiger Vorlauf unter {FLOW_MIN:.0f} °C ({max(flows)[1]}) – Heizbetrieb aus"
+        if flows and max(flows)[0] >= FLOW_MIN:
+            value, name, why = max(flows)
+        else:
+            value, name, why = (FLOW_MIN, *others[0][1:])
         return round(min(max(value, FLOW_MIN), self.cfg.max_flow_temp)), True, f"{name} {why}"
 
     def _dhw(self, t: datetime, pres: Presence) -> tuple[int | None, str, float | None]:

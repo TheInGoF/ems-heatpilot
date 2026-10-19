@@ -27,7 +27,7 @@ nutzt sie auch:
    Ordnung“.
 6. Ändert sich das Kessel-Soll ohne HeatPilot (z. B. die alte HA-Automation), ist ein fremder Schreiber aktiv:
    Hinweis und Meldung; nach 2 fremden Änderungen in 1 h pausiert Weg W – nicht gegeneinander schreiben.
-7. Höchstens 24 Schreibvorgänge in 24 h – schwankt die Empfehlung, pausiert Weg W mit Meldung.
+7. Keine Zählsperre (seit 0.39): bei 1 K Änderung wird nach jeder Haltezeit geschrieben, egal wie oft am Tag.
 8. Fällt HeatPilot aus, bleibt das letzte Soll stehen – deshalb nie unter dem Minimum. Beim Zurückschalten auf
    aus/trocken wird nichts zurückgeschrieben (Hinweis: die HA-Automation ggf. wieder einschalten).
 
@@ -46,7 +46,7 @@ import time
 
 from . import plausibility
 from .dhw_entity import entity_problem, suggest_entity, target_entity, write_blocked  # noqa: F401 – auch für Aufrufer
-from .dhw_rule import (CHECK_MAX_S, CHECK_S, CHECK_TOL_K, DAY_MAX, DAY_S, EMS_FRESH_S, FOREIGN_MAX,  # noqa: F401
+from .dhw_rule import (CHECK_MAX_S, CHECK_S, CHECK_TOL_K, COUNT_WINDOW_S, EMS_FRESH_S, FOREIGN_MAX,  # noqa: F401
                        FOREIGN_WINDOW_S, HINT_AUTOMATION, HINT_FAILSAFE, HINT_S, HOLD_S, MAX_FAILS, STEP_K, UNKNOWN,
                        Decision, _c, decide, limits, unrounded, wish)
 from .dhw_status import (ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, ACT_WRITE, ACTIONS,  # noqa: F401
@@ -175,21 +175,16 @@ class DhwControl(DhwStatus):
 
     def _guard(self, ts: int, d: Decision) -> Decision:
         """Vor dem Vormerken (nur „heatpilot“): Spricht ein Hindernis dagegen (``blocker``), wird nichts vorgemerkt –
-        kein Fehlschlag. Gab es schon ``DAY_MAX`` Schreibvorgänge in 24 h, schwankt die Empfehlung: pausieren."""
+        kein Fehlschlag. Eine Zählsperre gibt es nicht (Ingo): Ändert sich die Empfehlung um 1 K, wird nach der
+        Haltezeit geschrieben – sonst bliebe der Speicher z. B. auf 60 °C stehen, nur weil viel los war."""
         problem = self.blocker()
         if problem:
             return Decision(False, d.value, problem)
-        if len(self._writes(ts)) >= DAY_MAX:
-            self._pause(ts, f"{DAY_MAX} Schreibvorgänge in 24 h",
-                        f"Warmwasser-Soll {DAY_MAX}× in 24 h geschrieben – die Empfehlung schwankt (Anwesenheit, "
-                        "Zapfungen?). Warmwasser über HeatPilot pausiert; bitte prüfen und in HeatPilot wieder "
-                        "einschalten")
-            return Decision(False, d.value, "pausiert")
         return d
 
     def _writes(self, ts: int) -> list[int]:
-        """Schreibvorgänge der letzten 24 h seit dem letzten „wieder einschalten“."""
-        since = max(ts - DAY_S, int(self.state.get("resumed", 0)))
+        """Schreibvorgänge der letzten 24 h seit dem letzten „wieder einschalten“ – nur für die Anzeige."""
+        since = max(ts - COUNT_WINDOW_S, int(self.state.get("resumed", 0)))
         return [t for t in self.state.get("writes") or [] if t > since]
 
     def _reference(self, mode: str, current: float | None) -> tuple[float | None, int | None]:

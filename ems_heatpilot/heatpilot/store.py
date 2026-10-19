@@ -41,13 +41,28 @@ CREATE TABLE IF NOT EXISTS control_log(
 CREATE TABLE IF NOT EXISTS preview_log(
     ts INTEGER PRIMARY KEY, flow REAL, heating INTEGER, dhw REAL, t_out REAL
 );
+CREATE TABLE IF NOT EXISTS valve_dry_log(
+    ts INTEGER, room TEXT, rule TEXT, action TEXT, setpoint REAL, base REAL, temp REAL, valve REAL,
+    eta_min REAL, valve_pred REAL, est_k REAL, est_starts REAL, reliable INTEGER, managed INTEGER, reason TEXT,
+    starts_h REAL, act_over_k REAL, act_starts REAL, checked INTEGER, pred_over_k REAL
+);
+CREATE TABLE IF NOT EXISTS valve_subst(ts INTEGER, room TEXT, PRIMARY KEY(ts, room));
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
+CREATE INDEX IF NOT EXISTS idx_valve_dry_ts ON valve_dry_log(ts);
 CREATE INDEX IF NOT EXISTS idx_control_ts ON control_log(ts);
 CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 """
 
 CONTROL_LOG_KEEP_DAYS = 90  # Schreibprotokoll (0.34) so lange aufheben
 PREVIEW_LOG_KEEP_DAYS = 90  # Trockenlauf-Protokoll (0.37) so lange aufheben
+VALVE_DRY_KEEP_DAYS = 90    # Ventil-Trockenlauf (0.39) so lange aufheben
+VALVE_SUBST_KEEP_DAYS = 90  # Ventil-Ersatzwerte (0.39): Sensor still, Ventil aus hvac_action – so lange merken
+# Ventil-Trockenlauf (0.39) je Eintrag: Regel (drosseln/gemeinsam), Aktion (senken/anheben/zurück), was HeatPilot
+# geschrieben hätte und warum, die Schätzung (nur mit belastbaren Modellen; pred_over_k: vorhergesagtes Überschwingen
+# ohne Eingriff, zum Nachprüfen) und später, was wirklich geschah
+VALVE_DRY_COLS = ("ts", "room", "rule", "action", "setpoint", "base", "temp", "valve", "eta_min", "valve_pred",
+                  "est_k", "est_starts", "reliable", "managed", "reason", "starts_h", "act_over_k", "act_starts",
+                  "checked", "pred_over_k")
 # Trockenlauf (0.37) je Stunde: Plan (flow, heating, dhw, t_out aus SCHEMA) und dazu Schreibvorgänge des Plans,
 # nach der Stunde der Ist-Wert (Mittel der Messpunkte, Anteil Heizbetrieb an), dessen Wechsel und die Zahl der Messpunkte
 PREVIEW_COLS = ("w_flow", "w_heating", "w_dhw", "act_flow", "act_heating", "act_dhw",
@@ -122,8 +137,9 @@ class Store:
     def reset_learning(self, since_day: str) -> None:
         """Gelerntes verwerfen, damit es aus den Rohdaten neu berechnet werden kann.
 
-        Bleibt: Messwerte, Einstellungen, Empfehlungs-Verlauf, Schreib- und Trockenlauf-Protokoll (Messung, nichts
-        Gelerntes). Tageszähler ab ``since_day``
+        Bleibt: Messwerte, Einstellungen, Empfehlungs-Verlauf, Schreib- und Trockenlauf-Protokolle (auch das der
+        Ventile, 0.39 – Messung, nichts Gelerntes). Ventilmodelle (``model.valve.*``) fallen mit weg und lernen danach
+        aus den Messwerten nach. Tageszähler ab ``since_day``
         werden beim Neueinlesen der Historie neu gebildet und hier gelöscht (sonst doppelt).
         """
         self.db.execute("DELETE FROM kv WHERE key LIKE 'model.%' OR key IN "
@@ -152,6 +168,14 @@ class Store:
         self.db.executemany(
             "INSERT OR REPLACE INTO room_samples VALUES(?, ?, ?, ?, ?, ?)", rows
         )
+
+    def add_valve_subst(self, ts: int, rooms: Iterable[str]) -> None:
+        """Messpunkt, in dem der Ventilwert dieser Räume ein Ersatzwert ist (Sensor ohne Wert, Ventil aus
+        ``hvac_action``) – das Ventilmodell lernt ihn nicht (seit 0.39)."""
+        rooms = list(rooms)
+        if rooms:
+            self.db.executemany("INSERT OR REPLACE INTO valve_subst VALUES(?, ?)", ((int(ts), r) for r in rooms))
+            self.db.execute("DELETE FROM valve_subst WHERE ts < ?", (int(ts) - VALVE_SUBST_KEEP_DAYS * 86400,))
 
     def home_by_ts(self, since: int, persons: list[str] | None) -> dict[int, bool]:
         """Ist jemand zu Hause? Nur die gewählten Personen (None = alle gespeicherten)."""
@@ -244,6 +268,29 @@ class Store:
     def preview_log(self, since: int) -> list[dict]:
         """Protokoll ab ``since``, älteste Stunde zuerst."""
         return [dict(r) for r in self.db.execute("SELECT * FROM preview_log WHERE ts >= ? ORDER BY ts", (int(since),))]
+
+    # --- Ventil-Trockenlauf (0.39) ---
+    def add_valve_dry(self, entry: dict) -> None:
+        """Ein Eintrag „würde schreiben“ an ein Thermostat (Spalten ``VALVE_DRY_COLS``, fehlende leer)."""
+        self.db.execute(f"INSERT INTO valve_dry_log({', '.join(VALVE_DRY_COLS)}) "
+                        f"VALUES({', '.join('?' * len(VALVE_DRY_COLS))})", tuple(entry.get(c) for c in VALVE_DRY_COLS))
+        self.db.execute("DELETE FROM valve_dry_log WHERE ts < ?", (int(entry["ts"]) - VALVE_DRY_KEEP_DAYS * 86400,))
+        self.db.commit()
+
+    def valve_dry_log(self, since: int) -> list[dict]:
+        """Einträge ab ``since``, älteste zuerst (mit ``id``)."""
+        return [dict(r) for r in self.db.execute(
+            "SELECT rowid AS id, * FROM valve_dry_log WHERE ts >= ? ORDER BY ts, rowid", (int(since),))]
+
+    def valve_dry_open(self, before: int) -> list[dict]:
+        """Einträge vor ``before``, bei denen noch nachgetragen werden muss, was wirklich geschah."""
+        return [dict(r) for r in self.db.execute(
+            "SELECT rowid AS id, * FROM valve_dry_log WHERE ts <= ? AND action != 'zurück' AND checked IS NULL "
+            "ORDER BY ts", (int(before),))]
+
+    def set_valve_dry_actual(self, entry_id: int, over_k: float | None, starts: float | None) -> None:
+        self.db.execute("UPDATE valve_dry_log SET act_over_k = ?, act_starts = ?, checked = 1 WHERE rowid = ?",
+                        (over_k, starts, int(entry_id)))
 
     def add_burner_event(self, ts: int, state: bool) -> None:
         self.db.execute("INSERT INTO burner_events VALUES(?, ?)", (ts, int(state)))

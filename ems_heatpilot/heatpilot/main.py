@@ -43,6 +43,11 @@ DATA_VERSION = 13  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladee
 #                             Hausmodell aus Tageswerten, Auskühlen mit Übertemperatur aus der Bilanz,
 #                             schnelle Phase je Anlage, Raum-Startwerte aus dem Haus; Zeitplan-Empfehlungen
 #                  13 (0.33): Fremdwärme-Ereignisse je Raum (Kamin, Ofen) – nicht gelernt, Stundenwerte ext_frac
+#                  0.39 bleibt bei 13: Die Ventilmodelle sind neu und haben einen eigenen Stand (valve_model.VERSION).
+#                  Fehlt ein Modell oder passt sein Stand nicht, lernt es im Takt aus den gespeicherten Messwerten
+#                  (room_samples, bis 60 Tage) in Abschnitten nach – Raum-, Haus- und alle übrigen Modelle bleiben,
+#                  wie sie sind, und es wird nichts aus Home Assistant neu geholt. „Lernstand neu berechnen“ verwirft
+#                  auch sie.
 
 
 class App:

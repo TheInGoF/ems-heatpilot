@@ -6,7 +6,8 @@ Hausmodell (Stunde und Tag, ohne Warmwasser). Stündlich lernt es Nachtzeiten un
 Tado und die Schlafenszeiten aus dem Stromverbrauch. In die Datenbank schreibt es die Stundenwerte,
 die Fremdwärme-Ereignisse, die Zähler verworfener Gaswerte, die Tagesschnappschüsse der Modelle und
 die gelernten Zeiten (``schedule.learned``, ``KV_MANAGED_UNTIL``, die Nächte aus dem Stromverbrauch über
-``sleep.learn``). Es steuert nichts.
+``sleep.learn``). Seit 0.39 lernt es das Ventilverhalten je Raum (``learn_valves`` über ``valve_learn``). Es steuert
+nichts.
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ import time
 from collections import deque
 from datetime import datetime, timedelta
 
-from . import plausibility, schedule, sleep
+from . import plausibility, schedule, sleep, valve_learn
 from .models import DAILY_MIN_HOURS, ROOM_STEP_H, RoomModel
 from .values import local, midnight
 
@@ -51,6 +52,7 @@ DHW_BASE_MIN_HOURS = 14 * 24
 DHW_BASE_MIN_CELL = 4         # so viele Sommerstunden je Wochentag/Stunde, sonst Mittel der Stunde
 
 KV_MANAGED_UNTIL = "schedule.managed_until"  # bis dahin hat HeatPilot selbst gesteuert: nicht aus Tado lernen
+VALVE_BUDGET_S = 1.0  # Ventilmodelle: höchstens so lange je Takt aus der Historie nachlernen (0.39)
 
 
 class LearnMixin:
@@ -202,6 +204,26 @@ class LearnMixin:
                 cur = [a, b]
         covered += cur[1] - cur[0] if cur else 0
         return covered / 3600
+
+    # ------------------------------------------------------------------ Ventile (0.39)
+    def learn_valves(self, until: int | None = None, budget_s: float | None = VALVE_BUDGET_S) -> bool:
+        """Ventilmodelle bis zum letzten abgeschlossenen Raumschritt lernen (``valve_learn``) – beim ersten Mal bzw.
+        nach einem neuen Modellstand aus der gespeicherten Historie, je Abschnitt höchstens ein Tag und je Takt
+        höchstens ``budget_s`` Sekunden (None: bis fertig). True, solange noch nachgelernt wird."""
+        until = self._last_room_step if until is None else until
+        if until is None or not self.valves:
+            return False
+        running = {c: int(ev["start_ts"]) for c, ev in self.room_ext.items()}
+        return valve_learn.learn_all(self.store, self.valves, until, running, budget_s)
+
+    def valve_info(self, climate: str, now_ts: int | None = None) -> dict | None:
+        """Ventilmodell eines Raums für die Anzeige (``ValveModel.summary``) mit der Schrittweite seiner Thermostate."""
+        model, room = self.valves.get(climate), self.found.room_of(climate)
+        if model is None or room is None:
+            return None
+        step, source = valve_learn.step_of(room, self.states)
+        return model.summary(step, source, now_ts, catching_up=valve_learn.behind(model, self._last_room_step),
+                             group=valve_learn.group_of(room))
 
     # ------------------------------------------------------------------ Haus
     def aggregate_hour(self, hour: int, learn: bool = True) -> None:
