@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.36.0
+**Nachtzeiten aus dem Stromverbrauch** (abgesprochen; Standard aus – es ändert sich nichts, bis Leistungssensoren gewählt sind)
+- **Einstellungen → Steuerung, „Nachtzeiten aus dem Stromverbrauch“:** Leistungssensoren des Hauses (W oder kW; bei drei Phasen alle drei, die Summe ist die Hausleistung) und „Nicht zählen“ für Verbraucher, die nachts laufen (Waschmaschine, Spülmaschine, Wallbox – werden abgezogen). HeatPilot lernt daraus je Wochentag, wann das Haus schlafen geht und aufsteht: abends fällt der Verbrauch aufs Nachtniveau, morgens steigt er wieder (Kaffeemaschine, Licht, Bad). Je Nacht gilt eine eigene Schwelle zwischen Nacht- und Abendniveau, über dem Flackern von Kühlschrank und Gefrierschrank
+- Ausgelassen werden Nächte im Urlaub, wenn alle lange weg sind oder um 22 Uhr niemand zu Hause ist („nicht zu Hause“), Nächte mit Lücken in der Hausleistung („keine Daten“) und Nächte ohne erkennbaren Abend („zu wenig Unterschied“). Fehlt eine Phase, zählt der Messpunkt nicht – eine halbe Summe wäre falsch
+- **Wochenplan:** je Tag „gelernt ab“/„gelernt bis“ als Median der letzten sechs Wochen mit Zahl der Nächte und Streuung – Beginn aus den Nächten, deren Abend der Tag ist, Ende aus denen, deren Morgen er ist (Nacht Fr→Sa: Fr „ab“, Sa „bis“). Belastbar ab drei Nächten mit höchstens 90 min Streuung und plausibler Lage (Beginn 19:00–01:30, Ende 03:30–09:30). Mit dem Häkchen **„Gelernte Zeiten verwenden“** ersetzen belastbare Werte je Hälfte den eingestellten Eintrag, sonst gilt der Wochenplan (Rückfall); ohne Häkchen nur Vorschlag. Übersicht und Einstellungen zeigen die wirksame Zeit mit Herkunft („gelernt (Strom)“ / „eingestellt“). Bei „Beobachten“ wird gelernt und angezeigt, geändert wird nichts
+- Die Hausleistung wird wie die anderen Messwerte gespeichert und mit der Historie eingelesen – nach dem ersten Start und nach geänderten Sensoren sind sofort Nächte da. Gerechnet wird stündlich, jede Nacht genau einmal; „Lernstand neu berechnen“ rechnet die Nächte mit neu. An den Schreibregeln ändert sich nichts (nur Räume mit „macht mit“, 5–25 °C, EMS-ESP nur lesend)
+- Ein gelernter Beginn nach Mitternacht (z. B. 00:30 am Wochenende) gilt am Folgetag – die Nacht ist eine Zeitspanne, der Tag davor bleibt Komfort. Messwerte gelten bis zum nächsten Messpunkt, so lernt HeatPilot auch mit Abtastintervall bis 15 min. Nach einem Wechsel der Leistungssensoren zählen alte Werte nicht mehr, angebrochene erste Nächte auch nicht
+- Doku: Abschnitt „Nachtzeiten aus dem Stromverbrauch“
+
 ## 0.35.1
 - Übersicht „Haus-Trägheit“: erklärt, was die Stunden bedeuten (Zeitkonstante der Wände), und rechnet es für heute aus: „von 21,2 auf 18 °C in ≈ 24 h (5 °C außen; Fremdwärme hält ≈ 6 K über außen)“ – mit Nachttemperatur und Außentemperatur aus Einstellungen und Messung
 

@@ -248,6 +248,12 @@ class Discovered:
     gas: str | None = None
     gas_unit: str | None = None
     demand_sensor: str | None = None  # z. B. sensor.heizungsanforderung (Ventile in %)
+    # seit 0.36: Leistungssensoren des Hauses (Summe, ggf. je Phase) und Verbraucher, die nicht zählen –
+    # nur aus den Einstellungen, keine Automatik; power_units: Einheit je Sensor (W/kW) zur Zeit der
+    # Erkennung, damit auch die Historie (ohne Attribute) richtig umgerechnet wird
+    power: list[str] = field(default_factory=list)
+    power_exclude: list[str] = field(default_factory=list)
+    power_units: dict[str, str] = field(default_factory=dict)
     home_zone: tuple[float, float] | None = None
     # nur bei ``all_rooms=True`` (Vorschläge): die climate-Entitäten, die die Erkennung im Betrieb ohne
     # Raum-Einstellungen als Räume nähme – die Oberfläche hakt nur diese vorab an (sonst dasselbe Ventil
@@ -263,6 +269,7 @@ class Discovered:
             ids.append(self.gas)
         if self.demand_sensor:
             ids.append(self.demand_sensor)
+        ids += self.power + self.power_exclude
         return sorted(set(ids))
 
     def climate_ids(self) -> list[str]:
@@ -284,6 +291,9 @@ class Discovered:
             "gas": self.gas,
             "gas_unit": self.gas_unit,
             "demand_sensor": self.demand_sensor,
+            "power": self.power,
+            "power_exclude": self.power_exclude,
+            "power_units": self.power_units,
             "home_zone": self.home_zone if private else (self.home_zone is not None),
             "auto_rooms": self.auto_rooms,
         }
@@ -601,6 +611,17 @@ def discover(states: list[dict], registry, cfg, all_rooms: bool = False) -> Disc
 
     if cfg.demand_sensor and cfg.demand_sensor in by_id:
         d.demand_sensor = cfg.demand_sensor
+
+    # Schlafenszeit aus dem Stromverbrauch (0.36): nur gewählte Sensoren, die es in HA gibt
+    d.power = [e for e in cfg.power_sensors if e in by_id]
+    d.power_exclude = [e for e in cfg.power_exclude if e in by_id and e not in d.power]
+    missing = [e for e in [*cfg.power_sensors, *cfg.power_exclude] if e not in by_id]
+    if missing:
+        log.warning("Leistungssensoren nicht gefunden: %s – zählen nicht", ", ".join(missing))
+    for e in d.power + d.power_exclude:
+        unit = by_id[e].get("attributes", {}).get("unit_of_measurement")
+        if unit:
+            d.power_units[e] = str(unit)
 
     zone = by_id.get("zone.home", {}).get("attributes", {})
     if "latitude" in zone:

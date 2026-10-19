@@ -147,14 +147,22 @@ class App:
         save_settings(clean)
         log.info("Einstellungen gespeichert: %s", sorted(clean))
         before = list(self.eng.found.persons) if self.eng else None
-        rooms_before = self._room_inputs()
+        rooms_before, power_before = self._room_inputs(), self._power_inputs()
         await self.build(backfill=False)
         rooms_after = self._room_inputs()
         changed = sorted(c for c, v in rooms_after.items() if rooms_before is not None and rooms_before.get(c) != v)
+        reload = False
         if changed:
             # Sensoren eines Raums geändert oder Raum neu: dessen Werte gibt es bisher nicht in den
             # gespeicherten Daten – Historie aus Home Assistant neu holen und neu lernen
             log.info("Räume mit neuen Sensoren/neu gewählt: %s – Historie wird neu eingelesen", ", ".join(changed))
+            reload = True
+        if power_before is not None and power_before != self._power_inputs():
+            # Leistungssensoren (0.36) geändert: Hausleistung der Vergangenheit neu holen, Nächte neu rechnen
+            log.info("Leistungssensoren geändert – Historie wird neu eingelesen")
+            self.store.clear_power()  # Werte der alten Sensoren nicht als Nächte zählen
+            reload = True
+        if reload:
             asyncio.create_task(self.reload_history())
         if before is not None and sorted(before) != sorted(self.eng.found.persons):
             self.store.recount_home(self.eng.found.persons)
@@ -168,6 +176,11 @@ class App:
             return None
         return {r.climate: (r.heating_power, r.temp_sensor, tuple(sorted(d["climate"] for d in r.members)))
                 for r in self.eng.found.rooms}
+
+    def _power_inputs(self) -> tuple[tuple, tuple] | None:
+        if self.eng is None:
+            return None
+        return tuple(self.eng.found.power), tuple(self.eng.found.power_exclude)
 
     async def reload_history(self) -> None:
         """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers)."""

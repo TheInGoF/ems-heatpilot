@@ -122,7 +122,11 @@ def test_settings_api_roundtrip_control_fields(tmp_path):
                                      "managed": False}  # leerer Komfort wird nicht gespeichert (= 21)
             assert validate(s)[1] == []  # was die Oberfläche bekommt, kann sie unverändert speichern
             eff = j["schedule"]["effective"]
-            assert eff["plan"][0] == {"day": "Mo", "start": "20:30", "end": "04:30"} and eff["source"]["night_start"] == "wochenplan"
+            # seit 0.36 steht je Hälfte die Herkunft dabei (ohne night_plan_auto: eingestellt)
+            assert eff["plan"][0] == {"day": "Mo", "start": "20:30", "end": "04:30",
+                                      "source_start": "eingestellt", "source_end": "eingestellt"}
+            assert eff["source"]["night_start"] == "wochenplan"
+            assert j["sleep"]["active"] is False and j["sleep"]["sensors"] == [] and len(j["sleep"]["plan"]) == 7
             assert j["control"]["limits"] == {"temp_min": 5.0, "temp_max": 25.0, "preset_max": 12}
             assert j["climate_targets"]["climate.wz"] == 19.0
             assert j["balance"] == {"changes": [], "pause_days": 10, "effect_days": 14, "forget_days": 60}
@@ -181,3 +185,26 @@ def test_rooms_preset_roundtrip_and_validation(tmp_path):
                       ({"preset": 2, "preset_max": 0}, "liegt über den 0 Stufen")):
         _, errors = validate({"rooms": [{"climate": "climate.a", **bad}]})
         assert errors and text in errors[0], (bad, errors)
+
+
+def test_power_fields_roundtrip_and_defaults(tmp_path):
+    """0.36: Leistungssensoren, Ausschlüsse und „gelernte Zeiten verwenden“ gehen hin und zurück; Standard aus."""
+    cfg = Config.load(tmp_path / "options.json")
+    assert cfg.power_sensors == [] and cfg.power_exclude == [] and cfg.night_plan_auto is False
+    assert cfg.night_plan_learned is None and "night_plan_learned" not in cfg.to_raw()
+    raw = cfg.to_raw()
+    assert raw["power_sensors"] == [] and raw["power_exclude"] == [] and raw["night_plan_auto"] is False
+    clean, errors = validate({"power_sensors": ["sensor.l1", " sensor.l2 ", "", "sensor.l1", "sensor.l3"],
+                              "power_exclude": ["sensor.waschmaschine"], "night_plan_auto": "on"})
+    assert errors == []
+    assert clean["power_sensors"] == ["sensor.l1", "sensor.l2", "sensor.l3"]
+    assert clean["power_exclude"] == ["sensor.waschmaschine"] and clean["night_plan_auto"] is True
+    save_settings(clean, tmp_path)
+    cfg = Config.load(tmp_path / "options.json")
+    assert cfg.power_sensors == ["sensor.l1", "sensor.l2", "sensor.l3"]
+    assert cfg.power_exclude == ["sensor.waschmaschine"] and cfg.night_plan_auto is True
+    assert validate(cfg.to_raw())[1] == []  # was die Oberfläche bekommt, kann sie unverändert speichern
+    _, errors = validate({"power_sensors": ["kein entity"], "power_exclude": ["sensor.ok", "auch nicht"]})
+    assert len(errors) == 2 and "power_sensors" in errors[0] and "power_exclude" in errors[1]
+    # Laufzeitfeld aus einer Datei wird nicht übernommen
+    assert Config.from_raw({"night_plan_learned": [{"start": "23:00", "end": None}] * 7}).night_plan_learned is None

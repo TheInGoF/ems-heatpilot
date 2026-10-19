@@ -17,8 +17,10 @@ keine YAML-Optionen:
 - **Steuerung:** der Hauptschalter **Beobachten** (Standard: lernen, empfehlen, Tado
   nur auf Knopfdruck) oder **HeatPilot steuert** (HeatPilot schreibt die
   Raum-Solltemperaturen selbst – siehe [Steuerung](#steuerung-beobachten-oder-heatpilot-steuert)),
-  dazu der Wochenplan der Nachtabsenkung, Nacht- und Abwesenheitstemperatur und der
-  Vorheizdeckel
+  dazu der Wochenplan der Nachtabsenkung, Nacht- und Abwesenheitstemperatur, der
+  Vorheizdeckel und die **Nachtzeiten aus dem Stromverbrauch** (Leistungssensoren des Hauses,
+  „Nicht zählen“ für Waschmaschine & Co., Häkchen „Gelernte Zeiten verwenden“ – siehe
+  [Nachtzeiten aus dem Stromverbrauch](#nachtzeiten-aus-dem-stromverbrauch))
 - **Verbindung:** EMS-ESP-Adresse mit „Testen“-Knopf (nur lesend, kein Passwort/Token).
   Gelesen werden Kessel und Regler alle 30 s und alle weiteren Geräte, die EMS-ESP
   kennt (Mischer, Solar, Sensoren …), alle 5 min. Fehlen Werte, die die
@@ -458,8 +460,51 @@ unverändert weiter; die
 Ersparnis-Schätzung rechnet weiter mit Abwesenheits-/Nachttemperatur und dem Mo–Fr-Mittel des
 Plans.
 
-Später (0.35+): Schlafenszeit aus dem Hausverbrauch und Soll nach Ventilstellung – jetzt bewusst
-nicht enthalten.
+### Nachtzeiten aus dem Stromverbrauch
+
+Wann das Haus schlafen geht, verrät der Stromzähler: Abends fällt der Verbrauch auf das Nachtniveau
+(Standby), morgens steigt er wieder (Kaffeemaschine, Licht, Bad). Seit 0.36 lernt HeatPilot daraus
+den Wochenplan der Nachtabsenkung – als Vorschlag oder, mit dem Häkchen, als wirksame Zeiten.
+Einstellungen → Steuerung, unter dem Wochenplan:
+
+- **Leistungssensoren (Haus, ggf. je Phase):** ein oder mehrere Sensoren in W oder kW; die Summe
+  ist die Hausleistung, bei drei Phasen also alle drei eintragen. Gemeint ist der **Verbrauch** des
+  Hauses, nicht der Netzbezug einer PV-Anlage (der wird tagsüber negativ und zählt dann nicht).
+  Fehlt eine Phase (Sensor „nicht verfügbar“), zählt der Messpunkt nicht – eine halbe Summe wäre
+  falsch.
+- **Nicht zählen:** Leistungssensoren von Verbrauchern, die nachts laufen (Waschmaschine,
+  Spülmaschine, Trockner, Wallbox). Sie werden von der Hausleistung abgezogen. Ohne eigenen Sensor
+  stört ein gelegentlicher Nachtlauf wenig, denn der Wochenplan ist der Median von sechs Wochen.
+- **Je Nacht** (18:00 bis 12:00 des Folgetags, Ortszeit) bestimmt HeatPilot das Nachtniveau
+  (00–04 Uhr), das Abendniveau (19–21 Uhr) und daraus eine Schwelle; sie liegt über dem normalen
+  Flackern der Nacht (Kühlschrank, Gefrierschrank). Schlafbeginn ist die erste halbe Stunde unter der
+  Schwelle, nach der es bis 3 Uhr überwiegend ruhig bleibt – sonst war noch jemand wach. Aufstehen
+  ist der erste Anstieg darüber ab 3:30, frühestens 4 h nach dem Schlafbeginn; ohne Anstieg bis
+  11 Uhr zählt die Nacht nur mit ihrem Beginn.
+- **Ausgelassen** werden Nächte im Urlaub, wenn alle lange weg sind oder um 22 Uhr niemand zu Hause
+  ist („nicht zu Hause“), Nächte mit Lücken in der Hausleistung („keine Daten“) und Nächte ohne
+  erkennbaren Abend („zu wenig Unterschied“ – kein Abendverbrauch, oder der Sensor misst nur einen
+  Teil des Hauses).
+- **Wochenplan:** Beginn aus den Nächten, deren Abend der Wochentag ist, Ende aus denen, deren
+  Morgen er ist – wie im Wochenplan selbst (Nacht Fr→Sa: Fr „ab“, Sa „bis“). Median der letzten
+  sechs Wochen, auf 5 min gerundet. **Belastbar** ist eine Hälfte ab drei Nächten, wenn die Streuung
+  (Quartilsabstand) höchstens 90 min beträgt und die Zeit plausibel liegt (Beginn 19:00–01:30, Ende
+  03:30–09:30). Ein Beginn nach Mitternacht (z. B. Sa 00:30) zählt zum Abend davor und gilt am
+  Folgetag – bis dahin bleibt es Komfort. Die Tabelle zeigt je Tag „gelernt ab“ / „gelernt bis“ mit
+  Zahl der Nächte und Streuung, darunter, wie viele Nächte warum ausgelassen wurden. Ein Messwert gilt
+  bis zum nächsten Messpunkt (Abtastintervall bis 15 min geht). Nach einem Wechsel der
+  Leistungssensoren verwirft HeatPilot die alten Werte und liest die Historie neu ein.
+- **Wann die Werte gelten:** nur mit dem Häkchen **„Gelernte Zeiten verwenden“**, und je Hälfte nur,
+  wo etwas Belastbares vorliegt – sonst gilt der eingestellte Eintrag des Wochenplans (Rückfall,
+  auch wenn die Sensoren einmal ausfallen). Übersicht und Einstellungen zeigen die wirksame Zeit mit
+  Herkunft („gelernt (Strom)“ oder „eingestellt“). Bei „Beobachten“ wird gelernt und angezeigt,
+  geändert wird nichts; an den Schreibregeln ändert sich nichts.
+- Gerechnet wird stündlich, jede Nacht genau einmal, sobald ihr Fenster vorbei ist. Nach dem ersten
+  Start und nach einer Änderung der Sensoren liest HeatPilot die Historie neu ein, damit sofort
+  Nächte da sind. Die Hausleistung wird wie die anderen Messwerte gespeichert (`power_w`,
+  `power_ex_w`) und steht im Export; „Lernstand neu berechnen“ rechnet die Nächte mit neu.
+
+Später (0.37): Soll nach Ventilstellung – jetzt bewusst nicht enthalten.
 
 ## Was das Add-on macht
 

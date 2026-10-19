@@ -38,6 +38,11 @@ DEFAULT_NIGHT_PLAN = [
     {"start": "21:00", "end": "06:30"},  # So
 ]
 COMFORT_MIN, COMFORT_MAX, COMFORT_DEFAULT = 5.0, 25.0, 21.0
+# Nachtplan (0.36): gelernter Beginn darf nach Mitternacht liegen, höchstens bis hierher (sonst eingestellter Wert)
+LATE_START_MAX = "03:00"
+NOON = time(12, 0)
+# Herkunft einer Nachtzeit im wirksamen Wochenplan (0.36)
+SOURCE_SET, SOURCE_POWER = "eingestellt", "gelernt (Strom)"
 # Hydraulik (0.35): Voreinstellung am Ventilunterteil – höchstens so viele Stufen
 PRESET_MAX = 12
 
@@ -72,6 +77,10 @@ FIELDS: dict[str, tuple] = {
     "night_start": ("time",),
     "night_end": ("time",),
     "night_plan": ("nightplan",),
+    # Schlafenszeit aus dem Hausstromverbrauch (0.36)
+    "power_sensors": ("entities",),
+    "power_exclude": ("entities",),
+    "night_plan_auto": ("bool",),
     "preheat_max_h": ("float", 0.5, 6),
     "learn_schedule": ("bool",),
     "floor_heating_rooms": ("entities",),
@@ -283,6 +292,15 @@ class Config:
     night_end: time = time(6, 0)
     # Nachtabsenkung nach Wochenplan (Steuerung heatpilot): Mo..So {start, end} als "HH:MM"
     night_plan: list[dict] = field(default_factory=lambda: [dict(d) for d in DEFAULT_NIGHT_PLAN])
+    # Schlafenszeit aus dem Hausstromverbrauch (0.36): Leistungssensoren (W oder kW; Summe = Hausleistung,
+    # bei drei Phasen alle drei), Verbraucher, die nicht zählen (Waschmaschine, Spülmaschine, Wallbox –
+    # werden abgezogen), und ob gelernte Zeiten den Wochenplan ersetzen (sonst nur Vorschlag)
+    power_sensors: list[str] = field(default_factory=list)
+    power_exclude: list[str] = field(default_factory=list)
+    night_plan_auto: bool = False
+    # Laufzeit, nicht gespeichert: gelernte Nachtzeiten Mo..So [{start, end}] mit None, wo nichts
+    # Belastbares vorliegt – setzt die Engine (update_sleep), wirkt nur mit night_plan_auto
+    night_plan_learned: list[dict | None] | None = field(default=None, repr=False, compare=False)
     # so früh höchstens vorheizen (h) – Räume, die es nicht schaffen, werden akzeptiert
     preheat_max_h: float = 3.0
     # Nachtzeiten/-temperatur und Abwesenheit aus Tado weiterlernen (Einstellungen = Startwerte)
@@ -312,6 +330,8 @@ class Config:
     def from_raw(cls, raw: dict) -> "Config":
         cfg = cls()
         for key, value in raw.items():
+            if key == "night_plan_learned":
+                continue  # Laufzeitfeld, kommt nie aus einer Datei
             if key in ("night_start", "night_end", "vacation_arrival_time"):
                 value = _parse_time(value)
             elif key == "overrides":
@@ -356,29 +376,70 @@ class Config:
         return t >= self.night_start or t < self.night_end
 
     # --- Wochenplan der Nachtabsenkung (0.34) ---
-    def night_times(self, weekday: int) -> tuple[time, time]:
-        """(Beginn am Abend, Ende am Morgen) des Wochentags 0 = Mo … 6 = So."""
+    def night_entry(self, weekday: int) -> dict:
+        """Wirksamer Eintrag des Wochentags 0 = Mo … 6 = So: {start, end, source_start, source_end}.
+
+        Seit 0.36 ersetzt mit ``night_plan_auto`` je Hälfte der aus dem Stromverbrauch gelernte Wert
+        (``night_plan_learned``) den eingestellten, wo es einen belastbaren gibt; sonst gilt der
+        eingestellte (Rückfall). Die Herkunft steht je Hälfte dabei.
+        """
         d = self.night_plan[weekday % 7]
-        return _parse_time(d["start"]), _parse_time(d["end"])
+        out = {"start": d["start"], "end": d["end"], "source_start": SOURCE_SET, "source_end": SOURCE_SET}
+        learned = self.night_plan_learned if self.night_plan_auto else None
+        entry = learned[weekday % 7] if learned and len(learned) == 7 else None
+        for key in ("start", "end"):
+            value = entry.get(key) if entry else None
+            if not value:
+                continue
+            try:
+                hhmm = _clean_time(value)
+            except ValueError:
+                continue
+            if key == "start" and LATE_START_MAX < hhmm < "12:00":
+                continue  # Beginn mitten in der Nacht/morgens: unplausibel, eingestellter Wert gilt
+            if key == "end" and hhmm >= "12:00":
+                continue
+            out[key], out["source_" + key] = hhmm, SOURCE_POWER
+        return out
+
+    def night_times(self, weekday: int) -> tuple[time, time]:
+        """(Beginn am Abend, Ende am Morgen) des Wochentags 0 = Mo … 6 = So – wirksam, siehe night_entry."""
+        e = self.night_entry(weekday)
+        return _parse_time(e["start"]), _parse_time(e["end"])
+
+    def night_span(self, day: datetime) -> tuple[datetime, datetime]:
+        """(Beginn, Ende) der Nacht, die zum Abend von ``day`` gehört (Nacht Fr → Sa: ``day`` = Fr).
+
+        Eingestellte Beginne liegen am Abend (ab 12:00). Seit 0.36 kann ein aus dem Stromverbrauch
+        gelernter Beginn nach Mitternacht liegen (z. B. 00:30) – er zählt dann zum Folgetag. Läge er nach
+        dem Ende, gilt der eingestellte Beginn (sonst wäre die Nacht leer).
+        """
+        start, _ = self.night_times(day.weekday())
+        nxt = day + timedelta(days=1)
+        _, end = self.night_times(nxt.weekday())
+        s = _at(nxt if start < NOON else day, start, day)
+        e = _at(nxt, end, day)
+        if s >= e:  # gelernter Beginn nach dem Ende (sehr frühes Ende eingestellt): eingestellter Beginn gilt
+            s = _at(day, _parse_time(self.night_plan[day.weekday() % 7]["start"]), day)
+        return s, e
+
+    def _spans_around(self, dt: datetime) -> list[tuple[datetime, datetime]]:
+        return [self.night_span(dt + timedelta(days=k)) for k in (-1, 0, 1)]
 
     def is_night_at(self, dt: datetime) -> bool:
-        """Nacht laut Wochenplan: ab dem Beginn dieses Wochentags (abends) bzw. vor dessen Ende (morgens)."""
-        start, end = self.night_times(dt.weekday())
-        return dt.time() >= start or dt.time() < end
+        """Nacht laut Wochenplan: zwischen Beginn (abends, gelernt auch nach Mitternacht) und Ende (morgens)."""
+        return any(s <= dt < e for s, e in self._spans_around(dt))
 
     def night_end_at(self, dt: datetime) -> datetime:
-        """Ende der Nacht, in der ``dt`` liegt (nur sinnvoll, wenn is_night_at(dt))."""
-        start, _ = self.night_times(dt.weekday())
-        day = dt if dt.time() < start else dt + timedelta(days=1)
-        _, end = self.night_times(day.weekday())
-        return _at(day, end, dt)
+        """Ende der Nacht, in der ``dt`` liegt (sonst das nächste Nachtende)."""
+        spans = self._spans_around(dt)
+        hit = next((e for s, e in spans if s <= dt < e), None)
+        return hit or min(e for _, e in spans if e > dt)
 
     def night_start_after(self, dt: datetime) -> datetime:
         """Nächster Nachtbeginn ab ``dt`` (nur sinnvoll, wenn nicht is_night_at(dt))."""
-        start, _ = self.night_times(dt.weekday())
-        day = dt if dt.time() < start else dt + timedelta(days=1)
-        start, _ = self.night_times(day.weekday())
-        return _at(day, start, dt)
+        spans = self._spans_around(dt) + [self.night_span(dt + timedelta(days=2))]
+        return min(s for s, _ in spans if s >= dt)
 
     def is_managing(self) -> bool:
         return self.control_mode == "heatpilot"

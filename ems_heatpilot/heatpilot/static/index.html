@@ -84,7 +84,7 @@ input[type=checkbox] { width: 16px; height: 16px; }
 .btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; font-weight: 600; }
 .btn.small { padding: 3px 9px; font-size: 12px; }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-#outdoor-list .row input { flex: 1; width: auto; min-width: 0; }
+#outdoor-list .row input, #power-list .row input, #power-ex-list .row input { flex: 1; width: auto; min-width: 0; }
 .msg-ok { color: var(--good); } .msg-err { color: #e34948; }
 .savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; border-top: 1px solid var(--border);
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -170,6 +170,7 @@ dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
 .seg input { position: absolute; opacity: 0; width: 0; height: 0; }
 .warnbox { border-left: 3px solid var(--warn); background: rgba(201, 133, 0, .09); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin: 10px 0; color: var(--text-primary); }
 table.plan { width: auto; } table.plan td, table.plan th { padding: 3px 6px; } table.form.plan input { min-width: 0; width: 108px; }
+table.plan td.np-learned { white-space: nowrap; font-size: 12px; } table.plan .badge { font-size: 11px; padding: 0 6px; }
 table.form input[type=checkbox] { min-width: 0; } table.form input.r-comfort { min-width: 72px; width: 72px; }
 /* Räume (0.35): Voreinstellung/Stufen klein; Empfehlungen: Erwartung je Raum als Chips, Wirkungszeile abgesetzt */
 table.form input.r-preset, table.form input.r-preset-max { min-width: 60px; width: 60px; }
@@ -1214,7 +1215,7 @@ async function load() {
   $("disc").textContent = JSON.stringify(s.discovered, null, 2);
 }
 // ---------------------------------------------------------------- Einstellungen
-let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {};
+let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
 function sunText(g, updates) {
   if (!g || updates < 96) return '<span class="muted">lernt noch</span>';
   const names = ["Ost", "Süd", "West"], best = g.indexOf(Math.max(...g));
@@ -1422,14 +1423,24 @@ function renderSchedule(s) {
   if (!sc || !sc.effective) { box.hidden = true; return; }
   const e = sc.effective, l = sc.learned || {};
   box.hidden = false;
+  const sl = s.sleep || {}, powered = (sl.sensors || []).length > 0;
   if (s.control_mode === "heatpilot" && e.plan) {
+    // Nachtzeiten aus dem Stromverbrauch (0.36): start/end sind die wirksamen Zeiten, source_* sagt woher
+    const strom = (d, k) => d["source_" + k] === "gelernt (Strom)";
+    const cell = (d, k) => `${esc(d[k])}${strom(d, k) ? ' <span class="badge" title="aus dem Hausstromverbrauch gelernt">Strom</span>' : ""}`;
+    const anyStrom = e.plan.some((d) => strom(d, "start") || strom(d, "end"));
+    const note = anyStrom ? `„Strom“: aus dem Hausstromverbrauch gelernt (${sl.nights || 0} Nächte, Median der letzten ${sl.weeks || 6} Wochen) – die übrigen Zeiten sind eingestellt.`
+      : !powered ? "" : sl.auto ? "„Gelernte Zeiten verwenden“ ist an, aber noch nichts ist belastbar – es gilt der eingestellte Wochenplan."
+      : "Aus dem Stromverbrauch gelernte Zeiten stehen als Vorschlag unter Einstellungen → Steuerung.";
     box.innerHTML = `<h2>Zeitplan – HeatPilot steuert</h2><p>Nachtabsenkung nach Wochenplan (Einstellungen → Steuerung): nachts ${fmt(e.night_temp)} °C, bei Abwesenheit und im Urlaub ${fmt(e.away_temp)} °C, sonst die Komforttemperatur des Raums; vorgeheizt wird so früh, wie der Raum laut Modell braucht. Aus Tado wird dabei nichts gelernt.</p>` +
-      `<div class="scroll"><table class="plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th></tr>${e.plan.map((d) => `<tr><td>${esc(d.day)}</td><td>${esc(d.start)}</td><td>${esc(d.end)}</td></tr>`).join("")}</table></div>`;
+      `<div class="scroll"><table class="plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th></tr>${e.plan.map((d) => `<tr><td>${esc(d.day)}</td><td>${cell(d, "start")}</td><td>${cell(d, "end")}</td></tr>`).join("")}</table></div>` +
+      (note ? `<p class="muted" style="margin:6px 0 0">${note}</p>` : "");
     return;
   }
   const src = e.source || {}, how = (k) => src[k] === "gelernt" ? "gelernt" : "eingestellt";
   box.innerHTML = `<h2>Zeitplan – Beobachten</h2><p>Nacht ab <b>${esc(e.night_start)}</b> (${how("night_start")}) bis <b>${esc(e.night_end)}</b> (${how("night_end")}) · Nachttemperatur ${fmt(e.night_temp)} °C (${how("night_temp")}) · Abwesenheit ${fmt(e.away_temp)} °C (${how("away_temp")})` +
-    `${l.nights ? ` · ${l.nights} Nächte aus Tado erkannt` : ""}. Damit rechnet die Ersparnis-Schätzung – geschaltet wird nichts.</p>`;
+    `${l.nights ? ` · ${l.nights} Nächte aus Tado erkannt` : ""}. Damit rechnet die Ersparnis-Schätzung – geschaltet wird nichts.` +
+    `${powered ? ` Aus dem Stromverbrauch: ${sl.nights || 0} Nächte gelernt – Vorschlag unter Einstellungen → Steuerung, wirksam erst bei „HeatPilot steuert“.` : ""}</p>`;
 }
 function roomCheckText(sv) {
   if (!sv.rooms_checked) return sv.rooms_ok_floor ? "kein plausibles Heizkörper-Raummodell (Fußbodenräume werden nicht je Raum geprüft) – nur das ganze Haus geprüft" : "noch kein Raummodell plausibel – nur das ganze Haus geprüft";
@@ -1576,9 +1587,12 @@ function showTab(name) {
 }
 
 const isTemp = (e) => e.id.startsWith("sensor.") && (e.device_class === "temperature" || e.unit === "°C");
+// Leistung (0.36): nur sensor.* mit device_class power oder Einheit W/kW – Hausleistung und Ausschlüsse
+const isPower = (e) => e.id.startsWith("sensor.") && (e.device_class === "power" || e.unit === "W" || e.unit === "kW");
 const isSensor = (e) => e.id.startsWith("sensor.") || e.id.startsWith("counter.");
 const PICKERS = {
   temp: { filter: isTemp, label: "Temperatur-Sensoren" },
+  power: { filter: isPower, label: "Leistungssensoren" },
   sensor: { filter: isSensor, label: "Sensoren" },
   weather: { filter: (e) => e.id.startsWith("weather."), label: "Wetter" },
   climate: { filter: (e) => e.id.startsWith("climate."), label: "Thermostate" },
@@ -1684,10 +1698,38 @@ function learnedHint(key, show) {
   return ` · gelernt: ${show(l)}` + (src === "gelernt" || l === e ? " (verwendet)" : src.startsWith("eingestellt (") ? " – Untergrenze gilt" : ` – verwendet: ${show(e)}`);
 }
 
+// Mehrfach-Liste von Entitäten (0.36, wie die Außenfühler): Zeilen mit ×, der Knopf hängt eine leere Zeile an
+let entN = 100;
+const entRow = (id, picker, value) => `<div class="row" style="margin-bottom:4px">${ent(`${id}-${entN++}`, value, picker)}<button class="btn small" onclick="this.parentNode.remove()">×</button></div>`;
+const entList = (id, values, picker, more) => `<div id="${id}">${values.map((v) => entRow(id, picker, v)).join("")}</div><button class="btn small" onclick="addEnt('${id}', '${picker}')">${more}</button>`;
+function addEnt(id, picker) { $(id).insertAdjacentHTML("beforeend", entRow(id, picker, "")); }
+
+// Gelernte Planhälfte (0.36): „21:35 · 5 Nächte ± 20 min“, grau solange nicht belastbar, „gilt“ wenn die Steuerung sie nutzt
+function learnedCell(d, half, eff) {
+  if (!d || !d[half]) return '<span class="muted">–</span>';
+  const n = d["n_" + half], sp = d["spread_" + half + "_min"], ok = d["reliable_" + half];
+  const txt = `${esc(d[half])} · ${n} ${n === 1 ? "Nacht" : "Nächte"}${sp !== null && sp !== undefined ? ` ± ${sp} min` : ""}`;
+  const used = !!eff && eff["source_" + half] === "gelernt (Strom)";
+  return `<span class="${ok ? "" : "muted"}" title="${ok ? "belastbar" : "noch nicht belastbar: mind. 3 Nächte, Streuung bis 90 min, plausible Uhrzeit"}">${txt}</span>` +
+    (used ? ' <span class="badge" style="border-color:var(--good);color:var(--good)">✓ gilt</span>' : "");
+}
+// Zeile unter dem Wochenplan: wie viele Nächte zählen, wie viele warum ausgelassen wurden
+function sleepLine(sl) {
+  const skipped = Object.entries(sl.invalid || {}).map(([r, n]) => `${n}× ${esc(r)}`).join(", ");
+  if (!sl.nights && !skipped) return "Noch keine Nacht ausgewertet – gerechnet wird stündlich, nach dem Speichern zuerst aus der Historie.";
+  return `Gelernt aus ${sl.nights} ${sl.nights === 1 ? "Nacht" : "Nächten"}${skipped ? `; ausgelassen: ${skipped}` : ""}.` +
+    (sl.auto && !sl.active ? " „Gelernte Zeiten verwenden“ ist an, aber noch nichts ist belastbar – es gilt der Wochenplan." : "");
+}
+
 // Steuerung (0.34): Schalter beobachten/heatpilot, Wochenplan der Nachtabsenkung, Nacht-/Abwesenheitstemperatur, Vorheizdeckel
+// Nachtzeiten aus dem Stromverbrauch (0.36): Leistungssensoren, Ausschlüsse, Häkchen „verwenden“, gelernte Spalten im Wochenplan
 function controlCard(s) {
   const mode = s.control_mode === "heatpilot" ? "heatpilot" : "beobachten";
   const plan = (s.night_plan || []).length === 7 ? s.night_plan : (DEF.night_plan || []);
+  const power = s.power_sensors || [], powerEx = s.power_exclude || [];
+  const learned = power.length && SLEEP && (SLEEP.plan || []).length === 7 ? SLEEP.plan : null;  // Spalten nur mit Sensoren
+  const effPlan = (SCHED && SCHED.effective && SCHED.effective.plan) || [];
+  const missing = SLEEP ? power.filter((p) => !(SLEEP.sensors || []).includes(p)) : [];
   return `<p>Was HeatPilot mit den Räumen tut. <b>Beobachten</b>: lernen, empfehlen, Tado nur auf Knopfdruck. <b>HeatPilot steuert</b>: HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst – Komfort, Nacht nach Wochenplan, Abwesenheit, rechtzeitig vorheizen.</p>
     <div class="seg" id="f-control_mode">
       <label><input type="radio" name="control_mode" value="beobachten" ${mode === "beobachten" ? "checked" : ""} onchange="modeHint()"> Beobachten</label>
@@ -1696,12 +1738,20 @@ function controlCard(s) {
     <div class="warnbox">Zurück zu Tado nur hier über den Schalter – danach in der Tado-App den Zeitplan fortsetzen (HeatPilot stellt ihn nicht wieder her). Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt geschriebene Soll stehen. Es gibt keinen Zwischenmodus und keinen automatischen Rückfall.</div>
     <h3 style="font-size:13px;margin:12px 0 4px">Nachtabsenkung – Wochenplan</h3>
     <p class="muted" style="margin:0 0 6px">Je Wochentag: Beginn am Abend dieses Tages, Ende am Morgen dieses Tages (die Nacht Fr → Sa steht also bei Fr „ab“ und Sa „bis“). Gilt bei „HeatPilot steuert“; nachts bekommen alle Räume mit „macht mit“ die Nachttemperatur.</p>
-    <div class="scroll"><table class="form plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th></tr>${WEEKDAYS.map((d, i) =>
-      `<tr class="np" data-day="${i}"><td>${d}</td><td><input type="time" class="np-start" value="${esc((plan[i] || {}).start || "")}"></td><td><input type="time" class="np-end" value="${esc((plan[i] || {}).end || "")}"></td></tr>`).join("")}</table></div>
+    <div class="scroll"><table class="form plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th>${learned ? "<th>gelernt ab</th><th>gelernt bis</th>" : ""}</tr>${WEEKDAYS.map((d, i) =>
+      `<tr class="np" data-day="${i}"><td>${d}</td><td><input type="time" class="np-start" value="${esc((plan[i] || {}).start || "")}"></td><td><input type="time" class="np-end" value="${esc((plan[i] || {}).end || "")}"></td>${learned ? `<td class="np-learned">${learnedCell(learned[i], "start", effPlan[i])}</td><td class="np-learned">${learnedCell(learned[i], "end", effPlan[i])}</td>` : ""}</tr>`).join("")}</table></div>
+    ${learned ? `<p class="muted" id="sleep-line" style="margin:4px 0 0">${sleepLine(SLEEP)}</p>` : ""}
     <div class="form-grid" style="margin-top:10px">
       ${field("Nachttemperatur (°C)", num("f-night_temp", s.night_temp, "0.5"), "Soll aller Räume mit „macht mit“ in der Nacht; im Modus Beobachten Untergrenze der Ersparnis-Rechnung" + learnedHint("night_temp", (v) => fmt(v) + " °C"))}
       ${field("Temperatur bei Abwesenheit (°C)", num("f-away_temp", s.away_temp, "0.5"), "Soll, wenn niemand zu Hause ist oder im Urlaub" + learnedHint("away_temp", (v) => fmt(v) + " °C"))}
       ${field("Vorheizen höchstens (h)", num("f-preheat_max_h", s.preheat_max_h, "0.5"), "Deckel für die Aufheizzeit aus dem Raummodell (0,5–6 h). Räume, die das Ziel nicht schaffen, werden akzeptiert – nichts wird hochgedreht.")}
+    </div>
+    <h3 style="font-size:13px;margin:14px 0 4px">Nachtzeiten aus dem Stromverbrauch</h3>
+    <p class="muted" style="margin:0 0 6px">Abends fällt der Hausverbrauch auf das Nachtniveau, morgens steigt er wieder – daraus lernt HeatPilot je Wochentag Beginn und Ende der Nacht (Median der letzten ${(SLEEP && SLEEP.weeks) || 6} Wochen). Ohne Sensor ist die Funktion aus.</p>
+    <div class="form-grid">
+      ${field("Leistungssensoren (Haus, ggf. je Phase)", entList("power-list", power, "power", "+ Sensor"), "Summe aller Einträge = Hausleistung; bei drei Phasen alle drei eintragen (W oder kW)." + (missing.length ? ` <span class="msg-err">Nicht in Home Assistant gefunden: ${missing.map(esc).join(", ")}</span>` : ""))}
+      ${field("Nicht zählen (Waschmaschine, Spülmaschine, Wallbox …)", entList("power-ex-list", powerEx, "power", "+ Verbraucher"), "Leistungssensoren von Verbrauchern, die auch nachts laufen – werden von der Hausleistung abgezogen.")}
+      ${field("Gelernte Zeiten verwenden", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-night_plan_auto" ${s.night_plan_auto ? "checked" : ""}> gelernte Nachtzeiten statt des Wochenplans</label>`, "Sonst nur Vorschlag; wo nichts Belastbares gelernt ist, gilt der Wochenplan oben.")}
     </div>`;
 }
 function modeHint() {
@@ -1799,6 +1849,10 @@ function collect() {
   const cm = document.querySelector('input[name="control_mode"]:checked');
   out.control_mode = cm ? cm.value : "beobachten";
   out.night_plan = [...document.querySelectorAll("tr.np")].map((tr) => ({ start: tr.querySelector(".np-start").value, end: tr.querySelector(".np-end").value }));
+  // Nachtzeiten aus dem Stromverbrauch (0.36): Sensorlisten als Arrays, Häkchen als bool
+  out.power_sensors = [...document.querySelectorAll("#power-list input")].map((i) => i.value.trim()).filter(Boolean);
+  out.power_exclude = [...document.querySelectorAll("#power-ex-list input")].map((i) => i.value.trim()).filter(Boolean);
+  out.night_plan_auto = $("f-night_plan_auto").checked;
   out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
   out.rooms = []; out.floor_heating_rooms = [];
   for (const tr of document.querySelectorAll("tr.room")) {
@@ -1824,13 +1878,18 @@ function collect() {
 async function saveSettings() {
   const msg = $("save-msg");
   msg.className = ""; msg.textContent = "Speichere …";
-  const r = await fetch("api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(collect()) });
+  const body = collect();
+  // Leistungssensoren geändert (0.36): das Backend liest die Historie neu ein, die Nächte kommen erst danach
+  const same = (k) => JSON.stringify([...new Set(body[k])]) === JSON.stringify((SET || {})[k] || []);
+  const reload = !same("power_sensors") || !same("power_exclude");
+  const r = await fetch("api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const j = await readJSON(r);
   if (!j.ok) { msg.className = "msg-err"; msg.innerHTML = "Nicht gespeichert: " + j.errors.map(esc).join(" · "); return; }
   msg.className = "msg-ok"; msg.textContent = "Gespeichert und übernommen.";
   const note = saveNote(j);
+  const hist = reload ? ' <span class="muted">Historie wird neu eingelesen – die gelernten Nachtzeiten erscheinen danach.</span>' : "";
   SET = null; await loadSettings(); load().catch(() => {});
-  $("save-msg").className = "msg-ok"; $("save-msg").innerHTML = "Gespeichert und übernommen." + note;
+  $("save-msg").className = "msg-ok"; $("save-msg").innerHTML = "Gespeichert und übernommen." + note + hist;
 }
 // Nach dem Speichern (0.35): bei mehreren Geräten in einem Raum, welches das Schlüsselgerät ist (Raumregler, sonst
 // das erste – es liefert Temperatur und Voreinstellung des Raums); gemerkte Änderungen der Voreinstellung
@@ -1893,6 +1952,7 @@ async function loadSettings() {
   ENT = await getJSON("api/entities");
   SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
   DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
+  SLEEP = j.sleep || null;  // Nachtzeiten aus dem Stromverbrauch (0.36)
   renderSettings();
 }
 

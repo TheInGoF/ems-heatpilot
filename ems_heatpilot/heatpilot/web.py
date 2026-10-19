@@ -91,6 +91,8 @@ def make_app(app) -> web.Application:
             "suggested": await app.suggestions(),
             "roles": roles,
             "schedule": {"learned": app.eng.schedule_learned, "effective": app.eng.eff.as_dict()},
+            # Nachtzeiten aus dem Stromverbrauch (0.36): Wochenplan mit Belastbarkeit, Zahl der Nächte, Gründe
+            "sleep": app.eng.sleep_summary(),
             # Steuerung (0.34): erlaubte Schalterstellungen, Wochentage des Nachtplans, aktuelles Soll je
             # Thermostat (Startwert der Komforttemperatur eines neu gewählten Raums)
             "control": {"modes": list(CONTROL_MODES), "weekdays": list(WEEKDAYS),

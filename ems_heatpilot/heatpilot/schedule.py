@@ -196,8 +196,10 @@ def _plan_median(cfg, key: str) -> time:
     mins = []
     for d in range(5):
         start, end = cfg.night_times(d)
-        mins.append(_minutes(start if key == "start" else end))
-    m = int(statistics.median(mins))
+        m = _minutes(start if key == "start" else end)
+        # gelernter Beginn nach Mitternacht (0.36) zählt als später Abend, nicht als Morgen
+        mins.append(m + 24 * 60 if key == "start" and m < 12 * 60 else m)
+    m = int(statistics.median(mins)) % (24 * 60)
     return time(m // 60, m % 60)
 
 
@@ -207,7 +209,8 @@ def effective(cfg, learned: dict | None) -> Effective:
     if getattr(cfg, "control_mode", "beobachten") == "heatpilot":
         # HeatPilot schreibt die Zeiten selbst – aus Tado lernen wäre zirkulär: der Wochenplan gilt
         src = {k: "wochenplan" for k in src}
-        plan = [{"day": day, **d} for day, d in zip(("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"), cfg.night_plan)]
+        # seit 0.36: wirksame Zeiten je Tag mit Herkunft je Hälfte (eingestellt | gelernt (Strom))
+        plan = [{"day": day, **cfg.night_entry(i)} for i, day in enumerate(("Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"))]
         return Effective(_plan_median(cfg, "start"), _plan_median(cfg, "end"), cfg.night_temp, cfg.away_temp,
                          src, plan)
     eff = Effective(cfg.night_start, cfg.night_end, cfg.night_temp, cfg.away_temp, src)
