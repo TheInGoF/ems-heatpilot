@@ -21,6 +21,11 @@ BACKUP_DIR = Path(os.environ.get("HEATPILOT_BACKUP_DIR", "/config"))
 BACKUP_NAME = "heatpilot-einstellungen.json"
 
 _ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
+# Felder mit fester Domäne (0.38): IDs wie in Home Assistant – nur Kleinbuchstaben, Ziffern, Unterstrich. Dasselbe
+# Muster nutzt Control für die Benachrichtigungsziele, damit „notify.Handy“ schon beim Speichern auffällt
+NOTIFY_TARGET = re.compile(r"^notify\.[a-z0-9_]+$")
+NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")
+_DOMAIN_ID = {"notify": NOTIFY_TARGET, "number": NUMBER_ENTITY}
 _TIME = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 # Steuerung (seit 0.34): „beobachten“ = lernen und empfehlen, Tado nur auf Knopfdruck;
@@ -47,9 +52,12 @@ SOURCE_SET, SOURCE_POWER = "eingestellt", "gelernt (Strom)"
 PRESET_MAX = 12
 # Warmwasser-Desinfektion (0.36.3): Wochentag des Termins, leer = kein Termin (Standard)
 DISINFECT_DAYS = ("", *WEEKDAYS)
+# Warmwasser-Soll über HeatPilot (Weg W, 0.38): aus (nur Empfehlung, Standard), trocken (rechnen und protokollieren,
+# nichts schreiben), heatpilot (HeatPilot schreibt das Speicher-Soll) – unabhängig von ``control_mode``
+DHW_MODES = ("aus", "trocken", "heatpilot")
 
 # Feld -> (Typ, min, max). Typen: int, float, str, bool, choice, entity, entities, time, strings, rooms,
-# overrides, nightplan
+# overrides, nightplan. Bei entity/entities steht optional die erlaubte Domäne dabei (0.38: number, notify)
 FIELDS: dict[str, tuple] = {
     "control_mode": ("choice", CONTROL_MODES),
     "sample_interval_s": ("int", 60, 900),
@@ -73,6 +81,10 @@ FIELDS: dict[str, tuple] = {
     "dhw_disinfect_day": ("choice", DISINFECT_DAYS),
     "dhw_disinfect_time": ("time",),
     "dhw_disinfect_temp": ("float", 60, 80),
+    # Weg W (0.38): Schalter, Entität des Speicher-Solls (leer = erkannt); Benachrichtigungsziele
+    "dhw_control": ("choice", DHW_MODES),
+    "dhw_set_entity": ("entity", "number"),
+    "notify_targets": ("entities", "notify"),
     "design_outdoor_temp": ("float", -25, 0),
     "living_area_m2": ("float", 0, 2000),
     "boiler_nominal_kw": ("float", 0, 100),
@@ -187,8 +199,24 @@ def _clean_night_plan(value) -> list[dict]:
     return plan
 
 
+def _check_domain(key: str, items: list[str]) -> None:
+    """Felder mit fester Domäne (0.38): Warmwasser-Soll nur ``number.*``, Benachrichtigungen nur ``notify.*`` – und nur
+    in Kleinbuchstaben wie in Home Assistant (sonst wiese Control das Ziel später ab)."""
+    domain = FIELDS[key][1] if len(FIELDS[key]) > 1 else None
+    if not domain:
+        return
+    bad = [v for v in items if not v.startswith(f"{domain}.")]
+    if bad:
+        raise ValueError(f"nur {domain}-Entitäten: {', '.join(bad)}")
+    pattern = _DOMAIN_ID.get(domain)
+    bad = [v for v in items if pattern and not pattern.match(v)]
+    if bad:
+        raise ValueError(f"nur {domain}-Entitäten in Kleinbuchstaben (wie in Home Assistant): {', '.join(bad)}")
+
+
 def validate(raw: dict) -> tuple[dict, list[str]]:
     """Eingaben aus der Oberfläche prüfen und bereinigen. Gibt (sauber, Fehler) zurück."""
+    from .dhw_entity import wrong_role  # spät wie _RANGE
     from .vacation import _RANGE  # spätes Import, vermeidet Zyklus
 
     clean: dict = {}
@@ -217,12 +245,16 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                 v = str(value or "").strip()
                 if v and not _ENTITY.match(v):
                     raise ValueError("keine gültige Entität (z. B. sensor.name)")
+                _check_domain(key, [v] if v else [])
+                if key == "dhw_set_entity" and v and (wrong := wrong_role(v)):
+                    raise ValueError(wrong)  # Heizkreis, Vorlauf-Soll … – nie das Warmwasser-Soll (0.38)
                 clean[key] = v
             elif kind == "entities":
                 items = [str(v).strip() for v in (value or []) if str(v).strip()]
                 bad = [v for v in items if not _ENTITY.match(v)]
                 if bad:
                     raise ValueError(f"ungültig: {', '.join(bad)}")
+                _check_domain(key, items)
                 clean[key] = list(dict.fromkeys(items))
             elif kind == "time":
                 clean[key] = _clean_time(value)
@@ -297,6 +329,12 @@ class Config:
     dhw_disinfect_day: str = ""
     dhw_disinfect_time: time = time(13, 0)
     dhw_disinfect_temp: float = 70.0
+    # Weg W (0.38): Warmwasser-Soll – aus (Standard), trocken oder heatpilot (siehe DHW_MODES, dhw_control.py);
+    # Entität des Speicher-Solls in HA (number, leer = aus der Erkennung) und Benachrichtigungsziele (notify.*,
+    # Entitäten oder Dienste; leer = keine Meldungen)
+    dhw_control: str = "aus"
+    dhw_set_entity: str | None = None
+    notify_targets: list[str] = field(default_factory=list)
     design_outdoor_temp: float = -12.0
     # fürs Zertifikat; 0 = unbekannt bzw. aus EMS-ESP (nompower, burnminpower)
     living_area_m2: float = 0.0
@@ -361,9 +399,14 @@ class Config:
                 value = {k.strip(): v.strip() for k, v in value.items()}
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
-        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host", "vacation_entity"):
+        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host", "vacation_entity", "dhw_set_entity"):
             if getattr(cfg, key) == "":
                 setattr(cfg, key, None)
+        if cfg.dhw_control not in DHW_MODES:
+            cfg.dhw_control = "aus"  # unbekannt: nichts schreiben
+        if cfg.dhw_set_entity and not NUMBER_ENTITY.match(str(cfg.dhw_set_entity)):
+            cfg.dhw_set_entity = None
+        cfg.notify_targets = [t for t in cfg.notify_targets or [] if isinstance(t, str) and NOTIFY_TARGET.match(t)]
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
         if cfg.control_mode not in CONTROL_MODES:
             cfg.control_mode = "beobachten"
@@ -467,6 +510,10 @@ class Config:
 
     def is_managing(self) -> bool:
         return self.control_mode == "heatpilot"
+
+    def writes_dhw(self) -> bool:
+        """Weg W (0.38): schreibt HeatPilot das Warmwasser-Soll? Nur mit Schalter „heatpilot“."""
+        return self.dhw_control == "heatpilot"
 
     # --- Desinfektion (0.36.3) ---
     def disinfect_weekday(self) -> int | None:

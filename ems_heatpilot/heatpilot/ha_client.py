@@ -37,6 +37,9 @@ TOKEN_FILES = (
     "/var/run/s6/container_environment/SUPERVISOR_TOKEN",
 )
 
+# eigene Zustände, die das Add-on in HA anlegen darf (set_state)
+OWN_PREFIXES = ("sensor.heatpilot_", "binary_sensor.heatpilot_")
+
 AUTH_HINT = (
     "Bitte das Add-on neu starten. Hilft das nicht, im Reiter „Diagnose“ die "
     "Diagnose-Datei herunterladen und weitergeben."
@@ -211,6 +214,11 @@ class HAClient:
         """Geräte (seit 0.35): Name, Modell, Bereich – zu welchem Gerät/Raum eine Entität gehört."""
         return await self.call({"type": "config/device_registry/list"})
 
+    async def get_services(self) -> dict:
+        """Dienste von Home Assistant (seit 0.38): {Domäne: {Dienst: Beschreibung}} – für die Auswahl der
+        Benachrichtigungsdienste (``notify.mobile_app_…``). Nur lesen."""
+        return await self.call({"type": "get_services"}, timeout=30) or {}
+
     async def area_registry(self) -> list[dict]:
         """Bereiche von Home Assistant (seit 0.35): area_id -> Name, z. B. „Wohnzimmer“."""
         return await self.call({"type": "config/area_registry/list"})
@@ -269,10 +277,10 @@ class HAClient:
     async def set_state(self, entity_id: str, state: Any, attributes: dict) -> None:
         """Eigene Sensoren in HA anlegen/aktualisieren (REST /api/states).
 
-        Sicherung: Das Add-on darf ausschließlich seine eigenen
-        ``sensor.heatpilot_*`` schreiben – niemals Therme, Regler oder Tado.
+        Sicherung: Das Add-on darf hier ausschließlich seine eigenen ``sensor.heatpilot_*`` und (seit 0.38)
+        ``binary_sensor.heatpilot_*`` (Problem-Sensor) schreiben – niemals Therme, Regler oder Tado.
         """
-        if not entity_id.startswith("sensor.heatpilot_"):
+        if not entity_id.startswith(OWN_PREFIXES):
             raise PermissionError(f"Schreiben auf {entity_id} ist gesperrt")
         url = f"{self.base_url}/api/states/{entity_id}"
         async with self._session.post(

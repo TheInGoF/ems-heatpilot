@@ -22,8 +22,13 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
   Beginn rechnet ``desired`` mit der Aufheizzeit bei maximalem Vorlauf – meist ist es deshalb der maximale),
   heizt er sonst auf, +5 K. Heizbetrieb aus nur, wenn kein Raum Wärme braucht – auch keiner, der nicht für den
   Vorlauf zählt (``_other_need``).
-* **Warmwasser-Soll** aus ``DhwModel.recommend`` mit derselben Anwesenheit und dem Desinfektionstermin.
-* **Schreibvorgänge, die es gäbe** (``count_writes``): nur bei Änderung ab 1 K bzw. an/aus, 5 min Haltezeit.
+* **Warmwasser-Soll** aus ``DhwModel.recommend`` mit derselben Anwesenheit und dem Desinfektionstermin, auf ganze
+  Grad wie Weg W (``dhw_control.wish``: halbe Grad aufwärts, Minimum…Maximum).
+* **Schreibvorgänge, die es gäbe** (``count_writes``): nur bei Änderung ab 1 K bzw. an/aus, 5 min Haltezeit. Seit 0.38
+  gilt beim Warmwasser dieselbe Regel wie in Weg W (die Schwelle auch für die ungerundete Empfehlung, ``dhw_exact``): Bei „Trockenlauf“ bzw. „HeatPilot setzt“ beginnt die Zählung beim
+  Wert von Weg W (zuletzt „geschrieben“ bzw. Kessel-Soll) mit der laufenden Haltezeit; bei „HeatPilot setzt“ heißen
+  die Warmwasser-Schreibvorgänge „schreibt“ (``dhw_writes``), sonst „würde schreiben“. Vorlauf und Heizbetrieb
+  bleiben Trockenlauf.
 
 Je volle Stunde gilt der Wert, der den größten Teil der Stunde gilt; ``steps`` enthält jede Änderung genau.
 Gerechnet wird bei Abruf (``cached``, höchstens alle 5 min) und stündlich fürs Protokoll (``preview_log``).
@@ -39,7 +44,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from . import dhw_disinfect, guards
+from . import dhw_control, dhw_disinfect, guards
 from .config import Config
 from .controlloop import Presence, desired
 from .engine_summary import FORECAST_MAX_GAP_MIN
@@ -50,8 +55,8 @@ STEP_MIN = 5           # Rechenschritt
 HOURS = 24             # so viele volle Stunden ab der laufenden
 FLOW_MIN = 25.0        # Vorlauf-Soll nie darunter
 FLOW_STEP_K = 1.0      # Schreibschwelle Vorlauf (Planungspapier: ab 1 K)
-DHW_STEP_K = 1.0       # Schreibschwelle Warmwasser
-HOLD_MIN = 5           # Haltezeit nach jedem Schreiben
+DHW_STEP_K = dhw_control.STEP_K        # Schreibschwelle Warmwasser – dieselbe wie Weg W (0.38)
+HOLD_MIN = dhw_control.HOLD_S // 60    # Haltezeit nach jedem Schreiben (5 min) – dieselbe wie Weg W
 HEATUP_K = 5.0         # Aufheizzuschlag ohne Vorheizplan
 HEATUP_GAP_K = 0.3     # Regelgenauigkeit des Thermostats: so weit unter dem Soll gilt ein Raum als am Soll …
 HOLD_BAND_K = 0.3      # … und so weit darüber auch; darüber kühlt er ab, darunter heizt er auf
@@ -74,19 +79,23 @@ def _de(value: float, digits: int = 1) -> str:
 
 # ------------------------------------------------------------------ Schreibvorgänge
 def count_writes(series: list[tuple[datetime, float | bool | None]], start, step_k: float | None,
-                 hold_min: float = HOLD_MIN) -> list[tuple[datetime, object, object]]:
+                 hold_min: float = HOLD_MIN, since: datetime | None = None) -> list[tuple[datetime, object, object]]:
     """Schreibvorgänge nach den abgesprochenen Regeln: (Zeitpunkt, neuer Wert, vorher).
 
     Geschrieben wird nur bei Änderung – Zahlen ab ``step_k`` Unterschied zum zuletzt geschriebenen Wert, an/aus
     (``step_k`` None) bei jedem Wechsel –, danach gilt ``hold_min`` Haltezeit: Was sich darin ändert, geht erst
     danach hinaus, und nur, wenn es dann noch anders ist. ``start``: Wert, der heute am Kessel steht (None =
     unbekannt, dann zählt der erste Wert). Werte None (z. B. Vorlauf bei Heizbetrieb aus) werden übersprungen.
+    ``since`` (0.38): Zeitpunkt des letzten echten Schreibens – dessen Haltezeit gilt auch am Anfang. Ein dritter
+    Wert je Eintrag (0.38, Warmwasser) ist der ungerundete: Die Schwelle gilt auch für ihn (wie ``dhw_rule.decide``).
     """
-    out, last, last_t = [], start, None
-    for t, v in series:
+    out, last, last_t = [], start, since
+    for t, v, *exact in series:
         if v is None:
             continue
-        if last is not None and (abs(v - last) < step_k - 1e-9 if step_k is not None else v == last):
+        e = exact[0] if exact and exact[0] is not None else v
+        if last is not None and ((abs(v - last) < step_k - 1e-9 or abs(e - last) < step_k - 1e-9)
+                                 if step_k is not None else v == last):
             continue
         if last_t is not None and t < last_t + timedelta(minutes=hold_min):
             continue
@@ -302,11 +311,12 @@ class _Run:
             if need is not None:
                 needs.append((need[0], r.name, need[1]))
         flow, heating, why = self._flow(needs, t_out)
-        dhw, dhw_why = self._dhw(t, pres)
+        dhw, dhw_why, dhw_exact = self._dhw(t, pres)
         night = self.cfg.is_night_at(t) if self.cfg.is_managing() else self.eng.eff.is_night(t.time())
         return {"ts": int(t.timestamp()), "t": t, "t_out": t_out, "src": src, "flow": flow, "heating": heating,
                 "why": why, "dhw": dhw, "dhw_why": dhw_why, "sps": sps, "phases": phases, "night": night,
-                "home": pres.home_count, "vacation": pres.vacation}
+                "home": pres.home_count, "vacation": pres.vacation,
+                "dhw_exact": dhw_exact}
 
     def _flow(self, needs: list[tuple], t_out: float | None) -> tuple[int | None, bool | None, str]:
         if not any(r.heats for r in self.rooms):
@@ -319,9 +329,10 @@ class _Run:
         value, name, why = max(flows) if flows else (FLOW_MIN, *needs[0][1:])  # nur Räume ohne eigenen Vorlauf
         return round(min(max(value, FLOW_MIN), self.cfg.max_flow_temp)), True, f"{name} {why}"
 
-    def _dhw(self, t: datetime, pres: Presence) -> tuple[int | None, str]:
+    def _dhw(self, t: datetime, pres: Presence) -> tuple[int | None, str, float | None]:
+        """(Warmwasser-Soll auf ganze Grad wie Weg W, Grund, Empfehlung ungerundet – für die Schwelle)."""
         if not self.dhw_check["ok"]:
-            return None, "lernt noch: " + "; ".join(self.dhw_check["reasons"])
+            return None, "lernt noch: " + "; ".join(self.dhw_check["reasons"]), None
         if pres.vacation:
             someone, arrival, unknown = False, pres.arrival, None
         else:
@@ -331,7 +342,8 @@ class _Run:
         rec = self.eng.dhw.recommend(t, someone, arrival, self.cfg, unknown_from=unknown,
                                      current_set=self.dhw_last, disinfect_h=self.dis_h)
         self.dhw_last = rec["target"]
-        return round(rec["target"]), rec["reason"]
+        # dieselbe Rundung und Schwelle wie Weg W (0.38)
+        return dhw_control.wish(rec["target"], self.cfg), rec["reason"], dhw_control.unrounded(rec["target"], self.cfg)
 
     def advance(self, row: dict, dt_h: float) -> None:
         """Raumtemperaturen einen Schritt weiter: unter dem Soll heizen mit dem Vorlauf, am Soll hält das Thermostat
@@ -429,11 +441,15 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
     run = _Run(eng, now_ts)
     rows = run.run()
     start = {**run.start_state(), **(written or {})}
+    dhw = _dhw_rule(eng)
+    if dhw["ref"] is not None:  # Weg W (0.38): Startwert und Haltezeit wie im Takt
+        start["dhw"] = dhw["ref"][0]
     raw = {
         "flow": count_writes([(r["t"], r["flow"] if r["heating"] else None) for r in rows], start["flow"],
                              FLOW_STEP_K),
         "heating": count_writes([(r["t"], r["heating"]) for r in rows], start["heating"], None),
-        "dhw": count_writes([(r["t"], r["dhw"]) for r in rows], start["dhw"], DHW_STEP_K),
+        "dhw": count_writes([(r["t"], r["dhw"], r["dhw_exact"]) for r in rows], start["dhw"], DHW_STEP_K,
+                            since=dhw["since"]),
     }
     writes = sorted(({"ts": int(t.timestamp()), "t": t.isoformat(), "what": kind, "value": v, "from": prev}
                      for kind, items in raw.items() for t, v, prev in items), key=lambda w: (w["ts"], w["what"]))
@@ -457,7 +473,22 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
         # Versatz Außenfühler − Vorhersage jetzt (K): so weit ist die Vorhersage angeglichen, klingt über fade_h ab
         "forecast_offset_k": round(run.offset, 1) if run.pt_ts and run.t_out_now is not None else None,
         "forecast_fade_h": FORECAST_FADE_H,
+        # Weg W (0.38): Schalter des Warmwasser-Solls und wie seine Schreibvorgänge heißen
+        "dhw_mode": dhw["mode"], "dhw_writes": dhw["label"], "dhw_paused": dhw["paused"],
     }
+
+
+def _dhw_rule(eng) -> dict:
+    """Weg W für die Vorschau: Schalter, Startwert (Wert, letzter Schreibzeitpunkt) nach derselben Regel wie
+    ``dhw_control`` und die Bezeichnung „schreibt“ (HeatPilot setzt, nicht pausiert) bzw. „würde schreiben“."""
+    ctl = getattr(eng, "dhw_control", None)
+    mode = getattr(eng.cfg, "dhw_control", "aus")
+    ref = ctl.reference() if ctl is not None else None
+    paused = bool(ctl is not None and ctl.paused())
+    since = None if ref is None or ref[1] is None else local(ref[1])
+    writes = mode == "heatpilot" and not paused and ctl is not None and bool(ctl.entity_id)
+    return {"mode": mode, "ref": ref, "since": since, "paused": paused and mode == "heatpilot",
+            "label": "schreibt" if writes else "würde schreiben"}
 
 
 def cached(eng, now_ts: float | None = None, max_age_s: float = CACHE_S) -> dict:

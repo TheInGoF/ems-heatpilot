@@ -332,7 +332,7 @@ def test_stored_boost_on_ems_circuit_is_dropped_with_hint(tmp_path):
     assert EMS not in ctl.boosts and "climate.wz" in ctl.boosts and ctl.expired_boosts() == []
     assert EMS not in (store.get(KV) or {}) and EMS in store.get(KV_EMS_LEFT)
     want = ("Heizkreis: Boost 25 °C aus einer früheren Version steht noch am Regler – HeatPilot schreibt nicht an den "
-            "Kessel, Regler-Soll von Hand auf 20 °C zurückstellen")
+            "Heizkreis, Regler-Soll von Hand auf 20 °C zurückstellen")
     assert ctl.notes() == [want]
     eng = SimpleEngine(store, rooms)
     assert want in ControlLoop(eng, ctl).warnings()
@@ -357,7 +357,7 @@ def test_readiness_names_ems_circuit_once(tmp_path):
     eng, _, _ = house(tmp_path, [room("Wz", "climate.wz"), room("Heizkreis", EMS, managed=True, ems=True)])
     res = readiness.assess(eng, int(time.time()))
     assert [n for n in res["notes"] if "Heizkreis" in n] == [
-        "Heizkreis: Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel – macht nicht mit"]
+        "Heizkreis: Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Heizkreis – macht nicht mit"]
     assert next(r for r in res["rooms"] if r["climate"] == EMS)["state"] == "nicht dabei"
     eng2, _, _ = house(tmp_path / "b", [room("Wz", "climate.wz"), room("Bad", "climate.bad", managed=False)])
     assert "Machen nicht mit: Bad" in readiness.assess(eng2, int(time.time()))["notes"]  # gewöhnliche wie bisher

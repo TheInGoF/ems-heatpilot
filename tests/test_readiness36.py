@@ -278,7 +278,7 @@ def test_boiler_section_texts_and_level_untouched(tmp_path):
     b = readiness.boiler(eng)
     assert b["ready"] and b["polled"] and b["polled_at"]
     assert b["text"] == ("Alle 5 nötigen Steuerungen vorhanden und schreibbar – eine Kesselsteuerung wäre möglich "
-                         "(nicht gebaut, HeatPilot schreibt nichts)")
+                         "(nicht gebaut; am Kessel schreibt HeatPilot nur das Warmwasser-Soll, mit „HeatPilot setzt“)")
     first = b["controls"][0]
     assert first == {"key": "selflowtemp", "name": "Vorlauf-Soll", "required": True, "found": True,
                      "writeable": True, "value": 1, "min": 0, "max": 90, "uom": "°C"}

@@ -395,7 +395,7 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dic
     climate (``climate_info``), optional.
 
     Seit 0.36.3: Gehört ein Gerät der Gruppe zu EMS-ESP (``info[…]["ems"]``), ist der Raum ``ems`` und macht nie
-    mit – auch wenn „macht mit“ gespeichert ist (Warnung im Log). HeatPilot schreibt nicht an den Kessel.
+    mit – auch wenn „macht mit“ gespeichert ist (Warnung im Log). HeatPilot schreibt nicht an den Heizkreis.
     """
     info = info or {}
 

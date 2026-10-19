@@ -1,8 +1,15 @@
-"""Ergebnisse als ``sensor.heatpilot_*`` in Home Assistant bereitstellen."""
+"""Ergebnisse als ``sensor.heatpilot_*`` in Home Assistant bereitstellen.
+
+Seit 0.38 dazu der Problem-Sensor ``binary_sensor.heatpilot_problem`` (``publish_problem``): an, solange ein
+Problem offen ist (Schreibfehler Warmwasser oder Thermostat, Weg W pausiert, fremder Schreiber), mit den Gründen
+im Attribut ``reasons`` – für eigene Dashboards und Automationen. Die Gründe sammelt ``notify.Notifier``.
+"""
 
 from __future__ import annotations
 
 from .ha_client import HAClient
+
+PROBLEM_ENTITY = "binary_sensor.heatpilot_problem"
 
 
 def _sensor(state, name, unit=None, icon=None, device_class=None, **extra):
@@ -106,3 +113,13 @@ async def publish(ha: HAClient, s: dict) -> None:
     }
     for entity_id, (state, attrs) in sensors.items():
         await ha.set_state(entity_id, state, attrs)
+
+
+async def publish_problem(ha: HAClient, problem: dict) -> None:
+    """Problem-Sensor setzen: ``on`` mit den offenen Gründen (``reasons``), sonst ``off`` (seit 0.38)."""
+    reasons = [str(r) for r in problem.get("reasons") or []]
+    await ha.set_state(PROBLEM_ENTITY, "on" if reasons else "off", {
+        "friendly_name": "HeatPilot Problem", "device_class": "problem",
+        "icon": "mdi:alert-circle-outline" if reasons else "mdi:check-circle-outline",
+        "reasons": reasons, "anzahl": len(reasons),
+    })

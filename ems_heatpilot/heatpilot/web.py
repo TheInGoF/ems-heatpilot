@@ -1,4 +1,10 @@
-"""Weboberfläche (über Ingress direkt in der HA-Seitenleiste)."""
+"""Weboberfläche (über Ingress direkt in der HA-Seitenleiste).
+
+Seit 0.38 dazu Weg W und Benachrichtigungen: ``GET api/dhw`` (Status und Bereitschaft des Warmwasser-Solls),
+``POST api/dhw/resume`` („wieder einschalten“ – nur bei einer Pause, sonst 409), ``GET api/notify`` (Ziele zur
+Auswahl) und ``POST api/notify/test`` (Testnachricht nur an die gespeicherten Ziele). ``api/entities`` sagt je
+``number``-Entität, ob sie als Warmwasser-Soll taugt (``dhw``: fits, hint – für die Auswahl).
+"""
 
 from __future__ import annotations
 
@@ -12,9 +18,10 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .config import CONTROL_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
+from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
+from . import dhw_control, dhw_entity, notify
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -70,7 +77,29 @@ def make_app(app) -> web.Application:
     async def summary(_req):
         if app.eng is None:
             return json_response({"starting": True, "status": app.status})
-        return json_response({**app.eng.summary(), "configured": app.configured})
+        return json_response({**app.eng.summary(), "configured": app.configured,
+                              "dhw_control": dhw_state()})  # 0.38: Statuszeile Warmwasser (Weg W)
+
+    def dhw_state() -> dict:
+        """Status von Weg W (``DhwControl.as_dict``); ohne Instanz nur der Schalter."""
+        ctl = getattr(app.eng, "dhw_control", None)
+        if ctl is not None:
+            return ctl.as_dict()
+        mode = getattr(app.cfg, "dhw_control", "aus")
+        return {"mode": mode, "modes": list(DHW_MODES), "active": False, "writes": mode == "heatpilot",
+                "paused": False, "warnings": [], "log": [], "status_text": "Warmwasser-Soll: aus – HeatPilot empfiehlt nur"}
+
+    async def notify_info() -> dict:
+        """Benachrichtigungsziele zur Auswahl (Entitäten aus den Zuständen, Dienste aus ``get_services``) mit Stand."""
+        services, error = {}, None
+        try:
+            services = await asyncio.wait_for(app.ha.get_services(), timeout=10)
+        except Exception as err:  # noqa: BLE001 – ältere HA bzw. Fehler: nur die notify-Entitäten
+            error = f"Dienste nicht lesbar ({err or type(err).__name__}) – nur notify-Entitäten zur Auswahl"
+        n = getattr(app.eng, "notifier", None)
+        targets = list(getattr(app.cfg, "notify_targets", []) or [])
+        return {**(n.as_dict() if n is not None else {"targets": targets, "problems": [], "last": None}),
+                "available": notify.available(app.eng.states, services, targets), "services_error": error}
 
     async def history(req):
         if app.eng is None:
@@ -110,6 +139,11 @@ def make_app(app) -> web.Application:
             # Desinfektion (0.36.3): Termin, Temperatur (vom Kessel oder eingestellt), Vorschlag, Hinweis
             "disinfect": {**app.eng.disinfect_info(suggest=True), "days": list(DISINFECT_DAYS),
                           "temp_range": list(FIELDS["dhw_disinfect_temp"][1:])},
+            # Weg W (0.38): Schalter, Entität (eingestellt bzw. Vorschlag aus der Erkennung), Status, Bereitschaft
+            "dhw_control": {"modes": list(DHW_MODES),
+                            "suggested": dhw_control.suggest_entity(app.eng.found, app.eng.states),
+                            "status": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time()))},
+            "notify": await notify_info(),
         })
 
     async def entities(_req):
@@ -117,7 +151,8 @@ def make_app(app) -> web.Application:
 
         climate-Einträge (0.35) zusätzlich mit ``device_name``, ``device_model``, ``controller`` (Vorschlag
         Wandthermostat) und ``siblings`` (Sensoren desselben Geräts: id, kind, name, unit), seit 0.36.3 ``ems``
-        (Heizkreis von EMS-ESP: „macht mit“ gesperrt)."""
+        (Heizkreis von EMS-ESP: „macht mit“ gesperrt), seit 0.38 bei ``number`` ``dhw`` (taugt als Warmwasser-Soll,
+        Name deutet darauf – ``dhw_entity.picker``)."""
         if app.eng is None:
             return json_response([])
         idx = Registry.of(await app.registry()).lookup()
@@ -143,6 +178,7 @@ def make_app(app) -> web.Application:
                 **({k: v for k, v in climate_info(eid, idx, app.eng.states).items()
                     if k in ("device_name", "device_model", "controller", "siblings", "ems")}
                    if eid.startswith("climate.") else {}),
+                **({"dhw": dhw_entity.picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
             })
         return json_response(out)
 
@@ -281,7 +317,42 @@ def make_app(app) -> web.Application:
                                                         "paused_until": None, "rooms": {}, "log": [],
                                                         "warnings": [], "status_text": "Beobachten"},
                 # seit 0.36.1: „Bereit für die Steuerung?“ – auch bei Beobachten, mit Kessel über EMS-ESP
-                "readiness": readiness.assess(eng, int(time.time()))}
+                "readiness": readiness.assess(eng, int(time.time())),
+                # seit 0.38: Warmwasser-Soll über HeatPilot (Weg W) – Statuszeile, Hinweise, Protokoll
+                "dhw": dhw_state()}
+
+    async def dhw_get(_req):
+        """Weg W (0.38): Status und Bereitschaft des Warmwasser-Solls."""
+        if app.eng is None:
+            return json_response({"starting": True, "status": app.status})
+        return json_response({"dhw": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time()))})
+
+    async def dhw_resume(_req):
+        """„Wieder einschalten“ nach einer Pause von Weg W – schreibt selbst nichts, der nächste Takt entscheidet. Ohne
+        Pause ändert sich nichts (409) – ein wiederholter Aufruf hebt die Fehlschläge nicht auf."""
+        ctl = getattr(app.eng, "dhw_control", None)
+        if ctl is None:
+            return json_response({"error": f"HeatPilot startet noch ({app.status})"}, status=503)
+        was = ctl.resume()
+        body = {"ok": was, "was_paused": was, "dhw": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time()))}
+        if not was:
+            return json_response({**body, "error": "Warmwasser über HeatPilot ist nicht pausiert – nichts geändert"},
+                                 status=409)
+        return json_response(body)
+
+    async def notify_get(_req):
+        if app.eng is None:
+            return json_response({"starting": True, "status": app.status})
+        return json_response(await notify_info())
+
+    async def notify_test(_req):
+        """Testnachricht – nur an die gespeicherten Ziele (``notify_targets``), über ``Control.notify``."""
+        n = getattr(app.eng, "notifier", None)
+        if n is None:
+            return json_response({"ok": False, "errors": [f"HeatPilot startet noch ({app.status})"]}, status=503)
+        if not n.targets:
+            return json_response({"ok": False, "sent": [], "errors": [notify.NO_TARGETS]}, status=400)
+        return json_response(await n.test())
 
     async def heat_get(_req):
         if app.eng is None:
@@ -402,6 +473,10 @@ def make_app(app) -> web.Application:
     web_app.router.add_post("/api/heat/{action}", heat_post)
     web_app.router.add_get("/api/presence", presence_data)
     web_app.router.add_get("/api/preview", preview_data)
+    web_app.router.add_get("/api/dhw", dhw_get)
+    web_app.router.add_post("/api/dhw/resume", dhw_resume)
+    web_app.router.add_get("/api/notify", notify_get)
+    web_app.router.add_post("/api/notify/test", notify_test)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
     return web_app

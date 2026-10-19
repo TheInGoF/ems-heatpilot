@@ -63,7 +63,11 @@ keine YAML-Optionen:
   Änderung zählt HeatPilot die Anwesenheit in den gespeicherten Daten neu;
   abgewählte Räume und Personen fließen in keine Auswertung mehr ein.
 - **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub** – unter Warmwasser seit 0.36.3 auch der
-  Termin der **Desinfektion (Legionellen)** mit Vorschlag (siehe [Desinfektion](#desinfektion-legionellen))
+  Termin der **Desinfektion (Legionellen)** mit Vorschlag (siehe [Desinfektion](#desinfektion-legionellen)),
+  seit 0.38 der Schalter **Warmwasser-Soll** (Aus / Trockenlauf / HeatPilot setzt, siehe
+  [Weg W](#warmwasser-über-heatpilot-weg-w))
+- **Benachrichtigungen** (seit 0.38): Ziele in Home Assistant für Meldungen, mit „Testnachricht senden“ (siehe
+  [Benachrichtigungen](#benachrichtigungen))
 - **Zuordnungen (Experten):** was die Erkennung gefunden hat, mit eigener Korrektur
 - **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“
 
@@ -434,7 +438,7 @@ Zustand. Geprüft wird in dieser Reihenfolge:
 8. **Laufzeit** – weniger als 72 gelernte Stunden im Hausmodell: „Modelle sind jung“ (Hinweis).
 
 Räume ohne „macht mit“ stehen als „nicht dabei“ in der Liste, ebenso der Heizkreis von EMS-ESP, falls
-er als Raum gewählt ist („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel“). Die Übersicht zeigt bei „Beobachten“ die
+er als Raum gewählt ist („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Heizkreis“). Die Übersicht zeigt bei „Beobachten“ die
 Stufe als Badge in der Statuszeile, der Heizen-Reiter in seiner Statuszeile.
 
 **Kessel über EMS-ESP** (zweiter Block, nur Anzeige): Bevor es je einen Kessel-Schalter gibt, zeigt
@@ -466,8 +470,18 @@ Abfragen nicht in 3 s, bricht die Runde ab und wird nach einer Stunde wiederholt
 alle 30 s laufen davon unberührt weiter. Auch diese Abfragen sind reine Lese-Anfragen; einen
 Schreibpfad zu EMS-ESP gibt es weiterhin nicht, auch keinen vorbereiteten. Was HeatPilot damit täte,
 steht in der Planung ([docs/planung-vorlauf-ems.md](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/planung-vorlauf-ems.md));
-geschrieben wird erst mit einem eigenen Schalter in einer späteren Version. Der Kessel-Block ändert die
+Vorlauf und Heizbetrieb schreibt HeatPilot erst mit einem eigenen Schalter in einer späteren Version (das
+Warmwasser-Soll seit 0.38 über Home Assistant, siehe unten). Der Kessel-Block ändert die
 Stufe der Raumsteuerung nicht – die Tado-Steuerung braucht ihn nicht.
+
+Seit 0.38 kommt der Block **„Warmwasser über HeatPilot“** dazu (Weg W, nur Anzeige, ändert die Stufe der
+Raumsteuerung ebenfalls nicht): Entität des Speicher-Solls gefunden und tauglich (number mit °C, mit ihren
+Grenzen; kein Heizkreis, kein anderer Kesselwert – ein Name ohne Warmwasser-Hinweis ist eine Einschränkung),
+schreibbar laut EMS-ESP (`wwseltemp` bzw. `dhw/seltemp`), Schalterstand, letzte Prüfung (übernommen ja/nein),
+pausiert (seit wann), Kessel-Soll unklar (Entität und EMS-ESP verschieden), fremder Schreiber zuletzt gesehen,
+Minimum unter 50 °C ohne Desinfektionstermin – und der Hinweis „HA-Automation für das Speicher-Soll abschalten“,
+solange in den letzten 24 h fremde Änderungen kamen. Was dort ein Hindernis ist, verhindert auch das Schreiben. Siehe
+[Weg W](#warmwasser-über-heatpilot-weg-w).
 
 ### Räume und Geräte
 
@@ -488,7 +502,7 @@ Stufe der Raumsteuerung nicht – die Tado-Steuerung braucht ihn nicht.
   Home Assistant: „EMS-ESP“ in Hersteller, Name oder Modell, Hersteller „proddy“ oder angebunden über
   das EMS-ESP-Gateway; nur wenn Home Assistant kein Gerät kennt, am Namen – und nur bei MQTT. Er steht
   in der Raum-Tabelle, weil dort alle climate-Entitäten stehen, wird aber nicht vorgeschlagen, und
-  „macht mit“ ist gesperrt („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel“). Ein
+  „macht mit“ ist gesperrt („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Heizkreis“). Ein
   früher gespeichertes „macht mit“ gilt nicht (Warnung im Protokoll), und jeder Schreibversuch auf ihn –
   Knopfdruck im Reiter „Heizen“ oder Regelschleife – wird hart abgewiesen. Im Reiter „Heizen“ steht er nur
   zur Anzeige („nur Anzeige“): −/+ und Betriebsart sind gesperrt, Boost, „Zeitplan“ und „Ausschalten“ lassen
@@ -547,8 +561,11 @@ heißen solche Räume „akzeptiert“ – sie sind kein Hindernis.
 - **Pause** (Heizen → Pause, bis 48 h) hält alle Schreibvorgänge an; der Schalter bleibt dabei
   auf „HeatPilot steuert“. Ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher.
 - **Fehler** beim Schreiben werden protokolliert und nach 15 min erneut versucht; ab drei
-  Fehlschlägen in Folge steht eine Warnung im Heizen-Reiter.
-- **Protokoll:** jeder Schreibvorgang (Zeit, Raum, Aktion, Wert, Grund) wird 90 Tage gespeichert
+  Fehlschlägen in Folge steht eine Warnung im Heizen-Reiter – seit 0.38 auch als Meldung an die
+  [Benachrichtigungsziele](#benachrichtigungen) und im Problem-Sensor (einmal je Ereignis; der erste Erfolg
+  danach meldet „wieder in Ordnung“).
+- **Protokoll:** jeder Schreibvorgang (Zeit, Raum, Aktion, Wert, Grund; seit 0.38 auch die Zeilen des
+  Warmwasser-Solls) wird 90 Tage gespeichert
   – die letzten 20 im Heizen-Reiter, 200 in der Diagnose-Datei, alle im Export der gelernten
   Werte (`steuerung`), ohne Koordinaten.
 - Der Zustand der Regelschleife überlebt einen Neustart; beim Zurückschalten auf „Beobachten“
@@ -613,8 +630,11 @@ Später: Soll nach Ventilstellung – jetzt bewusst nicht enthalten.
 ## Vorschau (Trockenlauf)
 
 Bevor HeatPilot je etwas am Kessel setzt, zeigt es seit 0.37, **was es setzen würde** – für die nächsten 24 h,
-je Stunde. **Trockenlauf – HeatPilot schreibt nichts an den Kessel:** EMS-ESP bleibt nur lesend, es gibt
-keinen Schreibpfad. Die Vorschau ist ein Vorschlag zum Vergleichen; wann und ob umgestellt wird, entscheidest
+je Stunde. **Trockenlauf – HeatPilot schreibt nichts an den Kessel:** EMS-ESP bleibt nur lesend, für Vorlauf
+und Heizbetrieb gibt es keinen Schreibpfad. Einzige Ausnahme seit 0.38 ist das Warmwasser-Soll mit eigenem
+Schalter ([Weg W](#warmwasser-über-heatpilot-weg-w)): Die Vorschau rechnet Startwert und Schreibvorgänge des
+Warmwassers nach derselben Regel und nennt sie bei „HeatPilot setzt“ „schreibt“ statt „würde schreiben“. Die
+Vorschau ist ein Vorschlag zum Vergleichen; wann und ob umgestellt wird, entscheidest
 du. Zu finden in der Übersicht, Abschnitt „Vorschau (Trockenlauf)“.
 
 Gerechnet wird in 5-min-Schritten von jetzt bis zum Ende der 24. vollen Stunde:
@@ -687,18 +707,132 @@ Bereitschaftsverlust des Speichers (nur mit plausiblem Warmwasser-Modell), beim 
 „sammelt – erste Werte nach einer Stunde“. Das Protokoll bleibt 90 Tage, „Lernstand neu berechnen“ lässt es
 stehen (es ist Messung, nichts Gelerntes); es steht im Export („trockenlauf“) und im Diagnosepaket.
 
+## Warmwasser über HeatPilot (Weg W)
+
+Seit 0.38 kann HeatPilot das **Warmwasser-Soll** (Speicher-Soll) des Kessels selbst setzen – statt einer
+Automation in Home Assistant. Es ist der einzige Wert, den HeatPilot am Kessel schreibt, und er geht über Home
+Assistant: Dienst `number.set_value` auf die Entität des Speicher-Solls, die EMS-ESP in Home Assistant anlegt
+(z. B. `number.boiler_dhw_seltemp`, bei älteren EMS-ESP `number.boiler_wwseltemp`). An EMS-ESP selbst schickt
+HeatPilot weiterhin nur Lese-Anfragen; die Schreibregeln für die Thermostate bleiben, wie sie sind.
+
+**Einstellungen → Warmwasser, Schalter „Warmwasser-Soll“** – unabhängig vom Schalter der Raumsteuerung:
+
+- **Aus** (Standard): wie bisher – nur Empfehlung und Vorschau.
+- **Trockenlauf**: HeatPilot rechnet in jedem Takt und schreibt ins Protokoll, was es schreiben würde
+  („Trockenlauf: würde 55 °C schreiben (…)“) – nach denselben Regeln wie unten, am Kessel ändert sich nichts.
+- **HeatPilot setzt**: HeatPilot schreibt nach den Regeln unten.
+
+**Entität:** vorgeschlagen aus der Erkennung (Rolle „Warmwasser-Soll“, nur `number`-Entitäten); eine andere lässt
+sich wählen – die Auswahl bietet nur `number`-Entitäten mit °C an, die nicht zu etwas anderem gehören, den Vorschlag
+und Namen mit Warmwasser-Hinweis zuerst. Geschrieben wird nur auf diese eine Entität, nur ganze Grad zwischen Minimum
+und Maximum der Warmwasser-Einstellungen, nur innerhalb der Grenzen, die Home Assistant für die Entität meldet, und
+nur, wenn sie taugt: verfügbar, Einheit °C (ohne Einheit nicht), kein Heizkreis (`…_hc1_…`, z. B. die Heizkurve des
+Reglers), keine andere erkannte Rolle und kein anderer bekannter Kesselwert (Vorlauf-Soll, Heiztemperatur,
+Hysterese, Desinfektionstemperatur …). Solche Entitäten lassen sich gar nicht erst speichern; eine früher gespeicherte
+macht „Bereit für die Steuerung?“ zum Hindernis, und HeatPilot schreibt nichts. Deutet weder der Name noch der
+Anzeigename auf Warmwasser (dhw, ww, Warmwasser, Speicher …), ist das erlaubt – andere Kessel heißen anders –, steht
+aber als Einschränkung „prüfen“ da. Alles andere – andere Entitäten, andere Dienste, andere Werte – weist HeatPilot
+im Code hart ab. Bei „Aus“ und „Trockenlauf“ gibt es den Schreibweg gar nicht.
+
+**Regeln:**
+
+- **Wunsch** = die Warmwasser-Empfehlung (dieselbe wie in Übersicht und Vorschau), auf 1 K gerundet (halbe
+  Grad aufwärts), nie unter dem Minimum, nie über dem Maximum.
+- **Nur bei Änderung:** geschrieben wird, wenn der Wunsch mindestens 1 K vom Kessel-Soll abweicht – kein
+  „55, 55, 55“; den Wert hält der Kessel dann selbst. Die Schwelle gilt auch für die ungerundete Empfehlung:
+  Schwankt sie um x,5 (52,4 ↔ 52,6 °C), schreibt HeatPilot nicht abwechselnd 52 und 53.
+- **5 min Haltezeit** nach jedem Schreiben, kein Raster: um 15:03 geschrieben, frühestens um 15:08 die
+  nächste Entscheidung – danach sofort, wenn nötig.
+- **Sonderladung oder Desinfektion läuft** (Kesselschalter `wwdisinfecting`/Einmalladung oder weit über das
+  Soll geladen, samt Nachlauf): kein Schreiben, bis sie vorbei ist.
+- **Kessel-Soll:** der Zustand der beschriebenen Entität in Home Assistant; EMS-ESP direkt nur mit frischen Werten
+  (höchstens 90 s alt – antwortet EMS-ESP nicht mehr, zählt sein letzter Wert nicht). Zeigen Entität und EMS-ESP
+  verschiedene Werte, ist das Kessel-Soll **unklar**: HeatPilot schreibt nicht und zählt nichts als fremd, bis beide
+  gleich sind („Kessel-Soll unklar: Home Assistant zeigt 45 °C, EMS-ESP 50 °C“).
+- **Nicht bereit heißt: nichts schreiben.** Ist die Entität nicht verfügbar, fehlt sie, taugt sie nicht oder lässt
+  EMS-ESP das Warmwasser-Soll nicht schreiben, merkt HeatPilot nichts vor – dieselben Hindernisse wie in „Bereit für
+  die Steuerung?“, als Entscheidung sichtbar. Das zählt nicht als Fehlschlag.
+- **Prüfung nach 60 s:** Zeigt der Kessel den Wert (±0,5 K)? Geprüft wird im nächsten 30-s-Schritt der Live-Werte
+  bzw. im nächsten Takt – der Messtakt wartet darauf nicht. Ist das Kessel-Soll in dem Moment unbekannt oder unklar
+  (EMS-ESP startet nach einem Update neu), prüft HeatPilot bis 5 min nach dem Schreiben weiter; erst dann zählt es.
+  Zeigt der Kessel einen anderen Wert: Fehlschlag im Protokoll, Hinweis in der Oberfläche und eine Meldung
+  („Warmwasser-Soll 50 °C nicht übernommen (Kessel zeigt 55 °C) – 2. Versuch in 5 min“). Kein endloses
+  Nachschreiben: der nächste Versuch frühestens nach der Haltezeit; nach **3 Fehlschlägen in Folge pausiert** Weg W,
+  mit Meldung, bis du ihn mit **„wieder einschalten“** freigibst. Der erste Erfolg nach einem Fehler meldet „wieder in
+  Ordnung“ – auch wenn der Kessel den Wert erst später zeigt, sogar während der Pause. Zeigt er inzwischen schon den
+  Wunsch, braucht es keinen neuen Versuch: Hinweis, Meldung und Problem-Sensor gehen aus, die Fehlschläge zählen beim
+  nächsten Versuch weiter. Ein Fehler beim Schreiben selbst (Home Assistant antwortet nicht) zählt wie ein
+  Fehlschlag. „Wieder einschalten“ wirkt nur bei einer Pause (sonst ändert sich nichts).
+- **Fremder Schreiber:** Ändert sich das Kessel-Soll, ohne dass HeatPilot geschrieben hat (meist die alte
+  Automation, auch eine Änderung von Hand), stehen „anderer Schreiber aktiv – HA-Automation abschalten“ als
+  Hinweis und eine Meldung da; nach **2 fremden Änderungen in 1 h pausiert** Weg W – zwei Schreiber sollen
+  nicht gegeneinander schreiben. Übernimmt der Kessel einen Wert von HeatPilot nur verspätet, ist das kein
+  fremder Schreiber.
+- **Höchstens 24 Schreibvorgänge in 24 h:** Schwankt die Empfehlung (flatternde Anwesenheit, Zapf-Schwelle), schriebe
+  die Haltezeit allein alle 5 min. Beim 25. pausiert Weg W mit Meldung, bis du ihn wieder einschaltest.
+- **Fällt HeatPilot aus**, bleibt das zuletzt geschriebene Soll stehen – deshalb nie unter dem Minimum. Liegt das
+  Minimum unter 50 °C, zeigt „Bereit für die Steuerung?“ das ohne Desinfektionstermin als Einschränkung
+  (Legionellen: so tiefe Werte stehen dann wirklich am Kessel), mit Termin als Hinweis. Das Minimum entscheidest du.
+- **Zurück auf Aus oder Trockenlauf:** HeatPilot schreibt nichts zurück, der Kessel behält den Wert; ein
+  Hinweis erinnert daran, die Automation ggf. wieder einzuschalten.
+
+**Vor dem Umschalten** die Automation in Home Assistant abschalten, die bisher das Speicher-Soll setzt – beim
+Speichern mit „HeatPilot setzt“ fragt die Oberfläche einmal danach. Den Stand zeigt „Bereit für die Steuerung?“ im
+Block „Warmwasser über HeatPilot“ (siehe dort). Die Desinfektion löst
+HeatPilot weiterhin nicht aus (siehe [Desinfektion](#desinfektion-legionellen)).
+
+**Anzeige:** Heizen und Übersicht zeigen eine Statuszeile („HeatPilot setzt · 50 °C seit 15:03 · nächste
+Änderung 17:30 → 55 °C“, im Trockenlauf „Trockenlauf · würde 50 °C seit …“, sonst „pausiert – …“), das Protokoll
+im Heizen-Reiter auch die Warmwasser-Zeilen (geschrieben, würde schreiben, nicht übernommen, fremde Änderung,
+pausiert, wieder eingeschaltet). Bei „Aus“ steht die Zeile nur, solange ein Hinweis gilt (z. B. nach dem
+Zurückschalten); ist Weg W pausiert, steht dort der Knopf „wieder einschalten“. Einstellungen → Warmwasser zeigt
+denselben Stand ausführlicher (Kessel-Soll, Empfehlung, letztes Schreiben und Prüfen). Die nächste Änderung kommt
+aus der Vorschau, die nach derselben Regel rechnet. Uhrzeiten stehen überall in der Zeitzone deines Browsers (das
+Add-on schickt sie als Zeitpunkte, einen fremden Schreiber als Abstand, „vor 3 h“). Abfragen: `GET api/dhw` (Status
+und Bereitschaft), `POST api/dhw/resume` („wieder einschalten“ – ohne Pause Antwort 409, es ändert sich nichts).
+
+## Benachrichtigungen
+
+Seit 0.38 meldet HeatPilot Probleme an Ziele in Home Assistant – **Einstellungen → Benachrichtigungen**, Liste
+mit Häkchen:
+
+- **notify-Entitäten** (Home Assistant ab 2024.6, z. B. `notify.handy`) – geschickt mit der Aktion
+  `notify.send_message`,
+- **Dienste** wie `notify.mobile_app_…` (die Handy-App, ältere Integrationen) – direkt als Dienst, auch bei
+  älteren Home-Assistant-Versionen ohne notify-Entitäten.
+
+Ziele heißen wie in Home Assistant (`notify.<name>`, Kleinbuchstaben) – ein anders geschriebenes Ziel lässt sich
+nicht speichern. Gemeldet wird nur an die gewählten und gespeicherten Ziele; „Testnachricht senden“ schickt eine Nachricht an
+genau diese (`POST api/notify/test`) – solange geänderte Häkchen nicht gespeichert sind, ist der Knopf gesperrt.
+Gewählte Ziele, die es in Home Assistant nicht mehr gibt, stehen mit „fehlt“ in der Liste zum Abwählen. Ohne Ziele gibt es keine Meldungen – der Problem-Sensor läuft trotzdem.
+
+Was gemeldet wird: Warmwasser-Soll nicht übernommen, Weg W pausiert (3 Fehlschläge, 2 fremde Änderungen in 1 h oder
+24 Schreibvorgänge in 24 h), anderer Schreiber am Speicher-Soll und Thermostat-Schreibfehler der Raumsteuerung ab drei
+in Folge. Titel „HeatPilot“, Text kurz und konkret. Je
+Ereignis eine Meldung – nicht bei jedem Takt – und einmal „wieder in Ordnung“; höchstens eine Meldung je Art in
+6 h.
+
+**Problem-Sensor** `binary_sensor.heatpilot_problem`: an, solange ein Problem offen ist, mit den Gründen im
+Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
+
 ## Was das Add-on macht
 
 **Beobachten und lernen.** Im Standard greift es nicht von selbst in die Heizung ein:
 - An EMS-ESP sendet es ausschließlich Lese-Anfragen (GET), ein Token wird nicht benötigt –
-  auch bei „HeatPilot steuert“ und für die Kesselsteuerungen in „Bereit für die Steuerung?“.
-- In Home Assistant schreibt es von selbst nur seine eigenen `sensor.heatpilot_*`.
+  auch bei „HeatPilot steuert“, bei „HeatPilot setzt“ und für die Kesselsteuerungen in „Bereit für die Steuerung?“.
+- In Home Assistant legt es von selbst nur seine eigenen Sensoren an: `sensor.heatpilot_*` und den
+  Problem-Sensor `binary_sensor.heatpilot_problem` (an, solange ein Problem offen ist).
 - Ausnahme, nur auf deinen Knopfdruck im Reiter „Heizen“: Tado-Timer, Soll und
   Betriebsart der gewählten Räume (siehe oben). Jeder andere Schreibversuch wird im
   Code hart abgewiesen – auch auf den Heizkreis von EMS-ESP, selbst wenn er als Raum gewählt ist.
 - Erst mit dem Schalter **HeatPilot steuert** (Einstellungen → Steuerung) schreibt es die
   Raum-Solltemperaturen der Räume mit „macht mit“ selbst – mit denselben drei Diensten,
   denselben Räumen und 5–25 °C (siehe „Steuerung“).
+- Erst mit dem eigenen Schalter **„HeatPilot setzt“** (Einstellungen → Warmwasser, seit 0.38) schreibt es am
+  Kessel das Speicher-Soll: `number.set_value` über Home Assistant, nur auf die eine eingestellte Entität des
+  Warmwasser-Solls, nur ganze Grad zwischen Minimum und Maximum, nur bei Änderung ab 1 K, mit Haltezeit und Prüfung
+  nach 60 s (siehe [Weg W](#warmwasser-über-heatpilot-weg-w)). Jede andere `number`-Entität weist der Code hart ab.
+- Meldungen schickt es nur an die gewählten Ziele (Einstellungen → Benachrichtigungen, siehe dort).
 
 1. **Daten übernehmen:** Beim ersten Start holt sich das Add-on selbst die
    vorhandenen Daten aus Home Assistant. Ein Export ist nicht nötig.
@@ -774,6 +908,7 @@ stehen (es ist Messung, nichts Gelerntes); es steht im Export („trockenlauf“
 | `sensor.heatpilot_ww_ersparnis_schaetzung` | Ersparnis der Warmwasser-Strategie (% der Warmwasser-Energie) |
 | `sensor.heatpilot_naechste_ankunft` | vorhergesagte Ankunft |
 | `sensor.heatpilot_vorheizen_start` | wann das Vorheizen beginnen müsste |
+| `binary_sensor.heatpilot_problem` | seit 0.38: an, solange ein Problem offen ist; Gründe im Attribut `reasons` (siehe [Benachrichtigungen](#benachrichtigungen)) |
 
 Hinweis: Diese Sensoren werden vom Add-on gesetzt und sind nach einem
 Neustart von Home Assistant bis zum nächsten Takt (max. 5 min) „unbekannt“.
@@ -1043,7 +1178,8 @@ Gelernt wird aus Speichertemperatur, Ladestatus und Brennerleistung:
 - **Nachladegeschwindigkeit** in K/h, bis der Speicher nach dem Ladesignal nicht
   mehr steigt (mit Nachlauf, ohne die flachen Schritte danach)
 
-Strategie (läuft im Schatten mit, setzt nichts): Niemand zu Hause und keine
+Strategie (läuft im Schatten mit; gesetzt wird sie nur mit dem Schalter aus
+[Weg W](#warmwasser-über-heatpilot-weg-w)): Niemand zu Hause und keine
 Ankunft absehbar → Minimum. Zapfung in Kürze erwartet → Komfort
 (bei viel Verbrauch so hoch, dass der Speicher danach nicht unter das
 Minimum fällt). Sonst → Minimum. Nachgeladen wird rechtzeitig, weil die
