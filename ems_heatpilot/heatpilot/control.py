@@ -8,16 +8,18 @@ Erlaubt sind ausschließlich diese Aufrufe auf die ``climate.*``-Entitäten der 
 * ``climate.set_hvac_mode`` – Zeitplan (``auto``), Aus (``off``) oder Manuell (``heat``).
 
 Alles andere – andere Dienste und Entitäten außerhalb der gewählten Räume – wird hart abgewiesen.
-Eine eigene Sperre für EMS-ESP gibt es hier nicht: Wählt jemand den Heizkreis von EMS-ESP
-(``climate.…_thermostat_hc1``) als Raum, ginge ``climate.set_temperature`` über Home Assistant an
-den Regler. Die Erkennung schlägt ihn deshalb nicht vor (``discovery._EMS_CLIMATE``), die Doku rät
-davon ab; an EMS-ESP selbst schickt HeatPilot nur Lese-Anfragen (``emsesp.py``, GET). Jeder
-erfolgreiche Schreibvorgang landet im Protokoll ``control_log`` (Raum, Dienst, Wert, Grund).
+Ebenso seit 0.36.3 jeder Schreibvorgang auf den Heizkreis von EMS-ESP (``climate.…_thermostat_hc1``),
+auch wenn er als Raum gewählt ist: Gehört das Ziel zu einem Raum mit ``Room.ems`` (Gerät von EMS-ESP,
+siehe ``ems_lock``), wird es hart abgewiesen (``PermissionError``) – sonst ginge ``climate.set_temperature``
+über Home Assistant an den Regler. An EMS-ESP selbst schickt HeatPilot nur Lese-Anfragen (``emsesp.py``,
+GET). Jeder erfolgreiche Schreibvorgang landet im Protokoll ``control_log`` (Raum, Dienst, Wert, Grund).
 
 Ein Raum ist eine Gruppe (``discovery.Room``): mit Raumregler wird nur dieser beschrieben,
 sonst alle Ventile des Raums. Boost auf Knopfdruck: Tado-Cloud-Entitäten über den Tado-Timer,
 alle anderen (z. B. HomeKit) mit eigenem Timer – Ablauf in ``boosts`` gemerkt, die Regelschleife
-stellt danach den Wunschzustand bzw. das Soll von vorher wieder her (``end_boost``).
+stellt danach den Wunschzustand bzw. das Soll von vorher wieder her (``end_boost``). Ein gespeicherter Boost
+auf den Heizkreis von EMS-ESP (aus 0.36.2, vor der Sperre) lässt sich so nicht zurückstellen: Er wird beim
+Aufbau verworfen und steht als Hinweis im Reiter „Heizen“ (``notes``), bis das Regler-Soll von Hand zurück ist.
 """
 
 from __future__ import annotations
@@ -26,6 +28,7 @@ import logging
 import time
 
 from .discovery import Room
+from .ems_lock import LOCK_TEXT
 
 log = logging.getLogger(__name__)
 
@@ -34,6 +37,7 @@ MODES = ("auto", "off", "heat")
 TEMP_MIN, TEMP_MAX = 5.0, 25.0
 DUR_MIN, DUR_MAX = 15, 12 * 60
 KV = "control.boosts"
+KV_EMS_LEFT = "control.ems_boosts_left"  # verworfene Boosts auf den Heizkreis von EMS-ESP (0.36.3), für den Hinweis
 TADO_PLATFORM = "tado"  # nur diese Integration hat den Timer-Dienst
 HINT_SCHEDULE = "Zeitplan in der Tado-App fortsetzen"
 
@@ -63,11 +67,52 @@ class Control:
         for r in rooms:
             room = r if isinstance(r, Room) else Room(name=r, climate=r)
             self.groups[room.climate] = room
-        # alles, was überhaupt beschrieben werden darf (Schlüssel und Mitläufer)
-        self.rooms: set[str] = {c for room in self.groups.values() for c in room.climates}
+        # alles, was überhaupt beschrieben werden darf (Schlüssel und Mitläufer) – ohne den Heizkreis von EMS-ESP
+        self.ems: set[str] = {c for room in self.groups.values() if room.ems for c in room.climates}
+        self.rooms: set[str] = {c for room in self.groups.values() for c in room.climates} - self.ems
         self.states = states if states is not None else {}
         # laufende Boosts je Raum: {temp, end, local, before, before_mode, targets}
         self.boosts: dict[str, dict] = dict(store.get(KV) or {})
+        self.ems_left: dict[str, dict] = dict(store.get(KV_EMS_LEFT) or {})
+        self._drop_ems_boosts()
+
+    def _drop_ems_boosts(self) -> None:
+        """Gespeicherte Boosts auf den Heizkreis von EMS-ESP (aus 0.36.2) verwerfen – zurückschreiben ist gesperrt.
+
+        Sie bleiben als Hinweis (``notes``): Das Regler-Soll steht noch auf dem Boost und muss von Hand zurück.
+        """
+        dropped = {r: b for r, b in self.boosts.items() if r in self.ems or set(b.get("targets") or ()) & self.ems}
+        if not dropped:
+            return
+        for r, b in dropped.items():
+            self.boosts.pop(r)
+            log.warning("Boost auf %s verworfen (%s): %s", r, LOCK_TEXT, self._left_text(r, b))
+        self.ems_left.update(dropped)
+        self.store.put(KV_EMS_LEFT, self.ems_left)
+        self._save()
+
+    def _left_text(self, room: str, b: dict) -> str:
+        name = self.groups[room].name if room in self.groups else room
+        before = b.get("before")
+        back = f"auf {before:g} °C " if isinstance(before, (int, float)) else ""
+        return (f"{name}: Boost {b.get('temp', 0):g} °C aus einer früheren Version steht noch am Regler – HeatPilot "
+                f"schreibt nicht an den Kessel, Regler-Soll von Hand {back}zurückstellen")
+
+    def notes(self) -> list[str]:
+        """Hinweise für den Reiter „Heizen“: verworfene Boosts auf den Heizkreis von EMS-ESP, deren Soll noch am
+        Regler steht. Hat jemand das Soll geändert oder den Heizkreis ausgeschaltet, fällt der Hinweis weg."""
+        out, done = [], []
+        for r, b in self.ems_left.items():
+            current = self.target(r)
+            if self._state(r) and (current is None or abs(current - float(b.get("temp", 0))) >= 0.1):
+                done.append(r)
+            else:
+                out.append(self._left_text(r, b))
+        if done:
+            self.ems_left = {r: b for r, b in self.ems_left.items() if r not in done}
+            self.store.put(KV_EMS_LEFT, self.ems_left)
+            self.store.commit()
+        return out
 
     # ------------------------------------------------------------------ Prüfungen
     def _check_rooms(self, rooms) -> list[str]:
@@ -114,6 +159,8 @@ class Control:
 
     # ------------------------------------------------------------------ Schreiben
     async def _call(self, domain: str, service: str, entity_id: str, data: dict, reason: str = "Knopfdruck") -> None:
+        if entity_id in self.ems:  # EMS-ESP nur lesen – auch als Raum gewählt (0.36.3)
+            raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt: {LOCK_TEXT}")
         if (domain, service) not in ALLOWED or entity_id not in self.rooms:
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt")
         await self.ha.call({"type": "call_service", "domain": domain, "service": service,

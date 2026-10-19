@@ -45,6 +45,8 @@ NOON = time(12, 0)
 SOURCE_SET, SOURCE_POWER = "eingestellt", "gelernt (Strom)"
 # Hydraulik (0.35): Voreinstellung am Ventilunterteil – höchstens so viele Stufen
 PRESET_MAX = 12
+# Warmwasser-Desinfektion (0.36.3): Wochentag des Termins, leer = kein Termin (Standard)
+DISINFECT_DAYS = ("", *WEEKDAYS)
 
 # Feld -> (Typ, min, max). Typen: int, float, str, bool, choice, entity, entities, time, strings, rooms,
 # overrides, nightplan
@@ -67,6 +69,10 @@ FIELDS: dict[str, tuple] = {
     "dhw_min_temp": ("float", 30, 60),
     "dhw_comfort_temp": ("float", 35, 65),
     "dhw_max_temp": ("float", 40, 70),
+    # Desinfektion (0.36.3): Termin je Woche (Tag leer = keiner), Beginn, Temperatur als Rückfall ohne EMS-ESP
+    "dhw_disinfect_day": ("choice", DISINFECT_DAYS),
+    "dhw_disinfect_time": ("time",),
+    "dhw_disinfect_temp": ("float", 60, 80),
     "design_outdoor_temp": ("float", -25, 0),
     "living_area_m2": ("float", 0, 2000),
     "boiler_nominal_kw": ("float", 0, 100),
@@ -101,6 +107,11 @@ def _at(day: datetime, t: time, like: datetime) -> datetime:
     """Wanduhrzeit ``t`` am Tag von ``day`` – mit der Zeitzone von ``like`` (Ortszeit auch über die Umstellung)."""
     naive = datetime.combine(day.date(), t)
     return naive.astimezone() if like.tzinfo is not None else naive
+
+
+def _wall(dt: datetime) -> datetime:
+    """Ortszeit dieses Zeitpunkts (Wochentag und Uhrzeit nach Wanduhr); ohne Zeitzone unverändert."""
+    return dt.astimezone() if dt.tzinfo is not None else dt
 
 
 def _clean_time(value) -> str:
@@ -200,7 +211,7 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
             elif kind == "choice":
                 v = str(value or "").strip()
                 if v not in FIELDS[key][1]:
-                    raise ValueError(f"erlaubt: {', '.join(FIELDS[key][1])}")
+                    raise ValueError(f"erlaubt: {', '.join(c or '(leer)' for c in FIELDS[key][1])}")
                 clean[key] = v
             elif kind == "entity":
                 v = str(value or "").strip()
@@ -280,6 +291,12 @@ class Config:
     dhw_min_temp: float = 40.0
     dhw_comfort_temp: float = 50.0
     dhw_max_temp: float = 60.0
+    # Desinfektion (0.36.3): Termin je Woche – Tag "Mo"…"So", leer = kein Termin (Standard); Beginn (nur mit Tag
+    # wirksam) und Temperatur, falls EMS-ESP sie nicht meldet (wwdisinfectiontemp). Nur eingeplant und angezeigt –
+    # HeatPilot löst die Desinfektion noch nicht aus (EMS-ESP bleibt nur lesend)
+    dhw_disinfect_day: str = ""
+    dhw_disinfect_time: time = time(13, 0)
+    dhw_disinfect_temp: float = 70.0
     design_outdoor_temp: float = -12.0
     # fürs Zertifikat; 0 = unbekannt bzw. aus EMS-ESP (nompower, burnminpower)
     living_area_m2: float = 0.0
@@ -334,6 +351,11 @@ class Config:
                 continue  # Laufzeitfeld, kommt nie aus einer Datei
             if key in ("night_start", "night_end", "vacation_arrival_time"):
                 value = _parse_time(value)
+            elif key == "dhw_disinfect_time":
+                try:
+                    value = _parse_time(_clean_time(value))
+                except (TypeError, ValueError, AttributeError):
+                    continue  # unlesbar: Standard 13:00
             elif key == "overrides":
                 value = dict(item.split("=", 1) for item in value if "=" in item)
                 value = {k.strip(): v.strip() for k, v in value.items()}
@@ -345,6 +367,8 @@ class Config:
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
         if cfg.control_mode not in CONTROL_MODES:
             cfg.control_mode = "beobachten"
+        if cfg.dhw_disinfect_day not in DISINFECT_DAYS:
+            cfg.dhw_disinfect_day = ""  # unbekannter Tag: kein Termin
         try:
             cfg.night_plan = _clean_night_plan(cfg.night_plan)
         except (TypeError, ValueError, AttributeError):
@@ -443,6 +467,34 @@ class Config:
 
     def is_managing(self) -> bool:
         return self.control_mode == "heatpilot"
+
+    # --- Desinfektion (0.36.3) ---
+    def disinfect_weekday(self) -> int | None:
+        """Wochentag des Desinfektionstermins (0 = Mo … 6 = So), None = kein Termin."""
+        return WEEKDAYS.index(self.dhw_disinfect_day) if self.dhw_disinfect_day in WEEKDAYS else None
+
+    def disinfections(self, start: datetime, end: datetime) -> list[datetime]:
+        """Geplante Beginne der Desinfektion von ``start`` bis ``end`` (beide eingeschlossen), zeitlich sortiert.
+
+        Wanduhrzeit am Termintag in Ortszeit – auch über die Zeitumstellung (wie ``night_span``): „So 13:00“ ist
+        nach der Umstellung 13:00 Winterzeit, nicht 12:00. Ohne Termin leer. Ohne Zeitzone (Tests) naiv.
+        """
+        weekday = self.disinfect_weekday()
+        if weekday is None or end < start:
+            return []
+        first = _wall(start)
+        day = first - timedelta(days=(first.weekday() - weekday) % 7)  # letzter Termintag bis ``start``
+        out = []
+        while (at := _at(day, self.dhw_disinfect_time, start)) <= end:
+            if at >= start:
+                out.append(at)
+            day += timedelta(days=7)
+        return out
+
+    def next_disinfection(self, now: datetime) -> datetime | None:
+        """Nächster geplanter Beginn ab ``now`` (genau jetzt zählt mit), None ohne Termin."""
+        hits = self.disinfections(now, now + timedelta(days=8))
+        return hits[0] if hits else None
 
 
 def save_settings(clean: dict, data_dir: Path | None = None) -> Path:

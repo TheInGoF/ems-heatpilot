@@ -104,7 +104,29 @@ Weg W als eigene Version.
   Meldungen nutzt auch die Raumsteuerung (Schreibfehler am Thermostat) und später Weg B.
 - Jeder Schreibvorgang mit Grund im Protokoll wie `control_log`.
 - Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
-  `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an).
+  `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an, siehe unten).
+
+## Desinfektion als Teil von Weg B
+
+Stand 0.36.3 (gebaut, nur lesend): Termin in den Einstellungen (Tag, Uhrzeit; Standard aus), Temperatur
+vom Kessel (`wwdisinfectiontemp`, sonst Einstellung 60–80 °C), Vorschlag kurz vor der größten regelmäßigen
+Zapfung, im Warmwassermodell eingeplant (Empfehlung und Schatten wie nach einer erkannten Sonderladung, ab
+Beginn + Ladedauer) – aber nur bestätigt: Der ES73 hat in den letzten 8 Tagen zur Terminzeit desinfiziert.
+Sonst zählt der Termin nicht, denn ohne Auslösen kommt keine Wärme. Als Desinfektion gilt eine Sonderladung
+mit `wwdisinfecting` oder bis 5 K an die Desinfektionstemperatur – keine Einmalladung. Mit Termin ist
+`wwdisinfecting` in „Bereit für die Steuerung?“ nötig. Ausgelöst wird nichts.
+
+Mit dem Kessel-Schalter (Weg B, eigener Schalter) dazu:
+1. **Auslösen:** zum Termin `wwdisinfecting` an – einmal, ins Protokoll wie `control_log`; nur wenn der
+   ES73 nicht selbst desinfiziert: keine erkannte Desinfektion zu anderer Zeit, die sich wiederholt (zwei
+   Erkennungen am gleichen Wochentag ±1 h in den letzten Wochen). Einmalladungen zählen nicht – sonst setzte
+   eine Einmalladung die Legionellenschaltung eine Woche aus. Ab dann zählt der Termin im Modell, weil
+   HeatPilot ihn auslöst (nicht mehr erst bestätigt).
+2. **Prüfen:** Läuft sie? `dhw_special` (EMS-ESP meldet `wwdisinfecting`/Sonderladung) und die
+   Speichertemperatur: innerhalb von Ladedauer + 30 min mindestens Desinfektionstemperatur − 3 K.
+3. **Fehlschlag:** kein Anstieg, Schalter fällt sofort zurück oder EMS-ESP lehnt ab → Hinweis über die
+   Benachrichtigungsgeräte („Desinfektion So 17:30 nicht gelaufen“) und `binary_sensor.heatpilot_problem`;
+   kein erneuter Versuch vor dem nächsten Termin, außer von Hand.
 
 ## Takt der Heizung (Weg B)
 

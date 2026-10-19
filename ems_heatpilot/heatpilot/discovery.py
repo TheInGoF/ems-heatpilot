@@ -11,132 +11,25 @@ import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+# Rollen -> EMS-ESP-Namen und ihre Beschriftungen (seit 0.36.3 in ``discovery_roles``) – hier durchgereicht,
+# weil Module und Tests sie aus ``heatpilot.discovery`` holen
+from .discovery_roles import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES  # noqa: F401
+from .ems_lock import EMS_CLIMATE, LOCK_TEXT, is_ems_climate
+
 log = logging.getLogger(__name__)
 
 # Integrationen, deren climate-Entitäten Räume sind (Tado-Cloud, HomeKit-Bridge von Tado u. a.)
 ROOM_PLATFORMS = ("tado", "homekit_controller")
 # EMS-ESP-Heizkreis als climate (climate.thermostat_hc1, climate.ems_esp_thermostat_hc1): kein Raum – gilt nur
-# für fremde Plattformen; eine Tado-Zone „Bad Thermostat“ oder ein HomeKit-Ventil „Wohnzimmer Thermostat“ bleibt Raum
-_EMS_CLIMATE = re.compile(r"^climate\.(.*_)?(boiler|thermostat)(_hc\d+)?$", re.IGNORECASE)
+# für fremde Plattformen; eine Tado-Zone „Bad Thermostat“ oder ein HomeKit-Ventil „Wohnzimmer Thermostat“ bleibt Raum.
+# Die Schreibsperre (0.36.3) erkennt ihn am Gerät, siehe ems_lock
+_EMS_CLIMATE = EMS_CLIMATE
 # Wandthermostat (Raumregler) am Modell- oder Gerätenamen: Tado „Smart Thermostat“ (ohne „Radiator“),
 # HomeKit-Modelle ST01 (Smart Thermostat), RU01/RU02 (Wireless Temperature Sensor als Raumregler)
 _WALL_MODELS = re.compile(r"^(ST|RU)\d{2}", re.IGNORECASE)
 # Bestandteile von Gerätenamen, die keinen Raum beschreiben (für die Kurzform „Gerätename, gekürzt“)
 _NAME_NOISE = re.compile(r"\b(tado°?|smart|radiator|wireless|temperature|sensor|thermostat|valve|[A-Z]{2}\d{6,})\b",
                          re.IGNORECASE)
-
-# Rolle -> EMS-ESP-Namen. Je Rolle zuerst der Kurzname (so heißen die Werte in
-# der EMS-ESP-API und bei "Entity-ID-Format: Kurzname"), dann der lange Name
-# (Standard-Entity-IDs in HA, z. B. sensor.boiler_flame_current).
-BOILER_ROLES: dict[str, tuple[str, ...]] = {
-    "flow_temp": ("curflowtemp", "current_flow_temperature"),
-    "sel_flow_temp": ("selflowtemp", "selected_flow_temperature"),
-    "return_temp": ("rettemp", "return_temperature"),
-    "burner_power": ("curburnpow", "burner_current_power"),
-    "burner_on": ("burngas", "gas"),
-    "burner_starts": ("burnstarts", "burner_starts"),
-    "heating_pump": ("heatingpump", "heating_pump"),
-    "heating_active": ("heatingactive", "heating_active"),
-    "dhw_active": ("dhw_charging", "wwcharging", "dhw_active", "dhw_chargepump", "wwchargepump", "dhw_charge_pump",
-                   "dhw_3wayvalve"),
-    "dhw_seltemp": ("dhw_seltemp", "dhw_selected_temperature"),
-    "dhw_temp": ("dhw_curtemp", "dhw_current_intern_temperature"),
-    "boiler_outdoor": ("outdoortemp", "outside_temperature"),
-    "min_period": ("burnminperiod", "burner_min_period"),
-    "hyst_on": ("boilhyston", "hysteresis_on_temperature"),
-    "hyst_off": ("boilhystoff", "hysteresis_off_temperature"),
-    "min_power": ("burnminpower", "burner_min_power"),
-    "max_power": ("burnmaxpower", "burner_max_power"),
-    "nom_power": ("nompower", "nominal_power", "nominal_Power"),
-    "heating_off": ("heatingoff", "forceheatingoff", "force_heating_off"),
-    "boiler_temp": ("boiltemp", "actual_boiler_temperature"),
-    "pump_mod": ("heatingpumpmod", "heating_pump_modulation"),
-    "flame_current": ("flamecurr", "flame_current"),
-    "burner_runtime": ("burnworkmin", "total_burner_operating_time"),
-    "heat_starts": ("heatstarts", "burner_starts_heating"),
-    "heat_runtime": ("heatworkmin", "total_heat_operating_time"),
-    "nrg_total": ("nrgtotal", "total_energy"),
-    "nrg_heat": ("nrgheat", "energy_heating"),
-    # seit 0.25: Warmwasser-Details, Anlage, Wartung
-    "dhw_starts": ("dhw_starts", "wwstarts"),
-    "dhw_disinfecting": ("dhw_disinfecting", "wwdisinfecting"),
-    "dhw_onetime": ("dhw_onetime", "wwonetime", "dhw_one_time_charging"),
-    "dhw_hyst_on": ("dhw_hyston", "wwhyston", "dhw_hysteresis_on"),
-    "pump_delay": ("pumpdelay", "pump_delay"),
-    "sys_press": ("syspress", "system_pressure"),
-    "service_code": ("servicecode", "service_code"),
-    "last_code": ("lastcode", "last_error_code"),
-    "maint_msg": ("maintenancemessage", "maintenance_message"),
-    "maint_date": ("maintenancedate", "next_maintenance_date"),
-}
-
-# Regler (ES73/RC35 …), Heizkreis 1
-THERMOSTAT_ROLES: dict[str, tuple[str, ...]] = {
-    "hc_seltemp": ("hc1_seltemp", "hc1_selected_room_temperature"),
-    "hc_calc_flow": ("hc1_targetflowtemp", "hc1_calcflowtemp", "hc1_target_flow_temperature"),
-    "hc_mode": ("hc1_mode", "hc1_operating_mode"),
-    "hc_remotetemp": ("hc1_remotetemp", "hc1_room_temperature_from_remote"),
-    "damped_outdoor": ("dampedoutdoortemp", "damped_outdoor_temperature"),
-    # Heizkurve des Reglers (seit 0.25)
-    "hc_designtemp": ("hc1_designtemp", "hc1_design_temperature"),
-    "hc_offsettemp": ("hc1_offsettemp", "hc1_offset_temperature"),
-    "hc_minexttemp": ("minexttemp", "minimal_external_temperature"),
-    "building": ("building", "building_type"),
-    "disinfect_day": ("dhw_disinfectday", "wwdisinfectday", "dhw_disinfection_day"),
-    "disinfect_hour": ("dhw_disinfecthour", "wwdisinfecthour", "dhw_disinfection_hour"),
-}
-
-# Beschriftungen für die Oberfläche (Zuordnungen)
-ROLE_LABELS: dict[str, str] = {
-    "flow_temp": "Vorlauftemperatur (Ist)",
-    "sel_flow_temp": "Vorlauftemperatur (Soll am Kessel)",
-    "return_temp": "Rücklauftemperatur",
-    "burner_power": "Brennerleistung (%)",
-    "burner_on": "Brenner an (Gas)",
-    "burner_starts": "Brennerstarts (Zähler)",
-    "heating_pump": "Heizungspumpe",
-    "heating_active": "Heizen aktiv",
-    "dhw_active": "Warmwasser lädt",
-    "dhw_seltemp": "Warmwasser-Soll",
-    "dhw_temp": "Speichertemperatur",
-    "boiler_outdoor": "Außenfühler am Kessel",
-    "min_period": "Antipendelzeit",
-    "hyst_on": "Einschaltdifferenz",
-    "hyst_off": "Ausschaltdifferenz",
-    "min_power": "Minimale Brennerleistung",
-    "max_power": "Maximale Brennerleistung",
-    "nom_power": "Nennleistung (kW)",
-    "heating_off": "Heizen abschalten",
-    "boiler_temp": "Kesseltemperatur",
-    "pump_mod": "Pumpenmodulation",
-    "flame_current": "Flammenstrom",
-    "burner_runtime": "Brennerlaufzeit (Zähler)",
-    "heat_starts": "Brennerstarts Heizen (Zähler)",
-    "heat_runtime": "Heizlaufzeit (Zähler)",
-    "nrg_total": "Energie gesamt (EMS-ESP)",
-    "nrg_heat": "Energie Heizen (EMS-ESP)",
-    "hc_seltemp": "Regler: Raum-Soll",
-    "hc_calc_flow": "Regler: berechnete Vorlauftemperatur",
-    "hc_mode": "Regler: Betriebsart (Tag/Nacht)",
-    "hc_remotetemp": "Regler: Raumtemperatur (Remote)",
-    "damped_outdoor": "Regler: gedämpfte Außentemperatur",
-    "dhw_starts": "Warmwasser-Ladungen (Zähler)",
-    "dhw_disinfecting": "Legionellenschaltung läuft",
-    "dhw_onetime": "Warmwasser-Einmalladung",
-    "dhw_hyst_on": "Warmwasser: Nachladen ab (K unter Soll)",
-    "pump_delay": "Pumpennachlauf (min)",
-    "sys_press": "Anlagendruck (bar)",
-    "service_code": "Kesselstatus (Servicecode)",
-    "last_code": "Letzter Fehler",
-    "maint_msg": "Wartungsmeldung",
-    "maint_date": "Wartungstermin",
-    "hc_designtemp": "Regler: Auslegungstemperatur (Heizkurve)",
-    "hc_offsettemp": "Regler: Offset Heizkurve",
-    "hc_minexttemp": "Regler: tiefste Außentemperatur (Auslegung)",
-    "building": "Regler: Gebäudeart",
-    "disinfect_day": "Legionellenschaltung: Tag",
-    "disinfect_hour": "Legionellenschaltung: Uhrzeit",
-}
 
 # Betriebsart, in der der Heizkreis heizt (EMS-ESP liefert je nach Sprache)
 HEAT_MODES = {"tag", "day", "comfort", "heat", "heizen", "an", "on"}
@@ -168,6 +61,9 @@ class Room:
     area: str | None = None
     device_name: str | None = None
     device_model: str | None = None
+    # seit 0.36.3: Heizkreis von EMS-ESP (ein Gerät des Raums gehört zu EMS-ESP) – nie „macht mit“,
+    # Control weist jeden Schreibvorgang darauf hart ab (EMS-ESP nur lesen)
+    ems: bool = False
 
     @property
     def climates(self) -> list[str]:
@@ -380,13 +276,18 @@ def is_wall_thermostat(climate: str, idx: RegistryIndex, by_id: dict) -> bool:
 
 
 def climate_info(climate: str, idx: RegistryIndex, by_id: dict) -> dict:
-    """Bereich, Gerät, Sensoren und Raumregler-Vorschlag einer climate-Entität (für Vorschläge und Oberfläche)."""
+    """Bereich, Gerät, Sensoren und Raumregler-Vorschlag einer climate-Entität (für Vorschläge und Oberfläche).
+
+    ``ems`` (0.36.3): Heizkreis von EMS-ESP (``ems_lock``) – die Oberfläche sperrt „macht mit“, HeatPilot schreibt
+    nie darauf.
+    """
     dev = idx.device_of(climate)
     return {
         "area": idx.area_of(climate),
         "device_name": dev.get("name_by_user") or dev.get("name") or None,
         "device_model": dev.get("model") or None,
         "controller": is_wall_thermostat(climate, idx, by_id),
+        "ems": is_ems_climate(climate, idx),
         **device_sensors(climate, idx, by_id),
     }
 
@@ -399,7 +300,8 @@ def room_candidates(ids: list[str], by_id: dict, idx: RegistryIndex) -> list[str
         if not e.startswith("climate."):
             continue
         platform = idx.entity.get(e, {}).get("platform")
-        if platform in ROOM_PLATFORMS or (idx.device_of(e) and not _EMS_CLIMATE.match(e)):
+        if platform in ROOM_PLATFORMS or (idx.device_of(e) and not _EMS_CLIMATE.match(e)
+                                          and not is_ems_climate(e, idx)):
             out.append(e)
     return out
 
@@ -445,7 +347,7 @@ def _discover_rooms(d: Discovered, ids: list[str], by_id: dict, idx: RegistryInd
             e for e in sorted(ids)
             if e.startswith("climate.")
             and "current_temperature" in by_id[e].get("attributes", {})
-            and "boiler" not in e and "thermostat" not in e
+            and "boiler" not in e and "thermostat" not in e and not is_ems_climate(e, idx)
         ]
     if all_rooms:
         d.auto_rooms = _operating(candidates, idx)
@@ -463,6 +365,7 @@ def _discover_rooms(d: Discovered, ids: list[str], by_id: dict, idx: RegistryInd
             controller=info["controller"] if all_rooms else False,
             platform=idx.entity.get(climate, {}).get("platform"),
             area=info["area"], device_name=info["device_name"], device_model=info["device_model"],
+            ems=info["ems"],
         ))
     if not all_rooms:
         _unique_names(d.rooms, by_id)
@@ -490,6 +393,9 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dic
     Gruppe es hat; die Komforttemperatur und die Voreinstellung (0.35) kommen vom Schlüssel, Mitläufer
     behalten ihre eigene Voreinstellung. Einträge ohne ``group``: eigener Raum. ``info``: Bereich/Gerät je
     climate (``climate_info``), optional.
+
+    Seit 0.36.3: Gehört ein Gerät der Gruppe zu EMS-ESP (``info[…]["ems"]``), ist der Raum ``ems`` und macht nie
+    mit – auch wenn „macht mit“ gespeichert ist (Warnung im Log). HeatPilot schreibt nicht an den Kessel.
     """
     info = info or {}
 
@@ -521,11 +427,15 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dic
             comfort = float(comfort) if comfort is not None else 21.0
         except (TypeError, ValueError):
             comfort = 21.0
+        ems = any(info.get(r["climate"], {}).get("ems") for r in entries_)
+        managed = any(bool(r.get("managed")) for r in entries_)
+        if ems and managed:
+            log.warning("%s macht nicht mit: %s", name, LOCK_TEXT)
         rooms.append(Room(
             name=name, climate=head["climate"], heating_power=head.get("heating_power") or None,
             humidity=head.get("humidity") or None, temp_sensor=head.get("temperature") or None,
             group=head.get("group") or None, controller=bool(head.get("controller")),
-            managed=any(bool(r.get("managed")) for r in entries_), comfort=comfort,
+            managed=managed and not ems, comfort=comfort, ems=ems,
             platform=reg.get(head["climate"], {}).get("platform"),
             members=[device(r) for r in others],
             preset=_preset(head, "preset"), preset_max=_preset(head, "preset_max"),

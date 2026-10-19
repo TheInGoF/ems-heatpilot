@@ -12,7 +12,7 @@ from pathlib import Path
 
 from aiohttp import web
 
-from .config import CONTROL_MODES, PRESET_MAX, WEEKDAYS, Config
+from .config import CONTROL_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, readiness
 from .emsesp import EmsEsp
@@ -107,13 +107,17 @@ def make_app(app) -> web.Application:
             "climate_targets": {eid: st.get("attributes", {}).get("temperature")
                                 for eid, st in app.eng.states.items()
                                 if eid.startswith("climate.") and st.get("state") != "off"},
+            # Desinfektion (0.36.3): Termin, Temperatur (vom Kessel oder eingestellt), Vorschlag, Hinweis
+            "disinfect": {**app.eng.disinfect_info(suggest=True), "days": list(DISINFECT_DAYS),
+                          "temp_range": list(FIELDS["dhw_disinfect_temp"][1:])},
         })
 
     async def entities(_req):
         """Alle wählbaren Entitäten mit Name, Einheit, Klasse, Gerät und Bereich (für Raum-Vorschläge).
 
         climate-Einträge (0.35) zusätzlich mit ``device_name``, ``device_model``, ``controller`` (Vorschlag
-        Wandthermostat) und ``siblings`` (Sensoren desselben Geräts: id, kind, name, unit)."""
+        Wandthermostat) und ``siblings`` (Sensoren desselben Geräts: id, kind, name, unit), seit 0.36.3 ``ems``
+        (Heizkreis von EMS-ESP: „macht mit“ gesperrt)."""
         if app.eng is None:
             return json_response([])
         idx = Registry.of(await app.registry()).lookup()
@@ -137,7 +141,7 @@ def make_app(app) -> web.Application:
                     "user": bool(a.get("user_id"))}
                    if eid.startswith("person.") else {}),
                 **({k: v for k, v in climate_info(eid, idx, app.eng.states).items()
-                    if k in ("device_name", "device_model", "controller", "siblings")}
+                    if k in ("device_name", "device_model", "controller", "siblings", "ems")}
                    if eid.startswith("climate.") else {}),
             })
         return json_response(out)
@@ -164,7 +168,7 @@ def make_app(app) -> web.Application:
                          ", ".join(f"{c['room']} {c['from']}→{c['to']}" for c in changes), advice.PRESET_PAUSE_DAYS)
         # Räume nach dem Speichern: welches Gerät Schlüssel ist (Raumregler, sonst erstes der Gruppe)
         rooms = [{"name": r.name, "climate": r.climate, "controller": r.controller,
-                  "members": [m["climate"] for m in r.members]}
+                  "members": [m["climate"] for m in r.members], **({"ems": True} if r.ems else {})}
                  for r in (app.eng.found.rooms if app.eng is not None else [])]
         return json_response({"ok": True, "rooms": rooms, "preset_changes": changes})
 
@@ -259,6 +263,7 @@ def make_app(app) -> web.Application:
                 # seit 0.34: Gruppe, Steuerung
                 "group": r.group, "controller": r.controller, "managed": r.managed, "comfort": r.comfort,
                 "platform": r.platform, "tado_cloud": bool(ctl and ctl.is_tado(r.climate)),
+                "ems": r.ems,  # 0.36.3: Heizkreis von EMS-ESP – Bedienung gesperrt
                 "climates": r.climates, "devices": devices,
                 "control": ctl_rooms.get(r.climate),
             })

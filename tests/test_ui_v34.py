@@ -53,7 +53,9 @@ def test_room_table_sends_group_controller_managed_comfort():
     coll = js.split("function collect()")[1].split("function saveSettings")[0]
     assert 'group: tr.querySelector(".r-group").value.trim()' in coll
     assert 'controller: tr.querySelector(".r-controller").checked' in coll
-    assert 'managed: tr.querySelector(".r-managed").checked' in coll
+    # seit 0.36.3 über managedOf(): offenes Häkchen wie bisher, gesperrt (Heizkreis von EMS-ESP) siehe test_v363_review
+    assert 'managed: managedOf(tr, c)' in coll
+    assert 'if (!box.disabled) return box.checked;' in js.split("function managedOf(tr, c)")[1].split("\n}\n")[0]
     assert 'comfort: tr.querySelector(".r-comfort").value.trim()' in coll
     # „macht mit“ setzt nie ein Vorschlag – nur der Nutzer
     sug = js.split("function applySuggestions()")[1].split("async function testEms")[0]

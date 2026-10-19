@@ -19,7 +19,8 @@ schlechtere Kondensieren beim Laden aus warmem Speicher und jeder Brennerstart.
 
 Erkennen am Fühler (Zapfungen, Nachlauf, Fühlerstufe) und der Schatten der Strategie stehen in
 ``dhw_watch``. Die Namen davon, die Module und Tests aus ``heatpilot.dhw`` holen, reicht dieses Modul
-durch; die übrigen Konstanten der Erkennung gibt es nur in ``dhw_watch``.
+durch; die übrigen Konstanten der Erkennung gibt es nur in ``dhw_watch``. Den Desinfektionstermin aus den
+Einstellungen (seit 0.36.3: einplanen, vorschlagen) rechnet ``dhw_disinfect``.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
+from .dhw_disinfect import covers, is_disinfection, planned_for, remember
 from .dhw_watch import (
     AFTER_CHARGE_H, HIT_K, SENSOR_STEP, SENSOR_STEP_N, SPECIAL_COVER_H, DrawWatch, sensor_step_of, tail_rising,
 )
@@ -99,6 +101,8 @@ class DhwModel:
     # Zapfprofil, als der Haushalt leer wurde: wird daraus „alle lange weg“, zurück auf diesen Stand
     _backup: dict | None = None
     _last_special: datetime | None = None  # Ende der letzten Sonderladung: große Zapfungen danach sind gedeckt
+    # seit 0.36.3: Ende der zuletzt erkannten Desinfektionen (ISO, ohne Einmalladungen) – bestätigen den Termin
+    disinfects: list = field(default_factory=list)
 
     # ------------------------------------------------------------------ Modell
     @property
@@ -156,17 +160,25 @@ class DhwModel:
         w = self.weekly_weight(weekday, hour)
         return (1 - w) * self.hit_daily[hour] + w * self.hit[weekday * 24 + hour]
 
-    def big_draw_expected(self, now: datetime, hours: float) -> float | None:
+    @property
+    def last_special(self) -> datetime | None:
+        """Ende der zuletzt erkannten Sonderladung (Legionellenschaltung, Einmalladung) – None, wenn noch keine."""
+        return self._last_special
+
+    def big_draw_expected(self, now: datetime, hours: float, planned: list[datetime] | None = None) -> float | None:
         """Wiederkehrende große Zapfung (mind. 2× am selben Wochentag ±1 h) im Zeitfenster: übliche Größe.
 
         Folgt sie üblicherweise auf eine Sonderladung (Wanne nach der Legionellenschaltung), ist sie
-        dadurch gedeckt und zählt nicht – dafür muss die Strategie nicht vorher höher laden.
+        dadurch gedeckt und zählt nicht – dafür muss die Strategie nicht vorher höher laden. Seit 0.36.3
+        ebenso nach einem geplanten Desinfektionstermin (``planned``, siehe ``dhw_disinfect.covers``).
         """
         sizes = []
         for h in range(int(hours) + 1):
             t = _wall(now + timedelta(hours=h))
             same = [b[1] for b in self.big_draws if not (len(b) > 2 and b[2])
-                    and (d := datetime.fromisoformat(b[0])).weekday() == t.weekday() and abs(d.hour - t.hour) <= 1]
+                    and (d := datetime.fromisoformat(b[0])).weekday() == t.weekday() and abs(d.hour - t.hour) <= 1
+                    and not (planned and covers(planned, t.replace(minute=0, second=0, microsecond=0)
+                                                + timedelta(hours=d.hour - t.hour)))]
             if len(same) >= 2:
                 sizes.append(statistics.median(same))
         return max(sizes) if sizes else None
@@ -204,6 +216,8 @@ class DhwModel:
         dhw_set: float | None = None,
         *,
         burner_kw_prev: float | None = None,
+        disinfect: bool = False,
+        disinfect_temp: float | None = None,
     ) -> dict:
         """Ein Abtastschritt. Gibt {'draw_k', 'loss_kwh', 'charge_kwh'} zurück.
 
@@ -212,7 +226,8 @@ class DhwModel:
         ``special`` (Legionellenschaltung, Einmalladung): Ladung läuft mit, aber weder
         Ladekosten noch Zapfprofil dieser Stunde werden gelernt.
         ``burner_kw_prev``: Brennerleistung am vorigen Messpunkt – dann zählt die mittlere
-        Leistung über den Schritt statt der am Schrittende.
+        Leistung über den Schritt statt der am Schrittende. ``disinfect`` (Kessel meldet die Desinfektion)
+        und ``disinfect_temp``: ob eine Sonderladung eine Desinfektion war (``dhw_disinfect.is_disinfection``).
         """
         out = {"draw_k": 0.0, "loss_kwh": 0.0, "charge_kwh": 0.0, "special": False}
         self._roll_slot(when, learn_usage)
@@ -256,6 +271,7 @@ class DhwModel:
             # Sonderladung auch ohne Kesselschalter: weit über das Soll geladen (Legionellenschaltung)
             c["special"] = c.get("special") or special or (c["set"] is not None and t_cur > c["set"] + SPECIAL_ABOVE_SET_K)
             out["special"] = c["special"]
+            c["disinfect"], c["dis_temp"] = c.get("disinfect") or disinfect, disinfect_temp
             c["max"] = max(c["max"], t_cur)
             c["h"] += dt_h + c["tail_h"]  # Ladung kam im Nachlauf zurück: läuft einfach weiter
             c["tail_h"], c["peak_h"], c["tail"] = 0.0, 0.0, None
@@ -344,6 +360,8 @@ class DhwModel:
         if c.get("special") or (c.get("set") is not None and c["max"] > c["set"] + SPECIAL_ABOVE_SET_K):
             self.special_charges += 1
             self._last_special = when
+            if when is not None and is_disinfection(bool(c.get("disinfect")), c["max"], c.get("dis_temp")):
+                self.disinfects = remember(self.disinfects, when)  # keine Einmalladung: bestätigt den Termin
             return
         self.charges += 1
         if c.get("drawn"):
@@ -433,12 +451,14 @@ class DhwModel:
         cfg,
         unknown_from: datetime | None = None,
         current_set: float | None = None,
+        disinfect_h: float | None = None,
     ) -> dict:
         """Empfohlene Speichertemperatur jetzt (nur Empfehlung, wird nicht gesetzt).
 
         ``unknown_from``: ab dann ist offen, ob jemand heimkommt (Gewohnheit dort noch nicht
         verlässlich gelernt). Liegt das im Horizont, bleibt das heutige Soll ``current_set`` –
         Minimum nur, wenn eine Ankunft sicher weit weg ist bzw. alle lange weg sind.
+        ``disinfect_h``: Ladedauer der Desinfektion zum Termin (``dhw_disinfect.ready_hours``).
         """
         comfort = min(cfg.dhw_comfort_temp + self.comfort_margin, cfg.dhw_max_temp)
         reheat_h = (comfort - cfg.dhw_min_temp) / max(self.charge_rate_kh, 5.0)
@@ -454,7 +474,8 @@ class DhwModel:
         draw = self.expected_draw(now, horizon)
         chance = max(self.hit_at(slot // 24, slot % 24)
                      for slot in (slot_of(now + timedelta(hours=h)) for h in range(int(horizon) + 1)))
-        big = self.big_draw_expected(now, horizon)
+        # geplanter Desinfektionstermin (0.36.3): große Zapfungen danach deckt dessen Wärme
+        big = self.big_draw_expected(now, horizon, planned_for(self, cfg, now, horizon, disinfect_h))
         if draw >= 1.0 or chance >= HIT_THRESHOLD or big:
             # Komfort zu Beginn der Nutzung; bei viel Verbrauch so hoch, dass er danach
             # nicht unter das Minimum fällt
@@ -513,6 +534,7 @@ class DhwModel:
             "backup": None if self._backup is None else {
                 **self._backup, "pend": _pend_out(self._backup["pend"]), "cur": _pend_out(self._backup["cur"])},
             "last_special": None if self._last_special is None else self._last_special.isoformat(),
+            "disinfects": self.disinfects,
         }
 
     @classmethod
@@ -532,6 +554,7 @@ class DhwModel:
             hit=d.get("hit", [0.0] * SLOTS),
             hit_daily=d.get("hit_daily", [0.0] * 24),
             sensor_step=d.get("sensor_step", SENSOR_STEP),
+            disinfects=list(d.get("disinfects") or []),
         )
         m._watch.sensor_step = m.sensor_step
         b = d.get("backup")

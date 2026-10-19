@@ -209,6 +209,22 @@ table.ready-t .rt-narrow { display: none; }
 #heat-status .ready-line .dot { margin-right: 4px; vertical-align: 0; }
 .tile.off { background: var(--off-bg); }
 .tile.off .value { font-size: 15px; font-weight: 500; color: var(--text-muted); padding: 5px 0 3px; }
+/* Desinfektion (0.36.3): Termin, gelesene Temperatur und Vorschlag in Einstellungen → Warmwasser;
+   Heizkreis von EMS-ESP: „macht mit“ und Bedienung gesperrt */
+.field select.sel { width: 100%; padding: 6px 8px; font: inherit; font-size: 13px; }
+.dis-read { padding: 6px 0 2px; font-size: 13px; color: var(--text-primary); }
+.card p.dis-state { margin: 14px 0 0; font-size: 13px; color: var(--text-secondary); }  /* vor .card p */
+.card p.dis-state + p.dis-state { margin-top: 6px; }
+.dis-state b { color: var(--text-primary); }
+.dis-sug { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 6px; padding: 8px 10px;
+  margin: 10px 0; font-size: 13px; color: var(--text-primary); background: var(--bg); }
+.dis-sug.off { border-left-color: var(--border); color: var(--text-secondary); }
+.dis-sug .row { justify-content: space-between; margin-bottom: 4px; }
+.dis-sug .muted { display: block; margin-top: 3px; }
+.hint.ems-lock, .ems-lock { color: var(--warn); }
+.dis-counts { border-left: 3px solid var(--warn); padding-left: 8px; color: var(--text-primary); }
+.btn:disabled { opacity: .5; cursor: default; }
+.field input:disabled, table.form input:disabled { opacity: .5; cursor: not-allowed; }
 </style>
 </head>
 <body>
@@ -855,13 +871,17 @@ async function loadHeat() {
 }
 function heatError(e) { heatMsg(`<span class="msg-err">${esc(e.message || e)}</span>`); }
 function heatMsg(html) { $("heat-msg").innerHTML = html; const d = $("dlg-msg"); if (d) d.innerHTML = html; }
-function allRooms() { return HEAT ? HEAT.rooms.map((r) => r.climate) : []; }
+// Heizkreis von EMS-ESP (0.36.3, rooms[].ems): wird angezeigt, aber nie bedient – Boost, Zeitplan, Ausschalten,
+// Soll und Betriebsart lassen ihn aus (das Backend weist es ohnehin ab: EMS-ESP nur lesen)
+const EMS_LOCK = "Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel";
+const ctlRooms = (j) => (j ? j.rooms.filter((r) => !r.ems) : []);
+function allRooms() { return ctlRooms(HEAT).map((r) => r.climate); }
 function renderHeat() {
   const j = HEAT; if (!j) return;
-  const ids = allRooms();
+  const ids = allRooms(), own = ctlRooms(j);
   BOOST.rooms = BOOST.rooms.filter((c) => ids.includes(c));
-  const n = j.rooms.length, running = j.rooms.filter((r) => r.boost), offN = j.rooms.filter((r) => r.mode === "off").length;
-  const autoN = j.rooms.filter((r) => r.mode === "auto" && !r.boost).length;
+  const n = own.length, running = own.filter((r) => r.boost), offN = own.filter((r) => r.mode === "off").length;
+  const autoN = own.filter((r) => r.mode === "auto" && !r.boost).length;
   const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
   const c = ctl(), pil = managing();
   $("heat-status").innerHTML = heatStatus(c, j.readiness);
@@ -884,6 +904,7 @@ function act(kind, title, sub, on) {
 const unreachable = (c) => c && c.reach_c !== null && c.reach_c !== undefined && c.desired !== null && c.reach_c < c.desired - 0.2;
 function roomState(r) {
   const c = r.control, t = fmt(r.target) + "°";
+  if (r.ems) return `nur Anzeige · ${t}`;  // Heizkreis von EMS-ESP (0.36.3)
   if (managing() && r.managed && c && c.phase) {  // Zustand aus der Regelschleife
     if (r.boost) return `Timer · ${t}`;
     const until = c.manual_until ? ` bis ${clock(c.manual_until)}` : "";
@@ -939,7 +960,7 @@ function boostDlg(j) {
 // Zeitplan-Knopf: Tado-Cloud-Räume zurück in den Tado-Zeitplan; andere Räume bekommen bei „HeatPilot steuert“ den
 // Wunschzustand, bei „Beobachten“ geht es nur in der Tado-App weiter (Hinweis aus der Antwort)
 function schedDlg(j) {
-  const n = j.rooms.length, cloud = j.rooms.filter((r) => r.tado_cloud).length;
+  const n = ctlRooms(j).length, cloud = ctlRooms(j).filter((r) => r.tado_cloud).length;
   const text = managing()
     ? `Alle Räume zurück zum Wunschzustand von HeatPilot${cloud ? ` (${cloud === n ? "alle" : cloud} Tado-Cloud-Räume in den Tado-Zeitplan)` : ""}. Ein laufender Timer endet sofort.`
     : cloud === n ? "Alle Räume zurück in den Tado-Zeitplan. Ein laufender Timer endet sofort."
@@ -961,7 +982,7 @@ function syncBoost(j) {
   $("heat-dlg").style.setProperty("--tile-fg", c.fg);
   const names = j.rooms.filter((r) => BOOST.rooms.includes(r.climate)).map((r) => shortName(r.name));
   $("boost-sum").textContent = n === 0 ? "Kein Raum gewählt" : n === ids.length ? "Alle Räume" : n <= 2 ? names.join(", ") : `${n} Räume`;
-  $("boost-rooms").innerHTML = j.rooms.map((r) => `<span class="chip ${BOOST.rooms.includes(r.climate) ? "on" : ""}" onclick="boostRoom('${esc(r.climate)}')">${BOOST.rooms.includes(r.climate) ? "✓ " : ""}${esc(shortName(r.name))}</span>`).join("") +
+  $("boost-rooms").innerHTML = ctlRooms(j).map((r) => `<span class="chip ${BOOST.rooms.includes(r.climate) ? "on" : ""}" onclick="boostRoom('${esc(r.climate)}')">${BOOST.rooms.includes(r.climate) ? "✓ " : ""}${esc(shortName(r.name))}</span>`).join("") +
     `<span class="chip" onclick="boostAll()">${n === ids.length ? "Keine" : "Alle"}</span>`;
   $("boost-temp").textContent = fmt(BOOST.temp) + " °C";
   const dur = $("boost-dur"); if (String(dur.value) !== String(BOOST.minutes)) dur.value = BOOST.minutes;
@@ -977,15 +998,17 @@ function roomDlg(r) {
   if (!r) return "<h2>Raum</h2><p>Nicht mehr vorhanden.</p>";
   const off = r.mode === "off", modeName = { auto: "Zeitplan", heat: "Manuell", off: "Aus" };
   const modes = ["auto", "heat", "off"].filter((m) => !r.modes.length || r.modes.includes(m));
+  const lock = !!r.ems;  // Heizkreis von EMS-ESP: nur Anzeige (0.36.3)
   $("heat-dlg").style.setProperty("--tile-fg", tileColors(off ? null : r.target, r.mode).fg);
   return `<h2>${esc(shortName(r.name))}</h2>` +
     `<div class="row" style="gap:14px"><span style="font-size:32px;font-weight:700">${fmt(r.temp)} °C</span>` +
     `<span class="muted">${r.action === "heating" ? "heizt · " : ""}Ventil ${fmt(r.valve, 0)} %${r.humidity !== null && r.humidity !== undefined ? ` · Feuchte ${fmt(r.humidity, 0)} %` : ""}</span></div>` +
-    `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${off ? "disabled" : ""}>−</button>` +
+    `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${off || lock ? "disabled" : ""}>−</button>` +
     `<span>Soll <b>${off ? "aus" : fmt(r.target) + " °C"}</b></span>` +
-    `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${off ? "disabled" : ""}>+</button></div>` +
-    `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')">${modeName[m]}</button>`).join("")}</div>` +
+    `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${off || lock ? "disabled" : ""}>+</button></div>` +
+    `<div class="modes">${modes.map((m) => `<button class="btn ${r.mode === m ? "on" : ""}" onclick="roomMode('${esc(r.climate)}','${m}')"${lock ? " disabled" : ""}>${modeName[m]}</button>`).join("")}</div>` +
     (r.boost ? `<p class="muted" style="margin:8px 0 0">Timer läuft noch ${leftText(r.boost.left_min)}${r.boost.local ? " (lokal in HeatPilot)" : ""} – „Zeitplan“ beendet ihn sofort.</p>` : "") +
+    (lock ? `<div class="ctl-info ems-lock" id="dlg-ems">${EMS_LOCK} – Soll und Betriebsart nur am Regler.</div>` : "") +
     ctlInfo(r);
 }
 // Was die Regelschleife mit dem Raum vorhat (nur bei „HeatPilot steuert“)
@@ -994,6 +1017,7 @@ function ctlInfo(r) {
   const devices = (r.devices || []).length > 1
     ? `<div class="ctl-info">Geräte: ${r.devices.map((d) => `${esc(shortName(d.name))} ${fmt(d.temp)}°${d.controller ? " (Raumregler)" : ""}`).join(" · ")}</div>` : "";
   if (!managing()) return devices;
+  if (r.ems) return devices;  // gesperrt – der Hinweis steht schon im Dialog
   if (!r.managed || !c || !c.phase) return devices + `<div class="ctl-info">Macht nicht mit – HeatPilot schreibt hier nichts (Einstellungen → Räume → „macht mit“).</div>`;
   let h = `<div class="ctl-info">HeatPilot: <b>${PHASE[c.phase] || c.phase}</b> → Soll <b>${fmt(c.desired)} °C</b>${c.reason ? ` · ${esc(c.reason)}` : ""}`;
   if (c.next_change) h += `<br>nächste Änderung ${clock(c.next_change)}${c.next_phase ? " " + (PHASE[c.next_phase] || c.next_phase) : ""}`;
@@ -1145,6 +1169,29 @@ function planOutdoor(plan) {
   return `<p class="muted" id="plan-tout">Gerechnet mit ${fmt(plan.t_out_used)} °C außen ` +
     (plan.t_out_source === "vorhersage" ? `(Vorhersage für ${clock(plan.t_out_at)})` : "(aktuelle Außentemperatur – keine Vorhersage für den Zeitpunkt)") + "</p>";
 }
+// Desinfektion (0.36.3): HeatPilot plant den Termin ein, löst ihn aber noch nicht aus (EMS-ESP nur lesen).
+// Rückfall für den Hinweis, falls eine Antwort ihn nicht mitbringt – gleich dhw_disinfect.NOT_YET
+const DIS_NOT_YET = "HeatPilot löst sie noch nicht aus – solange der Regler (z. B. ES73) sie macht, dessen Termin eintragen";
+// „So 17:30 (eingestellt)“ → ["So 17:30", "eingestellt"]: Zeit groß als Wert, die Herkunft vorn in der Notiz
+// (als Einheit daneben bricht sie in schmalen Kacheln in eine eigene Zeile)
+const splitWhen = (t) => { const m = /^(.*?)\s*(?:\(([^()]*)\))?$/.exec(String(t || "")); return [m[1], m[2] || ""]; };
+// Kachel in der Übersicht → Warmwasser (summary.dhw.disinfect_plan): mit Termin der nächste, sonst die zuletzt
+// erkannte Sonderladung des Reglers; ohne beides grau mit dem Weg zur Einstellung
+function disinfectTile(p) {
+  if (!p) return "";
+  const box = (label, value, note, off) => `<div class="tile${off ? " off" : ""}" id="tile-disinfect"><div class="label">${label}</div>` +
+    `<div class="value">${esc(value)}</div><div class="muted">${note.filter(Boolean).join(" · ")}</div></div>`;
+  const temp = p.temp === null || p.temp === undefined ? "" : `${fmt(p.temp, 0)} °C ${esc(p.temp_source || "")}`;
+  if (p.configured && p.next_text) {
+    const [v, how] = splitWhen(p.next_text), hint = String(p.hint || DIS_NOT_YET).split(" – ")[0];
+    return box("Nächste Desinfektion", v, [esc(how), temp, p.counts === false && p.counts_text ? esc(p.counts_text) : esc(hint)]);
+  }
+  if (p.last_special_text) {
+    const [v, how] = splitWhen(p.last_special_text);
+    return box("Letzte Sonderladung", v, [esc(how), "kein Desinfektionstermin eingestellt – Einstellungen → Warmwasser"]);
+  }
+  return box("Desinfektion", "kein Termin", ["keine Sonderladung erkannt – Termin unter Einstellungen → Warmwasser"], true);
+}
 const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–";
 
 async function load() {
@@ -1214,6 +1261,7 @@ async function load() {
     w.next_charge ? tile("Nächste Ladung", w.next_charge.now ? "jetzt" : w.next_charge.eta ? timeOf(w.next_charge.eta) : "> 2 Tage", "",
       prelim + `Kessel lädt ab ${fmt(w.next_charge.trigger, 0)} °C nach (Soll − Hysterese)` + (w.next_charge.hours ? ` · in ≈ ${fmt(w.next_charge.hours, 1)} h` : "") +
       (w.next_charge.by_schedule ? " · ausgelöst vom Soll-Zeitprogramm" : w.next_charge.trigger_at_eta != null && w.next_charge.trigger_at_eta !== w.next_charge.trigger ? ` · dann ab ${fmt(w.next_charge.trigger_at_eta, 0)} °C (Zeitprogramm)` : "")) : "",
+    disinfectTile(w.disinfect_plan),  // 0.36.3: eingestellter Termin bzw. letzte erkannte Sonderladung
     w.disinfect ? tile("Legionellenschaltung", esc(w.disinfect.day ?? (w.disinfect.hour !== null ? `${w.disinfect.hour}:00` : "–")), w.disinfect.day && w.disinfect.hour !== null ? `${w.disinfect.hour}:00` : "",
       `Wird nicht gelernt · bisher ${w.disinfect.special_charges} Sonderladungen ausgeklammert`) : "",
   ].join("");
@@ -1282,6 +1330,7 @@ async function load() {
 }
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, ROLES = [], DISC = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
+let DIS = null;  // Desinfektion (0.36.3): GET api/settings → disinfect
 function sunText(g, updates) {
   if (!g || updates < 96) return '<span class="muted">lernt noch</span>';
   const names = ["Ost", "Süd", "West"], best = g.indexOf(Math.max(...g));
@@ -1798,11 +1847,12 @@ function roomRows() {
     const where = [area ? `Bereich: ${esc(area)}` : "", device ? `Gerät: ${esc(device)}` : ""].filter(Boolean).join(" · ");
     const group = isSet ? (r.group || "") : (g.group || area);
     const wall = !!(g.controller || c.controller), controller = isSet ? !!r.controller : wall;
+    const lock = emsLock(c);  // Heizkreis von EMS-ESP (0.36.3): „macht mit“ gesperrt
     const wallHint = wall && !isSet ? "Vorschlag" : wall && !controller ? "Wandthermostat?" : "";
     return `<tr class="room" data-climate="${esc(c.id)}" data-area="${esc(area)}">
       <td><input type="checkbox" class="r-on" ${on ? "checked" : ""}></td>
-      <td><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}"><div class="hint">${esc(c.id)} · in HA: ${esc(c.name)}</div>${where ? `<div class="hint">${where}</div>` : ""}</td>
-      <td style="text-align:center"><input type="checkbox" class="r-managed" ${r.managed ? "checked" : ""} onchange="modeHint()"></td>
+      <td><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}"><div class="hint">${esc(c.id)} · in HA: ${esc(c.name)}</div>${where ? `<div class="hint">${where}</div>` : ""}${lock ? `<div class="hint ems-lock">„macht mit“ gesperrt: ${esc(lock)}</div>` : ""}</td>
+      <td style="text-align:center"><input type="checkbox" class="r-managed" ${r.managed && !lock ? "checked" : ""}${lock ? ` disabled title="${esc(lock)}"` : ""} onchange="modeHint()">${lock ? '<div class="hint ems-lock">gesperrt</div>' : ""}</td>
       <td><input type="number" class="r-comfort" step="0.5" min="${lim.temp_min}" max="${lim.temp_max}" value="${esc(comfort)}"></td>
       <td><input class="r-group" value="${esc(group)}" placeholder="${esc(area || "z. B. Wohnzimmer")}"></td>
       <td style="text-align:center"><input type="checkbox" class="r-controller" ${controller ? "checked" : ""}>${wallHint ? `<div class="hint">${wallHint}</div>` : ""}</td>
@@ -1814,6 +1864,23 @@ function roomRows() {
       <td><input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || sibling(c, "temperature"))}" placeholder="Temperatur (optional)"></td>
       <td><input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || sibling(c, "humidity"))}" placeholder="Feuchte (optional)"></td></tr>`;
   }).join("");
+}
+// „macht mit“ gesperrt (0.36.3): die Entität ist der Heizkreis von EMS-ESP (api/entities: ems), oder sie steht in
+// den gespeicherten Räumen mit gleichem „Raum“ wie einer – wie group_rooms im Backend nimmt das den ganzen Raum heraus
+function emsLock(c) {
+  if (c.ems) return EMS_LOCK;
+  const saved = SET.rooms || [], group = (saved.find((r) => r.climate === c.id) || {}).group;
+  const ems = new Set(ENT.filter((e) => e.ems).map((e) => e.id));
+  return group && saved.some((r) => r.group === group && ems.has(r.climate)) ? `gleicher Raum wie der ${EMS_LOCK}` : "";
+}
+// „macht mit“ beim Speichern (0.36.3): gesperrte Zeile – ein Gerät im selben Raum wie der Heizkreis von EMS-ESP
+// behält sein gespeichertes „macht mit“ (das Backend nimmt den Raum nur zur Laufzeit heraus; wird die Gruppe
+// aufgelöst, gilt es wieder), der Heizkreis selbst macht nie mit
+function managedOf(tr, c) {
+  const box = tr.querySelector(".r-managed");
+  if (!box.disabled) return box.checked;
+  const e = ENT.find((x) => x.id === c);
+  return !(e && e.ems) && !!((SET.rooms || []).find((r) => r.climate === c) || {}).managed;
 }
 // „Bereiche übernehmen“: der Bereich aus Home Assistant in alle leeren Raum-Felder – gefüllte bleiben
 function applyAreas() {
@@ -1971,7 +2038,9 @@ function boilerHtml(b, open) {
   const range = (x) => !has(x.min) && !has(x.max) ? "–" : `${val(x.min)} – ${val(x.max)}${unit(x, has(x.max) ? x.max : x.min)}`;
   const can = (x) => !x.found ? "–" : x.writeable === true ? '<span class="msg-ok">ja</span>'
     : x.writeable === false ? `<span class="${x.required ? "msg-err" : "muted"}">nein</span>` : '<span class="muted">unbekannt</span>';
-  const rows = (b.controls || []).map((x) => `<tr${x.found === false ? ' class="muted"' : ""}><td>${esc(x.name)}<div class="muted"><code>${esc(x.key)}</code></div></td>` +
+  // note (0.36.3): wofür eine Steuerung nötig ist, z. B. „Desinfektion braucht WWK Desinfizieren (schreibbar)“
+  const rows = (b.controls || []).map((x) => `<tr${x.found === false ? ' class="muted"' : ""}><td>${esc(x.name)}<div class="muted"><code>${esc(x.key)}</code></div>` +
+    `${x.note ? `<div class="muted ready-note">${esc(x.note)}</div>` : ""}</td>` +
     `<td>${x.found === false ? "nicht gefunden" : val(x.value) + unit(x, x.value)}${range(x) === "–" ? "" : `<div class="muted rt-narrow">${range(x)}</div>`}</td>` +
     `<td class="rt-wide">${range(x)}</td><td>${can(x)}</td><td>${x.required ? "nötig" : "Info"}</td></tr>`).join("");
   const need = (b.controls || []).filter((x) => x.required).length;
@@ -1980,6 +2049,67 @@ function boilerHtml(b, open) {
     `<details id="ready-boiler-details"${open ? " open" : ""} ontoggle="READY_SHOW.boiler = this.open"><summary>Steuerungen <span class="muted">(${need} nötig, ${(b.controls || []).length - need} zur Info)</span></summary>` +
     `<div class="scroll"><table class="ready-t"><tr><th>Steuerung</th><th>Wert</th><th class="rt-wide">Bereich</th><th>schreibbar</th><th></th></tr>${rows}</table></div></details>` +
     `<p class="muted" style="margin:6px 0 0">Nur Anzeige. Was HeatPilot damit täte, steht in der Planung (docs/planung-vorlauf-ems.md); geschrieben wird erst mit einem eigenen Schalter in einer späteren Version.</p></div>`;
+}
+
+// Desinfektion (0.36.3) in Einstellungen → Warmwasser (GET api/settings → disinfect): Tag („aus“ = kein Termin),
+// Uhrzeit, Temperatur laut Kessel (sonst die Einstellung), Zustand und Vorschlag mit Begründung. „Vorschlag
+// übernehmen“ trägt nur Tag und Uhrzeit ein – gespeichert wird mit „Speichern“. HeatPilot löst nichts aus.
+const DAY_NAMES = { Mo: "Montag", Di: "Dienstag", Mi: "Mittwoch", Do: "Donnerstag", Fr: "Freitag", Sa: "Samstag", So: "Sonntag" };
+const CHARGE_FROM = { gelernt: "gelernte Ladegeschwindigkeit", Leistung: "aus der Kesselleistung", "geschätzt": "geschätzt" };
+const DIS_BOILER = "laut Kessel";  // dhw_disinfect.SOURCE_BOILER
+function disinfectHtml(s, d) {
+  d = d || {};
+  const day = s.dhw_disinfect_day || "", [lo, hi] = d.temp_range || [60, 80];
+  const opts = (d.days || ["", ...WEEKDAYS]).map((k) =>
+    `<option value="${esc(k)}"${k === day ? " selected" : ""}>${k ? esc(DAY_NAMES[k] || k) : "aus"}</option>`).join("");
+  const read = d.temp === null || d.temp === undefined ? "–" : `<b>${fmt(d.temp, 1)} °C</b> ${esc(d.temp_source || "")}`;
+  return `<h3 style="font-size:13px;margin:14px 0 4px" id="dis-head">Desinfektion (Legionellen)</h3>` +
+    `<p class="muted" style="margin:0 0 6px">Einmal je Woche heizt der Kessel den Speicher auf die Desinfektionstemperatur. ` +
+    `HeatPilot plant den Termin ein, sobald der Regler zu dieser Zeit desinfiziert: Große Zapfungen nach der Ladung (z. B. die Wanne) ` +
+    `sind durch dessen Wärme gedeckt – dafür lädt die Strategie vorher nicht höher.</p><div class="form-grid">` +
+    field("Tag", `<select id="f-dhw_disinfect_day" class="sel" onchange="disinfectSync()">${opts}</select>`, "aus = kein Termin (Standard)") +
+    field("Uhrzeit (Beginn)", `<input id="f-dhw_disinfect_time" type="time" value="${esc(s.dhw_disinfect_time || "13:00")}" oninput="disinfectSync()">`,
+      "nur wirksam mit Tag") +
+    field("Temperatur", `<div class="dis-read" id="dis-temp">${read}</div>`, d.temp_source === DIS_BOILER
+      ? "gelesen vom Kessel (EMS-ESP wwdisinfectiontemp)"
+      : esc(d.temp_note || "EMS-ESP meldet keine Desinfektionstemperatur – es gilt der eingestellte Wert")) +
+    field("Temperatur ohne Kesselwert (°C)", `<input id="f-dhw_disinfect_temp" type="number" step="1" min="${lo}" max="${hi}" value="${esc(s.dhw_disinfect_temp)}">`,
+      `${lo}–${hi} °C; gilt nur, wenn EMS-ESP keine Desinfektionstemperatur meldet`) +
+    `</div>${disinfectState(d)}${disinfectSuggestHtml(d.suggestion)}<div class="warnbox" id="dis-hint">${esc(d.hint || DIS_NOT_YET)}</div>`;
+}
+// Zustand: nächster Termin bzw. kein Termin, letzte erkannte Sonderladung, Termin des Reglers; der Termin zählt nur,
+// wenn der Regler zu dieser Zeit desinfiziert (bestätigt) – sonst sagt counts_text warum nicht
+function disinfectState(d) {
+  const rg = d.regler || {}, hour = rg.hour === null || rg.hour === undefined ? "" : `${rg.hour}:00`;
+  const parts = [d.configured && d.next_text ? `Nächste Desinfektion <b>${esc(d.next_text)}</b>` : "Kein Termin eingestellt",
+    d.last_special_text ? `letzte Sonderladung ${esc(d.last_special_text)}` : "",
+    rg.day || hour ? `Regler meldet ${esc([rg.day, hour].filter(Boolean).join(" "))}` : ""].filter(Boolean);
+  return `<p class="dis-state" id="dis-state">${parts.join(" · ")}</p>` +
+    (d.configured && d.counts === false && d.counts_text ? `<p class="dis-state dis-counts" id="dis-counts">${esc(d.counts_text)}</p>` : "");
+}
+function disinfectSuggestHtml(sg) {
+  if (!sg) return "";
+  if (!sg.ok) return `<div class="dis-sug off" id="dis-sug"><b>Zeitvorschlag</b><span class="muted">${esc(sg.reason || "kein Vorschlag")}</span></div>`;
+  const how = `Ladedauer ≈ ${fmt(sg.charge_h * 60, 0)} min (${esc(CHARGE_FROM[sg.charge_from] || sg.charge_from || "")})`;
+  return `<div class="dis-sug" id="dis-sug"><div class="row"><b>Zeitvorschlag: ${esc(DAY_NAMES[sg.day] || sg.day)} ${esc(sg.time)}</b>` +
+    `<button class="btn small" id="dis-apply" onclick="applyDisinfect()">Vorschlag übernehmen</button></div>` +
+    `<div id="dis-sug-text">${esc(sg.text)}</div>${sg.saving_text ? `<span class="muted">${esc(sg.saving_text)}</span>` : ""}` +
+    `<span class="muted">${how}</span></div>`;
+}
+// Uhrzeit nur mit Tag bedienbar (bleibt gespeichert); Knopf zeigt, ob der Vorschlag schon eingetragen ist
+function disinfectSync() {
+  const day = $("f-dhw_disinfect_day"), at = $("f-dhw_disinfect_time"), btn = $("dis-apply"), sg = (DIS || {}).suggestion;
+  if (!day || !at) return;
+  at.disabled = !day.value;
+  if (!btn || !sg || !sg.ok) return;
+  const same = day.value === sg.day && at.value === sg.time;
+  btn.disabled = same; btn.textContent = same ? "Vorschlag eingetragen" : "Vorschlag übernehmen";
+}
+function applyDisinfect() {
+  const sg = (DIS || {}).suggestion; if (!sg || !sg.ok) return;
+  $("f-dhw_disinfect_day").value = sg.day; $("f-dhw_disinfect_time").value = sg.time;
+  disinfectSync();
+  $("save-msg").className = ""; $("save-msg").textContent = `Desinfektion ${sg.day} ${sg.time} eingetragen – prüfen und speichern.`;
 }
 
 function renderSettings() {
@@ -2027,7 +2157,7 @@ function renderSettings() {
       ${field("Minimum (°C)", num("f-dhw_min_temp", s.dhw_min_temp, "1"), "Darunter nie, z. B. wenn niemand zu Hause ist")}
       ${field("Komfort (°C)", num("f-dhw_comfort_temp", s.dhw_comfort_temp, "1"), "Mindestens zu Beginn einer Nutzung")}
       ${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}
-    </div>`) +
+    </div>${disinfectHtml(s, DIS)}`) +
     card("Urlaub", `<p>Im Urlaub lernt das Add-on keine Gewohnheiten. Ohne Uhrzeit beim Ende gilt die Standard-Rückkehrzeit. Kommt jemand per GPS sicher heim, zählt die GPS-Ankunft.</p>
       <div id="vac-list">${(s.vacations || []).map(vacRow).join("")}</div><button class="btn small" onclick="addVac()">+ Urlaub</button>
       <div class="form-grid" style="margin-top:10px">
@@ -2047,7 +2177,7 @@ function renderSettings() {
     `<div class="savebar"><button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="applySuggestions()">Vorschläge übernehmen</button><span id="save-msg"></span></div>`;
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
   $("f-gas_calorific_value").oninput = upd; $("f-gas_z_number").oninput = upd; upd();
-  modeHint();
+  modeHint(); disinfectSync();
   renderReadyBox(HEAT && HEAT.readiness); loadReadiness();  // Zustandsbox (0.36.1): sofort der letzte Stand, dann frisch
 }
 
@@ -2059,10 +2189,13 @@ function collect() {
   const v = (id) => $(id).value.trim();
   const out = { outdoor_sensors: [...document.querySelectorAll("#outdoor-list input")].map((i) => i.value.trim()).filter(Boolean) };
   for (const k of ["emsesp_host", "gas_sensor", "weather_entity", "demand_sensor", "vacation_entity",
-                   "night_start", "night_end", "vacation_arrival_time"]) out[k] = v("f-" + k);
+                   "night_start", "night_end", "vacation_arrival_time",
+                   "dhw_disinfect_day", "dhw_disinfect_time"]) out[k] = v("f-" + k);  // Desinfektion (0.36.3): "" = aus
+  // Tag „aus“ und Uhrzeit geleert (das Feld ist dann gesperrt): die gespeicherte Uhrzeit bleibt
+  if (!out.dhw_disinfect_day && !out.dhw_disinfect_time) delete out.dhw_disinfect_time;
   for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
                    "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp", "preheat_max_h",
-                   "dhw_comfort_temp", "dhw_max_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
+                   "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days"]) out[k] = v("f-" + k);
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
   // Steuerung: Schalter (ohne Auswahl bleibt es bei Beobachten) und Wochenplan Mo..So
@@ -2081,7 +2214,7 @@ function collect() {
     out.rooms.push({ climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
                      temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim(),
                      group: tr.querySelector(".r-group").value.trim(), controller: tr.querySelector(".r-controller").checked,
-                     managed: tr.querySelector(".r-managed").checked, comfort: tr.querySelector(".r-comfort").value.trim(),
+                     managed: managedOf(tr, c), comfort: tr.querySelector(".r-comfort").value.trim(),
                      // Hydraulik (0.35): leer = unbekannt (wird nicht gespeichert), Stufen 0 = kein Voreinstellventil
                      preset: tr.querySelector(".r-preset").value.trim(), preset_max: tr.querySelector(".r-preset-max").value.trim() });
     if (tr.querySelector(".r-floor").checked) out.floor_heating_rooms.push(c);
@@ -2173,6 +2306,7 @@ async function loadSettings() {
   SET = j.settings; SUG = j.suggested; ROLES = j.roles; DISC = j.discovered; SCHED = j.schedule;
   DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
   SLEEP = j.sleep || null;  // Nachtzeiten aus dem Stromverbrauch (0.36)
+  DIS = j.disinfect || null;  // Desinfektion (0.36.3): Termin, Temperatur, Vorschlag
   renderSettings();
 }
 
