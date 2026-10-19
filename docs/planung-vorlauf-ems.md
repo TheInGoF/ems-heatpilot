@@ -115,14 +115,15 @@ zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/a
 5-min-Haltezeit wie das Warmwasser, damit der Kessel nicht hin und her schaltet.
 
 **Auflösung fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll in
-**0,1 K** – die Ventile brauchen die volle Auflösung, siehe nächster Abschnitt.
+der **vollen Auflösung des Thermostats** – bei Tado 0,5 K, siehe nächster Abschnitt.
 
 ## Thermostate als Stellglied: Ventilverhalten lernen (0.39)
 
 Idee Ingo: HeatPilot „missbraucht“ den eingebauten PID-Regler der Thermostate. Tado lässt das Ventil nicht
 direkt stellen – aber über ein fein verschobenes Raum-Soll lässt sich die Ventilöffnung führen. Dafür
-braucht es die **volle Auflösung von 0,1 K**: Mit groben Schritten (0,5 oder 1 K) springt der Regler nur
-zwischen auf und zu, das Ventil kennt dann praktisch nur an und aus. Mit 0,1 K moduliert es.
+braucht es die **volle Auflösung des Thermostats** – Tado kann 0,5 K, feiner geht nicht. Mit groben
+Schritten (1 K und mehr) springt der Regler nur zwischen auf und zu, das Ventil kennt dann praktisch nur
+an und aus. Jeder 0,5-K-Schritt zählt, damit es so fein wie möglich moduliert.
 
 Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineering aus den eigenen Daten,
 `room_samples`: Raumtemperatur, Soll, Ventil in %):
@@ -130,11 +131,11 @@ Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineerin
   Nachstellzeit, Totzeit), Sättigung 0–100 %, Totband um das Soll.
 - Gelernt aus den vorhandenen Soll-Wechseln und dem normalen Verlauf, je Ventil, mit Vorhersagefehler;
   erst wenn die Vorhersage trägt, nutzt die Steuerung es.
-- Anzeige je Raum: „Ventil öffnet bei 0,3 K unter Soll auf ≈ 40 %, schließt ab ≈ 0,1 K darüber“.
-- Umgekehrt genutzt: Welches Soll (in 0,1 K) bringt die gewünschte Ventilstellung – z. B. das Ventil
+- Anzeige je Raum: „Ventil öffnet bei 0,5 K unter Soll auf ≈ 40 %, schließt ab Soll“.
+- Umgekehrt genutzt: Welches Soll (in 0,5-K-Schritten) bringt die gewünschte Ventilstellung – z. B. das Ventil
   früh drosseln, wenn ein Raum schnell heizt, oder mehrere Räume gleichzeitig öffnen (weniger Takten).
-- Schreibweg und Schrittweite je Thermostat aus HA prüfen (`target_temp_step`; Tado über HomeKit oder
-  Cloud) – kann ein Gerät nur gröber, nutzt HeatPilot dort dessen Schritt und sagt das in der Anzeige.
+- Schrittweite je Thermostat aus HA (`target_temp_step`, bei Tado 0,5 K); andere Geräte mit feinerem
+  Schritt nutzen ihren Schritt. Geschrieben wird immer auf den Schritt gerundet.
 - Nur bei Änderung schreiben, 5 min Haltezeit, Protokoll.
 
 ## Regeln für den Vorlauf (Ideen, Reihenfolge nach Nutzen)
