@@ -1,4 +1,10 @@
-"""Einstiegspunkt des Add-ons."""
+"""Einstiegspunkt des Add-ons.
+
+Seit 0.41 läuft im 30-s-Takt der Live-Werte auch Weg B (``boiler_step``: Kessel über HeatPilot rechnen, prüfen,
+schreiben), der Heartbeat ``sensor.heatpilot_heartbeat`` (jede Minute) und das Lesen der Wächter-Automationen
+(alle 10 min, nur lesen). Beim Zurückschalten von „heatpilot“ schreibt die alte Schreibstelle einmal den
+Rückfall-Vorlauf (``App._boiler_back``).
+"""
 
 from __future__ import annotations
 
@@ -10,7 +16,10 @@ from datetime import datetime, timedelta
 from aiohttp import web
 
 from . import __version__
+from . import boiler_status, floor_limit, watchdog
 from .backfill import run_backfill
+from .boiler_control import BoilerControl
+from .boiler_entity import flow_target, heat_target, regulator_block, same_entity
 from .control import Control
 from .controlloop import ControlLoop
 from .config import DATA_DIR, SETTINGS_NAME, Config, backup, restore_settings, save_settings, validate
@@ -135,7 +144,10 @@ class App:
                 eng.live = old.live
                 if old.cfg.emsesp_host == eng.cfg.emsesp_host:  # Kesselsteuerungen bis zur nächsten Abfrage
                     eng.ems_controls, eng.ems_controls_ts = old.ems_controls, old.ems_controls_ts
+                    eng.ems, eng.ems_ts = old.ems, old.ems_ts  # letzte Werte mit ihrer Zeit (Weg B: Regler am Bus)
+                    eng.regulator_watch = old.regulator_watch  # Regler zuletzt gesehen, Folge „kein Gerät“ (0.41)
                 await self._release_valves(old, found)
+                await self._boiler_back(old, eng)
             self.eng = eng
             self._build_control(eng, found, old)
             self._restart_emsesp()
@@ -156,6 +168,18 @@ class App:
         except Exception:  # noqa: BLE001
             log.exception("Ventile führen: Zurückschreiben vor dem Neuaufbau fehlgeschlagen")
 
+    async def _boiler_back(self, old: Engine, eng: Engine) -> None:
+        """Weg B (0.41): von „heatpilot“ auf aus/trocken umgestellt – einmal den Rückfall-Vorlauf und Heizbetrieb an
+        schreiben, noch über die alte Schreibstelle (``BoilerControl.fallback``), damit der Kessel nicht auf einem
+        Nacht-Wert stehen bleibt. Ein Fehler hält den Aufbau nicht auf."""
+        ctl = old.boiler_control
+        if ctl is None or old.cfg.boiler_control != "heatpilot" or self.cfg.boiler_control == "heatpilot":
+            return
+        try:
+            await ctl.fallback(boiler_status.fallback(eng))
+        except Exception:  # noqa: BLE001
+            log.exception("Kessel über HeatPilot: Rückfallwert beim Zurückschalten nicht geschrieben")
+
     def _build_control(self, eng: Engine, found, old: Engine | None) -> None:
         """Schreibstellen neu aufbauen: Control (Gruppen, HA-Zustände; seit 0.38 die eine Entität des
         Warmwasser-Solls – nur mit Schalter „heatpilot“ – und die Benachrichtigungsziele), Regelschleife, Weg W und
@@ -163,18 +187,28 @@ class App:
         mehr."""
         cfg = self.cfg
         entity = target_entity(cfg, found, eng.states)
+        boiler = {"flow": flow_target(cfg, found, eng.states), "heating": heat_target(cfg, found, eng.states)}
+        writes = {"flow": boiler["flow"][0], "heating": boiler["heating"][0], "max": cfg.max_flow_temp,
+                  "floors": floor_limit.floor_rooms(cfg, found.rooms)} if cfg.writes_boiler() else None
         self.control = Control(self.ha, self.store, found.rooms, states=eng.states,
                                dhw_entity=entity[0] if cfg.writes_dhw() else None,
-                               dhw_limits=(cfg.dhw_min_temp, cfg.dhw_max_temp), notify_targets=cfg.notify_targets)
+                               dhw_limits=(cfg.dhw_min_temp, cfg.dhw_max_temp), notify_targets=cfg.notify_targets,
+                               boiler=writes, boiler_lock=lambda: regulator_block(eng))
         eng.notifier = Notifier(self.store, self.control, cfg.notify_targets,
                                 carry=old.notifier if old is not None else None)
         eng.control_loop = ControlLoop(eng, self.control)
         eng.dhw_control = DhwControl(eng, self.control, eng.notifier, entity,
                                      carry=old.dhw_control if old is not None else None)
+        eng.boiler_control = BoilerControl(eng, self.control, eng.notifier, boiler,
+                                           carry=old.boiler_control if old is not None else None)
+        if old is not None:
+            eng.watchdog, eng.heartbeat_ts = old.watchdog, old.heartbeat_ts
         if old is not None and old.control_loop is not None:
             old.control_loop.stop()  # ein noch laufendes apply() der alten Schleife schreibt nichts mehr
         if old is not None and old.dhw_control is not None:
             old.dhw_control.stop()
+        if old is not None and old.boiler_control is not None:
+            old.boiler_control.stop()
 
     def _restart_emsesp(self) -> None:
         if self._ems_task:
@@ -185,6 +219,9 @@ class App:
 
     async def apply_settings(self, raw: dict) -> list[str]:
         clean, errors = validate(raw)
+        if not errors and self.eng is not None and {"flow_set_entity", "dhw_set_entity"} & set(clean):
+            cfg = Config.from_raw({**self.cfg.to_raw(), **clean})  # Weg B (0.41): auch gegen die erkannten Entitäten
+            errors = [p for p in (same_entity(cfg, self.eng.found, self.eng.states),) if p]
         if errors:
             return errors
         save_settings(clean)
@@ -267,18 +304,64 @@ async def main() -> None:
 
 
 async def live_loop(app: App) -> None:
-    """Alle 30 s die Live-Werte merken (Reiter „Live“) und eine fällige Prüfung des Warmwasser-Solls (0.38)."""
+    """Alle 30 s die Live-Werte merken (Reiter „Live“), eine fällige Prüfung des Warmwasser-Solls (0.38), Weg B,
+    Heartbeat und Wächter (0.41) – jedes für sich, ein Fehler hält die anderen nicht auf."""
     while True:
         try:
             if app.eng is not None:
                 app.eng.record_live()
         except Exception:  # noqa: BLE001
             log.exception("Live-Werte nicht erfasst")
-        try:
-            await check_dhw(app)
-        except Exception:  # noqa: BLE001
-            log.exception("Prüfung des Warmwasser-Solls fehlgeschlagen")
+        for name, step in (("Prüfung des Warmwasser-Solls", check_dhw), ("Kessel über HeatPilot", boiler_step),
+                           ("Heartbeat", heartbeat), ("Wächter lesen", scan_watchdog)):
+            try:
+                await step(app)
+            except Exception:  # noqa: BLE001
+                log.exception("%s fehlgeschlagen", name)
         await asyncio.sleep(LIVE_STEP_S)
+
+
+async def boiler_step(app: App, now: float | None = None) -> int:
+    """Weg B (0.41): Kessel über HeatPilot im 30-s-Takt – rechnen, prüfen, vormerken (``plan``), schreiben
+    (``apply``), danach Meldungen und Problem-Sensor. Gibt die Zahl der Schreibvorgänge zurück."""
+    eng = app.eng
+    ctl = getattr(eng, "boiler_control", None) if eng is not None else None
+    if ctl is None:
+        return 0
+    try:
+        ctl.plan(now)
+    except Exception:  # noqa: BLE001 – Lernen und Raumsteuerung laufen weiter, es wird nichts geschrieben
+        ctl.pending = []
+        log.exception("Kessel über HeatPilot: Schritt fehlgeschlagen – nichts geschrieben")
+    n = await ctl.apply(now)
+    await send_notes(app, eng)
+    return n
+
+
+async def heartbeat(app: App, now: float | None = None) -> bool:
+    """``sensor.heatpilot_heartbeat`` jede Minute setzen (0.41) – der Wächter in HA sieht daran, dass es läuft."""
+    eng, now = app.eng, time.time() if now is None else now
+    if eng is None or (eng.heartbeat_ts is not None and now - eng.heartbeat_ts < watchdog.EVERY_S - 1):
+        return False
+    await watchdog.publish(app.ha, now, eng.cfg.boiler_control, boiler_status.fallback(eng))
+    eng.heartbeat_ts = now
+    return True
+
+
+async def scan_watchdog(app: App, now: float | None = None) -> bool:
+    """Wächter-Automationen lesen (0.41, nur lesen) – alle 10 min, solange „Kessel über HeatPilot“ nicht aus ist."""
+    eng, now = app.eng, time.time() if now is None else now
+    if eng is None or eng.cfg.boiler_control == "aus":
+        return False
+    if eng.watchdog and now - eng.watchdog.get("ts", 0) < watchdog.SCAN_EVERY_S:
+        return False
+    flow = eng.boiler_control.entities["flow"] if eng.boiler_control is not None else None
+    try:  # viele Automationen bzw. HA langsam: höchstens eine Minute, der Live-Takt wartet sonst
+        eng.watchdog = await asyncio.wait_for(watchdog.scan(app.ha, eng.states, flow), timeout=watchdog.SCAN_MAX_S)
+    except asyncio.TimeoutError:
+        eng.watchdog = {"found": [], "error": "Automationen nicht lesbar (Zeitüberlauf)", "checked": 0}
+    eng.watchdog["ts"] = int(now)
+    return True
 
 
 async def check_dhw(app: App, now: float | None = None) -> bool:
@@ -342,7 +425,8 @@ async def poll_emsesp(ems: EmsEsp, app: App, interval_s: int = 30, controls_ever
 
     Seit 0.36.1 außerdem die Kesselsteuerungen (``EmsEsp.controls``, ebenfalls nur GET) für
     „Bereit für die Steuerung?“: sobald EMS-ESP antwortet, danach stündlich, in ``eng.ems_controls``.
-    Fehler dabei werden nur geloggt.
+    Fehler dabei werden nur geloggt. Seit 0.41 geht mit den Werten der Ausgang je Gerät mit (``EmsEsp.status``) –
+    eine gescheiterte Abfrage des Reglers ist „unbekannt“, nicht „kein Regler“ (``regulator``).
     """
     controls_at: float | None = None
     try:
@@ -350,7 +434,7 @@ async def poll_emsesp(ems: EmsEsp, app: App, interval_s: int = 30, controls_ever
             try:
                 values = await ems.read()
                 if values and app.eng is not None:
-                    app.eng.set_ems(values)
+                    app.eng.set_ems(values, getattr(ems, "status", None))  # je Gerät: Antwort, fehlt, Fehler
                     app.eng.store.commit()
             except asyncio.CancelledError:
                 raise

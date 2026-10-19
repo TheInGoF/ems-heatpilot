@@ -1,8 +1,10 @@
 # Planung: Vorlauftemperatur über EMS führen (Diskussionspapier)
 
-Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden). Gebaut ist bisher nur **Weg W** (Warmwasser-Soll über Home
-Assistant, 0.38, siehe unten); alles andere nicht – die Fußboden-Grenze je Raum (0.39.1) gilt bisher nur in Vorschau
-und Anzeige. EMS-ESP bleibt bis auf Weiteres **nur lesend**.
+Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden). Gebaut sind **Weg W** (Warmwasser-Soll über Home
+Assistant, 0.38, siehe unten) und seit 0.41 **Weg B** (Kessel über HeatPilot: Vorlauf-Soll live und Heizbetrieb über
+Home Assistant, eigener Schalter, siehe „Weg B – gebaut (0.41)“); die Fußboden-Grenze je Raum (0.39.1) gilt seit 0.41
+auch hart vor jedem Schreiben. Das Auslösen der Desinfektion folgt mit 0.42. EMS-ESP bleibt **nur lesend** – geschrieben
+wird über Home Assistant.
 Dieses Papier sammelt Wege, Risiken und offene Fragen, damit die Entscheidung nebenbei reifen kann.
 
 ## Ausgangslage
@@ -78,6 +80,51 @@ geht also nur ohne ES73. Ingo baut den ES73 ab, sobald HeatPilot den Kessel übe
    ES73 erst danach abbauen. Wächter in HA (HeatPilot-Sensor älter als 1 h → Kessel auf festen Vorlauf
    45 °C und Warmwasser 50 °C).
 
+## Weg B – gebaut (0.41)
+
+**Stand 0.41:** gebaut wie in „Takt der Heizung (Weg B)“ und „Regeln für den Vorlauf“ beschrieben – Schalter „Kessel
+über HeatPilot“ (`boiler_control`: aus, Trockenlauf, HeatPilot; Standard aus), getrennt von Raumsteuerung und
+Warmwasser. Geschrieben wird über Home Assistant, nie per REST an EMS-ESP:
+
+- `number.set_value` nur auf die eine Entität des Vorlauf-Solls (`selflowtemp`; Einstellung `flow_set_entity`, leer =
+  erkannt; strenge Prüfung: number mit °C, kein Heizkreis, keine andere Rolle, nie die Heiztemperatur), ganze Grad,
+  35 °C bis `max_flow_temp`, höchstens die Fußboden-Grenze mit den Messwerten von jetzt,
+- `switch.turn_on`/`turn_off` nur auf die eine Entität des Heizbetriebs (`heatingactivated`; `heating_switch_entity`;
+  nie „Heizen abschalten“ oder ein Warmwasser-Schalter).
+- **Solange ein Regler am Bus ist, wird nicht geschrieben** (EMS-ESP antwortet auf das Gerät `thermostat` oder es gibt
+  frische Regler-Werte in Home Assistant; ohne Antwort von EMS-ESP ist es unbekannt und ebenfalls gesperrt). Der
+  Trockenlauf geht immer. Ebenfalls gesperrt, solange „Heizen abschalten“ an ist (EMS-ESP hält die Heizung dann aus).
+- Live alle 30 s: Vorlauf-Soll aus der Vorschau-Rechnung (anspruchsvollster Raum, Vorheizen, Aufheizzuschlag), nur ab
+  1 K Änderung, höchstens ein Schreiben je 60 s; Heizbetrieb mit 5 min Haltezeit; Prüfung nach 60 s; 3 Fehlschläge in
+  Folge oder 2 fremde Änderungen in 1 h → Pause bis „wieder einschalten“; während einer Warmwasser-Ladung bleibt das
+  Vorlauf-Soll unberührt.
+- Mindest-Vorlauf aus der Abnahme (Näherung: Wärmebedarf des Hauses laut Hausmodell auf die Räume mit Raummodell
+  verteilt, je offenem Raum Heizwirkung × (Vorlauf − Raumtemperatur)); reicht auch der höchste Vorlauf nicht, gilt
+  nichts. Takt-Boost: +2 K je 10 min bis +10 K, zurück in 2-K-Schritten. Die Antipendelzeit bleibt unberührt.
+- Zurückschalten auf aus/Trockenlauf: einmal der Rückfall-Vorlauf (`boiler_fallback_flow`, Standard 45 °C, höchstens
+  die strengste Fußboden-Grenze) und Heizbetrieb an. Wächter in Home Assistant: `sensor.heatpilot_heartbeat` jede
+  Minute; die Automation legt der Nutzer in der Oberfläche von Home Assistant an (Anleitung in HeatPilot, kein YAML),
+  „Bereit für die Steuerung?“ erkennt sie an der Automationsliste (nur lesen).
+- Ablauf zum Regler-Abbau: 1. einige Tage Trockenlauf, Vergleich ansehen; 2. Wächter anlegen; 3. Schalter auf
+  HeatPilot – gesperrt, solange der Regler dran ist; 4. Regler abbauen (EMS-ESP danach neu starten, damit es den Regler
+  nicht mehr meldet); 5. HeatPilot schreibt.
+- Nach der Prüfung von 0.41 zusätzlich abgesichert (die Regeln oben bleiben): Eine gescheiterte Abfrage des Reglers
+  heißt „unbekannt“ (gesperrt), nicht „kein Regler“ – als abgebaut gilt er erst nach 3 ausdrücklichen „kein Gerät
+  thermostat“ in Folge über 5 min und 30 min nach dem letzten Sehen. Kein Pendeln: Vorlauf anheben sofort, senken erst
+  nach 10 min niedrigerem Ziel; Heizbetrieb aus erst nach 15 min ohne Bedarf; Boost zurück sofort nur, wenn der Raum
+  warm ist, sonst 10 min nach dem letzten Wunsch. Schutz: Steht das Vorlauf-Soll am Kessel über der Grenze (Fußboden,
+  höchster Vorlauf, Entität – auch bei unklarem Wert), sofort zurück auf die Grenze bzw. ohne Bedarf Heizbetrieb aus;
+  Heizbetrieb an nur mit bekanntem Vorlauf-Soll bis zur Grenze. Kein Ziel rechenbar (z. B. Außentemperatur fehlt): nach
+  15 min Rückfall-Vorlauf und Heizbetrieb an, mit Meldung. Ziel auf die Grenzen der Entität begrenzt, Abweisungen als
+  Hinweis und nach 15 min als Meldung. Vorlauf-Soll und Warmwasser-Soll nie dieselbe Entität. Eingriff des Wächters
+  wird erkannt (keine Pause), Änderungen eines Schritts zählen als ein Ereignis; die Anleitung nennt die Bedingung
+  „kessel ist heatpilot“ und schlägt ohne Rückfallwert (unter 35 °C) keinen Wächter vor.
+- Im ersten Betrieb ohne Regler zu beobachten: Bleibt das Vorlauf-Soll über Stunden stehen, oder erwartet der Kessel es
+  regelmäßig vom Regler? Wenn nicht stehen bleibt: Auffrischen ohne Änderung (z. B. alle 5–10 min) als eigene Regel
+  abstimmen – das widerspricht „nur bei Änderung“. Bis dahin die Heiztemperatur am Kessel höchstens auf die strengste
+  Fußboden-Grenze stellen.
+- Offen: Desinfektion auslösen (0.42, siehe unten); eigene Witterungsführung über die Vorschau hinaus.
+
 ## Warmwasser-Soll schon vor Weg B (Weg W) – gebaut (0.38)
 
 **Stand 0.38:** gebaut wie unten beschrieben – Schalter „Warmwasser-Soll“ (Aus, Trockenlauf, HeatPilot setzt;
@@ -119,7 +166,7 @@ Weg W als eigene Version.
 - Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
   `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an, siehe unten).
 
-## Desinfektion als Teil von Weg B
+## Desinfektion als Teil von Weg B (folgt 0.42)
 
 Stand 0.36.3 (gebaut, nur lesend): Termin in den Einstellungen (Tag, Uhrzeit; Standard aus), Temperatur
 vom Kessel (`wwdisinfectiontemp`, sonst Einstellung 60–80 °C), Vorschlag kurz vor der größten regelmäßigen
@@ -148,6 +195,11 @@ Der Vorlauf braucht mehr als das Warmwasser (Ingo): **live** – HeatPilot rechn
 Nachkommastellen nicht jedes Mal schreiben). Wie beim Warmwasser: nur bei Änderung, 60 s danach
 zurücklesen, Fehler über die Benachrichtigungsgeräte melden. Heizbetrieb an/aus bekommt dieselbe
 5-min-Haltezeit wie das Warmwasser, damit der Kessel nicht hin und her schaltet.
+
+**Gebaut (0.41):** genau so – live alle 30 s, ab 1 K, Prüfung nach 60 s, Heizbetrieb mit 5 min Haltezeit; dazu
+höchstens ein Vorlauf-Schreiben je 60 s (siehe „Weg B – gebaut (0.41)“). Gegen Pendeln an einer Schwelle (nach der
+Prüfung von 0.41): Vorlauf anheben sofort, senken erst nach 10 min niedrigerem Ziel; Heizbetrieb aus erst nach 15 min
+ohne Bedarf.
 
 **Auflösung fürs Schreiben (Ingo):** Warmwasser-Soll ab 1 K Änderung, Vorlauf-Soll ab 1 K, Raum-Soll in
 der **vollen Auflösung des Thermostats** – bei Tado 0,5 K, siehe nächster Abschnitt.
@@ -235,7 +287,7 @@ Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineerin
   unmittelbar vor dem Schreiben durch `floor_limit.flow_cap` (mit den Messwerten von jetzt) und wird abgewiesen bzw.
   auf die Grenze gesenkt, auch beim Takt-Boost und beim Vorheizen; ein Wert darüber wird nie geschrieben.
 
-1. **Takt-Boost** (Idee Ingo): Taktet der Kessel stark (z. B. mehr als 3 Starts je Stunde, Brennerläufe
+1. **Takt-Boost** (Idee Ingo, gebaut 0.41: ab 3 Starts je Stunde mit Läufen im Mittel unter 10 min): Taktet der Kessel stark (z. B. mehr als 3 Starts je Stunde, Brennerläufe
    unter 5 min) und wartet dabei ein Raum mit offenem Ventil unter Soll, den Vorlauf in 2-K-Schritten um
    bis zu +10 K anheben. Mehr Energie je Brennerlauf, längere Läufe, wartende Räume bekommen Leistung.
    Zurück, sobald der Raum warm ist oder das Takten aufhört. Preis: etwas weniger Brennwert, deshalb nur
@@ -261,7 +313,10 @@ fordern drei Räume zusammen an, läuft er durch.
 
 - Weiße Liste der erlaubten Befehle und Werte (wie heute bei Tado in `control.py`), Grenzen 35 °C bis
   `max_flow_temp` (Ingo: braucht kein Raum mindestens 35 °C, Heizbetrieb aus), Fußboden-Grenze je Raum als harte
-  Grenze vor jedem Schreiben (`floor_limit.flow_cap`, siehe „Regeln für den Vorlauf“), höchstens ein Schreibvorgang je 10 min je Wert, Kurvenparameter höchstens 3× am Tag.
+  Grenze vor jedem Schreiben (`floor_limit.flow_cap`, siehe „Regeln für den Vorlauf“), Kurvenparameter höchstens 3× am
+  Tag. Gebaut (0.41): Vorlauf-Soll höchstens einmal je 60 s (live, Ingo – statt der früheren Idee „einmal je 10 min“),
+  Heizbetrieb mit 5 min Haltezeit; über der Grenze sofort zurück (Schutz), Heizbetrieb an nur mit Vorlauf-Soll bis zur
+  Grenze, gesperrt, solange nicht sicher ist, dass kein Regler am Bus ist.
 - Trockenlauf-Modus: HeatPilot rechnet und protokolliert, was es schreiben würde, schreibt aber nicht.
 - Jeder Schreibvorgang im Protokoll (wie `control_log`), Anzeige im Heizen-Reiter.
 - Ausfall-Verhalten dokumentiert: Weg A → ES73 regelt weiter; Weg B → Kesselknopf bzw. HA-Wächter.

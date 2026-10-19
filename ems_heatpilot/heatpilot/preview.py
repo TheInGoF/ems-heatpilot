@@ -35,8 +35,10 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
 * **Schreibvorgänge, die es gäbe** (``count_writes``): nur bei Änderung ab 1 K bzw. an/aus, 5 min Haltezeit. Seit 0.38
   gilt beim Warmwasser dieselbe Regel wie in Weg W (die Schwelle auch für die ungerundete Empfehlung, ``dhw_exact``): Bei „Trockenlauf“ bzw. „HeatPilot setzt“ beginnt die Zählung beim
   Wert von Weg W (zuletzt „geschrieben“ bzw. Kessel-Soll) mit der laufenden Haltezeit; bei „HeatPilot setzt“ heißen
-  die Warmwasser-Schreibvorgänge „schreibt“ (``dhw_writes``), sonst „würde schreiben“. Vorlauf und Heizbetrieb
-  bleiben Trockenlauf.
+  die Warmwasser-Schreibvorgänge „schreibt“ (``dhw_writes``), sonst „würde schreiben“. Seit 0.41 (Weg B) ebenso
+  Vorlauf und Heizbetrieb (``flow_writes``): bei „Kessel über HeatPilot“ trocken bzw. heatpilot beginnt die Zählung
+  beim Wert des Schritts (zuletzt „geschrieben“ bzw. am Kessel), „schreibt“ nur bei heatpilot ohne Pause und Sperre.
+  Live rechnet ``boiler_flow`` dazu Abnahme-Untergrenze und Takt-Boost – die Vorschau zeigt den Plan aus dem Bedarf.
 
 Je volle Stunde gilt der Wert, der den größten Teil der Stunde gilt; ``steps`` enthält jede Änderung genau.
 Gerechnet wird bei Abruf (``cached``, höchstens alle 5 min) und stündlich fürs Protokoll (``preview_log``).
@@ -72,6 +74,8 @@ FORECAST_FADE_H = 6.0  # Versatz Außenfühler − Vorhersage (jetzt) klingt üb
 DAY_SP_H = 48          # Tages-Soll nicht gesteuerter Räume, nachts abgefragt: gemessen in so vielen Stunden
 CACHE_S = 300
 NOTE = "Trockenlauf – HeatPilot schreibt nichts an den Kessel"
+NOTE_BOILER = ("Kessel über HeatPilot schreibt Vorlauf und Heizbetrieb – die Vorschau zeigt den Plan aus dem Bedarf, "
+               "Abnahme-Untergrenze und Takt-Boost rechnet HeatPilot live dazu")
 NO_MODELS = "Noch kein Raummodell plausibel (ohne Fußbodenheizung) – ohne Raummodelle kein Vorlauf-Soll"
 NO_T_OUT = "Keine Außentemperatur – ohne sie kein Vorlauf-Soll"
 
@@ -503,6 +507,8 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
     run = _Run(eng, now_ts)
     rows = run.run()
     start = {**run.start_state(), **(written or {})}
+    boiler = _boiler_rule(eng)
+    start.update({k: v for k, v in (boiler["ref"] or {}).items() if v is not None})  # Weg B (0.41): wie im Schritt
     dhw = _dhw_rule(eng)
     if dhw["ref"] is not None:  # Weg W (0.38): Startwert und Haltezeit wie im Takt
         start["dhw"] = dhw["ref"][0]
@@ -519,7 +525,8 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
     dis = cfg.disinfections(local(run.h0), local(run.end_ts - 1))
     dis_info = {"temp": eng.disinfect_temp()[0], "counts": dhw_disinfect.plan_counts(eng.dhw, cfg, run.now)}
     return {
-        "now": run.now.isoformat(), "step_min": STEP_MIN, "dry_run": True, "note": NOTE,
+        "now": run.now.isoformat(), "step_min": STEP_MIN, "dry_run": not boiler["writes"],
+        "note": NOTE_BOILER if boiler["writes"] else NOTE,
         "control_mode": cfg.control_mode,
         "hours": [_hour(h, rows, writes, dis, dis_info) for h in range(run.h0, run.end_ts, 3600)],
         "steps": _steps(rows),
@@ -538,7 +545,22 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
         "forecast_fade_h": FORECAST_FADE_H,
         # Weg W (0.38): Schalter des Warmwasser-Solls und wie seine Schreibvorgänge heißen
         "dhw_mode": dhw["mode"], "dhw_writes": dhw["label"], "dhw_paused": dhw["paused"],
+        # Weg B (0.41): Schalter „Kessel über HeatPilot“ und wie Vorlauf- und Heizbetrieb-Schreibvorgänge heißen
+        "boiler_mode": boiler["mode"], "flow_writes": boiler["label"], "boiler_blocked": boiler["blocked"],
+        "boiler_paused": boiler["paused"],
     }
+
+
+def _boiler_rule(eng) -> dict:
+    """Weg B (0.41) für die Vorschau: Schalter, Startwerte wie im Schritt (``BoilerControl.reference``) und die
+    Bezeichnung „schreibt“ (heatpilot, nicht pausiert, nicht gesperrt) bzw. „würde schreiben“."""
+    ctl = getattr(eng, "boiler_control", None)
+    mode = getattr(eng.cfg, "boiler_control", "aus")
+    blocked = ctl.blocker() if ctl is not None and mode == "heatpilot" else None
+    paused = bool(ctl is not None and mode == "heatpilot" and ctl.paused())
+    writes = mode == "heatpilot" and ctl is not None and not paused and not blocked
+    return {"mode": mode, "ref": ctl.reference() if ctl is not None else None, "writes": writes, "paused": paused,
+            "blocked": blocked, "label": "schreibt" if writes else "würde schreiben"}
 
 
 def _dhw_rule(eng) -> dict:

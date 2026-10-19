@@ -1,5 +1,6 @@
 """Schreibzugriffe über Home Assistant: Thermostate (Bedienung im Reiter „Heizen“, Regelschleife, seit 0.34),
-das Warmwasser-Soll (Weg W, seit 0.38) und Benachrichtigungen (seit 0.38). Die einzige Stelle, die Dienste aufruft.
+das Warmwasser-Soll (Weg W, seit 0.38), Vorlauf-Soll und Heizbetrieb (Weg B, seit 0.41) und Benachrichtigungen
+(seit 0.38). Die einzige Stelle, die Dienste aufruft.
 
 Erlaubt sind ausschließlich diese Aufrufe auf die ``climate.*``-Entitäten der gewählten Räume:
 
@@ -13,7 +14,18 @@ Warmwasser-Solls (``dhw_entity``, nur mit Schalter „heatpilot“ gesetzt), gan
 Maximum aus den Einstellungen (``set_dhw``; die Regel dazu steht in ``dhw_control``) – und nur, wenn die Entität
 taugt (``dhw_entity.entity_problem``: verfügbar, Einheit °C, kein Heizkreis, kein anderer Kesselwert wie das
 Vorlauf-Soll). Und Meldungen nur an die eingestellten Ziele (``notify``): notify-Entitäten über
-``notify.send_message``, ältere Dienste als ``notify.<dienst>``.
+``notify.send_message``, ältere Dienste als ``notify.<dienst>``; scheitert eine Entität (nicht am Titel, kein
+Zeitüberlauf, keine getrennte Verbindung – die Meldung könnte schon angekommen sein) und gibt es den Dienst
+``notify.mobile_app_<name>``, einmal über ihn (seit 0.41) – nicht, wenn der Dienst selbst als Ziel gewählt ist.
+
+Seit 0.41 (Weg B, nur mit Schalter „Kessel über HeatPilot: heatpilot“ gesetzt) genau zwei weitere Schreibwege zum
+Kessel: ``number.set_value`` auf die eine Entität des Vorlauf-Solls (``set_flow``: ganzzahlig, 35 °C bis
+``max_flow_temp`` und höchstens die Fußboden-Grenze mit den Messwerten von jetzt, ``floor_limit.flow_cap``; innerhalb
+der Grenzen der Entität) und ``switch.turn_on``/``turn_off`` auf die eine Entität des Heizbetriebs (``set_heating``) –
+nur, wenn die Entität taugt (``boiler_entity``) und kein Regler am Bus ist (``boiler_lock``); eingeschaltet wird nur,
+wenn das Vorlauf-Soll am Kessel laut Home Assistant höchstens bei der Grenze liegt oder HeatPilot gerade einen Wert
+darunter geschrieben hat (``_flow_safe``). Sind Vorlauf-Soll und Warmwasser-Soll dieselbe Entität, sind beide
+Schreibwege gesperrt (``conflict``). Die Antipendelzeit und alle anderen Kesselwerte bleiben unberührt.
 
 Alles andere – andere Dienste, andere ``number``-Entitäten, Werte außerhalb der Grenzen, Entitäten außerhalb der
 gewählten Räume – wird hart abgewiesen (``PermissionError``).
@@ -34,19 +46,26 @@ Aufbau verworfen und steht als Hinweis im Reiter „Heizen“ (``notes``), bis d
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import math
 import time
 
+from . import boiler_entity, floor_limit
+from .boiler_rule import CHECK_MAX_S, CHECK_TOL_K, FLOW_MIN
 from .config import NOTIFY_TARGET
 from .dhw_entity import entity_problem
 from .discovery import Room
 from .ems_lock import LOCK_TEXT
+from .ha_client import HAConnectionLost
 
 log = logging.getLogger(__name__)
 
-# ("number", "set_value") nur für das eingestellte Warmwasser-Soll (``dhw_entity``, Weg W seit 0.38)
+# ("number", "set_value") nur für das Warmwasser-Soll (Weg W, 0.38) und das Vorlauf-Soll (Weg B, 0.41),
+# ("switch", "turn_on"/"turn_off") nur für den Heizbetrieb (Weg B, 0.41)
 ALLOWED = {("tado", "set_climate_timer"), ("climate", "set_temperature"), ("climate", "set_hvac_mode"),
-           ("number", "set_value")}
+           ("number", "set_value"), ("switch", "turn_on"), ("switch", "turn_off")}
+SERVICES_S = 600                         # Dienste von HA (Rückfall auf notify.mobile_app_…) so lange merken
 NOTIFY_ENTITY_SERVICE = "send_message"   # Aktion für notify-Entitäten (HA ab 2024.6)
 NOTIFY_MAX = 1000                        # Meldungen kürzen
 MODES = ("auto", "off", "heat")
@@ -75,17 +94,33 @@ def _num(value) -> float | None:
 
 class Control:
     def __init__(self, ha, store, rooms: list, states: dict | None = None, dhw_entity: str | None = None,
-                 dhw_limits: tuple[float, float] | None = None, notify_targets=()) -> None:
+                 dhw_limits: tuple[float, float] | None = None, notify_targets=(), boiler: dict | None = None,
+                 boiler_lock=None) -> None:
         """``rooms``: ``discovery.Room`` (Gruppen) oder nur climate-IDs (jede ihr eigener Raum).
         ``states``: HA-Zustände (``engine.states``), um Betriebsart und Soll vor dem Schreiben zu kennen.
         ``dhw_entity``/``dhw_limits`` (0.38): die eine ``number``-Entität des Warmwasser-Solls und (Minimum, Maximum)
         – nur mit Schalter „heatpilot“ gesetzt, sonst None (dann ist ``set_dhw`` gesperrt).
-        ``notify_targets`` (0.38): die eingestellten Benachrichtigungsziele (``notify.*``)."""
+        ``notify_targets`` (0.38): die eingestellten Benachrichtigungsziele (``notify.*``).
+        ``boiler`` (0.41, Weg B): {"flow": number-Entität, "heating": switch-Entität, "max": max_flow_temp,
+        "floors": Fußboden-Räume (``floor_limit.floor_rooms``)} – nur mit Schalter „heatpilot“ gesetzt, sonst None
+        (dann sind ``set_flow``/``set_heating`` gesperrt); ``boiler_lock``: Aufruf, der den Grund liefert, solange
+        nicht geschrieben werden darf (Regler am Bus)."""
         self.ha = ha
         self.store = store
         self.dhw_entity = dhw_entity if dhw_entity and dhw_entity.startswith("number.") else None
         self.dhw_limits = dhw_limits
         self.notify_targets: set[str] = {t for t in notify_targets or () if NOTIFY_TARGET.match(str(t))}
+        b = boiler or {}
+        self.flow_entity = b.get("flow") if str(b.get("flow") or "").startswith("number.") else None
+        self.heat_entity = b.get("heating") if str(b.get("heating") or "").startswith("switch.") else None
+        self.flow_max, self.floors, self.boiler_lock = b.get("max"), list(b.get("floors") or ()), boiler_lock
+        # dieselbe Entität für Vorlauf- und Warmwasser-Soll: beide Schreibwege gesperrt (Weg B, 0.41)
+        self.conflict = (f"Vorlauf-Soll und Warmwasser-Soll sind dieselbe Entität ({self.flow_entity}) – beide "
+                         "Schreibwege gesperrt" if self.flow_entity and self.flow_entity == self.dhw_entity else None)
+        if self.conflict:
+            log.error(self.conflict)
+        self._flow_sent: tuple[int, float] | None = None  # zuletzt geschriebenes Vorlauf-Soll (Wert, Zeit)
+        self._services: tuple[float, dict] | None = None
         self.groups: dict[str, Room] = {}
         for r in rooms:
             room = r if isinstance(r, Room) else Room(name=r, climate=r)
@@ -184,21 +219,32 @@ class Control:
         return self.platform(entity_id) == TADO_PLATFORM
 
     # ------------------------------------------------------------------ Schreiben
-    async def _call(self, domain: str, service: str, entity_id: str, data: dict, reason: str = "Knopfdruck") -> None:
+    async def _call(self, domain: str, service: str, entity_id: str, data: dict, reason: str = "Knopfdruck",
+                    action: str | None = None) -> None:
         if entity_id in self.ems:  # EMS-ESP nur lesen – auch als Raum gewählt (0.36.3)
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt: {LOCK_TEXT}")
         if (domain, service) not in ALLOWED:
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt")
-        if domain == "number":
+        if domain == "number" and self.conflict and entity_id == self.flow_entity:
+            raise PermissionError(self.conflict)
+        if domain == "number" and self.flow_entity and entity_id == self.flow_entity:
+            self._check_flow(entity_id, data)  # nur das Vorlauf-Soll, nur in den Grenzen (Weg B, 0.41)
+        elif domain == "number":
             self._check_dhw(entity_id, data)  # nur das eingestellte Warmwasser-Soll, nur in den Grenzen (0.38)
+        elif domain == "switch":
+            self._check_heating(entity_id, data, service == "turn_on")  # nur der Heizbetrieb (Weg B, 0.41)
         elif entity_id not in self.rooms:
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt")
         await self.ha.call({"type": "call_service", "domain": domain, "service": service,
                             "service_data": data, "target": {"entity_id": entity_id}}, timeout=30)
         if service == "set_hvac_mode":
             reason = f"{reason} ({data.get('hvac_mode')})"
-        self.store.add_control_log(int(time.time()), entity_id, service, data.get("temperature", data.get("value")),
-                                   reason)
+        value = data.get("temperature", data.get("value"))
+        if domain == "switch":
+            value = int(service == "turn_on")
+        if domain == "number" and entity_id == self.flow_entity:
+            self._flow_sent = (int(value), time.time())
+        self.store.add_control_log(int(time.time()), entity_id, action or service, value, reason)
 
     def _check_dhw(self, entity_id: str, data: dict) -> None:
         """Warmwasser-Soll (Weg W): nur die eine eingestellte ``number``-Entität, nur ``value``, ganzzahlig,
@@ -222,9 +268,91 @@ class Control:
                                   f"({e_lo:g}…{e_hi:g} °C)" if e_lo is not None and e_hi is not None
                                   else f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id}")
 
+    def _boiler_guard(self, entity_id: str, what: str) -> None:
+        """Weg B: gesperrt ohne Schalter „heatpilot“, für eine andere Entität und solange ein Regler am Bus ist."""
+        if self.boiler_lock is not None and (why := self.boiler_lock()):
+            raise PermissionError(f"{what} auf {entity_id} gesperrt: {why}")
+
+    def _flow_hi(self) -> tuple[int, str | None]:
+        """Höchstes Vorlauf-Soll jetzt: ``max_flow_temp`` und die Fußboden-Grenze mit den Messwerten von jetzt
+        (``floor_limit.flow_cap``) – mit dem Grund, wenn die Fußboden-Grenze tiefer liegt."""
+        hi = int(self.flow_max)
+        cap, why = floor_limit.flow_cap(self.floors, floor_limit.read(self.floors, self.states))
+        if cap is not None and math.floor(cap + 1e-9) < hi:
+            return math.floor(cap + 1e-9), why
+        return hi, None
+
+    def _check_flow(self, entity_id: str, data: dict) -> None:
+        """Vorlauf-Soll (Weg B): nur die eine Entität, nur ``value``, ganzzahlig, 35 °C ≤ Wert ≤ ``max_flow_temp`` und
+        ≤ Fußboden-Grenze jetzt (``floor_limit.flow_cap`` mit den Messwerten), innerhalb der Grenzen der Entität; die
+        Entität muss taugen (``boiler_entity.flow_problem``). Alles andere hart abgewiesen."""
+        if not self.flow_entity or entity_id != self.flow_entity or self.flow_max is None:
+            raise PermissionError(f"number.set_value auf {entity_id} ist gesperrt – nur das Vorlauf-Soll bei „Kessel "
+                                  "über HeatPilot“")
+        value, (hi, why) = data.get("value"), self._flow_hi()
+        whole = isinstance(value, int) and not isinstance(value, bool)
+        if set(data) != {"value"} or not whole or not FLOW_MIN <= value <= hi:
+            limit = f" ({why})" if why else ""
+            raise PermissionError(f"Vorlauf-Soll {value!r} gesperrt – nur ganze Grad von {FLOW_MIN} bis {hi} °C{limit}")
+        problem = boiler_entity.flow_problem(entity_id, self._state(entity_id))
+        if problem:
+            raise PermissionError(f"{problem} – gesperrt")
+        attrs = self._state(entity_id).get("attributes") or {}
+        e_lo, e_hi = _num(attrs.get("min")), _num(attrs.get("max"))
+        if (e_lo is not None and value < e_lo) or (e_hi is not None and value > e_hi):
+            raise PermissionError(f"Vorlauf-Soll {value} °C außerhalb der Grenzen von {entity_id}")
+        self._boiler_guard(entity_id, "Vorlauf-Soll")
+
+    def _check_heating(self, entity_id: str, data: dict, on: bool = False) -> None:
+        """Heizbetrieb (Weg B): nur die eine ``switch``-Entität, ohne Daten; sie muss taugen (``heat_problem``).
+        Einschalten nur, wenn das Vorlauf-Soll am Kessel nicht über der Grenze liegt (``_flow_safe``)."""
+        if not self.heat_entity or entity_id != self.heat_entity or data:
+            raise PermissionError(f"switch auf {entity_id} ist gesperrt – nur der Heizbetrieb bei „Kessel über "
+                                  "HeatPilot“")
+        problem = boiler_entity.heat_problem(entity_id, self._state(entity_id))
+        if problem:
+            raise PermissionError(f"{problem} – gesperrt")
+        if on and (why := self._flow_safe()):
+            raise PermissionError(f"Heizbetrieb an gesperrt: {why}")
+        self._boiler_guard(entity_id, "Heizbetrieb")
+
+    def _flow_safe(self) -> str | None:
+        """Darf der Heizbetrieb an? None = ja: Das Vorlauf-Soll laut Home Assistant liegt höchstens bei der Grenze
+        jetzt, oder HeatPilot hat in den letzten 5 min einen Wert bis zur Grenze geschrieben (Home Assistant zeigt ihn
+        oft erst Sekunden später). Sonst der Grund – über der Grenze bzw. unbekannt heizt der Kessel womöglich zu heiß
+        in einen Fußboden."""
+        if not self.flow_entity or self.flow_max is None:
+            return "kein Vorlauf-Soll zum Prüfen"
+        hi, why = self._flow_hi()
+        sent = self._flow_sent
+        if sent is not None and time.time() - sent[1] <= CHECK_MAX_S and sent[0] <= hi:
+            return None
+        shown = _num(self._state(self.flow_entity).get("state"))
+        if shown is None:
+            return "Vorlauf-Soll am Kessel unbekannt"
+        if shown > hi + CHECK_TOL_K:
+            return f"Vorlauf-Soll am Kessel {shown:g} °C liegt über {hi} °C{f' ({why})' if why else ''}"
+        return None
+
+    async def set_flow(self, value: int, reason: str) -> None:
+        """Vorlauf-Soll schreiben (Weg B, seit 0.41): ``number.set_value`` – Prüfung in ``_check_flow``."""
+        if not self.flow_entity:
+            raise PermissionError("Vorlauf-Soll: Schreiben gesperrt (Schalter nicht „heatpilot“ oder keine Entität)")
+        await self._call("number", "set_value", self.flow_entity, {"value": value}, reason, action="flow_set")
+
+    async def set_heating(self, on: bool, reason: str) -> None:
+        """Heizbetrieb schalten (Weg B, seit 0.41): ``switch.turn_on``/``turn_off`` – Prüfung in ``_check_heating``."""
+        if not self.heat_entity or not isinstance(on, bool):
+            raise PermissionError("Heizbetrieb: Schalten gesperrt (Schalter nicht „heatpilot“ oder keine Entität)")
+        await self._call("switch", "turn_on" if on else "turn_off", self.heat_entity, {}, reason,
+                         action="heating_on" if on else "heating_off")
+
     async def set_dhw(self, value: int, reason: str) -> None:
         """Warmwasser-Soll schreiben (Weg W, seit 0.38): ``number.set_value`` auf ``dhw_entity`` – die Prüfung
-        macht ``_call``/``_check_dhw``; ohne eingestellte Entität (Schalter nicht „heatpilot“) gesperrt."""
+        macht ``_call``/``_check_dhw``; ohne eingestellte Entität (Schalter nicht „heatpilot“) gesperrt, ebenso, wenn
+        sie auch das Vorlauf-Soll ist (``conflict``)."""
+        if self.conflict:
+            raise PermissionError(self.conflict)
         if not self.dhw_entity:
             raise PermissionError("Warmwasser-Soll: Schreiben gesperrt (Schalter nicht „HeatPilot setzt“ oder keine "
                                   "Entität)")
@@ -243,13 +371,46 @@ class Control:
             try:
                 await self.ha.call(payload, timeout=30)
             except Exception as err:  # noqa: BLE001 – HA 2024.6/2024.7 kennen „title“ bei send_message nicht
-                if "title" not in str(err) and "extra keys" not in str(err):
-                    raise  # anderer Fehler (Zeitüberlauf, Verbindung): nicht doppelt schicken
-                log.debug("notify.send_message mit Titel abgelehnt (%s) – ohne Titel", err)
-                await self.ha.call({**payload, "service_data": {"message": f"{title}: {message}"}}, timeout=30)
+                if "title" in str(err) or "extra keys" in str(err):
+                    log.debug("notify.send_message mit Titel abgelehnt (%s) – ohne Titel", err)
+                    await self.ha.call({**payload, "service_data": {"message": f"{title}: {message}"}}, timeout=30)
+                    return
+                if self._maybe_sent(err):
+                    raise  # Zeitüberlauf, Verbindung getrennt: vielleicht doch angekommen – nicht doppelt schicken
+                service = await self._mobile_service(target)
+                if service is None or f"notify.{service}" in self.notify_targets:
+                    raise  # kein Dienst – oder er ist selbst gewählt und bekommt die Meldung ohnehin
+                log.info("notify.send_message auf %s gescheitert (%s) – einmal über notify.%s", target, err, service)
+                await self.ha.call({"type": "call_service", "domain": "notify", "service": service,
+                                    "service_data": {"message": message, "title": title}}, timeout=30)
             return
         await self.ha.call({"type": "call_service", "domain": "notify", "service": target.split(".", 1)[1],
                             "service_data": {"message": message, "title": title}}, timeout=30)
+
+    def _maybe_sent(self, err: Exception) -> bool:
+        """Kann die Meldung trotz Fehler angekommen sein? Zeitüberlauf, getrennte Verbindung (auch wenn Home
+        Assistant gerade nicht verbunden ist) – dann kein Rückfall, sonst käme sie doppelt."""
+        if isinstance(err, (asyncio.TimeoutError, TimeoutError, ConnectionError, HAConnectionLost)):
+            return True
+        connected = getattr(self.ha, "connected", None)
+        return "Verbindung getrennt" in str(err) or (connected is not None and not connected.is_set())
+
+    async def _mobile_service(self, target: str) -> str | None:
+        """Dienst ``notify.mobile_app_<name>`` zur Entität ``target`` (Name = Entität bzw. Anzeigename), wenn es ihn
+        laut ``get_services`` gibt – None sonst oder wenn die Dienste nicht lesbar sind."""
+        if self._services is None or time.time() - self._services[0] > SERVICES_S:
+            try:
+                self._services = (time.time(), await self.ha.get_services() or {})
+            except Exception as err:  # noqa: BLE001 – ohne Dienste kein Rückfall
+                log.debug("Dienste nicht lesbar (%s) – kein Rückfall auf notify.mobile_app_…", err)
+                return None
+        have = set((self._services[1] or {}).get("notify") or {})
+        obj = target.split(".", 1)[1]
+        name = str((self._state(target).get("attributes") or {}).get("friendly_name") or "")
+        slug = "_".join("".join(c if c.isalnum() else " " for c in name.lower()).split())
+        cands = [obj if obj.startswith("mobile_app_") else f"mobile_app_{obj}"]
+        cands += [f"mobile_app_{slug}"] if slug else []
+        return next((c for c in cands if c in have), None)
 
     async def _ensure_heat(self, entity_id: str, reason: str) -> None:
         """Vor einem Soll: Betriebsart ``heat`` sicherstellen (HomeKit-Räume stehen sonst evtl. auf ``off``,

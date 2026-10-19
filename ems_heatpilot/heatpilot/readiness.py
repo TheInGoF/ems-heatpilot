@@ -33,13 +33,19 @@ Fußbodenheizung ohne Anschluss (Einstellungen vor 0.39.1, gelten wie direkt am 
 Seit 0.40 sagt der Abschnitt ``valves`` („Ventile führen“, ``valve_control.readiness``), welche Räume mit „macht mit“
 HeatPilot führen kann (Raum- und Ventilmodell belastbar, Schritt bis 0,5 K) und welche noch lernen – mit Grund,
 Schalterstand und laufenden Eingriffen. Ändert die Stufe der Raumsteuerung nicht.
+
+Seit 0.41 sagt der Abschnitt ``boiler_control`` („Kessel über HeatPilot“, Weg B, ``boiler_status.ready``), ob
+HeatPilot Vorlauf-Soll und Heizbetrieb schreiben kann: beide Entitäten gefunden und tauglich, schreibbar laut EMS-ESP,
+**Regler am Bus** (sperrt, solange er dran ist), „Heizen abschalten“, Wächter in Home Assistant (nicht erkannt ist eine
+Einschränkung), letzte Prüfung, Pause, fremder Schreiber, Mindestleistung für die Abnahme. Ändert die Stufe der
+Raumsteuerung nicht.
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 
-from . import dhw_control, dhw_entity, floor_limit, guards, valve_control
+from . import boiler_status, dhw_control, dhw_entity, floor_limit, guards, valve_control
 from .controlloop import MAX_FAILS, preheat_hours, reach_c
 from .emsesp import BOILER_CONTROLS
 from .ems_lock import LOCK_TEXT
@@ -164,8 +170,8 @@ def boiler(eng) -> dict:
     elif not polled:
         text = "noch nicht abgefragt" + ("" if eng.ems else " – EMS-ESP antwortet bisher nicht")
     elif not missing:
-        text = (f"Alle {n_required} nötigen Steuerungen vorhanden und schreibbar – eine Kesselsteuerung wäre "
-                "möglich (nicht gebaut; am Kessel schreibt HeatPilot nur das Warmwasser-Soll, mit „HeatPilot setzt“)")
+        text = (f"Alle {n_required} nötigen Steuerungen vorhanden und schreibbar – HeatPilot kann den Kessel "
+                "übernehmen (Schalter „Kessel über HeatPilot“, Block unten)")
     else:
         text = "Es fehlen: " + ", ".join(missing)
     return {
@@ -344,6 +350,7 @@ def assess(eng, now_ts: int) -> dict:
         "dhw": dhw(eng, now_ts),
         "floor": floor,
         "valves": valve_control.readiness(eng, now_ts),  # 0.40: Ventile führen – nur Anzeige
+        "boiler_control": boiler_status.ready(eng, now_ts),  # 0.41: Kessel über HeatPilot (Weg B) – nur Anzeige
     }
 
 

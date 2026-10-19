@@ -33,6 +33,8 @@ BOILER_ROLES: dict[str, tuple[str, ...]] = {
     "max_power": ("burnmaxpower", "burner_max_power"),
     "nom_power": ("nompower", "nominal_power", "nominal_Power"),
     "heating_off": ("heatingoff", "forceheatingoff", "force_heating_off"),
+    # Heizbetrieb an/aus (0.41, Weg B): darauf schaltet HeatPilot mit „Kessel über HeatPilot“
+    "heating_activated": ("heatingactivated", "heating_activated"),
     "boiler_temp": ("boiltemp", "actual_boiler_temperature"),
     "pump_mod": ("heatingpumpmod", "heating_pump_modulation"),
     "flame_current": ("flamecurr", "flame_current"),
@@ -93,6 +95,7 @@ ROLE_LABELS: dict[str, str] = {
     "max_power": "Maximale Brennerleistung",
     "nom_power": "Nennleistung (kW)",
     "heating_off": "Heizen abschalten",
+    "heating_activated": "Heizbetrieb aktiviert",
     "boiler_temp": "Kesseltemperatur",
     "pump_mod": "Pumpenmodulation",
     "flame_current": "Flammenstrom",

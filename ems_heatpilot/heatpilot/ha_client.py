@@ -31,6 +31,10 @@ class AuthError(HAError):
     pass
 
 
+class HAConnectionLost(HAError):
+    """Die Verbindung brach während eines Aufrufs ab – er kann trotzdem ausgeführt worden sein (seit 0.41)."""
+
+
 # s6-overlay legt die Umgebung des Containers zusätzlich als Dateien ab
 TOKEN_FILES = (
     "/run/s6/container_environment/SUPERVISOR_TOKEN",
@@ -161,7 +165,7 @@ class HAClient:
             self.connected.clear()
             for fut in self._pending.values():
                 if not fut.done():
-                    fut.set_exception(HAError("Verbindung getrennt"))
+                    fut.set_exception(HAConnectionLost("Verbindung getrennt"))
             self._pending.clear()
             await asyncio.sleep(delay)
             delay = min(delay * 2, 60)
@@ -218,6 +222,10 @@ class HAClient:
         """Dienste von Home Assistant (seit 0.38): {Domäne: {Dienst: Beschreibung}} – für die Auswahl der
         Benachrichtigungsdienste (``notify.mobile_app_…``). Nur lesen."""
         return await self.call({"type": "get_services"}, timeout=30) or {}
+
+    async def automation_config(self, entity_id: str) -> dict:
+        """Konfiguration einer Automation (seit 0.41, Wächter für Weg B): {"config": {…}} – nur lesen."""
+        return await self.call({"type": "automation/config", "entity_id": entity_id}, timeout=10) or {}
 
     async def area_registry(self) -> list[dict]:
         """Bereiche von Home Assistant (seit 0.35): area_id -> Name, z. B. „Wohnzimmer“."""

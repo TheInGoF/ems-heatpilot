@@ -12,7 +12,9 @@ Vorschau (``preview_log``, Trockenlauf – nur Anzeige). Seit 0.38 prüft der Ta
 (``dhw_control.plan`` – merkt einen Schreibvorgang nur vor, geschrieben wird danach in ``main``). Seit 0.39 lernt der
 Takt das Ventilverhalten je Raum (``valve_model``/``valve_learn``) und protokolliert im Trockenlauf, was HeatPilot an
 den Thermostaten verstellen würde (``valve_dry`` – schreibt nichts). Seit 0.40 führt die Regelschleife mit eigenem
-Schalter die Ventile wirklich (``valve_control``); diese Räume lässt der Trockenlauf aus.
+Schalter die Ventile wirklich (``valve_control``); diese Räume lässt der Trockenlauf aus. Seit 0.41 führt
+``boiler_control`` (Weg B, eigener Schalter) Vorlauf-Soll und Heizbetrieb des Kessels – im 30-s-Takt von ``main``,
+nicht im Messtakt.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import plausibility, preview_log, schedule, sleep, valve_dry, valve_learn
+from . import plausibility, preview_log, regulator, schedule, sleep, valve_dry, valve_learn
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -66,6 +68,8 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.ems: dict[str, dict] = {}  # direkt von EMS-ESP gelesen (optional)
         # Zeit der letzten Antwort von EMS-ESP (0.38): Weg W nimmt EMS-ESP-Werte nur frisch (dhw_control.readings)
         self.ems_ts: float | None = None
+        # Regler am Bus (Weg B, 0.41): zuletzt gesehen, Folge „kein Gerät thermostat“ – regulator.note/regulator
+        self.regulator_watch: dict = regulator.load(store)
         # Kesselsteuerungen laut EMS-ESP (seit 0.36.1, nur Anzeige): {Kurzname: {found, writeable, value …}},
         # main.poll_emsesp liest sie beim Start und stündlich; ohne EMS-ESP bleibt es leer
         self.ems_controls: dict[str, dict] = {}
@@ -133,6 +137,9 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.control_loop = None  # controlloop.ControlLoop, von main gesetzt (Steuerung seit 0.34)
         self.dhw_control = None   # dhw_control.DhwControl, von main gesetzt (Weg W seit 0.38)
         self.notifier = None      # notify.Notifier, von main gesetzt (Meldungen, Problem-Sensor seit 0.38)
+        self.boiler_control = None  # boiler_control.BoilerControl, von main gesetzt (Weg B seit 0.41)
+        self.watchdog: dict = {}    # Wächter-Automationen in HA (watchdog.scan, main alle 10 min) – nur gelesen
+        self.heartbeat_ts: float | None = None  # zuletzt gesetzter sensor.heatpilot_heartbeat (0.41)
         self._live_entities = {
             *found.climate_ids(),
             *(found.boiler.get(k) for k in ("burner_on", "burner_power", "dhw_active", "min_period")),
@@ -156,10 +163,12 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         if entity_id in self._live_entities:
             self.update_live()
 
-    def set_ems(self, values: dict[str, dict]) -> None:
-        """Neue Werte von EMS-ESP (main.poll_emsesp, nur bei einer Antwort) – mit Zeitstempel ``ems_ts``."""
+    def set_ems(self, values: dict[str, dict], status: dict[str, str] | None = None) -> None:
+        """Neue Werte von EMS-ESP (main.poll_emsesp, nur bei einer Antwort) – mit Zeitstempel ``ems_ts``. ``status``
+        (seit 0.41, ``EmsEsp.status``): wie die Abfrage je Gerät ausging – für „Regler am Bus“ (``regulator.note``)."""
         self.ems = values
         self.ems_ts = time.time()
+        regulator.note(self, status, self.ems_ts)
         self.update_live()
 
     def _val(self, entity_id: str | None):

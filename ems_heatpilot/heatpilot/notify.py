@@ -8,6 +8,10 @@ Oberfläche (``available``):
 * **Dienst** wie ``notify.mobile_app_handy`` (die Handy-App, ältere Integrationen, auch ohne notify-Entitäten) –
   geschickt als Dienst ``notify.<name>`` mit ``message`` und ``title``.
 
+Seit 0.41 stehen die Dienste der Handy-App (``notify.mobile_app_…``) oben in der Auswahl, „empfohlen“ – sie kommen
+am zuverlässigsten an; scheitert eine notify-Entität, versucht ``Control.notify`` einmal den passenden Handy-App-Dienst.
+Ein Fehler beim Senden an die Handy-App nennt die üblichen Ursachen (``MOBILE_HINT``).
+
 Geschickt wird nur über ``Control.notify`` (dort hart auf die eingestellten Ziele begrenzt); Titel „HeatPilot“, Text
 kurz und konkret. Wer etwas melden will, öffnet ein Problem unter einem Schlüssel (``problem``, z. B.
 „dhw_write_failed“) und schließt es wieder (``solved``). Entprellt: Gemeldet wird einmal je Ereignis – beim Öffnen,
@@ -33,6 +37,10 @@ OK_SUFFIX = ":ok"
 TEST_TEXT = "Testnachricht – Benachrichtigungen von HeatPilot kommen hier an."
 NO_TARGETS = "Keine Ziele gespeichert – erst wählen und speichern"
 KEEP_CLOSED_S = 7 * 86400    # geschlossene Schlüssel so lange merken (für die 6-h-Sperre reicht weniger)
+MOBILE = "mobile_app"
+MOBILE_HINT = ("prüfen: in iOS bzw. Android die Mitteilungen der Home-Assistant-App erlauben, in der App (Companion "
+               "App › Benachrichtigungen) die Push-ID zurücksetzen, im Protokoll von Home Assistant nach „mobile_app“ "
+               "suchen")
 
 
 def kind_of(target: str, states: dict) -> str:
@@ -42,8 +50,9 @@ def kind_of(target: str, states: dict) -> str:
 
 def available(states: dict, services: dict | None, selected=()) -> list[dict]:
     """Auswahl für die Oberfläche: notify-Entitäten aus den Zuständen, Dienste aus ``get_services`` (ohne
-    ``send_message``, das nur mit Entität geht). Je Eintrag {id, name, kind, selected}; gewählte Ziele, die es
-    nicht (mehr) gibt, stehen mit ``kind`` „fehlt“ dabei, damit man sie abwählen kann."""
+    ``send_message``, das nur mit Entität geht). Je Eintrag {id, name, kind, selected, recommended}; die Dienste der
+    Handy-App (``notify.mobile_app_…``) stehen oben und sind „empfohlen“ (seit 0.41). Gewählte Ziele, die es nicht
+    (mehr) gibt, stehen mit ``kind`` „fehlt“ dabei, damit man sie abwählen kann."""
     selected = list(selected or [])
     out: dict[str, dict] = {}
     for eid, st in sorted((states or {}).items()):
@@ -56,7 +65,13 @@ def available(states: dict, services: dict | None, selected=()) -> list[dict]:
             out[eid] = {"id": eid, "name": name.replace("_", " "), "kind": "service"}
     for eid in selected:
         out.setdefault(eid, {"id": eid, "name": eid, "kind": "fehlt"})
-    return [{**v, "selected": v["id"] in selected} for v in out.values()]
+    items = [{**v, "selected": v["id"] in selected, "recommended": _mobile(v)} for v in out.values()]
+    return sorted(items, key=lambda v: not v["recommended"])  # stabil: sonst bleibt die Reihenfolge
+
+
+def _mobile(item: dict) -> bool:
+    """Dienst der Handy-App (``notify.mobile_app_…``) – kommt am zuverlässigsten an."""
+    return item["kind"] == "service" and item["id"].startswith(f"notify.{MOBILE}_")
 
 
 class Notifier:
@@ -142,7 +157,8 @@ class Notifier:
                 await self.control.notify(target, TITLE, text)
                 sent.append(target)
             except Exception as err:  # noqa: BLE001 – je Ziel melden, die anderen trotzdem
-                errors.append(f"{target}: {err}")
+                hint = f" – {MOBILE_HINT}" if MOBILE in target or MOBILE in str(err) else ""
+                errors.append(f"{target}: {err}{hint}")
         return sent, errors
 
     async def flush(self) -> int:

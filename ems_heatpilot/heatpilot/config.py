@@ -14,7 +14,9 @@ from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from pathlib import Path
 
-from . import entity_map, floor_limit
+from . import boiler_rule, entity_map, floor_limit
+from .room_entry import COMFORT_DEFAULT, COMFORT_MAX, COMFORT_MIN, PRESET_MAX  # noqa: F401 – wie bisher hier
+from .room_entry import clean_room as _clean_room
 
 DATA_DIR = Path(os.environ.get("HEATPILOT_DATA", "/data"))
 SETTINGS_NAME = "settings.json"
@@ -27,7 +29,7 @@ _ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
 # Muster nutzt Control für die Benachrichtigungsziele, damit „notify.Handy“ schon beim Speichern auffällt
 NOTIFY_TARGET = re.compile(r"^notify\.[a-z0-9_]+$")
 NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")
-_DOMAIN_ID = {"notify": NOTIFY_TARGET, "number": NUMBER_ENTITY}
+_DOMAIN_ID = {"notify": NOTIFY_TARGET, "number": NUMBER_ENTITY, "switch": boiler_rule.SWITCH_ENTITY}
 _TIME = re.compile(r"^(\d{1,2}):(\d{2})$")
 
 # Steuerung (seit 0.34): „beobachten“ = lernen und empfehlen, Tado nur auf Knopfdruck;
@@ -44,14 +46,11 @@ DEFAULT_NIGHT_PLAN = [
     {"start": "22:00", "end": "06:30"},  # Sa
     {"start": "21:00", "end": "06:30"},  # So
 ]
-COMFORT_MIN, COMFORT_MAX, COMFORT_DEFAULT = 5.0, 25.0, 21.0
 # Nachtplan (0.36): gelernter Beginn darf nach Mitternacht liegen, höchstens bis hierher (sonst eingestellter Wert)
 LATE_START_MAX = "03:00"
 NOON = time(12, 0)
 # Herkunft einer Nachtzeit im wirksamen Wochenplan (0.36)
 SOURCE_SET, SOURCE_POWER = "eingestellt", "gelernt (Strom)"
-# Hydraulik (0.35): Voreinstellung am Ventilunterteil – höchstens so viele Stufen
-PRESET_MAX = 12
 # Warmwasser-Desinfektion (0.36.3): Wochentag des Termins, leer = kein Termin (Standard)
 DISINFECT_DAYS = ("", *WEEKDAYS)
 # Warmwasser-Soll über HeatPilot (Weg W, 0.38): aus (nur Empfehlung, Standard), trocken (rechnen und protokollieren,
@@ -88,6 +87,8 @@ FIELDS: dict[str, tuple] = {
     "dhw_control": ("choice", DHW_MODES),
     "dhw_set_entity": ("entity", "number"),
     "notify_targets": ("entities", "notify"),
+    # Weg B (0.41): Kessel über HeatPilot – Schalter, Vorlauf-Soll, Heizbetrieb, Rückfall-Vorlauf (boiler_rule)
+    **boiler_rule.FIELDS,
     "design_outdoor_temp": ("float", -25, 0),
     "living_area_m2": ("float", 0, 2000),
     "boiler_nominal_kw": ("float", 0, 100),
@@ -136,59 +137,6 @@ def _clean_time(value) -> str:
     return f"{int(m.group(1)):02d}:{m.group(2)}"
 
 
-def _clean_room(r: dict) -> dict:
-    """Ein Raum-Eintrag aus der Oberfläche; neue Felder (0.34) nur, wenn sie gesetzt sind. Seit 0.39.1 dazu die
-    Fußbodenheizung: Anschluss ``floor_type`` und höchster Vorlauf ``floor_max_flow`` (``floor_limit.clean_entry``)."""
-    climate = str(r.get("climate", "")).strip()
-    if not _ENTITY.match(climate):
-        raise ValueError(f"Raum ohne gültige climate-Entität: {climate or '(leer)'}")
-    room = {"name": str(r.get("name") or "").strip(), "climate": climate}
-    for opt in ("temperature", "heating_power", "humidity"):
-        v = str(r.get(opt) or "").strip()
-        if v:
-            if not _ENTITY.match(v):
-                raise ValueError(f"{climate}: {opt} ungültig")
-            room[opt] = v
-    group = str(r.get("group") or "").strip()
-    if group:
-        room["group"] = group
-    for key in ("controller", "managed"):
-        if key in r:
-            room[key] = r[key] is True or str(r[key]).lower() in ("true", "1", "on", "ja")
-    if r.get("comfort") not in (None, ""):
-        try:
-            comfort = round(float(str(r["comfort"]).replace(",", ".")) * 2) / 2
-        except ValueError:
-            raise ValueError(f"{climate}: Komforttemperatur keine Zahl") from None
-        if not COMFORT_MIN <= comfort <= COMFORT_MAX:
-            raise ValueError(f"{climate}: Komfort muss zwischen {COMFORT_MIN:g} und {COMFORT_MAX:g} liegen")
-        room["comfort"] = comfort
-    # Hydraulik (0.35): preset = aktuelle Voreinstellung, preset_max = Zahl der Stufen.
-    # Leer = unbekannt (Schlüssel fehlt); preset_max 0 = kein Voreinstellventil (Rücklaufverschraubung)
-    steps: dict[str, int] = {}
-    for key, label in (("preset_max", "Stufen"), ("preset", "Voreinstellung")):
-        if r.get(key) in (None, ""):
-            continue
-        try:
-            v = int(str(r[key]).strip())
-        except ValueError:
-            raise ValueError(f"{climate}: {label} keine ganze Zahl") from None
-        if v < 0 or v > PRESET_MAX:
-            raise ValueError(f"{climate}: {label} muss zwischen 0 und {PRESET_MAX} liegen")
-        steps[key] = v
-    if steps.get("preset"):
-        if "preset_max" not in steps:
-            raise ValueError(f"{climate}: Voreinstellung {steps['preset']} braucht die Zahl der Stufen")
-        if steps["preset"] > steps["preset_max"]:
-            raise ValueError(f"{climate}: Voreinstellung {steps['preset']} liegt über den {steps['preset_max']} Stufen")
-    if "preset_max" in steps:
-        room["preset_max"] = steps["preset_max"]
-    if steps.get("preset"):
-        room["preset"] = steps["preset"]
-    room.update(floor_limit.clean_entry(r, climate))
-    return room
-
-
 def _clean_night_plan(value) -> list[dict]:
     """7 Einträge Mo..So {start, end}; Beginn abends (ab 12:00), Ende morgens (vor 12:00)."""
     if not isinstance(value, (list, tuple)) or len(value) != 7:
@@ -221,7 +169,7 @@ def _check_domain(key: str, items: list[str]) -> None:
 
 def validate(raw: dict) -> tuple[dict, list[str]]:
     """Eingaben aus der Oberfläche prüfen und bereinigen. Gibt (sauber, Fehler) zurück."""
-    from .dhw_entity import wrong_role  # spät wie _RANGE
+    from .boiler_entity import setting_problem  # spät wie _RANGE
     from .vacation import _RANGE  # spätes Import, vermeidet Zyklus
 
     clean: dict = {}
@@ -251,8 +199,8 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
                 if v and not _ENTITY.match(v):
                     raise ValueError("keine gültige Entität (z. B. sensor.name)")
                 _check_domain(key, [v] if v else [])
-                if key == "dhw_set_entity" and v and (wrong := wrong_role(v)):
-                    raise ValueError(wrong)  # Heizkreis, Vorlauf-Soll … – nie das Warmwasser-Soll (0.38)
+                if v and (wrong := setting_problem(key, v)):
+                    raise ValueError(wrong)  # Heizkreis, andere Rolle … – Weg W (0.38) und Weg B (0.41)
                 clean[key] = v
             elif kind == "entities":
                 items = [str(v).strip() for v in (value or []) if str(v).strip()]
@@ -296,6 +244,8 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
         hi = clean.get("dhw_max_temp", raw.get("dhw_max_temp"))
         if None not in (lo, mid, hi) and not (float(lo) <= float(mid) <= float(hi)):
             errors.append("Warmwasser: Minimum ≤ Komfort ≤ Maximum")
+    if clean.get("flow_set_entity") and clean.get("flow_set_entity") == clean.get("dhw_set_entity"):
+        errors.append("Vorlauf-Soll und Warmwasser-Soll: zwei verschiedene Entitäten wählen")  # Weg B (0.41)
     return clean, errors
 
 
@@ -345,6 +295,12 @@ class Config:
     dhw_control: str = "aus"
     dhw_set_entity: str | None = None
     notify_targets: list[str] = field(default_factory=list)
+    # Weg B (0.41): Kessel über HeatPilot – aus (Standard), trocken oder heatpilot (boiler_control.py); Entität des
+    # Vorlauf-Solls (number) und des Heizbetriebs (switch), leer = erkannt; Rückfall-Vorlauf beim Zurückschalten
+    boiler_control: str = "aus"
+    flow_set_entity: str | None = None
+    heating_switch_entity: str | None = None
+    boiler_fallback_flow: int = boiler_rule.FALLBACK_DEFAULT
     design_outdoor_temp: float = -12.0
     # fürs Zertifikat; 0 = unbekannt bzw. aus EMS-ESP (nompower, burnminpower)
     living_area_m2: float = 0.0
@@ -409,7 +365,8 @@ class Config:
                 value = entity_map.parse_overrides(value)
             if hasattr(cfg, key):
                 setattr(cfg, key, value)
-        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host", "vacation_entity", "dhw_set_entity"):
+        for key in ("gas_sensor", "demand_sensor", "weather_entity", "emsesp_host", "vacation_entity", "dhw_set_entity",
+                    "flow_set_entity", "heating_switch_entity"):
             if getattr(cfg, key) == "":
                 setattr(cfg, key, None)
         if cfg.dhw_control not in DHW_MODES:
@@ -417,6 +374,7 @@ class Config:
         if cfg.dhw_set_entity and not NUMBER_ENTITY.match(str(cfg.dhw_set_entity)):
             cfg.dhw_set_entity = None
         cfg.notify_targets = [t for t in cfg.notify_targets or [] if isinstance(t, str) and NOTIFY_TARGET.match(t)]
+        boiler_rule.clean_config(cfg)  # Weg B (0.41): Unbekanntes gilt als „aus“, nichts schreiben
         cfg.rooms = [r for r in cfg.rooms if r.get("climate")]
         entity_map.migrate_overrides(cfg)  # gas=/weather= in die Felder (0.39.1, Seite „Entitäten“)
         cfg.floor_heating_rooms = floor_limit.migrate(cfg.rooms, cfg.floor_heating_rooms)  # Fußboden (0.39.1)
@@ -527,6 +485,10 @@ class Config:
     def guides_valves(self) -> bool:
         """Ventile führen (0.40): nur mit eigenem Schalter UND „HeatPilot steuert“."""
         return self.valve_control is True and self.is_managing()
+
+    def writes_boiler(self) -> bool:
+        """Weg B (0.41): schreibt HeatPilot Vorlauf-Soll und Heizbetrieb? Nur mit Schalter „heatpilot“."""
+        return self.boiler_control == "heatpilot"
 
     def writes_dhw(self) -> bool:
         """Weg W (0.38): schreibt HeatPilot das Warmwasser-Soll? Nur mit Schalter „heatpilot“."""

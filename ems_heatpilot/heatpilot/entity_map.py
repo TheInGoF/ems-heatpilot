@@ -4,7 +4,8 @@ Je Rolle steht hier, wofür HeatPilot sie braucht (ein Satz), ob sie nötig ist,
 (Domäne, Einheit, Geräteklasse – für die gefilterte Auswahl) und wo die Wahl gespeichert wird. ``build`` setzt daneben,
 was gerade gilt: gewählt, automatisch erkannt, direkt von EMS-ESP gelesen oder fehlt – mit Zustand, Einheit, Bereich
 und ob die Entität verfügbar ist. Gruppen: Kessel und Regler (EMS-ESP-Rollen aus ``discovery_roles``), Warmwasser über
-HeatPilot, Außen & Wetter, Gas & Bedarf, Strom, Räume, Personen & Urlaub, Benachrichtigungen.
+HeatPilot, Kessel über HeatPilot (seit 0.41: Vorlauf-Soll und Heizbetrieb, Weg B), Außen & Wetter, Gas & Bedarf, Strom,
+Räume, Personen & Urlaub, Benachrichtigungen.
 
 Nur lesen (``GET api/entity_map``). Gespeichert wird über die bestehenden Einstellungen (``POST api/settings``), es gibt
 keine zweite Speicherstelle: Kessel- und Regler-Rollen als ``overrides`` (``rolle=entity_id``, leer = Erkennung), alles
@@ -18,7 +19,8 @@ keine Koordinaten.
 * Warmwasser lädt oder Speichertemperatur: eines genügt (eine Ladung erkennt HeatPilot auch am Temperaturanstieg und
   hält sie aus dem Heizmodell heraus); ohne Speichertemperatur gibt es kein Warmwasser-Modell.
 * Außentemperatur: Außenfühler, sonst der Außenfühler am Kessel (als Entität in Home Assistant), sonst das Wetter.
-* je Raum das Thermostat; die Warmwasser-Soll-Entität nur bei „HeatPilot setzt“.
+* je Raum das Thermostat; die Warmwasser-Soll-Entität nur bei „HeatPilot setzt“; Vorlauf-Soll und Heizbetrieb nur bei
+  „Kessel über HeatPilot: heatpilot“.
 
 Der Rücklauf ist optional: Er dient nur der Vorlauf-Auswertung und der Live-Anzeige. Liest EMS-ESP einen Kessel- oder
 Regler-Wert direkt (REST), fehlt er nicht – auch ohne Entität in Home Assistant. Ausnahme ist der Außenfühler am
@@ -30,6 +32,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from .boiler_entity import suggest_flow, suggest_heat
 from .dhw_entity import suggest_entity
 from .discovery import device_sensors
 from .discovery_roles import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
@@ -47,6 +50,8 @@ GROUPS: dict[str, tuple[str, str]] = {
     "regler": ("Regler (EMS-ESP)", "Werte des Reglers, Heizkreis 1 – alle optional: Vergleich, Heizkurve, Termine."),
     "warmwasser": ("Warmwasser über HeatPilot", "Die eine Entität, auf die HeatPilot das Warmwasser-Soll schreiben "
                                                 "darf (Weg W)."),
+    "kessel_hp": ("Kessel über HeatPilot", "Die zwei Entitäten, auf die HeatPilot am Kessel schreiben darf (Weg B): "
+                                           "Vorlauf-Soll und Heizbetrieb."),
     "aussen": ("Außen & Wetter", "Außentemperatur und Vorhersage."),
     "gas": ("Gas & Bedarf", "Verbrauch und Anforderung."),
     "strom": ("Strom", "Hausleistung für die Nachtzeiten aus dem Stromverbrauch."),
@@ -72,6 +77,8 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "choice": (("select", "sensor"), ("",), ()),
     "any": (("sensor", "number", "select"), (), ()),
     "dhw": (("number",), ("°C",), ()),
+    "flow_set": (("number",), ("°C",), ()),
+    "heat_switch": (("switch",), (), ()),
     "weather": (("weather",), (), ()),
     "gas": (("sensor",), ("m³", "m3", "kWh"), ("gas", "energy")),
     "demand": (("sensor",), ("%",), ()),
@@ -82,13 +89,15 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "climate": (("climate",), (), ()),
     "humidity": (("sensor",), ("%",), ("humidity",)),
 }
-# Auswahl in der Oberfläche mit eigener Regel (PICKERS): Warmwasser-Soll nur, was laut dhw_entity taugt
-PICKER = {"dhw": "dhw"}
+# Auswahl in der Oberfläche mit eigener Regel (PICKERS): Warmwasser-Soll nur, was laut dhw_entity taugt; Vorlauf-Soll
+# und Heizbetrieb (0.41) nur, was laut boiler_entity taugt (``api/entities`` → ``flow`` bzw. ``heating``)
+PICKER = {"dhw": "dhw", "flow_set": "flow", "heat_switch": "heating"}
 
 # EMS-ESP-Rolle -> (Art, wofür HeatPilot sie braucht)
 ROLES: dict[str, tuple[str, str]] = {
     "flow_temp": ("temp", "Daraus lernt HeatPilot Heizkurve und Wärmemodell; ohne ihn keine Vorschau."),
-    "sel_flow_temp": ("temp", "Vorlauf-Soll am Kessel – Vergleich der Vorschau mit dem, was der Kessel tut."),
+    "sel_flow_temp": ("temp", "Vorlauf-Soll am Kessel – Vergleich mit der Vorschau, Vorschlag für „Kessel über "
+                              "HeatPilot“."),
     "return_temp": ("temp", "Nur für die Spreizung in der Vorlauf-Auswertung und die Live-Anzeige."),
     "burner_power": ("pct", "Wärmemenge je Takt; ersetzt „Brenner an“ (Leistung über 0)."),
     "burner_on": ("flag", "Laufzeiten, Starts und Taktsperre; ersetzbar durch die Brennerleistung."),
@@ -107,7 +116,8 @@ ROLES: dict[str, tuple[str, str]] = {
     "min_power": ("pct", "Fürs Zertifikat, wenn die kleinste Leistung nicht eingetragen ist."),
     "max_power": ("pct", "Nur mitgelesen (Diagnose)."),
     "nom_power": ("kw", "Rechnet Prozent in kW um (Zertifikat, Live), wenn die Nennleistung nicht eingetragen ist."),
-    "heating_off": ("flag", "Heizbetrieb aus erkennen – Vorschau-Vergleich und Ventil-Lernen."),
+    "heating_off": ("flag", "Heizbetrieb aus erkennen; ist es an, schreibt „Kessel über HeatPilot“ nicht."),
+    "heating_activated": ("flag", "Heizbetrieb an/aus – Vorschlag für „Kessel über HeatPilot“ und Prüfung."),
     "boiler_temp": ("temp", "Live-Anzeige und Plausibilität."),
     "pump_mod": ("pct", "Läuft die Pumpe? – Live und Lernen."),
     "flame_current": ("ua", "Nur aufgezeichnet (Diagnose)."),
@@ -152,6 +162,12 @@ NEED: dict[str, tuple[str, ...]] = {"flow_temp": (), "burner_on": ("burner_power
 FIELD_ENTRIES: dict[str, tuple[str, str, str, bool, bool, str]] = {
     "dhw_set_entity": ("warmwasser", "Warmwasser-Soll (Entität)", "dhw", False, True,
                        "Nur hierhin schreibt HeatPilot bei „HeatPilot setzt“; leer = Vorschlag aus der Erkennung."),
+    "flow_set_entity": ("kessel_hp", "Vorlauf-Soll (Entität)", "flow_set", False, True,
+                        "Nur hierhin schreibt HeatPilot das Vorlauf-Soll bei „Kessel über HeatPilot“ (number, °C); leer "
+                        "= Vorschlag aus der Erkennung."),
+    "heating_switch_entity": ("kessel_hp", "Heizbetrieb (Entität)", "heat_switch", False, True,
+                              "Nur diesen Schalter schaltet HeatPilot bei „Kessel über HeatPilot“ (switch, Heizbetrieb "
+                              "aktiviert); leer = Vorschlag aus der Erkennung."),
     "outdoor_sensors": ("aussen", "Außenfühler", "temp", True, True,
                         "Außentemperatur für Modelle und Vorschau – bei mehreren zählt das Minimum; leer = Außenfühler "
                         "am Kessel aus Home Assistant."),
@@ -335,6 +351,8 @@ def _field_values(c: _Ctx) -> dict:
 
     return {
         "dhw_set_entity": (cfg.dhw_set_entity, suggest_entity(f, c.states)),
+        "flow_set_entity": (cfg.flow_set_entity, suggest_flow(f, c.states)),
+        "heating_switch_entity": (cfg.heating_switch_entity, suggest_heat(f, c.states)),
         "outdoor_sensors": (cfg.outdoor_sensors, auto("outdoor", cfg.outdoor_sensors, f.outdoor)),
         "weather_entity": (cfg.weather_entity, auto("weather", cfg.weather_entity, f.weather)),
         "gas_sensor": (cfg.gas_sensor, auto("gas", cfg.gas_sensor, f.gas)),
@@ -349,7 +367,8 @@ def _field_entries(c: _Ctx) -> list[dict]:
     """Warmwasser-Soll, Außen & Wetter, Gas & Bedarf, Strom, Personen & Urlaub, Benachrichtigungen."""
     values, out = _field_values(c), []
     for key, (group, label, kind, multi, auto, purpose) in FIELD_ENTRIES.items():
-        required = key == "outdoor_sensors" or (key == "dhw_set_entity" and c.cfg.dhw_control == "heatpilot")
+        required = key == "outdoor_sensors" or (key == "dhw_set_entity" and c.cfg.dhw_control == "heatpilot") or (
+            key in ("flow_set_entity", "heating_switch_entity") and c.cfg.boiler_control == "heatpilot")
         e = _base(key, group, label, kind, purpose, {"kind": "field", "name": key}, multi=multi, auto=auto,
                   required=required, alt=("weather_entity",) if key == "outdoor_sensors" else ())
         _fill(e, c, *values[key])

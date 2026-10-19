@@ -277,6 +277,7 @@ def test_settings_split_into_general_and_entities():
     assert "emSum();" in rs
     titles = re.findall(r'card\("([^"]+)"', rs)
     assert titles == ["Steuerung", "Verbindung", "Räume", "Gas & Kosten", "Komfort & Strategie", "Haus & Kessel",
+                      "Kessel über HeatPilot",  # 0.41: Weg B
                       "Warmwasser", "Urlaub", "Erweitert"]  # Messwerte, Personen, Benachrichtigungen, Zuordnungen: Entitäten
     # „Allgemein“ ohne Entitätsfelder – höchstens ein Verweis
     for gone in ("Zuordnungen (Experten)", 'class="ov"', "outdoor-list", "power-list", "f-gas_sensor", "f-weather_entity",
@@ -367,7 +368,7 @@ def test_rows_render_status_and_escape(tmp_path):
       out({ flow: row("flow_temp"), bp: row("burner_power"), dhw: row("dhw_active"), auto: row("dhw_temp"),
             nav: setNav(), sum: emCountText(emCounts(EMAP.groups[0].entries)), extra: emExtra(),
             page: emPage(EMAP), err: emPage({ error: "<b>kaputt" }), none: emPage(null),
-            ref: emRef("gas_sensor", "gas", "Gaszähler"), rooms: emRoomCount(EMAP.groups[6].entries) });""")
+            ref: emRef("gas_sensor", "gas", "Gaszähler"), rooms: emRoomCount(EMAP.groups[7].entries) });""")  # 0.41: Kessel über HeatPilot davor
     flow = plain(r["flow"])
     assert flow.startswith("Vorlauftemperatur (Ist) nötig Daraus lernt HeatPilot") and "nicht verfügbar" in flow
     assert "sensor.gibt_es_nicht nicht in Home Assistant" in flow and 'data-issue="1"' in r["flow"]
@@ -377,7 +378,7 @@ def test_rows_render_status_and_escape(tmp_path):
     assert "automatisch gefunden sensor.boiler_dhw_curtemp Speicher · 51.5 °C · Keller" in plain(r["auto"])
     assert " disabled>Automatik</button>" in r["auto"]  # schon automatisch
     assert plain(r["nav"]) == "Allgemein Entitäten 4" and 'name="set-page" value="general" checked' in r["nav"]
-    assert r["sum"] == "6 von 38 gefunden · 2 nötige fehlen · 2 nicht verfügbar"
+    assert r["sum"] == "6 von 39 gefunden · 2 nötige fehlen · 2 nicht verfügbar"  # 0.41: Heizbetrieb aktiviert
     assert "<i>" not in r["extra"] and "&lt;i>=sensor.z" in r["extra"] and 'x&quot;>&lt;b>=sensor.y' in r["extra"]
     groups = re.findall(r'<details class="card em-group" id="em-g-(\w+)"', r["page"])
     assert groups == [g["key"] for g in data["map"]["groups"]]
@@ -404,7 +405,8 @@ def test_collect_sends_overrides_and_fields_through_settings(tmp_path):
     assert s["power_sensors"] == ["sensor.hausleistung"] and s["gas_sensor"] == "" and s["outdoor_sensors"] == []
     assert s["persons"] == ["person.anna"] and "notify_targets" not in s  # eigene Tabellen (collect)
     assert set(s) == {"overrides", "persons", "dhw_set_entity", "outdoor_sensors", "weather_entity", "gas_sensor",
-                      "demand_sensor", "power_sensors", "power_exclude", "vacation_entity"}
+                      "demand_sensor", "power_sensors", "power_exclude", "vacation_entity",
+                      "flow_set_entity", "heating_switch_entity"}  # Weg B seit 0.41
     c = r["changed"]
     assert c["overrides"] == ["burner_power=sensor.boiler_curflowtemp"] and c["gas_sensor"] == "sensor.gaszaehler"
     assert c["outdoor_sensors"] == ["sensor.boiler_outdoortemp"] and c["power_sensors"] == []

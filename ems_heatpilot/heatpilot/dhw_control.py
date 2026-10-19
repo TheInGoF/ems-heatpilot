@@ -61,6 +61,16 @@ KV = "dhw_control.state"
 K_FAIL, K_PAUSED, K_FOREIGN = "dhw_write_failed", "dhw_paused", "dhw_foreign"
 
 
+def special_running(eng, sample: dict) -> bool:
+    """Sonderladung oder Desinfektion läuft: Kesselschalter im Messpunkt oder in HA (falls EMS-ESP nicht mehr
+    antwortet und der Messpunkt dessen letzten Stand zeigt) oder vom Modell erkannt (samt Nachlauf). Auch für Weg B
+    (0.41): solange fasst HeatPilot das Vorlauf-Soll nicht an."""
+    roles = getattr(eng.found, "boiler", None) or {}
+    in_ha = any(flag(eng._val(roles.get(r))) == 1 for r in ("dhw_disinfecting", "dhw_onetime"))
+    return bool(sample.get("dhw_special") or sample.get("dhw_disinfecting") or in_ha
+                or getattr(eng.dhw, "special_running", False))
+
+
 def _plausible(value) -> float | None:
     """Kessel-Soll als Zahl, nur plausibel (ein Platzhalter wie 3276,7 zählt nicht)."""
     return plausibility.in_range("dhw_set", num(value))
@@ -125,12 +135,8 @@ class DhwControl(DhwStatus):
         return "Kessel-Soll unbekannt"
 
     def special(self, sample: dict) -> bool:
-        """Sonderladung oder Desinfektion läuft: Kesselschalter im Messpunkt oder in HA (falls EMS-ESP nicht mehr
-        antwortet und der Messpunkt dessen letzten Stand zeigt) oder vom Modell erkannt (samt Nachlauf)."""
-        roles = getattr(self.eng.found, "boiler", None) or {}
-        in_ha = any(flag(self.eng._val(roles.get(r))) == 1 for r in ("dhw_disinfecting", "dhw_onetime"))
-        return bool(sample.get("dhw_special") or sample.get("dhw_disinfecting") or in_ha
-                    or getattr(self.eng.dhw, "special_running", False))
+        """Sonderladung oder Desinfektion läuft (``special_running``)."""
+        return special_running(self.eng, sample)
 
     def blocker(self) -> str | None:
         """Warum jetzt nicht geschrieben werden darf – dieselben Hindernisse wie in „Bereit für die Steuerung?“:

@@ -242,7 +242,7 @@ def test_poll_keeps_previous_controls_after_timeout(caplog):
             pass
 
     old = {"selflowtemp": {"found": True, "writeable": True}}
-    eng = SimpleNamespace(ems_controls=old, ems_controls_ts=123.0, set_ems=lambda v: None,
+    eng = SimpleNamespace(ems_controls=old, ems_controls_ts=123.0, set_ems=lambda v, status=None: None,
                           store=SimpleNamespace(commit=lambda: None))
     with pytest.raises(asyncio.CancelledError):
         asyncio.run(main_mod.poll_emsesp(FakeEms(), SimpleNamespace(eng=eng), interval_s=0))
