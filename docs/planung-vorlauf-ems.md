@@ -1,6 +1,6 @@
 # Planung: Vorlauftemperatur über EMS führen (Diskussionspapier)
 
-Stand 18.10.2026. Nichts davon ist gebaut; EMS-ESP bleibt bis auf Weiteres **nur lesend**.
+Stand 18.10.2026 (Kesselwerte ergänzt). Nichts davon ist gebaut; EMS-ESP bleibt bis auf Weiteres **nur lesend**.
 Dieses Papier sammelt Wege, Risiken und offene Fragen, damit die Entscheidung nebenbei reifen kann.
 
 ## Ausgangslage
@@ -97,6 +97,43 @@ fordern drei Räume zusammen an, läuft er durch.
 - Trockenlauf-Modus: HeatPilot rechnet und protokolliert, was es schreiben würde, schreibt aber nicht.
 - Jeder Schreibvorgang im Protokoll (wie `control_log`), Anzeige im Heizen-Reiter.
 - Ausfall-Verhalten dokumentiert: Weg A → ES73 regelt weiter; Weg B → Kesselknopf bzw. HA-Wächter.
+
+## Schreibbare Kesselwerte (Export aus EMS-ESP, 18.10.2026)
+
+Antwort auf einen Teil der Fragen unten: EMS-ESP zeigt am **Kessel** (nicht am ES73) diese schreibbaren Werte.
+Beim Export stand „Heizen abschalten: an“ und Vorlauf-Soll 7 °C bei 11 °C außen – der Kessel war im Aus-/Sommerbetrieb.
+
+| Steuerung (HA-Name) | EMS-ESP | Wert beim Export | Bereich | Wofür HeatPilot sie bräuchte |
+|---|---|---|---|---|
+| Gewählte Vorlauftemperatur | `selflowtemp` | 7 °C | 0–90 | Weg B: Vorlauf-Soll je Stunde |
+| Heizbetrieb aktiviert | `heatingactivated` | an | aus/an | Heizkreis nachts/abwesend ganz aus |
+| Heizen abschalten | `heatingoff` | an | aus/an | Sommer/Aus (heute setzt es der ES73) |
+| Heiztemperatur | `heatingtemp` | 90 °C | 0–90 | Obergrenze – nur einmal auf `max_flow_temp` |
+| Antipendelzeit | `burnminperiod` | 25 min | 0–120 | Taktsperre: **lesen**, nicht ändern (Regel bleibt) |
+| Pumpennachlaufzeit | `pumpdelay` | 8 min | 0–60 | nur lesen (Nachlauf in der Bilanz) |
+| Maximale Brennerleistung | `burnmaxpower` | 100 % | 32–100 | nicht ändern |
+| WWK gewählte Temperatur | `wwseltemp` | 45 °C | 0–254 | Speicher-Soll aus der Warmwasser-Empfehlung |
+| WWK Komfort | `wwcomfort` | Heiß | Heiß/Eco/Intelligent | nicht ändern |
+| WWK aktiviert | `wwactivated` | an | aus/an | Warmwasser aus bei langer Abwesenheit |
+| WWK Einmalladung | `wwonetime` | aus | aus/an | Sonderladung vor Ankunft/Wanne |
+| WWK Desinfizieren | `wwdisinfecting` | aus | aus/an | Legionellenladung, falls der ES73 wegfällt |
+| WWK Desinfektionstemperatur | `wwdisinfectiontemp` | 70 °C | 60–80 | nur lesen |
+| WWK Zirkulation | `wwcirc`/`wwcircmode` | aus / 1×3 min | – | nicht ändern |
+
+Folgerungen:
+- Für Weg B reichen **zwei Werte im Takt** (`selflowtemp`, `wwseltemp`) und **drei Schalter** (`heatingactivated`,
+  `wwactivated`, `wwonetime`); alles andere bleibt Nutzer-Einstellung. Die Antipendelzeit (25 min) ist der Grund für
+  die „Wartezeit durch Taktsperre“ in der Übersicht – sie bleibt, wie sie ist; der Takt-Boost arbeitet innerhalb davon.
+- **Vor dem Aktivieren muss HeatPilot prüfen und anzeigen, dass es alle nötigen Steuerungen hat** (Wunsch Ingo): je
+  Steuerung gefunden/schreibbar (EMS-ESP meldet `writeable` je Entität), erst wenn alle fünf da sind, lässt sich der Kessel-
+  Schalter stellen. Kommt als Abschnitt „Kessel“ in „Bereit für die Steuerung?“ (0.36.1, nur Anzeige).
+- **Vorschau vor dem Schreiben** (Wunsch Ingo): HeatPilot zeigt für die nächsten 24 h je Stunde, welchen Vorlauf und welches
+  Warmwasser-Soll es setzen würde (Trockenlauf) – aus Raummodellen (nötiger Vorlauf des anspruchsvollsten Raums mit Soll laut
+  Steuerungsplan, Aufheizzuschlag vor Nachtende/Ankunft, Takt-Boost), Nachtplan (Heizbetrieb aus bzw. Absenkvorlauf),
+  Warmwasser-Plan (Komfort + Reserve je Stunde, Sonderladungen). Geschrieben wird nichts; die Vorschau ist der Maßstab, ob die
+  Rechnung taugt, bevor ein Schalter kommt.
+- Offen bleibt Frage 2: nimmt der BK15 `selflowtemp` an, solange der ES73 am Bus hängt? Prüfen im Trockenlauf durch Vergleich
+  der Vorschau mit dem, was der ES73 tatsächlich setzt (`sel_flow` wird schon gespeichert).
 
 ## Offene Fragen an Ingo / zu prüfen
 
