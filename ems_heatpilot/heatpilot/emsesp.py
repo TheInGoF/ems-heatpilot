@@ -7,7 +7,7 @@ es gibt, wird beim ersten Mal ermittelt, sie werden seltener gelesen. Lesen
 braucht weder Passwort noch Token. Was in EMS-ESP unter „Customizations“ für
 API/MQTT ausgeschlossen ist, liefert EMS-ESP auch hier nicht. Verschachtelte Werte (``dhw``, ``hc1``) werden zu ``dhw_charging``,
 ``hc1_seltemp`` usw. flachgeklopft – passend zu den Kurznamen in
-``discovery.BOILER_ROLES``/``THERMOSTAT_ROLES``.
+``discovery_roles.BOILER_ROLES``/``THERMOSTAT_ROLES``.
 
 Seit 0.36.1 fragt ``controls()`` zusätzlich einzelne Kesselsteuerungen ab
 (``GET /api/boiler/<kurzname>``): Wert, Bereich, Einheit und ob EMS-ESP sie schreiben ließe

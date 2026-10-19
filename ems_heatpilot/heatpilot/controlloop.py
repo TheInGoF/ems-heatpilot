@@ -332,9 +332,12 @@ class ControlLoop:
         return {c: r["desired"] for c, r in self.rooms.items() if r["managed"] and r["desired"] is not None}
 
     def warnings(self) -> list[str]:
+        """Hinweise im Reiter „Heizen“: Schreibfehler in Folge, dazu (0.36.3) verworfene Boosts auf den Heizkreis
+        von EMS-ESP, die noch am Regler stehen (``Control.notes``)."""
         names = {r.climate: r.name for r in self.eng.found.rooms}
+        notes = getattr(self.control, "notes", None)
         return [f"{names.get(c, c)}: {s['fails']} Schreibfehler in Folge – Thermostat prüfen"
-                for c, s in self.state.items() if int(s.get("fails", 0)) >= MAX_FAILS]
+                for c, s in self.state.items() if int(s.get("fails", 0)) >= MAX_FAILS] + (notes() if notes else [])
 
     def as_dict(self, now_ts: int | None = None) -> dict:
         """Status für ``GET /api/heat`` (Schlüssel ``control``)."""

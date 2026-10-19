@@ -14,7 +14,9 @@ einstellbar), 2. Schreibfehler der Regelschleife, 3. Raummodell plausibel, 4. So
 (kleiner Heizkörper, kalter Flur), sind kein Hindernis: Sie werden akzeptiert und benannt.
 
 Der Abschnitt ``boiler`` sagt, ob EMS-ESP alle Kesselsteuerungen hätte, die eine spätere Kesselsteuerung
-bräuchte – nur Anzeige. Er ändert die Stufe der Raumsteuerung nicht: Tado braucht keinen Kessel.
+bräuchte – nur Anzeige. Er ändert die Stufe der Raumsteuerung nicht: Tado braucht keinen Kessel. Seit 0.36.3
+ist die Desinfektion (``wwdisinfecting``) dort nötig, sobald ein Desinfektionstermin eingestellt ist. Der
+Heizkreis von EMS-ESP als Raum (``Room.ems``) ist immer „nicht dabei“ – HeatPilot schreibt nicht an den Kessel.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from datetime import datetime
 from . import guards
 from .controlloop import MAX_FAILS, preheat_hours, reach_c
 from .emsesp import BOILER_CONTROLS
+from .ems_lock import LOCK_TEXT
 
 LEVELS = ("bereit", "eingeschränkt", "nicht bereit")
 ROOM_STATES = ("bereit", "akzeptiert", "lernt", "nicht erreichbar", "nicht dabei")
@@ -32,6 +35,9 @@ ACCEPTED_MIN = 2           # so viele „akzeptiert“ mindestens, bevor es (üb
 T_OUT_ASSUMED = 5.0        # ohne Außentemperatur rechnet die Regelschleife damit (controlloop.desired)
 PRESENCE_WINDOW_S = 3600   # Anwesenheit „unklar“, wenn in dieser Zeit meist unbekannt
 TARGET_TEMPERATURE = 1     # Home Assistant: ClimateEntityFeature.TARGET_TEMPERATURE
+# Desinfektion (0.36.3): mit eingestelltem Termin ist diese Kesselsteuerung nötig
+DISINFECT_CONTROL = "wwdisinfecting"
+DISINFECT_NOTE = "Desinfektion braucht WWK Desinfizieren (schreibbar)"
 
 
 def _num(value: float) -> str:
@@ -110,25 +116,30 @@ def _night_note(eng) -> str:
 def boiler(eng) -> dict:
     """Kessel über EMS-ESP: Sind alle nötigen Steuerungen da und schreibbar? Nur Anzeige, nichts schreiben.
 
-    ``found``/``writeable`` sind None, solange nicht abgefragt wurde.
+    ``found``/``writeable`` sind None, solange nicht abgefragt wurde. Mit Desinfektionstermin (0.36.3) ist
+    ``wwdisinfecting`` die sechste nötige Steuerung (``note`` sagt, wofür).
     """
     configured = bool(eng.cfg.emsesp_host)
+    disinfect = bool(getattr(eng.cfg, "dhw_disinfect_day", ""))
     ts = getattr(eng, "ems_controls_ts", None)
     polled = configured and ts is not None
     got = (getattr(eng, "ems_controls", None) or {}) if polled else {}
     controls, missing = [], []
     for key, (name, required, _) in BOILER_CONTROLS.items():
+        by_term = disinfect and key == DISINFECT_CONTROL
+        required = required or by_term
         c = got.get(key) or {}
         found = bool(c.get("found")) if polled else None
         writeable = c.get("writeable") if found else (False if polled else None)
         controls.append({"key": key, "name": name, "required": required, "found": found, "writeable": writeable,
                          "value": c.get("value") if found else None, "min": c.get("min") if found else None,
-                         "max": c.get("max") if found else None, "uom": c.get("uom") if found else None})
+                         "max": c.get("max") if found else None, "uom": c.get("uom") if found else None,
+                         **({"note": DISINFECT_NOTE} if by_term else {})})
         if polled and required and writeable is not True:
             why = "nicht gefunden" if not found else ("nicht schreibbar" if writeable is False
                                                       else "schreibbar unbekannt")
             missing.append(f"{name} ({why})")
-    n_required = sum(1 for _, required, _ in BOILER_CONTROLS.values() if required)
+    n_required = sum(1 for c in controls if c["required"])
     if not configured:
         text = "EMS-ESP nicht eingerichtet – ohne EMS-ESP keine Kesselsteuerung"
     elif not polled:
@@ -145,6 +156,7 @@ def boiler(eng) -> dict:
         "ready": polled and not missing,
         "controls": controls,
         "text": text,
+        "disinfect_required": disinfect,
     }
 
 
@@ -171,6 +183,10 @@ def assess(eng, now_ts: int) -> dict:
     for room in eng.found.rooms:
         entry = {"climate": room.climate, "name": room.name, "managed": bool(room.managed),
                  "comfort": float(room.comfort)}
+        if getattr(room, "ems", False):  # Heizkreis von EMS-ESP: nie dabei, auch mit „macht mit“ (0.36.3)
+            rooms.append({**entry, "managed": False, "state": "nicht dabei", "text": LOCK_TEXT})
+            notes.append(f"{room.name}: {LOCK_TEXT} – macht nicht mit")  # eigener Hinweis, nicht noch einmal unten
+            continue
         if not room.managed:
             rooms.append({**entry, "state": "nicht dabei", "text": "macht nicht mit (Einstellungen → Räume)"})
             by_state["nicht dabei"].append(room.name)

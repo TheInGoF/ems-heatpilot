@@ -4,7 +4,8 @@
 jeden Messpunkt an ``DhwModel`` und den Schatten der Spar-Strategie weiter (deren Tageswerte – Zapfung,
 Verluste, Ladung – schreibt es in die Datenbank), empfiehlt die Speichertemperatur und rechnet die
 Werte für den Reiter Warmwasser (Ersparnis, Auskühlkurve, nächste Ladung, Soll-Zeitprogramm des
-Reglers). Das Modell selbst steht in ``dhw.py``.
+Reglers). Seit 0.36.3 gibt es den Desinfektionstermin aus den Einstellungen an den Schatten weiter und zeigt
+ihn mit Vorschlag an (``disinfect_info``, gerechnet in ``dhw_disinfect``). Das Modell selbst steht in ``dhw.py``.
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from . import guards
+from . import dhw_disinfect, guards
+from .config import WEEKDAYS
 from .dhw_watch import AFTER_CHARGE_H, DrawWatch, tail_rising
 from .presence import arrival_unknown
 from .values import flag, local, num
@@ -101,7 +103,8 @@ class DhwMixin:
         check = guards.check_dhw(self.dhw)
         if check["ok"]:
             self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg,
-                                              unknown_from=unknown, current_set=num(sample.get("dhw_set")))
+                                              unknown_from=unknown, current_set=num(sample.get("dhw_set")),
+                                              disinfect_h=self.disinfect_ready_h())
             return check, self.dhw_rec["target"]
         # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll
         self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
@@ -132,12 +135,16 @@ class DhwMixin:
         bound = bool((self.dhw_rec or {}).get("margin_bound"))
         res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
                             learn_usage=not frozen, special=bool(sample.get("dhw_special")),
-                            dhw_set=num(sample.get("dhw_set")), burner_kw_prev=prev[2] if len(prev) > 2 else None)
+                            dhw_set=num(sample.get("dhw_set")), burner_kw_prev=prev[2] if len(prev) > 2 else None,
+                            disinfect=bool(sample.get("dhw_disinfecting")), disinfect_temp=self.disinfect_temp()[0])
         check, shadow_target = self.dhw_recommend(ts, sample)
+        # Sonderladung des Reglers trifft beide Speicher; ein bestätigter Desinfektionstermin (0.36.3) nur den
+        # Schatten, nach der Ladedauer – die Strategie desinfiziert zum Termin
+        mirror = t_cur if res.get("special") else dhw_disinfect.shadow_mirror(
+            self.dhw, self.cfg, local(prev[0]), now, self.disinfect_temp()[0], self.disinfect_ready_h())
         sh = self.dhw_shadow.step(
             self.dhw, t_cur, shadow_target, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp,
-            dhw_min=self.cfg.dhw_min_temp, margin_bound=bound, dhw_max=self.cfg.dhw_max_temp,
-            mirror=t_cur if res.get("special") else None,  # Sonderladung des Reglers trifft beide Speicher
+            dhw_min=self.cfg.dhw_min_temp, margin_bound=bound, dhw_max=self.cfg.dhw_max_temp, mirror=mirror,
         )
         if sh["raise_margin"] and check["ok"] and not frozen:  # Urlaub / lange weg: Reserve bleibt eingefroren
             self.dhw.note_cold_draw()
@@ -226,6 +233,7 @@ class DhwMixin:
             "kwh_per_k_avg": None if self.dhw.kwh_per_kelvin() is None else round(self.dhw.kwh_per_kelvin(), 3),
             "next_charge": self.dhw_next_charge(t_now),
             "disinfect": self.disinfect_schedule(),
+            "disinfect_plan": self.disinfect_info(),  # 0.36.3: eingestellter Termin, letzte erkannte Sonderladung
         }
 
     def dhw_charge_compared(self) -> float:
@@ -320,6 +328,52 @@ class DhwMixin:
             return None
         return {"day": day, "hour": None if hour is None else int(hour),
                 "special_charges": self.dhw.special_charges}
+
+    # ------------------------------------------------------------------ Desinfektion (0.36.3)
+    def disinfect_temp(self) -> tuple[float, str]:
+        """(Desinfektionstemperatur, Herkunft): EMS-ESP ``wwdisinfectiontemp``, sonst die Einstellung."""
+        return dhw_disinfect.temperature(self._boiler("dhw_disinfect_temp"), self.cfg)
+
+    def _disinfect_from(self) -> float:
+        """Speichertemperatur, von der die Desinfektion lädt: heutiges Soll, sonst der Komfortwert."""
+        return num(self._boiler("dhw_seltemp")) or self.cfg.dhw_comfort_temp
+
+    def disinfect_ready_h(self) -> float:
+        """Ladedauer der Desinfektion wie im Vorschlag: erst so lange nach dem Termin ist der Speicher heiß."""
+        return dhw_disinfect.ready_hours(self.dhw, self.cfg, self.nominal_kw(), self._disinfect_from(),
+                                         self.disinfect_temp()[0])
+
+    def disinfect_info(self, suggest: bool = False, now_ts: float | None = None) -> dict:
+        """Termin aus den Einstellungen für Übersicht und Einstellungen; ``suggest``: mit Terminvorschlag.
+
+        ``next_text`` „So 17:00 (eingestellt)“; dazu die letzte erkannte Sonderladung des Reglers
+        (``last_special_text`` „So 13:40 (erkannt)“). ``counts``: Der Termin zählt im Modell – nur bestätigt durch
+        eine Desinfektion des Reglers zu dieser Zeit (``dhw_disinfect.plan_counts``), sonst sagt ``counts_text``
+        warum nicht. HeatPilot löst die Desinfektion noch nicht aus.
+        """
+        now = local(time.time() if now_ts is None else now_ts)
+        temp, source = self.disinfect_temp()
+        nxt, last = self.cfg.next_disinfection(now), self.dhw.last_special
+        last = None if last is None else last.astimezone() if last.tzinfo else last
+        out = {
+            "configured": nxt is not None, "day": self.cfg.dhw_disinfect_day or None,
+            "time": self.cfg.dhw_disinfect_time.strftime("%H:%M"),
+            "next": None if nxt is None else nxt.isoformat(),
+            "next_text": None if nxt is None else f"{WEEKDAYS[nxt.weekday()]} {nxt:%H:%M} (eingestellt)",
+            "counts": nxt is not None and dhw_disinfect.plan_counts(self.dhw, self.cfg, now),
+            "temp": temp, "temp_source": source, "temp_boiler": num(self._boiler("dhw_disinfect_temp")),
+            "temp_note": dhw_disinfect.temp_note(self._boiler("dhw_disinfect_temp")),
+            "last_disinfect": (self.dhw.disinfects or [None])[-1],  # zuletzt erkannte Desinfektion (ohne Einmalladung)
+            "last_special": None if last is None else last.isoformat(),
+            "last_special_text": None if last is None else f"{WEEKDAYS[last.weekday()]} {last:%H:%M} (erkannt)",
+            "special_charges": self.dhw.special_charges, "regler": self.disinfect_schedule(),
+            "triggers": False, "hint": dhw_disinfect.NOT_YET,
+        }
+        if out["configured"] and not out["counts"]:
+            out["counts_text"] = dhw_disinfect.counts_text(self.dhw, self.cfg, now)
+        if suggest:
+            out["suggestion"] = dhw_disinfect.suggestion(self.dhw, self.nominal_kw(), self._disinfect_from(), temp, now)
+        return out
 
     def dhw_for_arrival(self, arrival: datetime, now: datetime) -> dict | None:
         """Wie lange muss der Speicher vor der Ankunft laden? (teilt sich die Therme mit dem Heizen)"""

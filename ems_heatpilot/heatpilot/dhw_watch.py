@@ -224,7 +224,9 @@ class DhwShadow:
         spart er Verluste ein, die es nicht gibt. Eine Zapfung, die er nur dank dieser Wärme bedient
         (Wanne nach der Legionellenschaltung: beginnt warm, zieht durch ihre Größe unter das Minimum),
         zählt weder als zu kalt noch für die Reserve – höchstens SPECIAL_COVER_H lang, und nicht, wenn
-        der Schatten sie schon unter dem Komfortwert bedient.
+        der Schatten sie schon unter dem Komfortwert bedient. Seit 0.36.3 kommt ``mirror`` auch einmal nach der
+        Ladedauer eines bestätigten Desinfektionstermins (Desinfektionstemperatur, ``dhw_disinfect.shadow_mirror``):
+        Die Strategie desinfiziert dann selbst – danach gilt dasselbe wie nach der Sonderladung des Reglers.
         """
         out = {"loss_kwh": 0.0, "cold_draw": 0, "raise_margin": 0}
         if t_actual is None:

@@ -52,6 +52,7 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Empfehlungen für Tado:** wo Tado zu spät oder zu früh heizt – Zeitplan, Frühstart, Geofencing je Raum
 - **Hydraulischer Abgleich:** welcher Heizkörper zu wenig oder zu viel Heizwasser bekommt – mit eingetragenen Stufen konkret („von 5 auf 6 stellen“), mit grober Wirkung auf die anderen Räume und Nachmessen nach der Änderung
 - **Warmwasser-Empfehlung:** sparsamste Speichertemperatur nach Zapfprofil und Anwesenheit; die Legionellenladung des Reglers ist eingerechnet, die große Zapfung danach braucht keine eigene Ladung – nur Empfehlung, gesetzt wird nichts
+- **Desinfektion (Legionellen) mit Terminvorschlag:** Termin in den Einstellungen, Temperatur vom Kessel; HeatPilot schlägt die Zeit kurz vor deiner größten regelmäßigen Zapfung vor („So 18 Uhr zapfst du am meisten – Desinfektion So 17:30“) und plant sie ein, sobald der Regler zu dieser Zeit desinfiziert – ausgelöst wird sie noch nicht
 - **Vorhersage sichtbar:** Minimum und Trend der nächsten 12 h; der Vorheizplan nennt die Außentemperatur, mit der er rechnet
 - **Zertifikat als PDF:** Haus und Heizung auf einer Seite – Heizlast, Kesselgröße, Takten, Energieklasse und Gesamtbewertung, bezogen auf die letzten 12 Monate
 - **Diagnose und Export:** Selbsttest, Log und alle gelernten Werte als Datei zum Gegenprüfen – ohne Koordinaten und Zugangsdaten
@@ -70,9 +71,9 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
   „HeatPilot steuert“ schreibt HeatPilot die Raum-Sollwerte selbst – nur für Räume mit
   „macht mit“, nur 5–25 °C, jeder Schreibvorgang im Protokoll. Zurück geht es nur über
   denselben Schalter. An EMS-ESP schickt HeatPilot nur Lese-Anfragen (GET); geschrieben
-  wird nur auf die Thermostate, die du als Raum wählst – den Heizkreis von EMS-ESP
-  (`climate.…_thermostat_hc1`) deshalb nicht als Raum wählen, sonst ginge ein Soll über Home
-  Assistant an den Regler (siehe [Steuerung](ems_heatpilot/DOCS.md#steuerung-beobachten-oder-heatpilot-steuert)).
+  wird nur auf die Thermostate, die du als Raum wählst. Den Heizkreis von EMS-ESP
+  (`climate.…_thermostat_hc1`) erkennt HeatPilot am Gerät: Er macht nie mit, und jeder Schreibversuch
+  darauf wird hart abgewiesen (siehe [Räume und Geräte](ems_heatpilot/DOCS.md#räume-und-geräte)).
 - **Sparen ja, übertreiben nein.** Komfort ist eine feste Grenze, gezählt wird am
   Gaszähler fürs ganze Haus, „gar nicht heizen“ ist keine Strategie, unsichere
   Modelle empfehlen nichts (siehe [Leitplanken](ems_heatpilot/DOCS.md)).

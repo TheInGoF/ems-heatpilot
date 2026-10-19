@@ -50,7 +50,8 @@ keine YAML-Optionen:
   doppelt über beide Wege; ohne Cloud heißen zwei Ventile im selben Bereich „Wohnzimmer VA1“ und
   „Wohnzimmer VA2“, bis sie als ein Raum gespeichert sind); was kein Raum ist
   (Klimaanlage im Auto, Heizkreis, Warmwasser),
-  bleibt abgewählt bzw. lässt sich abwählen. Ändern sich die Sensoren eines Raums oder kommt ein Raum
+  bleibt abgewählt bzw. lässt sich abwählen. Beim Heizkreis von EMS-ESP ist „macht mit“ gesperrt
+  (siehe [Räume und Geräte](#räume-und-geräte)). Ändern sich die Sensoren eines Raums oder kommt ein Raum
   hinzu, liest HeatPilot die Historie automatisch neu ein (dauert einige Minuten). Beim
   Speichern mehrerer Geräte in einem Raum sagt HeatPilot, welches das Schlüsselgerät ist
   (Raumregler, sonst das erste)
@@ -60,7 +61,8 @@ keine YAML-Optionen:
   markiert und nicht gewählt; Dummies ohne Gerät ebenso. Abwählen geht jederzeit. Nach einer
   Änderung zählt HeatPilot die Anwesenheit in den gespeicherten Daten neu;
   abgewählte Räume und Personen fließen in keine Auswertung mehr ein.
-- **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub**
+- **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub** – unter Warmwasser seit 0.36.3 auch der
+  Termin der **Desinfektion (Legionellen)** mit Vorschlag (siehe [Desinfektion](#desinfektion-legionellen))
 - **Zuordnungen (Experten):** was die Erkennung gefunden hat, mit eigener Korrektur
 - **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“
 
@@ -430,7 +432,8 @@ Zustand. Geprüft wird in dieser Reihenfolge:
 7. **Außentemperatur** – fehlt sie, rechnet das Vorheizen mit 5 °C (Einschränkung).
 8. **Laufzeit** – weniger als 72 gelernte Stunden im Hausmodell: „Modelle sind jung“ (Hinweis).
 
-Räume ohne „macht mit“ stehen als „nicht dabei“ in der Liste. Die Übersicht zeigt bei „Beobachten“ die
+Räume ohne „macht mit“ stehen als „nicht dabei“ in der Liste, ebenso der Heizkreis von EMS-ESP, falls
+er als Raum gewählt ist („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel“). Die Übersicht zeigt bei „Beobachten“ die
 Stufe als Badge in der Statuszeile, der Heizen-Reiter in seiner Statuszeile.
 
 **Kessel über EMS-ESP** (zweiter Block, nur Anzeige): Bevor es je einen Kessel-Schalter gibt, zeigt
@@ -449,10 +452,13 @@ Steuerung `GET /api/boiler/<kurzname>` ab (bei neueren EMS-ESP liegen die Warmwa
 | Antipendelzeit | `burnminperiod` | Info (nur lesen) |
 | Pumpennachlauf | `pumpdelay` | Info |
 | Heiztemperatur (Obergrenze) | `heatingtemp` | Info |
-| Desinfektion | `wwdisinfecting` / `dhw/disinfecting` | Info |
+| Desinfektion | `wwdisinfecting` / `dhw/disinfecting` | Info – nötig mit Desinfektionstermin |
 
 „Alle 5 nötigen Steuerungen vorhanden und schreibbar – eine Kesselsteuerung wäre möglich (nicht
-gebaut, HeatPilot schreibt nichts)“ bzw. „Es fehlen: Vorlauf-Soll (nicht schreibbar), …“. Ohne
+gebaut, HeatPilot schreibt nichts)“ bzw. „Es fehlen: Vorlauf-Soll (nicht schreibbar), …“. Ist ein
+Desinfektionstermin eingestellt (seit 0.36.3), ist die Desinfektion die sechste nötige Steuerung –
+„Desinfektion braucht WWK Desinfizieren (schreibbar)“, denn ohne Regler müsste HeatPilot sie später
+darüber auslösen. Ohne
 EMS-ESP-Adresse: „EMS-ESP nicht eingerichtet“. Schalter (Heizbetrieb, Einmalladung …) stehen als
 „an“/„aus“, gleich in welchem Bool-Format EMS-ESP sie meldet. Antwortet EMS-ESP auf eine dieser
 Abfragen nicht in 3 s, bricht die Runde ab und wird nach einer Stunde wiederholt – die Kesselwerte
@@ -477,10 +483,21 @@ Stufe der Raumsteuerung nicht – die Tado-Steuerung braucht ihn nicht.
   Zeitplan und keinen Timer. Vor dem ersten Schreiben stellt HeatPilot deshalb die
   Betriebsart auf „heizen“. Räume der Tado-Cloud-Integration behalten Timer und Zeitplan.
 - Der Vorlauf am Regler (EMS-ESP) bleibt außen vor: EMS-ESP wird weiterhin nur gelesen.
-  Den Heizkreis von EMS-ESP (`climate.…_thermostat_hc1`) deshalb nicht als Raum wählen: Er steht
-  in der Raum-Tabelle, weil dort alle climate-Entitäten stehen, wird aber nicht vorgeschlagen. Als
-  Raum gewählt, ginge ein Soll (Knopfdruck oder „macht mit“) über Home Assistant an den Regler –
-  eine eigene Sperre dafür gibt es noch nicht.
+  Den Heizkreis von EMS-ESP (`climate.…_thermostat_hc1`) erkennt HeatPilot seit 0.36.3 am Gerät in
+  Home Assistant: „EMS-ESP“ in Hersteller, Name oder Modell, Hersteller „proddy“ oder angebunden über
+  das EMS-ESP-Gateway; nur wenn Home Assistant kein Gerät kennt, am Namen – und nur bei MQTT. Er steht
+  in der Raum-Tabelle, weil dort alle climate-Entitäten stehen, wird aber nicht vorgeschlagen, und
+  „macht mit“ ist gesperrt („Heizkreis von EMS-ESP – HeatPilot schreibt nicht an den Kessel“). Ein
+  früher gespeichertes „macht mit“ gilt nicht (Warnung im Protokoll), und jeder Schreibversuch auf ihn –
+  Knopfdruck im Reiter „Heizen“ oder Regelschleife – wird hart abgewiesen. Im Reiter „Heizen“ steht er nur
+  zur Anzeige („nur Anzeige“): −/+ und Betriebsart sind gesperrt, Boost, „Zeitplan“ und „Ausschalten“ lassen
+  ihn aus. Liegt er mit einem Ventil in einem Raum, macht der ganze Raum nicht mit (in der Raum-Tabelle ist
+  „macht mit“ dann für alle Geräte dieses Raums gesperrt; das gespeicherte „macht mit“ der Ventile bleibt und
+  gilt wieder, sobald der Heizkreis nicht mehr in diesem Raum ist). Ein Boost auf den Heizkreis, den eine
+  frühere Version noch gemerkt hat, wird beim Start verworfen – zurückstellen darf HeatPilot ihn nicht; der
+  Reiter „Heizen“ sagt, auf welchen Wert das Regler-Soll von Hand zurück muss, bis es dort steht. Tado-Zonen
+  und HomeKit-Ventile, die ebenfalls „…_thermostat“ heißen, bleiben beschreibbar – es zählt das Gerät, nicht
+  der Name.
 
 ### Wunschzustand (jeder Takt, nur bei „HeatPilot steuert“)
 
@@ -597,7 +614,7 @@ Später (0.37): Soll nach Ventilstellung – jetzt bewusst nicht enthalten.
 - In Home Assistant schreibt es von selbst nur seine eigenen `sensor.heatpilot_*`.
 - Ausnahme, nur auf deinen Knopfdruck im Reiter „Heizen“: Tado-Timer, Soll und
   Betriebsart der gewählten Räume (siehe oben). Jeder andere Schreibversuch wird im
-  Code hart abgewiesen.
+  Code hart abgewiesen – auch auf den Heizkreis von EMS-ESP, selbst wenn er als Raum gewählt ist.
 - Erst mit dem Schalter **HeatPilot steuert** (Einstellungen → Steuerung) schreibt es die
   Raum-Solltemperaturen der Räume mit „macht mit“ selbst – mit denselben drei Diensten,
   denselben Räumen und 5–25 °C (siehe „Steuerung“).
@@ -956,6 +973,49 @@ bekommt die Strategie genauso): die Wanne danach, die warm beginnt und erst durc
 ihre Größe unter das Minimum zieht, höchstens 12 Stunden nach der Sonderladung.
 Eine Zapfung, die der Vergleichsspeicher schon unter dem Komfortwert bedient,
 zählt auch dann. Die wöchentliche Desinfektion des Reglers bleibt unberührt.
+
+### Desinfektion (Legionellen)
+
+Seit 0.36.3 gehört der Termin der wöchentlichen Desinfektion in die Einstellungen (Karte Warmwasser):
+**Tag** (Standard „aus“ – kein Termin), **Uhrzeit** des Beginns (Standard 13:00, nur mit Tag wirksam) und die
+**Temperatur**. Die liest HeatPilot vom Kessel (EMS-ESP `wwdisinfectiontemp` bzw. `dhw/disinfectiontemp`,
+„70 °C laut Kessel“); meldet EMS-ESP sie nicht, gilt die Einstellung (60–80 °C, Standard 70). Ein Kesselwert
+außerhalb von 60–80 °C zählt nicht – unter 60 °C ist es keine Desinfektion („Kessel meldet 55 °C – zu niedrig
+für eine Desinfektion, es gilt die Einstellung“).
+
+**HeatPilot löst die Desinfektion noch nicht aus** – EMS-ESP bleibt nur lesend. Viele Kessel haben dafür
+keinen eigenen Timer (nur den Schalter `wwdisinfecting`); bisher macht es der Regler (z. B. ES73 sonntags
+13:00). Solange er das tut, trage seinen Termin ein. Auslösen kommt erst mit der Kesselseite (eigener
+Schalter, siehe [Planung](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/planung-vorlauf-ems.md)).
+
+Eingeplant wird der Termin, sobald er **bestätigt** ist: Hat der Regler in den letzten 8 Tagen zu dieser Zeit
+desinfiziert (erkannt am Kesselschalter `wwdisinfecting` oder daran, dass der Speicher bis 5 K an die
+Desinfektionstemperatur kam; endet sie höchstens 3 Stunden nach dem Termin, ist es dieselbe), behandeln
+Empfehlung und Vergleichsspeicher die Stunden danach wie nach einer erkannten Sonderladung – ohne auf die
+Erkennung dieser Woche zu warten. Heiß ist der Speicher ab Beginn plus Ladedauer (wie beim Vorschlag): Eine
+große Zapfung (Wanne) ab dann bis höchstens 12 Stunden danach ist durch diese Wärme gedeckt, die Strategie
+lädt dafür vorher nicht höher; ein Termin zur Stunde der Wanne selbst deckt sie nicht. Der Vergleichsspeicher
+steht dann auf der Desinfektionstemperatur und kühlt von dort aus; seine Verluste zählen mit, eine Zapfung,
+die er nur dank dieser Wärme bedient, zählt nicht als zu kalt. Desinfiziert zu dieser Zeit niemand – kein
+Regler, oder er desinfiziert zu einer anderen Zeit (dann zählt seine Zeit) –, zählt der Termin nicht
+(„Termin noch nicht bestätigt – kein Regler desinfiziert zu dieser Zeit“): Sonst rechnete die Strategie mit
+Wärme, die nicht kommt, und die Ersparnis stiege. Eine Einmalladung ist keine Desinfektion und zählt weder
+dafür noch dagegen.
+
+**Vorschlag** (ab 4 Wochen Zapfprofil): HeatPilot sucht die Wochenstunde mit der größten regelmäßigen
+Zapfung – zuerst große Zapfungen, die an mindestens der Hälfte der letzten (bis zu 8) Wochen am selben
+Wochentag ±1 Stunde kamen (die größte zuerst, bei gleicher Größe die häufigere), sonst die Stunde, in der mindestens jede zweite Woche gezapft wird und Abfall ×
+Häufigkeit am größten ist. Der Beginn liegt so, dass der Speicher 15 Minuten vor dieser Stunde fertig ist
+(Ladedauer aus der gelernten Ladegeschwindigkeit ab 5 Ladungen, sonst Ladekosten × Anstieg ÷
+Kesselleistung), auf 15 Minuten abgerundet, und nur zwischen 06:00 und 21:00 – läge er nachts, gilt die
+nächstgrößte regelmäßige Zapfung, sonst gibt es keinen Vorschlag. Beispiel: „So 18 Uhr zapfst du am
+meisten (7 von 8 Sonntagen, ≈ 14 K) – Desinfektion So 17:30, dann nutzt du die 70 °C“, dazu grob, wie viel
+der Desinfektionswärme bis dahin im Speicher bleibt und ins Wasser geht. „Vorschlag übernehmen“ trägt Tag
+und Uhrzeit ein; gespeichert wird erst mit „Speichern“. Ohne genug Daten steht der Grund da.
+
+Die Übersicht (Warmwasser) zeigt die nächste Desinfektion als Wert („So 17:30“, Notiz „eingestellt“, dazu
+„Termin noch nicht bestätigt …“, solange er nicht zählt), ohne Termin die zuletzt erkannte Sonderladung.
+Mit Termin ist die Desinfektion in „Bereit für die Steuerung?“ eine nötige Kesselsteuerung.
 
 ## Entitätsnamen
 

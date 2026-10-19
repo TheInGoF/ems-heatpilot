@@ -121,6 +121,9 @@ class SampleMixin:
             # die Verbraucher, die nicht zählen (Waschmaschine, Wallbox …)
             "power_w": self.power_sum(self.found.power, strict=True),
             "power_ex_w": self.power_sum(self.found.power_exclude, strict=False),
+            # nur fürs Warmwasser-Modell (nicht in der Datenbank, 0.36.3): meldet der Kessel die Desinfektion?
+            # Unterscheidet sie von der Einmalladung – nur sie bestätigt den Desinfektionstermin
+            "dhw_disinfecting": flag(self._boiler("dhw_disinfecting")),
             # nur für die Live-Ansicht (nicht in der Datenbank): läuft die Heizungspumpe?
             "pump_on": (int(num(self._boiler("pump_mod")) > 0) if num(self._boiler("pump_mod")) is not None
                         else flag(self._boiler("heating_pump"))),
