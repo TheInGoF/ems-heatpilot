@@ -339,7 +339,8 @@ def test_engine_shadow_and_temperature_from_ems(tmp_path):
     info = eng.disinfect_info(now_ts=t0)
     assert info["configured"] and info["next_text"] == "So 13:00 (eingestellt)" and info["counts"]
     assert (info["temp"], info["temp_source"], info["temp_boiler"]) == (72.0, "laut Kessel", 72.0)
-    assert info["triggers"] is False and info["hint"].startswith("HeatPilot löst sie noch nicht aus")
+    # seit 0.42 löst HeatPilot nur bei „Warmwasser-Soll: HeatPilot setzt“ ohne Regler am Bus aus (test_disinfect42)
+    assert info["triggers"] is False and info["hint"].startswith("HeatPilot löst sie nicht aus")
     assert info["last_special"] is None and "suggestion" not in info and "counts_text" not in info
     assert info["last_disinfect"].startswith("2026-01-04T13:40") and info["temp_note"] is None
     eng.dhw._last_special = datetime(2026, 1, 10, 10, 30).astimezone()  # Regler desinfiziert Sa 10:30

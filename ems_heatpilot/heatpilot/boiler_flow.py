@@ -33,9 +33,8 @@ import math
 from dataclasses import dataclass, field
 
 from . import boiler_rule as br
-from . import floor_limit, guards, preview, valve_dry
+from . import boiler_power, floor_limit, guards, preview, valve_dry
 from .dhw_control import special_running
-from .values import num
 
 
 @dataclass
@@ -76,12 +75,12 @@ def _waiting(eng, readings: dict, gap: float = br.BOOST_GAP_K) -> list[str]:
 
 
 def min_power_kw(eng) -> tuple[float | None, str | None]:
-    """Mindestleistung des Kessels in kW (Einstellung bzw. EMS-ESP: Prozent × Nennleistung) – oder warum unbekannt."""
-    pct = eng.cfg.boiler_min_power_pct or num(eng._boiler("min_power"))
-    nom = eng.nominal_kw()
+    """Mindestleistung des Kessels in kW (Einstellung bzw. EMS-ESP: Prozent × Nennleistung) – oder warum unbekannt
+    (``boiler_power.missing``: „Abnahme-Regel aus: …“, seit 0.42 mit dem Vorschlag aus dem Bereich der maximalen
+    Brennerleistung, der nie automatisch gilt)."""
+    pct, nom = boiler_power.pct(eng)[0], eng.nominal_kw()
     if not pct or not nom:
-        return None, ("Abnahme: Mindestleistung unbekannt – kleinste Brennerleistung (%) und Nennleistung unter "
-                      "Einstellungen → Haus & Kessel eintragen")
+        return None, boiler_power.missing(eng)
     return pct / 100.0 * nom, None
 
 

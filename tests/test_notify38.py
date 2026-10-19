@@ -293,7 +293,8 @@ def test_version_changelog_docs():
     assert "## Warmwasser über HeatPilot (Weg W)" in docs and "## Benachrichtigungen" in docs
     assert "binary_sensor.heatpilot_problem" in docs and "number.set_value" in docs
     row = next(line for line in (ROOT / "README.md").read_text(encoding="utf-8").splitlines() if line.startswith("| 4 |"))
-    assert "Warmwasser-Soll gebaut, Desinfektion auslösen folgt mit Weg B" in row and "0.36.3 / 0.38" in row
+    # seit 0.42 erfüllt (test_disinfect42)
+    assert "Warmwasser-Soll gebaut, Desinfektion auslösen gebaut (0.42)" in row and "0.36.3 / 0.38" in row
     plan = (ROOT / "docs" / "planung-vorlauf-ems.md").read_text(encoding="utf-8")
     assert "Weg W" in plan and "gebaut (0.38)" in plan
 

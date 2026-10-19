@@ -406,7 +406,8 @@ def test_collect_sends_overrides_and_fields_through_settings(tmp_path):
     assert s["persons"] == ["person.anna"] and "notify_targets" not in s  # eigene Tabellen (collect)
     assert set(s) == {"overrides", "persons", "dhw_set_entity", "outdoor_sensors", "weather_entity", "gas_sensor",
                       "demand_sensor", "power_sensors", "power_exclude", "vacation_entity",
-                      "flow_set_entity", "heating_switch_entity"}  # Weg B seit 0.41
+                      "flow_set_entity", "heating_switch_entity",  # Weg B seit 0.41
+                      "disinfect_entity"}  # Desinfektion auslösen seit 0.42
     c = r["changed"]
     assert c["overrides"] == ["burner_power=sensor.boiler_curflowtemp"] and c["gas_sensor"] == "sensor.gaszaehler"
     assert c["outdoor_sensors"] == ["sensor.boiler_outdoortemp"] and c["power_sensors"] == []

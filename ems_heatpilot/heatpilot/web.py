@@ -17,6 +17,12 @@ Seit 0.41 Weg B (Kessel über HeatPilot): ``GET api/boiler`` (Status und Bereits
 Wächter) und in ``api/entities`` je ``number`` ``flow``, je ``switch`` ``heating`` (taugt als Vorlauf-Soll bzw.
 Heizbetrieb – ``boiler_entity``).
 
+Seit 0.42 (Desinfektion auslösen, Mindestleistung): ``disinfect.trigger`` in ``api/settings`` und
+``summary.dhw.disinfect_plan`` (wer die Desinfektion auslöst, Stand, letztes Ergebnis), ``disinfect`` in ``api/dhw``
+(dazu das Protokoll), ``boiler_power`` in ``api/settings`` (Mindestleistung mit Herkunft und Vorschlag aus dem Bereich
+der maximalen Brennerleistung – nur Anzeige, gespeichert wird über ``api/settings``), in ``api/entities`` je ``switch``
+``disinfect`` (taugt als Schalter der Desinfektion – ``disinfect_entity``).
+
 Seit 0.39.1 ``GET api/entity_map`` (nur lesen): alle Rollen in Gruppen mit Zweck, nötig/optional, Filter und dem, was
 gilt (``entity_map``) – für die Seite „Entitäten“ in den Einstellungen. Gespeichert wird weiter über ``api/settings``.
 """
@@ -37,6 +43,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
+from . import boiler_power, disinfect_entity
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -176,6 +183,8 @@ def make_app(app) -> web.Application:
                                              "heating": boiler_entity.suggest_heat(app.eng.found, app.eng.states)},
                                "fallback_range": [boiler_rule.FALLBACK_MIN, boiler_rule.FALLBACK_MAX],
                                "status": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))},
+            # 0.42: Mindestleistung – wirksamer Wert, Herkunft, Vorschlag (nie automatisch übernommen)
+            "boiler_power": boiler_power.info(app.eng),
         })
 
     async def entities(_req):
@@ -212,7 +221,8 @@ def make_app(app) -> web.Application:
                    if eid.startswith("climate.") else {}),
                 **({"dhw": dhw_entity.picker(eid, st, app.eng.found),
                     "flow": boiler_entity.flow_picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
-                **({"heating": boiler_entity.heat_picker(eid, st, app.eng.found)} if eid.startswith("switch.") else {}),
+                **({"heating": boiler_entity.heat_picker(eid, st, app.eng.found),
+                    "disinfect": disinfect_entity.picker(eid, st, app.eng.found)} if eid.startswith("switch.") else {}),
             })
         return json_response(out)
 
@@ -376,7 +386,9 @@ def make_app(app) -> web.Application:
         """Weg W (0.38): Status und Bereitschaft des Warmwasser-Solls."""
         if app.eng is None:
             return json_response({"starting": True, "status": app.status})
-        return json_response({"dhw": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time()))})
+        dis = getattr(app.eng, "disinfect_control", None)  # 0.42: Desinfektion auslösen mit Protokoll
+        return json_response({"dhw": dhw_state(), "readiness": readiness.dhw(app.eng, int(time.time())),
+                              "disinfect": dis.as_dict() if dis is not None else None})
 
     async def dhw_resume(_req):
         """„Wieder einschalten“ nach einer Pause von Weg W – schreibt selbst nichts, der nächste Takt entscheidet. Ohne

@@ -1,10 +1,11 @@
 # Planung: Vorlauftemperatur über EMS führen (Diskussionspapier)
 
-Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden). Gebaut sind **Weg W** (Warmwasser-Soll über Home
+Stand 19.10.2026 (Kesselwerte ergänzt, Weg B entschieden, Desinfektion gebaut). Gebaut sind **Weg W** (Warmwasser-Soll über Home
 Assistant, 0.38, siehe unten) und seit 0.41 **Weg B** (Kessel über HeatPilot: Vorlauf-Soll live und Heizbetrieb über
 Home Assistant, eigener Schalter, siehe „Weg B – gebaut (0.41)“); die Fußboden-Grenze je Raum (0.39.1) gilt seit 0.41
-auch hart vor jedem Schreiben. Das Auslösen der Desinfektion folgt mit 0.42. EMS-ESP bleibt **nur lesend** – geschrieben
-wird über Home Assistant.
+auch hart vor jedem Schreiben. Seit 0.42 löst HeatPilot auch die **Desinfektion** zum Termin aus (siehe „Desinfektion –
+gebaut (0.42)“) – damit kann der ES73 nach Weg B und 0.42 entfallen. EMS-ESP bleibt **nur lesend** – geschrieben wird über
+Home Assistant.
 Dieses Papier sammelt Wege, Risiken und offene Fragen, damit die Entscheidung nebenbei reifen kann.
 
 ## Ausgangslage
@@ -123,7 +124,10 @@ Warmwasser. Geschrieben wird über Home Assistant, nie per REST an EMS-ESP:
   regelmäßig vom Regler? Wenn nicht stehen bleibt: Auffrischen ohne Änderung (z. B. alle 5–10 min) als eigene Regel
   abstimmen – das widerspricht „nur bei Änderung“. Bis dahin die Heiztemperatur am Kessel höchstens auf die strengste
   Fußboden-Grenze stellen.
-- Offen: Desinfektion auslösen (0.42, siehe unten); eigene Witterungsführung über die Vorschau hinaus.
+- Gebaut mit 0.42: Desinfektion auslösen (siehe „Desinfektion – gebaut (0.42)“) und der Vorschlag der Mindestleistung
+  aus dem Bereich der maximalen Brennerleistung. Offen: eigene Witterungsführung über die Vorschau hinaus.
+- **ES73 abbauen:** Mit Weg B (Vorlauf, Heizbetrieb), Weg W (Warmwasser-Zeitprogramm) und 0.42 (Desinfektion) fehlt ohne
+  den ES73 nichts mehr, was er heute macht – er kann nach dem Trockenlauf von Weg B und 0.42 entfallen.
 
 ## Warmwasser-Soll schon vor Weg B (Weg W) – gebaut (0.38)
 
@@ -131,7 +135,7 @@ Warmwasser. Geschrieben wird über Home Assistant, nie per REST an EMS-ESP:
 Standard aus), geschrieben über Home Assistant (`number.set_value` auf die Entität des Speicher-Solls, nicht per
 REST an EMS-ESP), nur bei Änderung ab 1 K, 5 min Haltezeit, Prüfung nach 60 s, Pause nach 3 Fehlschlägen bzw. 2
 fremden Änderungen in 1 h, Meldungen über die Benachrichtigungsziele und `binary_sensor.heatpilot_problem`. Die
-Raumsteuerung meldet ihre Schreibfehler über dieselbe Stelle. Offen bleibt das Auslösen der Desinfektion (mit Weg B).
+Raumsteuerung meldet ihre Schreibfehler über dieselbe Stelle. Das Auslösen der Desinfektion ist seit 0.42 gebaut (unten).
 Nach der Prüfung von 0.38 zusätzlich abgesichert (die Regeln oben bleiben): geschrieben wird nur auf eine Entität, die
 nach dem Speicher-Soll aussieht (°C, kein Heizkreis, keine andere Rolle wie das Vorlauf-Soll), nur ohne Hindernis in
 „Bereit für die Steuerung?“; die 1-K-Schwelle gilt auch für die ungerundete Empfehlung; eine Zählsperre gibt es seit
@@ -164,9 +168,37 @@ Weg W als eigene Version.
   Meldungen nutzt auch die Raumsteuerung (Schreibfehler am Thermostat) und später Weg B.
 - Jeder Schreibvorgang mit Grund im Protokoll wie `control_log`.
 - Die Desinfektion bleibt beim ES73, bis er abgebaut wird; danach löst HeatPilot sie über
-  `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an, siehe unten).
+  `wwdisinfecting` zum eingestellten Termin aus (0.36.3 legt den Termin an, gebaut mit 0.42, siehe unten).
 
-## Desinfektion als Teil von Weg B (folgt 0.42)
+## Desinfektion – gebaut (0.42)
+
+**Stand 0.42:** gebaut wie unten beschrieben, mit diesen Festlegungen: HeatPilot schaltet `wwdisinfecting` nur, wenn ein
+Termin eingestellt ist, das Warmwasser-Soll auf „HeatPilot setzt“ steht (Weg W; im Trockenlauf nur Protokoll „würde
+Desinfektion starten“), **kein Regler am Bus** ist (dieselbe Erkennung wie Weg B – statt „keine erkannte Desinfektion zu
+anderer Zeit“; mit Regler macht er sie) und Weg W nicht pausiert ist. Geschrieben wird über Home Assistant
+(`switch.turn_on`/`turn_off` nur auf die eine Entität der Rolle `dhw_disinfecting`, Einstellung `disinfect_entity`, leer
+= erkannt; strenge Prüfung: switch, Name passt, nie Einmalladung, Zirkulation oder ein anderer Kesselschalter).
+- Zum Termin (Ortszeit, auch in der Woche der Zeitumstellung) einschalten – höchstens einmal je Termin (Zustand in kv,
+  überlebt Neustarts); nach 60 s prüfen (Schalter an bzw. EMS-ESP meldet Desinfektion/Sonderladung); beobachten, bis der
+  Speicher die Desinfektionstemperatur − 3 K erreicht (Erfolg) – spätestens **Ladedauer laut Modell + 60 min** (statt
+  + 30 min), sonst Fehlschlag mit Meldung und Problem-Sensor.
+- Danach: steht der Schalter noch an, einmal ausschalten und prüfen – nach einem Erfolg erst nach 15 min Nachlauf (der
+  Kessel setzt ihn meist selbst zurück), nach einem Fehlschlag gleich.
+- Verpasst (HeatPilot aus oder gesperrt): innerhalb von 12 h nachholen, sonst Meldung „Desinfektion verpasst“ und der
+  nächste Termin. Ein eben eingetragener Termin, der schon vorbei ist, wird nicht ausgelöst.
+- Während des Ablaufs schreibt Weg W das Speicher-Soll nicht, Weg B lässt das Vorlauf-Soll in Ruhe. Löst HeatPilot den
+  Termin aus, zählt er im Warmwasser-Modell ohne Bestätigung durch einen Regler.
+- Anzeige: Einstellungen → Warmwasser, Zeile „Auslösen“ („löst HeatPilot aus (So 17:30)“, „macht der Regler“, „aus“) mit
+  der letzten Desinfektion; dieselbe Zeile in „Bereit für die Steuerung?“ (Block Warmwasser); Protokoll im Heizen-Reiter.
+- Nach der Prüfung von 0.42 (gleiche Bedingungen fürs Ein- und Ausschalten): Ausschalten bei kurzer Sperre (EMS-ESP
+  antwortet nicht, Pause), unbekanntem Schalter oder Fehler bis 30 min weiter versuchen, dann Meldung; „gelungen“ nur
+  nach Bestätigung durch den Kessel, bei schon heißem Speicher erst mit voller Temperatur bzw. Rücksetzen durch den Kessel
+  (Nachlauf dann bis zur Frist); höchstens eine Desinfektion je 24 h (Termin verlegt); „macht der Regler“ nur mit frischem
+  Nachweis (eben abgebaut → warten und nachholen); Zeitüberlauf beim Einschalten → Prüfung nach 60 s entscheidet; ein
+  gescheiterter Termin zählt im Warmwasser-Modell nicht. Offen bleibt, ob der Kessel den Schalter nach dem Programm
+  selbst zurücksetzt – im ersten Betrieb ohne Regler beobachten.
+
+Ursprünglicher Plan (0.36.3):
 
 Stand 0.36.3 (gebaut, nur lesend): Termin in den Einstellungen (Tag, Uhrzeit; Standard aus), Temperatur
 vom Kessel (`wwdisinfectiontemp`, sonst Einstellung 60–80 °C), Vorschlag kurz vor der größten regelmäßigen
@@ -272,7 +304,9 @@ Dafür muss HeatPilot das Verhalten jedes Ventils nachbilden (reverse engineerin
   Heizen nicht (gilt seit 0.39 in Vorschau und Trockenlauf).
 - **Mindest-Vorlauf aus der Abnahme:** Der Kessel kann nicht unter seine Mindestleistung (BK15 ≈ 30 % von 18 kW).
   Aus den Raummodellen rechnen, ab welchem Vorlauf die offenen Räume diese Leistung abnehmen; liegt das über 35 °C,
-  gilt der höhere Wert. Reicht auch das nicht, lieber lange Pausen als viele kurze Läufe.
+  gilt der höhere Wert. Reicht auch das nicht, lieber lange Pausen als viele kurze Läufe. (Live-Test Ingo: der BK15
+  meldet keine Mindestleistung. Seit 0.42 schlägt HeatPilot die Untergrenze des Bereichs von „Maximale Brennerleistung“
+  vor – 32 % –, übernommen wird sie nur von Hand unter Haus & Kessel; ohne Wert ist die Abnahme-Regel aus.)
 - **Wer Wärme braucht, bekommt sie sofort.** Braucht nur ein Raum Wärme, wird DIESER Raum warm – der Takt-Boost hebt
   den Vorlauf dafür an. Kein Warten, bis andere Räume auskühlen und mitanfordern. „Gemeinsam anfordern“ zieht nur
   Räume vor, die ohnehin bald heizen würden, und lässt nie einen Raum warten.
@@ -334,12 +368,12 @@ Beim Export stand „Heizen abschalten: an“ und Vorlauf-Soll 7 °C bei 11 °C 
 | Heiztemperatur | `heatingtemp` | 90 °C | 0–90 | Obergrenze – nur einmal auf `max_flow_temp` |
 | Antipendelzeit | `burnminperiod` | 25 min | 0–120 | Taktsperre: **lesen**, nicht ändern (Regel bleibt) |
 | Pumpennachlaufzeit | `pumpdelay` | 8 min | 0–60 | nur lesen (Nachlauf in der Bilanz) |
-| Maximale Brennerleistung | `burnmaxpower` | 100 % | 32–100 | nicht ändern |
+| Maximale Brennerleistung | `burnmaxpower` | 100 % | 32–100 | nicht ändern; Untergrenze = Vorschlag Mindestleistung (0.42) |
 | WWK gewählte Temperatur | `wwseltemp` | 45 °C | 0–254 | Speicher-Soll aus der Warmwasser-Empfehlung |
 | WWK Komfort | `wwcomfort` | Heiß | Heiß/Eco/Intelligent | nicht ändern |
 | WWK aktiviert | `wwactivated` | an | aus/an | Warmwasser aus bei langer Abwesenheit |
 | WWK Einmalladung | `wwonetime` | aus | aus/an | Sonderladung vor Ankunft/Wanne |
-| WWK Desinfizieren | `wwdisinfecting` | aus | aus/an | Legionellenladung, falls der ES73 wegfällt |
+| WWK Desinfizieren | `wwdisinfecting` | aus | aus/an | Legionellenladung ohne ES73 – seit 0.42 zum Termin |
 | WWK Desinfektionstemperatur | `wwdisinfectiontemp` | 70 °C | 60–80 | nur lesen |
 | WWK Zirkulation | `wwcirc`/`wwcircmode` | aus / 1×3 min | – | nicht ändern |
 
@@ -371,6 +405,8 @@ Folgerungen:
 4. Moduliert der BK15 die Heizkreispumpe selbst, oder gibt der ES73 die Pumpe vor?
 5. EEPROM-Grenzen des ES73 (Buderus nennt für RC35 begrenzte Schreibzyklen) – wie oft darf die Kurve
    geändert werden?
+6. Setzt der Kessel `wwdisinfecting` nach dem Desinfektionsprogramm selbst zurück? (Im ersten Betrieb ohne ES73 im
+   Protokoll der Desinfektion ablesen: „Schalter aus (vom Kessel)“ bzw. „Schalter aus“ nach dem Ausschalten.)
 
 ## Hinweis zu den ES73-Entitäten in HA
 
@@ -379,4 +415,5 @@ Die Modelle lernen aus Kesselwerten (Vorlauf, Brenner, Gas), Tado-Raumtemperatur
 nicht aus dem ES73. Vom ES73 nutzt HeatPilot nur Regler-Soll/Betriebsart als Hilfsgrößen (Warmwasser-
 erkennung, Vorlauf-Studie). **Den ES73 erst abbauen**, wenn Weg B gebaut und im Trockenlauf geprüft ist: Der
 Außenfühler bleibt zwar am Kessel, aber Heizkurve, Warmwasser-Zeitprogramm und Desinfektion macht heute der
-ES73 – ohne ihn läuft der Kessel mit festem Vorlauf und ohne Legionellenschaltung.
+ES73 – ohne ihn läuft der Kessel mit festem Vorlauf und ohne Legionellenschaltung, solange HeatPilot sie nicht übernimmt
+(Weg B, Weg W und seit 0.42 die Desinfektion).

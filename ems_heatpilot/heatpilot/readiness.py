@@ -24,7 +24,10 @@ ohne Warmwasser-Hinweis ist eine Einschränkung), schreibbar laut EMS-ESP (``wws
 Prüfung, Pause, fremder Schreiber, Kessel-Soll unklar (Entität und EMS-ESP verschieden) und ein Minimum unter 50 °C
 ohne Desinfektionstermin (Legionellen) – mit dem Hinweis „HA-Automation für das Speicher-Soll abschalten“, solange in
 den letzten 24 h fremde Änderungen kamen. Dieselben Hindernisse hält ``DhwControl.blocker`` beim Schreiben ein. Auch
-er ändert die Stufe der Raumsteuerung nicht. Texte ohne Uhrzeit des Add-ons – Zeiten als ISO-Felder.
+er ändert die Stufe der Raumsteuerung nicht. Texte ohne Uhrzeit des Add-ons – Zeiten als ISO-Felder. Seit 0.42 steht
+dort auch, wer die Desinfektion auslöst („Desinfektion: löst HeatPilot aus (So 17:30)“, „macht der Regler“, „aus“), mit
+dem letzten Ergebnis (``disinfect_status.ready``); kann HeatPilot sie nicht auslösen oder löst sie niemand aus, ist das
+eine Einschränkung.
 
 Seit 0.39.1 steht unter ``floor`` die Fußboden-Grenze für den Vorlauf (``floor_limit.status``): wirksame Grenze jetzt,
 je Raum Anschluss, Anforderung und Grund; als Hinweise die wirksame Grenze und „Anschluss wählen“ für Räume mit
@@ -45,7 +48,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from . import boiler_status, dhw_control, dhw_entity, floor_limit, guards, valve_control
+from . import boiler_status, dhw_control, dhw_entity, disinfect_status, floor_limit, guards, valve_control
 from .controlloop import MAX_FAILS, preheat_hours, reach_c
 from .emsesp import BOILER_CONTROLS
 from .ems_lock import LOCK_TEXT
@@ -424,7 +427,9 @@ def dhw(eng, now_ts: int) -> dict:
     st = ctl.state if ctl is not None else {}
     info, blockers, limits = _dhw_entity(eng, entity, cfg)
     more_blockers, more_limits, notes = _dhw_state(eng, ctl, now_ts)
-    blockers, limits = blockers + more_blockers, limits + more_limits
+    dis_limits, dis_notes, dis = disinfect_status.ready(eng, now_ts)  # 0.42: wer die Desinfektion auslöst
+    blockers, limits = blockers + more_blockers, limits + more_limits + dis_limits
+    notes += dis_notes
     notes.append(dhw_control.HINT_FAILSAFE)
     mode, writes = cfg.dhw_control, cfg.writes_dhw()
     level = "nicht bereit" if blockers else ("eingeschränkt" if limits else "bereit")
@@ -446,5 +451,5 @@ def dhw(eng, now_ts: int) -> dict:
         "paused_since": _iso(paused["ts"]) if paused else None,
         "foreign_last": None if not fl else {**fl, "time": _iso(fl["ts"])},
         "foreign_24h": len(foreign), "hint": dhw_control.HINT_AUTOMATION if foreign else None,
-        "blockers": blockers, "limits": limits, "notes": notes,
+        "blockers": blockers, "limits": limits, "notes": notes, "disinfect": dis,
     }

@@ -45,6 +45,7 @@ BOILER_ROLES: dict[str, tuple[str, ...]] = {
     "nrg_heat": ("nrgheat", "energy_heating"),
     # seit 0.25: Warmwasser-Details, Anlage, Wartung
     "dhw_starts": ("dhw_starts", "wwstarts"),
+    # Schalter „WWK Desinfizieren“: läuft die Desinfektion? Seit 0.42 schaltet HeatPilot ihn zum Termin (disinfect_entity)
     "dhw_disinfecting": ("dhw_disinfecting", "wwdisinfecting"),
     # Desinfektionstemperatur des Kessels (0.36.3) – neuere EMS-ESP unter „dhw“, ältere als ww…
     "dhw_disinfect_temp": ("dhw_disinfectiontemp", "wwdisinfectiontemp", "dhw_disinfection_temperature"),
@@ -110,7 +111,7 @@ ROLE_LABELS: dict[str, str] = {
     "hc_remotetemp": "Regler: Raumtemperatur (Remote)",
     "damped_outdoor": "Regler: gedämpfte Außentemperatur",
     "dhw_starts": "Warmwasser-Ladungen (Zähler)",
-    "dhw_disinfecting": "Legionellenschaltung läuft",
+    "dhw_disinfecting": "Desinfektion (WWK Desinfizieren)",
     "dhw_disinfect_temp": "Desinfektion: Temperatur (Kessel)",
     "dhw_onetime": "Warmwasser-Einmalladung",
     "dhw_hyst_on": "Warmwasser: Nachladen ab (K unter Soll)",

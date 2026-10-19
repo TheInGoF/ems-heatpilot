@@ -368,6 +368,18 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
 .boiler-ico svg { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: -1px; color: var(--series-2); }
 .legend i.ring.own.flow { background: var(--series-2); border-color: var(--series-2); }
 .badge.n-rec { border-color: var(--good); color: var(--good); margin-left: 4px; }
+/* Desinfektion auslösen, Mindestleistung (0.42): Zeile „Auslösen“ in Einstellungen → Warmwasser, Zeile im Block
+   „Warmwasser über HeatPilot“, Vorschlag der kleinsten Leistung mit Knopf „übernehmen“ in Haus & Kessel */
+.dis-trig { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 6px; padding: 8px 10px;
+  margin: 10px 0; font-size: 13px; color: var(--text-primary); background: var(--bg); }
+.card .dis-trig p { margin: 4px 0 0; font-size: 13px; }
+.dis-trig code { color: var(--text-primary); overflow-wrap: anywhere; }
+.card p.ready-dis { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
+.ready-dis .dot { margin-right: 4px; }
+.minpow, .minpow-off { display: block; margin-top: 4px; }
+.minpow b { color: var(--text-primary); }
+.minpow .btn { margin-left: 4px; }
+.minpow-off { color: var(--warn); }
 </style>
 </head>
 <body>
@@ -1046,9 +1058,13 @@ function readyLine(r, pil) {
 }
 const ACTION_NAME = { set_temperature: "Soll", set_hvac_mode: "Betriebsart", set_climate_timer: "Tado-Timer" };
 // Weg W (0.38): Warmwasser-Zeilen im Protokoll (kind „dhw“, Name „Warmwasser-Soll“) mit eigenen Aktionen; Weg B (0.41):
-// Kessel-Zeilen (kind „boiler“, Name „Kessel“, BOILER_ACTION) – Vorlauf-Soll in °C, Heizbetrieb an/aus
+// Kessel-Zeilen (kind „boiler“, Name „Kessel“, BOILER_ACTION) – Vorlauf-Soll in °C, Heizbetrieb an/aus; seit 0.42 die
+// Zeilen der Desinfektion (kind „dhw“, Name „Desinfektion“) – Schalter an/aus, sonst die höchste Speichertemperatur
 const DHW_ACTION = { set_value: "gesetzt", dry_run: "würde schreiben", check_failed: "nicht übernommen",
-  foreign: "fremde Änderung", paused: "pausiert", resumed: "wieder eingeschaltet" };
+  foreign: "fremde Änderung", paused: "pausiert", resumed: "wieder eingeschaltet",
+  disinfect_on: "eingeschaltet", disinfect_off: "ausgeschaltet", disinfect_dry: "würde starten", disinfect_running: "läuft",
+  disinfect_done: "gelungen", disinfect_failed: "nicht gelaufen", disinfect_missed: "verpasst",
+  disinfect_aborted: "abgebrochen", disinfect_switch: "Schalter prüfen", disinfect_skipped: "übersprungen" };
 // Raum- und Warmwasser-Zeilen: control.log enthält seit 0.38 beide (neueste zuerst); ist es leer (keine
 // Regelschleife), die letzten Warmwasser-Zeilen aus dhw.log
 function heatLogRows(c, d) {
@@ -1064,7 +1080,8 @@ function renderHeatLog(c, d) {
     return `<tr${w ? ' class="log-dhw"' : k ? ' class="log-boiler"' : ""}><td style="white-space:nowrap">${esc(timeOf(l.time))}</td>` +
       `<td>${w ? DROP + esc(l.name || "Warmwasser-Soll") : k ? FLAME + esc(l.name || "Kessel") : esc(shortName(l.name || l.room))}</td>` +
       `<td>${(w ? DHW_ACTION : k ? BOILER_ACTION : ACTION_NAME)[l.action] || esc(l.action)}</td>` +
-      `<td>${k ? boilerLogValue(l) : l.value === null || l.value === undefined ? "–" : fmt(l.value) + " °C"}</td><td>${esc(l.reason || "")}</td></tr>`;
+      `<td>${k ? boilerLogValue(l) : l.action === "disinfect_on" ? "an" : l.action === "disinfect_off" ? "aus"
+        : l.value === null || l.value === undefined ? "–" : fmt(l.value) + " °C"}</td><td>${esc(l.reason || "")}</td></tr>`;
   }).join("");
 }
 async function loadHeat() {
@@ -1385,9 +1402,10 @@ function planOutdoor(plan) {
   return `<p class="muted" id="plan-tout">Gerechnet mit ${fmt(plan.t_out_used)} °C außen ` +
     (plan.t_out_source === "vorhersage" ? `(Vorhersage für ${clock(plan.t_out_at)})` : "(aktuelle Außentemperatur – keine Vorhersage für den Zeitpunkt)") + "</p>";
 }
-// Desinfektion (0.36.3): HeatPilot plant den Termin ein, löst ihn aber noch nicht aus (EMS-ESP nur lesen).
-// Rückfall für den Hinweis, falls eine Antwort ihn nicht mitbringt – gleich dhw_disinfect.NOT_YET
-const DIS_NOT_YET = "HeatPilot löst sie noch nicht aus – solange der Regler (z. B. ES73) sie macht, dessen Termin eintragen";
+// Desinfektion (0.36.3): HeatPilot plant den Termin ein; seit 0.42 löst es ihn aus, wenn kein Regler am Bus ist und das
+// Warmwasser-Soll auf „HeatPilot setzt“ steht (Hinweis aus dem Backend, disinfect_status). Rückfall für den Hinweis,
+// falls eine Antwort ihn nicht mitbringt – gleich dhw_disinfect.NOT_YET
+const DIS_NOT_YET = "HeatPilot löst sie nicht aus – nur bei „Warmwasser-Soll: HeatPilot setzt“ ohne Regler am Bus; solange der Regler (z. B. ES73) sie macht, dessen Termin eintragen";
 // „So 17:30 (eingestellt)“ → ["So 17:30", "eingestellt"]: Zeit groß als Wert, die Herkunft vorn in der Notiz
 // (als Einheit daneben bricht sie in schmalen Kacheln in eine eigene Zeile)
 const splitWhen = (t) => { const m = /^(.*?)\s*(?:\(([^()]*)\))?$/.exec(String(t || "")); return [m[1], m[2] || ""]; };
@@ -2684,6 +2702,9 @@ const PICKERS = {
   // (api/entities: flow.fits bzw. heating.fits: keine andere Rolle, kein Heizkreis, nie „Heizen abschalten“)
   flow: { filter: (e) => !!(e.flow && e.flow.fits), label: "Vorlauf-Soll (number, °C)" },
   heating: { filter: (e) => !!(e.heating && e.heating.fits), label: "Heizbetrieb (switch)" },
+  // Desinfektion auslösen (0.42): nur der Schalter „Desinfizieren“ (api/entities: disinfect.fits – switch, Name passt,
+  // nie Einmalladung, Zirkulation oder ein anderer Kesselschalter)
+  disinfect: { filter: (e) => !!(e.disinfect && e.disinfect.fits), label: "Schalter „Desinfizieren“ (switch)" },
 };
 
 const dhwRank = (e) => (e.id === (DHWC || {}).suggested ? 2 : 0) + (e.dhw && e.dhw.hint ? 1 : 0);
@@ -3005,8 +3026,9 @@ function boilerHtml(b, open) {
 }
 
 // Desinfektion (0.36.3) in Einstellungen → Warmwasser (GET api/settings → disinfect): Tag („aus“ = kein Termin),
-// Uhrzeit, Temperatur laut Kessel (sonst die Einstellung), Zustand und Vorschlag mit Begründung. „Vorschlag
-// übernehmen“ trägt nur Tag und Uhrzeit ein – gespeichert wird mit „Speichern“. HeatPilot löst nichts aus.
+// Uhrzeit, Temperatur laut Kessel (sonst die Einstellung), Zustand, seit 0.42 die Zeile „Auslösen“ (disinfect.trigger)
+// und Vorschlag mit Begründung. „Vorschlag übernehmen“ trägt nur Tag und Uhrzeit ein – gespeichert wird mit „Speichern“.
+// Geschaltet wird nie aus der Oberfläche, nur im Backend zum Termin.
 const DAY_NAMES = { Mo: "Montag", Di: "Dienstag", Mi: "Mittwoch", Do: "Donnerstag", Fr: "Freitag", Sa: "Samstag", So: "Sonntag" };
 const CHARGE_FROM = { gelernt: "gelernte Ladegeschwindigkeit", Leistung: "aus der Kesselleistung", "geschätzt": "geschätzt" };
 const DIS_BOILER = "laut Kessel";  // dhw_disinfect.SOURCE_BOILER
@@ -3018,8 +3040,9 @@ function disinfectHtml(s, d) {
   const read = d.temp === null || d.temp === undefined ? "–" : `<b>${fmt(d.temp, 1)} °C</b> ${esc(d.temp_source || "")}`;
   return `<h3 style="font-size:13px;margin:14px 0 4px" id="dis-head">Desinfektion (Legionellen)</h3>` +
     `<p class="muted" style="margin:0 0 6px">Einmal je Woche heizt der Kessel den Speicher auf die Desinfektionstemperatur. ` +
-    `HeatPilot plant den Termin ein, sobald der Regler zu dieser Zeit desinfiziert: Große Zapfungen nach der Ladung (z. B. die Wanne) ` +
-    `sind durch dessen Wärme gedeckt – dafür lädt die Strategie vorher nicht höher.</p><div class="form-grid">` +
+    `Ohne Regler am Bus löst HeatPilot sie bei „Warmwasser-Soll: HeatPilot setzt“ zum Termin aus (Schalter „Desinfizieren“, siehe „Auslösen“ unten); ` +
+    `macht sie ein Regler, plant HeatPilot seinen Termin ein. Große Zapfungen nach der Ladung (z. B. die Wanne) ` +
+    `sind durch diese Wärme gedeckt – dafür lädt die Strategie vorher nicht höher.</p><div class="form-grid">` +
     field("Tag", `<select id="f-dhw_disinfect_day" class="sel" onchange="disinfectSync()">${opts}</select>`, "aus = kein Termin (Standard)") +
     field("Uhrzeit (Beginn)", `<input id="f-dhw_disinfect_time" type="time" value="${esc(s.dhw_disinfect_time || "13:00")}" oninput="disinfectSync()">`,
       "nur wirksam mit Tag") +
@@ -3028,7 +3051,7 @@ function disinfectHtml(s, d) {
       : esc(d.temp_note || "EMS-ESP meldet keine Desinfektionstemperatur – es gilt der eingestellte Wert")) +
     field("Temperatur ohne Kesselwert (°C)", `<input id="f-dhw_disinfect_temp" type="number" step="1" min="${lo}" max="${hi}" value="${esc(s.dhw_disinfect_temp)}">`,
       `${lo}–${hi} °C; gilt nur, wenn EMS-ESP keine Desinfektionstemperatur meldet`) +
-    `</div>${disinfectState(d)}${disinfectSuggestHtml(d.suggestion)}<div class="warnbox" id="dis-hint">${esc(d.hint || DIS_NOT_YET)}</div>`;
+    `</div>${disinfectState(d)}${disinfectTriggerHtml(d.trigger)}${disinfectSuggestHtml(d.suggestion)}<div class="warnbox" id="dis-hint">${esc(d.hint || DIS_NOT_YET)}</div>`;
 }
 // Zustand: nächster Termin bzw. kein Termin, letzte erkannte Sonderladung, Termin des Reglers; der Termin zählt nur,
 // wenn der Regler zu dieser Zeit desinfiziert (bestätigt) – sonst sagt counts_text warum nicht
@@ -3063,6 +3086,69 @@ function applyDisinfect() {
   $("f-dhw_disinfect_day").value = sg.day; $("f-dhw_disinfect_time").value = sg.time;
   disinfectSync();
   $("save-msg").className = ""; $("save-msg").textContent = `Desinfektion ${sg.day} ${sg.time} eingetragen – prüfen und speichern.`;
+}
+
+// ---------------------------------------------------------------- Desinfektion auslösen (0.42)
+// Zeile „Auslösen“ in Einstellungen → Warmwasser (disinfect.trigger aus disinfect_status.info): wer die Desinfektion zum
+// Termin auslöst – „löst HeatPilot aus (So 17:30)“, „macht der Regler“, Trockenlauf oder aus –, der Schalter, was gerade
+// läuft, wartet oder sperrt, und die letzte Desinfektion mit Ergebnis. Dazu die Zeile im Block „Warmwasser über
+// HeatPilot“ (readiness.dhw.disinfect, in dhwReadyHtml) und die Protokollzeilen (DHW_ACTION). Nur Anzeige – die
+// Oberfläche schaltet nichts.
+const DIS_RESULT_CSS = { gelungen: "msg-ok", fehlgeschlagen: "msg-err", verpasst: "msg-err", abgebrochen: "msg-warn" };
+const disWhen = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";
+// gelb: gesperrt, letzte nicht gelaufen bzw. verpasst, oder Termin ohne jemanden, der ihn auslöst (kein Regler am Bus)
+const disDot = (t) => t.blocked || (t.last && t.last.ok === false) || (t.state === "aus" && t.label && t.regulator === false)
+  ? "dot-warn" : t.state === "heatpilot" || t.state === "regler" ? "dot-ok" : "";
+// „zuletzt So., 19.10., 17:30: gelungen – 68 °C erreicht (Ziel 67 °C)“; hat der Regler den Termin übernommen, die zuletzt
+// erkannte Desinfektion; im Trockenlauf nur, dass der Termin im Protokoll steht
+function disLast(l, detected) {
+  const seen = detected ? `zuletzt erkannt ${esc(disWhen(detected))}` : "";
+  if (!l || l.result === "regler") return seen;
+  if (l.result === "trocken") return `Termin ${esc(disWhen(l.time))}: Trockenlauf – nur im Protokoll`;
+  return `zuletzt ${esc(disWhen(l.time))}: <span class="${DIS_RESULT_CSS[l.result] || "muted"}">${esc(l.result_text || l.result)}</span>` +
+    (l.text ? ` – ${esc(l.text)}` : "");
+}
+// Was gerade ist: läuft (Speicher und Ziel), wartet (Grund), gesperrt (Grund)
+function disNow(t) {
+  const ow = t.run && t.run.off_wait;  // Ausschalten offen, gerade gesperrt (0.42: HeatPilot versucht es weiter)
+  if (t.run) return `<b>läuft</b> seit ${clock(t.run.since)} – Speicher ${degC(t.run.tank)}, Ziel ${degC(t.run.goal)}` +
+    (ow ? ` · <span class="msg-warn">Ausschalten wartet seit ${clock(ow.since)}: ${esc(ow.why)}</span>` : "");
+  if (t.waiting) return `wartet seit ${clock(t.waiting.since)}: ${esc(t.waiting.why)}`;
+  return t.blocked ? `<span class="msg-warn">zurzeit gesperrt: ${esc(t.blocked)}</span>` : "";
+}
+function disinfectTriggerHtml(t) {
+  if (!t) return "";
+  const why = t.state === "aus" && t.reason ? ` <span class="muted">– ${esc(t.reason)}</span>` : "";
+  const sw = t.entity ? `Schalter <code>${esc(t.entity)}</code> <span class="muted">(${esc(t.entity_source === "eingestellt" ? "gewählt" : "automatisch erkannt")}${t.switch ? ", jetzt " + esc(t.switch === "on" ? "an" : t.switch === "off" ? "aus" : t.switch) : ""})</span>`
+    : '<span class="muted">kein Schalter „Desinfizieren“ gefunden</span>';
+  const prob = t.entity_problem ? ` <span class="msg-err">${esc(t.entity_problem)}</span>` : "";
+  const parts = [disNow(t), disLast(t.last, t.detected)].filter(Boolean);
+  return `<div class="dis-trig" id="dis-trigger"><div class="ready-head">${readyDot(disDot(t))}<span><b>Auslösen:</b> <span id="dis-trigger-text">${esc(String(t.text || "").replace(/^Desinfektion: /, ""))}</span>${why}</span></div>` +
+    `<p class="muted" id="dis-trigger-switch">${sw}${prob} – <a href="#" onclick="emGo('warmwasser');return false">ändern unter Entitäten</a></p>` +
+    (parts.length ? `<p class="muted" id="dis-trigger-state">${parts.join(" · ")}</p>` : "") + "</div>";
+}
+
+// ---------------------------------------------------------------- Mindestleistung (0.42)
+// Einstellungen → Haus & Kessel (GET api/settings → boiler_power): woher die kleinste Brennerleistung kommt; meldet der
+// Kessel keine, der Vorschlag aus dem Bereich der maximalen Brennerleistung mit Knopf „übernehmen“ – er füllt nur das
+// Feld, gespeichert wird mit „Speichern“ (nie automatisch). Ohne Wert ist die Abnahme-Regel von Weg B aus.
+let BPOW = null;
+function minPowerHint(p) {
+  const base = "Untere Modulationsgrenze, z. B. 30";
+  if (!p) return base;
+  if (p.source === "laut Kessel") return `${base} · leer bzw. 0 = ${fmt(p.pct, 0)} % laut Kessel (EMS-ESP)`;
+  const sg = p.suggestion;
+  const tip = sg ? `<span class="minpow" id="minpow-sug">Vorschlag <b>${fmt(sg.pct, 0)} %</b> – ${esc(sg.text)} ` +
+    `<button class="btn small" id="minpow-apply" onclick="applyMinPower()">übernehmen</button></span>` : "";
+  const off = p.pct === null || p.pct === undefined
+    ? '<span class="minpow-off" id="minpow-off">Der Kessel meldet keine – ohne Wert ist die Abnahme-Regel bei „Kessel über HeatPilot“ aus.</span>' : "";
+  return [base, off, tip].filter(Boolean).join(" ");
+}
+function applyMinPower() {
+  const sg = (BPOW || {}).suggestion; if (!sg) return;
+  $("f-boiler_min_power_pct").value = sg.pct;
+  const b = $("minpow-apply"); if (b) { b.disabled = true; b.textContent = "eingetragen"; }
+  $("save-msg").className = ""; $("save-msg").textContent = `Kleinste Leistung ${fmt(sg.pct, 0)} % eingetragen – prüfen und speichern.`;
 }
 
 // ---------------------------------------------------------------- Warmwasser über HeatPilot (Weg W, 0.38)
@@ -3224,8 +3310,12 @@ function dhwReadyHtml(x, open) {
     ["letzte Prüfung", lc ? `${clock(lc.time)}: ${lc.value} °C ${ok(lc.ok, "übernommen", "nicht übernommen")}` : '<span class="muted">noch keine</span>'],
     ["pausiert", x.paused ? `<span class="msg-err">ja</span> – ${esc(x.pause_reason || "")}${x.paused_since ? ` · seit ${esc(timeOf(x.paused_since))}` : ""}` : "nein"],
     ["fremder Schreiber", fl ? `zuletzt ${esc(timeOf(fl.time))}: ${fmt(fl.from)} → ${fmt(fl.to)} °C · ${x.foreign_24h || 0}× in 24 h` : "in den letzten 24 h keiner"]];
+  // Desinfektion (0.42): wer sie auslöst und die letzte mit Ergebnis – sichtbar unter der Überschrift
+  const ds = x.disinfect, dl = ds && ds.last && ds.last.ok !== null && ds.last.ok !== undefined ? ds.last : null;
+  const dis = !ds ? "" : `<p class="ready-dis" id="ready-dhw-dis">${readyDot(ds.blocked || (dl && dl.ok === false) ? "dot-warn" : ds.triggers || ds.state === "regler" ? "dot-ok" : "")}` +
+    `${esc(ds.text)}${ds.blocked ? ` – zurzeit gesperrt: ${esc(ds.blocked)}` : ""}${dl ? ` · zuletzt ${esc(timeOf(dl.time))}: ${esc(dl.result_text || dl.result)}` : ""}</p>`;
   return `<div class="ready-boiler" id="ready-dhw"><h3>Warmwasser über HeatPilot</h3><div class="ready-head">${readyDot(lv.dot)}<span id="ready-dhw-headline">${esc(x.headline)}</span></div>` +
-    (x.hint ? `<div class="warnbox" id="ready-dhw-hint">${esc(x.hint)}</div>` : "") +
+    (x.hint ? `<div class="warnbox" id="ready-dhw-hint">${esc(x.hint)}</div>` : "") + dis +
     `<details id="ready-dhw-details"${open ? " open" : ""} ontoggle="READY_SHOW.dhw = this.open"><summary>Einzelheiten <span class="muted">(Schalter: ${esc(DHW_LABEL[x.mode] || x.mode)})</span></summary>` +
     (list ? `<ul class="ready-list">${list}</ul>` : "") +
     `<div class="scroll"><table class="ready-t">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table></div></details>` +
@@ -3500,7 +3590,7 @@ function boilerReadyHtml(x, open) {
     ["Regler am Bus", `${reg.present === false ? ok(true, "nein", "") : ok(false, "", reg.present ? "ja" : "unbekannt")} – ${esc(reg.text || "")}`],
     ["Heizen abschalten", x.heating_off ? `<span class="msg-err">an</span> – ${esc(x.heating_off)}` : "aus"],
     ["Wächter", `${readyDot(WD_DOT[wd.state] || "")} ${esc(wd.text || "–")}`],
-    ["Mindestleistung", has(x.min_power_kw) ? `${fmt(x.min_power_kw, 1)} kW` : '<span class="muted">unbekannt – Abnahme gilt nicht</span>'],
+    ["Mindestleistung", has(x.min_power_kw) ? `${fmt(x.min_power_kw, 1)} kW` : '<span class="muted">unbekannt – Abnahme-Regel aus</span>'],
     ["Rückfall-Vorlauf", has(x.fallback) ? degC(x.fallback) : '<span class="muted">läge unter 35 °C – wird nicht geschrieben</span>'],
     ["letzte Prüfung", lc ? `${clock(lc.time)}: ${BOILER_WHAT[lc.what] || esc(lc.what)} ${boilerVal(lc.what, lc.value)} ${ok(lc.ok, "übernommen", "nicht übernommen")}` : '<span class="muted">noch keine</span>'],
     ["pausiert", x.paused ? `<span class="msg-err">ja</span> – ${esc(x.pause_reason || "")}${x.paused_since ? ` · seit ${esc(timeOf(x.paused_since))}` : ""}` : "nein"],
@@ -3950,7 +4040,7 @@ function renderSettings() {
     card("Haus & Kessel", `<p>Für das Zertifikat und die Abnahme bei „Kessel über HeatPilot“ (kleinste Leistung × Nennleistung). 0 = unbekannt bzw. Wert von EMS-ESP.</p><div class="form-grid">
       ${field("Wohnfläche (m²)", num("f-living_area_m2", s.living_area_m2, "1"), "Beheizte Fläche – für Heizlast je m² und Energieklasse")}
       ${field("Nennleistung Kessel (kW)", num("f-boiler_nominal_kw", s.boiler_nominal_kw, "0.1"), "Typenschild, z. B. 18")}
-      ${field("Kleinste Leistung (%)", num("f-boiler_min_power_pct", s.boiler_min_power_pct, "1"), "Untere Modulationsgrenze, z. B. 30")}
+      ${field("Kleinste Leistung (%)", num("f-boiler_min_power_pct", s.boiler_min_power_pct, "1"), minPowerHint(BPOW))}
     </div>`) +
     card("Kessel über HeatPilot", boilerSectionHtml(s, BOILC)) +  // Weg B (0.41)
     card("Warmwasser", dhwSectionHtml(s, DHWC) + `<h3 class="sec-h">Temperaturen</h3><div class="form-grid">
@@ -4121,6 +4211,7 @@ async function loadSettings() {
   DIS = j.disinfect || null;  // Desinfektion (0.36.3): Termin, Temperatur, Vorschlag
   DHWC = j.dhw_control || null; NOTIFY = j.notify || null;  // 0.38: Weg W und Benachrichtigungen
   BOILC = j.boiler_control || null;  // 0.41: Weg B – Schalter, Vorschläge, Status, Bereitschaft
+  BPOW = j.boiler_power || null;  // 0.42: Mindestleistung mit Herkunft und Vorschlag
   renderSettings();
 }
 

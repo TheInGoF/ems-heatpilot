@@ -61,7 +61,8 @@ keine YAML-Optionen. Oben schaltet **„Allgemein | Entitäten“** zwischen den
   abgewählte Räume und Personen fließen in keine Auswertung mehr ein.
 - **Gas & Kosten, Komfort & Strategie, Warmwasser, Urlaub** (Gaszähler, Warmwasser-Soll-Entität und Urlaubs-Schalter
   stehen dort nur als Verweis „ändern unter Entitäten“) – unter Warmwasser seit 0.36.3 auch der
-  Termin der **Desinfektion (Legionellen)** mit Vorschlag (siehe [Desinfektion](#desinfektion-legionellen)),
+  Termin der **Desinfektion (Legionellen)** mit Vorschlag (siehe [Desinfektion](#desinfektion-legionellen)), seit
+  0.42 mit der Zeile **Auslösen** (wer sie zum Termin auslöst, letzte Desinfektion mit Ergebnis),
   seit 0.38 der Schalter **Warmwasser-Soll** (Aus / Trockenlauf / HeatPilot setzt, siehe
   [Weg W](#warmwasser-über-heatpilot-weg-w))
 - **Benachrichtigungen** (seit 0.38, seit 0.39.1 unter Entitäten): Ziele in Home Assistant für Meldungen, mit
@@ -76,7 +77,8 @@ erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen i
 ## Entitäten
 
 Seit 0.39.1 steht unter **Einstellungen → Entitäten** (Umschalter „Allgemein | Entitäten“) geordnet alles, was
-HeatPilot aus Home Assistant liest – und die eine Entität, die es beschreiben darf (Warmwasser-Soll). Die Gruppen sind
+HeatPilot aus Home Assistant liest – und die Entitäten, die es beschreiben darf (Warmwasser-Soll, seit 0.42 der Schalter
+der Desinfektion, seit 0.41 Vorlauf-Soll und Heizbetrieb). Die Gruppen sind
 aufklappbare Karten mit Zähler („Kessel (EMS-ESP) · 13 von 38 gefunden · 1 nicht verfügbar“): **Kessel (EMS-ESP)**,
 **Regler (EMS-ESP)**, **Warmwasser über HeatPilot**, **Außen & Wetter** (Außenfühler, Wetter), **Gas & Bedarf**
 (Gaszähler, Heizungsanforderung), **Strom** (Leistungssensoren, „Nicht zählen“), **Räume**, **Personen & Urlaub**
@@ -111,7 +113,9 @@ EMS-ESP direkt); **Brenner an** oder **Brennerleistung** – eines genügt; **Wa
 **Speichertemperatur** – eines genügt (eine Ladung erkennt HeatPilot auch am Anstieg der Speichertemperatur und hält
 sie aus dem Heizmodell heraus; ohne Speichertemperatur gibt es kein Warmwasser-Modell); eine **Außentemperatur**
 (Außenfühler, sonst der Außenfühler am Kessel als Entität in Home Assistant, sonst das Wetter); je Raum das
-**Thermostat**; die **Warmwasser-Soll-Entität** nur bei „HeatPilot setzt“. Der **Rücklauf** ist optional – er dient
+**Thermostat**; die **Warmwasser-Soll-Entität** nur bei „HeatPilot setzt“, der Schalter **„Desinfektion auslösen
+(Schalter)“** nur bei „HeatPilot setzt“ mit Desinfektionstermin (seit 0.42, siehe
+[Desinfektion auslösen](#desinfektion-legionellen)). Der **Rücklauf** ist optional – er dient
 nur der Vorlauf-Auswertung und der Live-Anzeige. Liefert EMS-ESP einen Kessel- oder Regler-Wert direkt, fehlt er
 nicht – außer beim **Außenfühler am Kessel**: Den Wert direkt von EMS-ESP zeigt die Seite nur an, als
 Außentemperatur dient er nicht (dafür eine Entität wählen, einen Außenfühler oder das Wetter).
@@ -125,7 +129,8 @@ Vorschlag dabei. **Personen** sind eine Liste mit Häkchen (nur Name und Zustand
 **Gespeichert** wird mit „Speichern“ wie alle Einstellungen (`POST api/settings`) – es gibt keine zweite
 Speicherstelle: Kessel- und Regler-Rollen als `overrides` (`rolle=entity_id`, leer = Erkennung), alles andere in den
 bisherigen Feldern (`gas_sensor`, `weather_entity`, `outdoor_sensors`, `demand_sensor`, `power_sensors`,
-`power_exclude`, `persons`, `vacation_entity`, `dhw_set_entity`, `notify_targets`). In den Karten unter „Allgemein“
+`power_exclude`, `persons`, `vacation_entity`, `dhw_set_entity`, `disinfect_entity`, `notify_targets`). In den Karten
+unter „Allgemein“
 steht nur noch, was gilt, mit „ändern unter Entitäten“. Alte Einstellungen bleiben gültig; frühere Zuordnungen
 `gas=…`/`weather=…` übernimmt HeatPilot beim Laden in Gaszähler bzw. Wetter (sie hatten Vorrang), Zuordnungen ohne
 bekannte Rolle stehen beim Kessel zum Entfernen. Die Seite liest `GET api/entity_map` (nur lesen); ist das nicht
@@ -223,7 +228,8 @@ Neben dem PDF gibt es eine **Druckansicht**: dasselbe Zertifikat als Seite, übe
 sichere Weg zum Weitergeben (z. B. an WhatsApp): Druckansicht → Drucken → Teilen.
 
 Wohnfläche, Nennleistung und kleinste Leistung des Kessels stehen unter
-**Einstellungen → Haus & Kessel** (0 = unbekannt bzw. Wert von EMS-ESP). Das
+**Einstellungen → Haus & Kessel** (0 = unbekannt bzw. Wert von EMS-ESP; meldet der Kessel keine kleinste Leistung,
+steht dort seit 0.42 ein Vorschlag mit „übernehmen“, siehe [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b)). Das
 Zertifikat enthält keine Namen, Adressen oder Standortdaten. Es ist kein
 Energieausweis nach GEG, die Werte sind nicht witterungsbereinigt.
 
@@ -529,8 +535,8 @@ Steuerung `GET /api/boiler/<kurzname>` ab (bei neueren EMS-ESP liegen die Warmwa
 „Alle 5 nötigen Steuerungen vorhanden und schreibbar – HeatPilot kann den Kessel übernehmen (Schalter „Kessel über
 HeatPilot“, Block unten)“ bzw. „Es fehlen: Vorlauf-Soll (nicht schreibbar), …“. Ist ein
 Desinfektionstermin eingestellt (seit 0.36.3), ist die Desinfektion die sechste nötige Steuerung –
-„Desinfektion braucht WWK Desinfizieren (schreibbar)“, denn ohne Regler müsste HeatPilot sie später
-darüber auslösen. Ohne
+„Desinfektion braucht WWK Desinfizieren (schreibbar)“, denn ohne Regler löst HeatPilot sie seit 0.42
+darüber aus. Ohne
 EMS-ESP-Adresse: „EMS-ESP nicht eingerichtet“. Schalter (Heizbetrieb, Einmalladung …) stehen als
 „an“/„aus“, gleich in welchem Bool-Format EMS-ESP sie meldet. Antwortet EMS-ESP auf eine dieser
 Abfragen nicht in 3 s, bricht die Runde ab und wird nach einer Stunde wiederholt – die Kesselwerte
@@ -545,7 +551,8 @@ Seit 0.41 der Block **„Kessel über HeatPilot“** (Weg B, nur Anzeige, änder
 Entitäten des Vorlauf-Solls und des Heizbetriebs gefunden und tauglich, schreibbar laut EMS-ESP (`selflowtemp`,
 `heatingactivated`), **Regler am Bus** (ja – das ist ein Hindernis, solange er dran ist), „Heizen abschalten“ an
 (Hindernis), Vorlauf-Soll und Warmwasser-Soll auf derselben Entität (Hindernis), **Wächter** in Home Assistant (nicht
-erkannt bzw. ausgeschaltet ist eine Einschränkung), Mindestleistung für die Abnahme (fehlt sie, eine Einschränkung),
+erkannt bzw. ausgeschaltet ist eine Einschränkung), Mindestleistung für die Abnahme (fehlt sie, ist die Abnahme-Regel
+aus – eine Einschränkung, seit 0.42 mit dem Vorschlag aus dem Bereich der maximalen Brennerleistung),
 letzte Prüfung, Pause, fremder Schreiber, Rückfall-Vorlauf. Was dort ein Hindernis ist, verhindert auch das Schreiben. Siehe [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b).
 
 Seit 0.38 kommt der Block **„Warmwasser über HeatPilot“** dazu (Weg W, nur Anzeige, ändert die Stufe der
@@ -555,7 +562,11 @@ schreibbar laut EMS-ESP (`wwseltemp` bzw. `dhw/seltemp`), Schalterstand, letzte 
 pausiert (seit wann), Kessel-Soll unklar (Entität und EMS-ESP verschieden), fremder Schreiber zuletzt gesehen,
 Minimum unter 50 °C ohne Desinfektionstermin – und der Hinweis „HA-Automation für das Speicher-Soll abschalten“,
 solange in den letzten 24 h fremde Änderungen kamen. Was dort ein Hindernis ist, verhindert auch das Schreiben. Siehe
-[Weg W](#warmwasser-über-heatpilot-weg-w).
+[Weg W](#warmwasser-über-heatpilot-weg-w). Seit 0.42 steht unter der Überschrift, wer die Desinfektion auslöst –
+„Desinfektion: löst HeatPilot aus (So 17:30)“, „macht der Regler“, „Trockenlauf“ oder „aus“ – mit der letzten
+Desinfektion und ihrem Ergebnis. Kann HeatPilot sie ohne Regler am Bus nicht auslösen (Schalter fehlt oder taugt nicht,
+Weg W pausiert), ging die letzte schief, oder löst einen eingetragenen Termin niemand aus (kein Regler, Warmwasser-Soll
+nicht „HeatPilot setzt“), ist das eine Einschränkung.
 
 Seit 0.40 steht davor der Block **„Ventile führen“** (nur Anzeige, ändert die Stufe der Raumsteuerung nicht): je Raum
 mit „macht mit“ **bereit** (Raum- und Ventilmodell belastbar, Schritt bis 0,5 K) oder **lernt** mit dem Grund
@@ -1075,8 +1086,9 @@ im Code hart ab. Bei „Aus“ und „Trockenlauf“ gibt es den Schreibweg gar 
 
 **Vor dem Umschalten** die Automation in Home Assistant abschalten, die bisher das Speicher-Soll setzt – beim
 Speichern mit „HeatPilot setzt“ fragt die Oberfläche einmal danach. Den Stand zeigt „Bereit für die Steuerung?“ im
-Block „Warmwasser über HeatPilot“ (siehe dort). Die Desinfektion löst
-HeatPilot weiterhin nicht aus (siehe [Desinfektion](#desinfektion-legionellen)).
+Block „Warmwasser über HeatPilot“ (siehe dort). Seit 0.42 löst HeatPilot mit „HeatPilot setzt“ auch die Desinfektion
+zum Termin aus, wenn kein Regler am Bus ist (siehe [Desinfektion](#desinfektion-legionellen)); solange sie läuft,
+schreibt Weg W das Speicher-Soll nicht.
 
 **Anzeige:** Heizen und Übersicht zeigen eine Statuszeile („HeatPilot setzt · 50 °C seit 15:03 · nächste
 Änderung 17:30 → 55 °C“, im Trockenlauf „Trockenlauf · würde 50 °C seit …“, sonst „pausiert – …“), das Protokoll
@@ -1157,6 +1169,13 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
      Raummodell, in kW umgerechnet mit dem Hausmodell: Wärmebedarf des Hauses jetzt, verteilt auf die Räume – eine
      Näherung, die Räume gleich schwer nimmt). Liegt das über dem Wert aus 1., gilt es. Reicht auch der höchste Vorlauf
      nicht, gilt nichts: lieber lange Pausen – der Kessel taktet dann über seine eigene Sperre.
+     **Mindestleistung** (seit 0.42): Meldet der Kessel keine kleinste Brennerleistung (EMS-ESP `burnminpower`) und ist
+     unter Einstellungen → Haus & Kessel nichts eingetragen, schlägt HeatPilot dort die Untergrenze des einstellbaren
+     Bereichs der **maximalen Brennerleistung** vor (`burnmaxpower`, z. B. „Vorschlag 30 % – aus dem Bereich der
+     maximalen Brennerleistung (30–100 %)“; Bereich aus der Kesselsteuerung von EMS-ESP bzw. den Grenzen der Entität).
+     **„übernehmen“** trägt ihn ins Feld ein, gespeichert wird erst mit „Speichern“ – nie automatisch. Fehlt die
+     Mindestleistung (oder die Nennleistung), ist die Regel aus: „Abnahme-Regel aus: Mindestleistung unbekannt – …“
+     steht als Einschränkung in „Bereit für die Steuerung?“ und als Grund im Ziel.
   3. **Takt-Boost:** Taktet der Kessel stark (mindestens 3 Brennerstarts in der letzten Stunde, Läufe im Mittel unter
      10 min) und wartet ein Raum unter Soll mit offenem Ventil, hebt HeatPilot den Vorlauf in **2-K-Schritten bis
      +10 K** über den Wert aus 1./2. (der erste Schritt sofort, dann je 10 min) – zurück in 2-K-Schritten, sobald der
@@ -1703,12 +1722,67 @@ Seit 0.36.3 gehört der Termin der wöchentlichen Desinfektion in die Einstellun
 außerhalb von 60–80 °C zählt nicht – unter 60 °C ist es keine Desinfektion („Kessel meldet 55 °C – zu niedrig
 für eine Desinfektion, es gilt die Einstellung“).
 
-**HeatPilot löst die Desinfektion noch nicht aus** – EMS-ESP bleibt nur lesend. Viele Kessel haben dafür
-keinen eigenen Timer (nur den Schalter `wwdisinfecting`); bisher macht es der Regler (z. B. ES73 sonntags
-13:00). Solange er das tut, trage seinen Termin ein. Auslösen kommt erst mit der Kesselseite (eigener
-Schalter, siehe [Planung](https://github.com/TheInGoF/ems-heatpilot/blob/main/docs/planung-vorlauf-ems.md)).
+**Desinfektion auslösen** (seit 0.42): Viele Kessel haben für die Legionellenschaltung keinen eigenen Timer, nur den
+Schalter „WWK Desinfizieren“ (EMS-ESP `wwdisinfecting`); bisher macht es der Regler am Bus (z. B. sonntags 13:00) –
+solange er das tut, trage seinen Termin ein. Ohne Regler löst HeatPilot die Desinfektion selbst aus, aber nur, wenn
+alles zutrifft:
 
-Eingeplant wird der Termin, sobald er **bestätigt** ist: Hat der Regler in den letzten 8 Tagen zu dieser Zeit
+- ein Termin ist eingetragen,
+- **Warmwasser-Soll: „HeatPilot setzt“** (Weg W; bei „Trockenlauf“ steht zum Termin nur „Trockenlauf: würde
+  Desinfektion … starten“ im Protokoll, bei „Aus“ geschieht nichts),
+- **kein Regler am Bus** – dieselbe Erkennung wie bei [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b) (EMS-ESP
+  meldet ausdrücklich kein Gerät `thermostat`; ohne Antwort von EMS-ESP ist es unbekannt und gesperrt). Mit Regler am
+  Bus macht er die Desinfektion, HeatPilot schaltet nichts. Das gilt nur, solange er frisch gemeldet wird: Wurde er eben
+  abgebaut und gilt nur noch die 30 min nach dem letzten Sehen als vorhanden, wartet der Termin und wird nachgeholt,
+- Weg W ist nicht pausiert,
+- der Schalter taugt: eine `switch`-Entität, deren Name bzw. Anzeigename nach der Desinfektion aussieht, nie die
+  Einmalladung, die Zirkulation, der Heizbetrieb oder ein anderer Kesselschalter; verfügbar, an oder aus; EMS-ESP lässt
+  ihn schreiben. Vorgeschlagen aus der Erkennung, wählbar unter
+  **Einstellungen → Entitäten → Warmwasser über HeatPilot → „Desinfektion auslösen (Schalter)“** (die Auswahl bietet
+  nur passende Schalter an).
+
+Geschrieben wird über Home Assistant – `switch.turn_on`/`turn_off` nur auf diese eine Entität, alles andere weist
+HeatPilot hart ab; an EMS-ESP gehen weiterhin nur Lese-Anfragen. **Ablauf zum Termin** (Ortszeit, auch in der Woche der
+Zeitumstellung – „So 13:00“ bleibt 13:00):
+
+1. **Einschalten** – einmal je Termin; der Termin gilt damit als erledigt, auch nach einem Neustart und auch, wenn das
+   Einschalten scheitert (dann Fehlschlag mit Meldung, kein neuer Versuch vor dem nächsten Termin). Läuft der Aufruf in
+   einen Zeitüberlauf, ist unklar, ob er ankam – dann entscheidet die Prüfung nach 60 s.
+2. **Nach 60 s prüfen:** Steht der Schalter an bzw. meldet EMS-ESP die Desinfektion (oder eine Sonderladung), läuft sie.
+   Fällt der Schalter sofort zurück, ist es ein Fehlschlag – auch wenn der Speicher schon heiß ist; ist der Zustand
+   unbekannt, prüft HeatPilot bis 5 min weiter.
+3. **Beobachten** (erst nach dieser Bestätigung): Erreicht der Speicher die **Desinfektionstemperatur − 3 K**, ist sie
+   gelungen. Lag er schon beim Einschalten darüber, zählt erst die volle Desinfektionstemperatur oder dass der Kessel den
+   Schalter selbst zurücksetzt (sein Programm ist fertig). Sonst spätestens nach der Ladedauer laut Modell + 60 min ein
+   Fehlschlag: Meldung „Desinfektion So 13:00 nicht gelaufen – Speicher erreichte nur 58 °C, nötig 67 °C“ über die
+   Benachrichtigungsziele und `binary_sensor.heatpilot_problem`. Die nächste gelungene meldet „wieder in Ordnung“.
+4. **Ausschalten:** Steht der Schalter danach noch an, schaltet HeatPilot ihn einmal aus und prüft nach 60 s – nach
+   einer gelungenen Desinfektion erst nach 15 min Nachlauf (meist setzt der Kessel ihn mit der vollen Temperatur selbst
+   zurück; war der Speicher schon beim Einschalten heiß, wartet HeatPilot bis zur Frist des Ablaufs), nach einem
+   Fehlschlag gleich. Ausgeschaltet wird unter denselben Bedingungen wie eingeschaltet. Sperrt etwas nur kurz (EMS-ESP
+   antwortet gerade nicht, Pause des Warmwasser-Solls), ist der Schalter kurz „nicht verfügbar“ oder scheitert der
+   Aufruf, versucht HeatPilot es weiter („Ausschalten wartet – Grund“); erst nach 30 min kommt die Meldung „Schalter
+   nicht ausgeschaltet (Grund)“. Bleibt er nach dem Ausschalten an, kommt ebenfalls eine Meldung.
+
+Lief HeatPilot zum Termin nicht (Add-on gestoppt) oder war das Auslösen gesperrt, holt es den Termin **innerhalb von
+12 h** nach; danach meldet es „Desinfektion So 13:00 verpasst – … ; nächster Termin …“, und es gilt der nächste Termin.
+Ein eben eingetragener oder geänderter Termin, der schon vorbei ist, wird nicht ausgelöst. Höchstens eine Desinfektion
+je 24 h: Wird der Termin während oder kurz nach einem Ablauf auf später am selben Tag gelegt, gilt er erst in der
+nächsten Woche (Protokoll „übersprungen“) – außer der Ablauf schlug fehl. Solange der Ablauf läuft,
+schreibt Weg W das Speicher-Soll nicht und Weg B lässt das Vorlauf-Soll in Ruhe (wie bei einer Sonderladung). Wird das
+Warmwasser-Soll mitten im Ablauf umgestellt, bricht er ab – der Kessel beendet die Desinfektion selbst.
+
+**Anzeige:** Einstellungen → Warmwasser zeigt unter dem Termin die Zeile **Auslösen** – „löst HeatPilot aus (So 13:00)“,
+„macht der Regler“, „Trockenlauf – würde … auslösen“ oder „aus“ mit Grund –, den Schalter (mit „ändern unter
+Entitäten“), was gerade läuft, wartet oder sperrt, und die letzte Desinfektion mit Ergebnis („zuletzt So., 13.10.,
+13:00: gelungen – 68 °C erreicht“). Dieselbe Zeile steht im Block „Warmwasser über HeatPilot“ von „Bereit für die
+Steuerung?“, die Schritte im Protokoll des Heizen-Reiters (Desinfektion: eingeschaltet, läuft, gelungen bzw. nicht
+gelaufen, verpasst, übersprungen, ausgeschaltet). Geschaltet wird nie aus der Oberfläche – nur zum Termin. Abfrage: `GET api/dhw` →
+`disinfect` (mit Protokoll).
+
+Eingeplant wird der Termin, wenn HeatPilot ihn auslöst (seit 0.42, siehe oben; ein gescheiterter oder verpasster
+Termin zählt nicht, solange das Modell noch mit seiner Wärme rechnen würde – „Desinfektion So 13:00 nicht gelaufen –
+ihre Wärme zählt im Warmwasser-Modell nicht“) oder sobald er **bestätigt** ist: Hat der Regler in den letzten 8 Tagen zu dieser Zeit
 desinfiziert (erkannt am Kesselschalter `wwdisinfecting` oder daran, dass der Speicher bis 5 K an die
 Desinfektionstemperatur kam; endet sie höchstens 3 Stunden nach dem Termin, ist es dieselbe), behandeln
 Empfehlung und Vergleichsspeicher die Stunden danach wie nach einer erkannten Sonderladung – ohne auf die
@@ -1734,8 +1808,9 @@ der Desinfektionswärme bis dahin im Speicher bleibt und ins Wasser geht. „Vor
 und Uhrzeit ein; gespeichert wird erst mit „Speichern“. Ohne genug Daten steht der Grund da.
 
 Die Übersicht (Warmwasser) zeigt die nächste Desinfektion als Wert („So 17:30“, Notiz „eingestellt“, dazu
-„Termin noch nicht bestätigt …“, solange er nicht zählt), ohne Termin die zuletzt erkannte Sonderladung.
-Mit Termin ist die Desinfektion in „Bereit für die Steuerung?“ eine nötige Kesselsteuerung.
+„Termin noch nicht bestätigt …“, solange er nicht zählt, sonst wer sie auslöst – „HeatPilot löst sie aus“, „Der Regler
+macht sie“), ohne Termin die zuletzt erkannte Sonderladung. Mit Termin ist die Desinfektion in „Bereit für die
+Steuerung?“ eine nötige Kesselsteuerung.
 
 ## Entitätsnamen
 

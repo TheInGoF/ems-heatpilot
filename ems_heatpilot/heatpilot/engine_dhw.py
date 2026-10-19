@@ -5,7 +5,8 @@ jeden Messpunkt an ``DhwModel`` und den Schatten der Spar-Strategie weiter (dere
 Verluste, Ladung – schreibt es in die Datenbank), empfiehlt die Speichertemperatur und rechnet die
 Werte für den Reiter Warmwasser (Ersparnis, Auskühlkurve, nächste Ladung, Soll-Zeitprogramm des
 Reglers). Seit 0.36.3 gibt es den Desinfektionstermin aus den Einstellungen an den Schatten weiter und zeigt
-ihn mit Vorschlag an (``disinfect_info``, gerechnet in ``dhw_disinfect``). Das Modell selbst steht in ``dhw.py``.
+ihn mit Vorschlag an (``disinfect_info``, gerechnet in ``dhw_disinfect``), seit 0.42 mit dem Stand des Auslösens
+(``disinfect_status``). Das Modell selbst steht in ``dhw.py``.
 """
 
 from __future__ import annotations
@@ -348,9 +349,11 @@ class DhwMixin:
 
         ``next_text`` „So 17:00 (eingestellt)“; dazu die letzte erkannte Sonderladung des Reglers
         (``last_special_text`` „So 13:40 (erkannt)“). ``counts``: Der Termin zählt im Modell – nur bestätigt durch
-        eine Desinfektion des Reglers zu dieser Zeit (``dhw_disinfect.plan_counts``), sonst sagt ``counts_text``
-        warum nicht. HeatPilot löst die Desinfektion noch nicht aus.
+        eine Desinfektion des Reglers zu dieser Zeit bzw. – seit 0.42 – weil HeatPilot ihn auslöst
+        (``dhw_disinfect.plan_counts``), sonst sagt ``counts_text`` warum nicht. ``trigger``: wer die Desinfektion
+        auslöst, Stand und letztes Ergebnis (``disinfect_status.info``); ``triggers``/``hint`` folgen daraus.
         """
+        from .disinfect_status import info as trigger_info  # spät: disinfect_status nutzt dhw_disinfect und config
         now = local(time.time() if now_ts is None else now_ts)
         temp, source = self.disinfect_temp()
         nxt, last = self.cfg.next_disinfection(now), self.dhw.last_special
@@ -367,10 +370,11 @@ class DhwMixin:
             "last_special": None if last is None else last.isoformat(),
             "last_special_text": None if last is None else f"{WEEKDAYS[last.weekday()]} {last:%H:%M} (erkannt)",
             "special_charges": self.dhw.special_charges, "regler": self.disinfect_schedule(),
-            "triggers": False, "hint": dhw_disinfect.NOT_YET,
         }
-        if out["configured"] and not out["counts"]:
-            out["counts_text"] = dhw_disinfect.counts_text(self.dhw, self.cfg, now)
+        trig = trigger_info(self, now_ts=now.timestamp())
+        out.update(trigger=trig, triggers=trig["triggers"], hint=trig["hint"])
+        if out["configured"] and not out["counts"]:  # 0.42: ein gescheiterter Termin zählt eine Weile nicht
+            out["counts_text"] = trig.get("uncounted") or dhw_disinfect.counts_text(self.dhw, self.cfg, now)
         if suggest:
             out["suggestion"] = dhw_disinfect.suggestion(self.dhw, self.nominal_kw(), self._disinfect_from(), temp, now)
         return out

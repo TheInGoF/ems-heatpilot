@@ -164,6 +164,11 @@ def self_check(app) -> list[dict]:
     if bctl is not None and app.cfg.boiler_control != "aus":
         level = "warn" if bctl.paused() or (bctl.mode == "heatpilot" and bctl.view.get("blocked")) else "ok"
         add(level, "Kessel über HeatPilot", bctl.as_dict()["status_text"])
+    dctl = getattr(eng, "disinfect_control", None)  # 0.42: Desinfektion auslösen
+    if dctl is not None and app.cfg.dhw_disinfect_day:
+        d = dctl.as_dict()
+        level = "warn" if d["blocked"] or (d["last"] or {}).get("ok") is False else "ok"
+        add(level, "Desinfektion", d["text"] + (f" – zurzeit gesperrt: {d['blocked']}" if d["blocked"] else ""))
 
     critical = [f.gas, *f.outdoor, f.boiler.get("flow_temp"), *(r.climate for r in f.rooms)]
     for eid in filter(None, critical):

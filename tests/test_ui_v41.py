@@ -220,7 +220,7 @@ def test_status_line_and_box_when_writing(tmp_path):
     assert facts[0] == "Kessel jetzt: Vorlauf-Soll 46 °C · Heizbetrieb an"
     assert facts[1] == ("Ziel: Vorlauf 48 °C , Heizbetrieb an – Wz heizt auf 21,0 °C (+5 K) · Boost +2 K Bedarf 46 °C · "
                         "Takt-Boost +2 K (wartet: Wz; Kessel taktet: 4 Starts/h, Läufe Ø 3 min)")
-    assert facts[2].startswith("Abnahme: Mindestleistung unbekannt")  # Grund aus dem Backend
+    assert facts[2].startswith("Abnahme-Regel aus: Mindestleistung unbekannt")  # Grund aus dem Backend (Text seit 0.42)
     assert facts[3] == "Entscheidung: Vorlauf-Soll: 46 → 48 °C · Heizbetrieb an passt"
     assert facts[4] == "Regler am Bus: nein (Kein Regler am Bus (EMS-ESP meldet kein Gerät thermostat))"
     lw, lc = b["last_write"]["flow"], b["last_check"]
@@ -298,7 +298,7 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
     assert rows[1] == f"Vorlauf-Soll {FLOW} erkannt · 30 °C (0–90 °C)" and rows[2] == f"Heizbetrieb {HEAT} erkannt · an"
     assert rows[3] == "schreibbar laut EMS-ESP selflowtemp unbekannt · heatingactivated unbekannt"
     assert rows[4].startswith("Regler am Bus ja – EMS-ESP meldet einen Regler") and rows[5] == "Heizen abschalten aus"
-    assert rows[7] == "Mindestleistung unbekannt – Abnahme gilt nicht" and rows[8] == "Rückfall-Vorlauf 45 °C"
+    assert rows[7] == "Mindestleistung unbekannt – Abnahme-Regel aus" and rows[8] == "Rückfall-Vorlauf 45 °C"
     assert rows[9:] == ["letzte Prüfung noch keine", "pausiert nein", "fremder Schreiber in den letzten 24 h keiner"]
     assert 'id="ready-boiler-hp-details" open' in g["ready"] and 'id="ready-boiler-hp-details" open' not in g["closed"]
     assert plain(g["ready"]).endswith("Schalter und „Anleitung Wächter“ unter Einstellungen → Kessel über HeatPilot, "
@@ -507,6 +507,6 @@ def test_docs_and_changelog_name_the_places():
     for text in ("Einstellungen → Kessel über HeatPilot", "**HeatPilot setzt**", "„Anleitung Wächter“",
                  "„Vorschau – Kessel über HeatPilot schreibt“", "**Rückfall-Vorlauf**", "„wieder einschalten“"):
         assert text in docs, text
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1]
-    assert head.startswith("0.41.0") and "**Oberfläche:** neue Karte **Einstellungen → Kessel über HeatPilot**" in head
+    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.41.0")[1].split("\n## ")[0]  # seit 0.42
+    assert "**Oberfläche:** neue Karte **Einstellungen → Kessel über HeatPilot**" in head
     assert "tests/test_ui_v41.py" in head

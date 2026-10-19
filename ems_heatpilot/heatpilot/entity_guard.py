@@ -1,8 +1,9 @@
 """Prüfung einer Schreib-Entität am Kessel (seit 0.41 gemeinsam für Weg W und B): Vorschlag, falsche Rolle, Hindernis.
 
 HeatPilot schreibt am Kessel nur auf Entitäten, die genau nach dem aussehen, was geschrieben wird – das Warmwasser-Soll
-(``dhw_entity``, Weg W), das Vorlauf-Soll und den Heizbetrieb (``boiler_entity``, Weg B). Was dafür bei allen gleich
-gilt, steht hier und wird mit der Rolle und einer Beschriftung („das Warmwasser-Soll“) aufgerufen:
+(``dhw_entity``, Weg W), das Vorlauf-Soll und den Heizbetrieb (``boiler_entity``, Weg B), seit 0.42 den Schalter der
+Desinfektion (``disinfect_entity``). Was dafür bei allen gleich gilt, steht hier und wird mit der Rolle und einer
+Beschriftung („das Warmwasser-Soll“) aufgerufen:
 
 * ``suggest`` – Vorschlag aus der Erkennung: die Rolle, wenn sie in der richtigen Domäne liegt, sonst eine Entität mit
   einem der EMS-ESP-Namen der Rolle (``number.boiler_selflowtemp``, ``switch.ems_esp_boiler_heatingactivated`` …),
