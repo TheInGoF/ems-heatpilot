@@ -25,13 +25,16 @@ keine Koordinaten.
 Der Rücklauf ist optional: Er dient nur der Vorlauf-Auswertung und der Live-Anzeige. Liest EMS-ESP einen Kessel- oder
 Regler-Wert direkt (REST), fehlt er nicht – auch ohne Entität in Home Assistant. Ausnahme ist der Außenfühler am
 Kessel: Als Außentemperatur dient nur eine Entität (``discovery``, ``engine_sample.outdoor_now``); den Wert direkt von
-EMS-ESP zeigt die Seite nur an und sagt das dazu (``EMS_ONLY_SHOWN``).
+EMS-ESP zeigt die Seite nur an und sagt das dazu (``EMS_ONLY_SHOWN``). Ein Raum-Sensor, den es in Home Assistant nicht
+mehr gibt (``sensor_gone``, seit 0.45.1), ist kein Problem: „gibt es nicht mehr“ (``gone``) – das Feld darf leer
+bleiben.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import sensor_gone
 from .boiler_entity import suggest_flow, suggest_heat
 from .disinfect_entity import suggest as suggest_disinfect
 from .dhw_entity import suggest_entity
@@ -42,6 +45,7 @@ SOURCE_SET, SOURCE_AUTO, SOURCE_EMS, SOURCE_MISSING = "gewählt", "automatisch",
 # Zustand einer Zeile: was fehlt (nötig), nicht verfügbar, nicht gefunden (optional, Erkennung fand nichts), nicht
 # gewählt (optional ohne Erkennung) – der Filter „nur fehlende“ zeigt die ersten drei
 ISSUE_MISSING, ISSUE_OFF, ISSUE_NOT_FOUND, ISSUE_NOT_SET = "fehlt", "nicht verfügbar", "nicht gefunden", "nicht gewählt"
+ISSUE_GONE = "gibt es nicht mehr"  # 0.45.1: Raum-Sensor weder in den Zuständen noch in der Registry – kein Problem
 PROBLEMS = (ISSUE_MISSING, ISSUE_OFF, ISSUE_NOT_FOUND)
 OFF_STATES = ("unavailable", "unknown")
 
@@ -415,7 +419,9 @@ def _room_entries(c: _Ctx) -> list[dict]:
             value = r.get(field) or None
             _fill(e, c, value if own else None, None if own else value)
             e.update(room=room, room_climate=r["climate"],
-                     suggested=sib.get(_ROOM_SENSOR.get(field, "")) if not value and field != "climate" else None)
+                     suggested=sib.get(_ROOM_SENSOR.get(field, "")) if not value and field != "climate" else None,
+                     gone=value if value and field != "climate" and not sensor_gone.exists(value, c.states, c.idx)
+                     else None)
             out.append(e)
     return out
 
@@ -429,6 +435,8 @@ def _needs(entries: list[dict]) -> None:
         e["missing"] = bool(e["required"] and e["source"] == SOURCE_MISSING and not alt)
         if e["missing"]:
             e["issue"] = ISSUE_MISSING
+        elif e.get("gone"):
+            e["issue"] = ISSUE_GONE
         elif e["available"] is False and not e["ems_key"]:
             e["issue"] = ISSUE_OFF
         elif e["source"] == SOURCE_MISSING and not e["covered_by"]:

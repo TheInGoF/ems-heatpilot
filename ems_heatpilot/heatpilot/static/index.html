@@ -2010,6 +2010,8 @@ function ovCharts() {
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
 let VFOUND = {};  // 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (api/settings: valve_found)
+let SGONE = {};  // 0.45.1: je Thermostat Felder, deren Sensor es in HA nicht mehr gibt (api/settings: sensors_gone)
+const GONE_HINT = "gibt es in Home Assistant nicht mehr – kann leer bleiben";
 let DIS = null;  // Desinfektion (0.36.3): GET api/settings → disinfect
 let DHWC = null, NOTIFY = null;  // 0.38: GET api/settings → dhw_control (Weg W) und notify (Benachrichtigungen)
 // Modellgüte (0.43): ein Abzeichen, drei Stufen – lernt noch · vorläufig · verlässlich; name (optional) steht davor
@@ -2631,7 +2633,8 @@ function valveHtml(v) {
   const bin = v.kind === "binär";
   const load = v.load_dependent ? ' <span class="muted">· hängt von der Last ab (Regler mit Integrator)</span>' : "";
   const title = `<span>${bin ? "Schaltpunkte" : "Kennlinie"}: Ventil (%) je K unter Soll${load}${v.reliable ? "" : ' <span class="muted">· vorläufig, gestrichelt</span>'}</span>`;
-  return `<div class="valve" id="dlg-valve"><h3 class="sec-h">Ventilverhalten${bin ? ' <span class="muted">· nur an/aus</span>' : ""}</h3>` +
+  const rest = v.no_pct ? ' <span class="muted">· ruht: das Thermostat meldet nur an/aus, Gelerntes bleibt</span>' : "";  // 0.45.1
+  return `<div class="valve" id="dlg-valve"><h3 class="sec-h">Ventilverhalten${bin ? ' <span class="muted">· nur an/aus</span>' : ""}${rest}</h3>` +
     (valveGraph(v) ? `<div class="pv-title">${title}</div><div class="valve-chart" id="dlg-valve-chart"></div>` : "") +
     `<p class="valve-text" id="dlg-valve-text">${esc(v.text)}</p>` +
     `<details class="valve-more"><summary>Einzelheiten</summary>${valveDetails(v)}</details></div>`;
@@ -3397,7 +3400,11 @@ function roomRows() {
     const noTado = c.platform && c.platform !== "tado" && c.platform !== "homekit_controller";
     // 0.45: Heizleistung vom alten Thermostat – HeatPilot nutzt sie schon, Speichern trägt sie fest ein
     const vf = !r.heating_power && !g.heating_power && !sibling(c, "heating_power") ? VFOUND[c.id] : null;
-    const vfHint = vf ? `gefunden ${esc(vf.how_text)}${vf.from_name ? ` ${esc(vf.from_name)}` : ""} und schon genutzt – Speichern trägt sie fest ein` : "";
+    const vfHint = vf ? `gefunden ${esc(vf.how_text)}${vf.from_name ? ` ${esc(vf.from_name)}` : ""} und schon genutzt – nur solange es die alte Integration gibt; ihre Werte bleiben nach dem Löschen in HeatPilot` : "";
+    // 0.45.1: eingetragener Sensor, den es in Home Assistant nicht mehr gibt – zählt nicht, das Feld kann leer bleiben
+    const gone = SGONE[c.id] || {}, goneHint = (k, v) => v && gone[k] === v ? GONE_HINT : "";
+    const valveVal = r.heating_power || g.heating_power || sibling(c, "heating_power") || (vf ? vf.sensor : "");
+    const tempVal = r.temperature || g.temp_sensor || sibling(c, "temperature"), humVal = r.humidity || g.humidity || sibling(c, "humidity");
     return `<div class="room" data-climate="${esc(c.id)}" data-area="${esc(area)}">
       <div class="room-row"><input type="checkbox" class="r-on" title="Raum lernen" aria-label="lernen" ${on ? "checked" : ""}>
       <div class="r-main"><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}" aria-label="Anzeigename"><div class="hint" title="${esc(c.id)}">${esc(c.id)} · in HA: ${esc(c.name)}</div></div>
@@ -3411,9 +3418,9 @@ function roomRows() {
       ${field("Fußboden", floorCell(c.id, r))}
       ${field("Voreinstellung (Stufe am Ventil)", `<input type="number" class="r-preset" min="0" max="${pmax}" step="1" value="${esc(r.preset ?? "")}" placeholder="–" title="Aktuelle Voreinstellung am Ventilunterteil, z. B. 5 – leer = unbekannt">`)}
       ${field("Stufen (0 = ohne)", `<input type="number" class="r-preset-max" min="0" max="${pmax}" step="1" value="${esc(r.preset_max ?? "")}" placeholder="–" title="Zahl der Stufen, z. B. 6 – leer = unbekannt, 0 = kein Voreinstellventil (Rücklaufverschraubung)">`)}
-      ${field("Ventil / Heizleistung", `<input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || sibling(c, "heating_power") || (vf ? vf.sensor : ""))}" placeholder="Ventil % (optional)">`, vfHint)}
-      ${field("Temperatur-Sensor", `<input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || sibling(c, "temperature"))}" placeholder="Temperatur (optional)">`)}
-      ${field("Feuchte", `<input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || sibling(c, "humidity"))}" placeholder="Feuchte (optional)">`)}
+      ${field("Ventil / Heizleistung", `<input class="r-valve" list="dl-sensor" value="${esc(valveVal)}" placeholder="Ventil % (optional)">`, goneHint("heating_power", valveVal) || vfHint)}
+      ${field("Temperatur-Sensor", `<input class="r-temp" list="dl-temp" value="${esc(tempVal)}" placeholder="Temperatur (optional)">`, goneHint("temperature", tempVal))}
+      ${field("Feuchte", `<input class="r-hum" list="dl-sensor" value="${esc(humVal)}" placeholder="Feuchte (optional)">`, goneHint("humidity", humVal))}
       </div>${roomStates(c.id)}<div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
   }).join("");
 }
@@ -3974,8 +3981,9 @@ function mcRooms(r) {
 }
 function mcValves(v) {
   const after = v.items.filter((i) => i.state === "lernt nach"), learn = v.items.filter((i) => i.state === "lernt");
+  const rest = v.items.filter((i) => i.state === "ruht");  // 0.45.1: %-Modell, der Raum meldet nur an/aus
   return `<b>${esc(v.text)}</b>` + (after.length ? ` · lernen aus der Historie nach: ${mcNames(after)}` : "") +
-    (learn.length ? ` · lernen noch: ${mcNames(learn)}` : "");
+    (learn.length ? ` · lernen noch: ${mcNames(learn)}` : "") + (rest.length ? ` · ruhen (nur an/aus, Gelerntes bleibt): ${mcNames(rest)}` : "");
 }
 const mcDhw = (w) => `<b>${esc(w.state)}</b>` + (w.ok ? ` · ${fmt(w.charges, 0)} Ladungen gemessen` : (w.reasons || []).length ? ` – ${esc(w.reasons[0])}` : "");
 // Zuletzt: wiederhergestellt bzw. neu gelernt (house.restored) und Gelerntes übernommen (rooms.adopted)
@@ -4059,10 +4067,12 @@ function dmRooms(r) {
 }
 function dmValves(v) {
   if (!v.total) return "";
+  const mcTypical = (i) => i.typical != null ? ` · typisch ${fmt(i.typical, 0)} % offen beim Heizen` : "";  // 0.45.1: Ersatz ohne %-Werte
   return `<h3 class="sec-h">${mcDot(v.reliable === v.total)}Ventile: ${esc(v.text)}</h3><div class="scroll"><table class="dm-t" id="dm-valves">` +
     "<tr><th>Raum</th><th>Zustand</th><th>Grund</th></tr>" + v.items.map((i) =>
-      `<tr><td>${esc(i.name)}</td><td>${mcDot(i.reliable)}${esc(i.state)}</td><td>${esc(i.reason || "–")}</td></tr>`).join("") + "</table></div>" +
-    '<p class="muted">„lernt nach“: arbeitet die gespeicherten Messwerte noch ab · „lernt“: braucht noch mehr Messungen (Grund daneben).</p>';
+      `<tr><td>${esc(i.name)}</td><td>${mcDot(i.reliable)}${esc(i.state)}</td><td>${esc(i.reason || "–")}${mcTypical(i)}</td></tr>`).join("") + "</table></div>" +
+    '<p class="muted">„lernt nach“: arbeitet die gespeicherten Messwerte noch ab · „lernt“: braucht noch mehr Messungen (Grund daneben) · ' +
+    '„ruht“: das Thermostat meldet nur an/aus – das gelernte %-Modell bleibt und lernt mit %-Werten weiter; beim Heizen gilt die typische Öffnung.</p>';
 }
 const dmDhw = (w) => `<h3 class="sec-h">${mcDot(w.ok)}Warmwasser: ${esc(w.state)}</h3>` +
   `<p>${fmt(w.charges, 0)} Ladungen gemessen${(w.reasons || []).length ? " · " + w.reasons.map(esc).join("; ") : ""}</p>`;
@@ -4122,7 +4132,7 @@ function restoreNotes(r) {
   const rs = r.room_stats || [], h = (x) => `${fmt(x.hours, 0)} h`;
   const got = rs.filter((x) => x.hours).map((x) => `<span title="${x.first ? `${tsDay(x.first)}–${tsDay(x.last)}` : ""}">${esc(x.name)} ${h(x)}</span>` +
     (x.heating ? "" : ` <span title="${esc(x.heat_why || "")}">ohne Heizleistung</span>`));
-  const none = rs.filter((x) => !x.hours).map((x) => `${esc(x.name)} (${esc(x.why || "nichts")})`);
+  const none = rs.filter((x) => !x.hours).map((x) => `${esc(x.name)} (${esc(x.why || "nichts")}${x.kept ? ` – ${fmt(x.kept, 0)} h von früher bleiben` : ""})`);
   return (bad.length ? ` Alter Sensor nicht verwendet: ${bad.join("; ")}.` : "") +
     (gone.length ? ` Keine Raumwerte nachgeholt für ${gone.join("; ")}.` : "") +
     (got.length ? ` Räume aus der Stundenstatistik: ${got.join(", ")}.` : "") +
@@ -4964,10 +4974,11 @@ function emState(e, value, has = () => false) {
   const items = ids.map((id) => emItem(e, id));
   const source = own ? "gewählt" : ids.length ? "automatisch" : e.ems_key ? "EMS-ESP" : "fehlt";
   const alt = source === "fehlt" ? (e.alt || []).find((k) => has(k)) || null : null;
-  const issue = source === "fehlt" && e.required && !alt ? "fehlt"
+  const gone = !e.multi && !!e.gone && chosen === e.gone;  // 0.45.1: Raum-Sensor gibt es nicht mehr – kein Problem
+  const issue = source === "fehlt" && e.required && !alt ? "fehlt" : gone ? "gibt es nicht mehr"
     : items.some((i) => i.available === false) && !e.ems_key ? "nicht verfügbar"
     : source === "fehlt" && !alt ? (e.auto && e.group !== "raeume" ? "nicht gefunden" : "nicht gewählt") : null;
-  return { source, items, alt, issue, problem: EM_PROBLEMS.includes(issue), own };
+  return { source, items, alt, issue, problem: EM_PROBLEMS.includes(issue), own, gone };
 }
 const emValue = (key) => key in EM_VAL ? EM_VAL[key] : (EM_BY[key] || {}).chosen;
 const emHas = (key) => !!EM_BY[key] && emState(EM_BY[key], emValue(key)).source !== "fehlt";
@@ -5110,7 +5121,8 @@ function emNow(e, st) {
     : e.ems_key && st.items.length ? `<div class="muted">Wert kommt direkt von EMS-ESP (<code>${esc(e.ems_key)}</code>)</div>` : "";
   const sug = e.suggested && !st.items.length ? `<div class="muted">Vorschlag: <code class="eid" title="${esc(e.suggested)}">${esc(e.suggested)}</code></div>` : "";
   const fb = e.fallback && emSaved(e, emValue(e.key)) ? `<div class="muted">${esc(e.fallback)}</div>` : "";
-  return `${emBadge(st)}${unsaved}${lines}${alt}${ems}${sug}${fb}`;
+  const gone = st.gone ? `<div class="muted">${GONE_HINT}</div>` : "";
+  return `${emBadge(st)}${unsaved}${lines}${alt}${ems}${sug}${fb}${gone}`;
 }
 function emEnt(i) {
   const val = i.state === null || i.state === undefined ? "" : ["unavailable", "unknown"].includes(i.state) ? ` · meldet „${esc(i.state)}“`
@@ -5525,7 +5537,8 @@ async function loadSettings() {
   SET = j.settings; SUG = j.suggested; SCHED = j.schedule;
   DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
   SLEEP = j.sleep || null;  // Nachtzeiten aus dem Stromverbrauch (0.36)
-  VFOUND = j.valve_found || {};  // 0.45: genutzt, zum Speichern angeboten
+  VFOUND = j.valve_found || {};  // 0.45: genutzt, zum Speichern angeboten (0.45.1: nur, solange es sie gibt)
+  SGONE = j.sensors_gone || {};  // 0.45.1: gelöschte Sensoren zählen nicht – Hinweis am Feld
   DIS = j.disinfect || null;  // Desinfektion (0.36.3): Termin, Temperatur, Vorschlag
   DHWC = j.dhw_control || null; NOTIFY = j.notify || null;  // 0.38: Weg W und Benachrichtigungen
   BOILC = j.boiler_control || null;  // 0.41: Weg B – Schalter, Vorschläge, Status, Bereitschaft

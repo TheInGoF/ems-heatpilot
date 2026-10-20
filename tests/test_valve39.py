@@ -288,10 +288,11 @@ def test_saved_restart_version_and_kind_change(tmp_path):
     # anderer Modellstand: neu, lernt aus der gespeicherten Historie nach
     eng.store.put(f"model.valve.{C}", {**saved, "version": vm.VERSION + 1})
     assert Engine(Config(), eng.store, Discovered(rooms=[room])).valves[C].learned_until is None
-    # Geräteart geändert (kein Ventilsensor mehr): neu
+    # Geräteart geändert (kein Ventilsensor mehr): seit 0.45.1 bleibt das %-Modell und ruht
     eng.store.put(f"model.valve.{C}", saved)
     plain = Engine(Config(), eng.store, Discovered(rooms=[Room("Wz", C)]))
-    assert plain.valves[C].binary_dev and plain.valves[C].learned_until is None
+    assert not plain.valves[C].binary_dev and plain.valves[C].no_pct
+    assert plain.valves[C].to_dict() == saved and plain.valves[C].learned_until == saved["learned_until"]
     # „Lernstand neu berechnen“ verwirft die Ventilmodelle, das Protokoll des Trockenlaufs bleibt
     eng.store.add_valve_dry({"ts": rows[-1][0], "room": C, "rule": "drosseln", "action": "senken", "setpoint": 20.5})
     eng.store.reset_learning("2000-01-01")

@@ -189,20 +189,27 @@ class Store:
         self.db.execute("DELETE FROM room_events")  # Fremdwärme-Ereignisse werden beim Nachlernen neu erkannt
         self.db.commit()
 
-    def reset_models(self, since_day: str | None = None, rooms: Iterable[str] | None = None) -> None:
+    def reset_models(self, since_day: str | None = None, rooms: Iterable[str] | None = None,
+                     keep_valves: Iterable[str] = ()) -> None:
         """„Aus gespeicherten Daten neu lernen“ (seit 0.42.1): Haus-, Raum- und Ventilmodelle, laufende Fremdwärme,
         Lernkurve, Fremdwärme-Ereignisse und gelernte Zeiten verwerfen – die Neuberechnung bildet sie aus den
         gespeicherten Messwerten und Stundenwerten neu. Bleiben: alle Messwerte und Stundenwerte, Warmwasser- und
         Personenmodelle (ein Raumwechsel ändert sie nicht, und ohne die HA-Historie ließen sie sich nicht neu lernen),
         Nächte aus dem Stromverbrauch, Einstellungen, Protokolle und die Tageszähler aus der Abtastung. Die Zähler
         verworfener Gaswerte ab ``since_day`` bildet die Neuberechnung neu (sonst doppelt). ``rooms``: nur die Raum- und
-        Ventilmodelle dieser Schlüssel (der aktuellen Räume) – die alter Schlüssel ohne Raum bleiben mit ihrem Namen."""
+        Ventilmodelle dieser Schlüssel (der aktuellen Räume) – die alter Schlüssel ohne Raum bleiben mit ihrem Namen.
+        ``keep_valves`` (0.45.1): diese Ventilmodelle bleiben (ein ruhendes %-Modell ließe sich nicht neu lernen)."""
         self.save_room_names()
+        keep = set(keep_valves)
         if rooms is None:
-            self.db.execute("DELETE FROM kv WHERE key LIKE 'model.room.%' OR key LIKE 'model.valve.%'")
+            self.db.execute("DELETE FROM kv WHERE key LIKE 'model.room.%'")
+            rooms_v = [r["key"][len("model.valve."):] for r in self.query("SELECT key FROM kv WHERE key LIKE "
+                                                                           "'model.valve.%'")]
         else:
-            self.db.executemany("DELETE FROM kv WHERE key = ?",
-                                [(f"model.{kind}.{k}",) for k in rooms for kind in ("room", "valve")])
+            rooms = list(rooms)
+            self.db.executemany("DELETE FROM kv WHERE key = ?", [(f"model.room.{k}",) for k in rooms])
+            rooms_v = rooms
+        self.db.executemany("DELETE FROM kv WHERE key = ?", [(f"model.valve.{k}",) for k in rooms_v if k not in keep])
         self.db.execute("DELETE FROM kv WHERE key IN "
                         "('model.house', 'model.room_ext', 'last_room_step', 'last_hour', 'schedule.learned')")
         if since_day is not None:

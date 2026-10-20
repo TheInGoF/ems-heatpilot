@@ -160,6 +160,8 @@ class Discovered:
     # seit 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (``room_heating.attach``) – zur Laufzeit genutzt,
     # die Oberfläche bietet sie zum Speichern an: {Schlüssel: {sensor, name, from, from_name, how, how_text}}
     valve_found: dict[str, dict] = field(default_factory=dict)
+    # seit 0.45.1: eingetragene Sensoren, die es in HA nicht mehr gibt (``sensor_gone.drop``): {Thermostat: {Feld: ID}}
+    sensors_gone: dict[str, dict] = field(default_factory=dict)
 
     def all_sensor_ids(self) -> list[str]:
         ids = list(self.boiler.values()) + list(self.thermostat.values()) + list(self.outdoor)
@@ -198,6 +200,7 @@ class Discovered:
             "home_zone": self.home_zone if private else (self.home_zone is not None),
             "auto_rooms": self.auto_rooms,
             "valve_found": self.valve_found,
+            "sensors_gone": self.sensors_gone,
         }
 
 

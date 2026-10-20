@@ -23,7 +23,8 @@ from __future__ import annotations
 import logging
 import time
 
-from . import keep_data, plausibility, preview_log, regulator, schedule, sleep, valve_dry, valve_learn
+from . import keep_data, plausibility, preview_log, regulator, schedule, sensor_gone, sleep, valve_dry, valve_learn
+from . import valve_typical
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -94,6 +95,11 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.valves: dict[str, ValveModel] = {
             r.climate: ValveModel.from_dict(store.get(f"model.valve.{r.climate}"), valve_learn.binary_device(r))
             for r in found.rooms if not r.ems}
+        # 0.45.1: beim Aufbau entfernte Sensoren (``sensor_gone``); typische Ventilöffnung beim Heizen – Ersatz in
+        # Räumen, die %-Werte kannten (``valve_typical``)
+        self._dropped = {e for f in getattr(found, "sensors_gone", {}).values() for e in f.values()}
+        valve_typical.refresh(store, [r.climate for r in found.rooms])
+        self.valve_typical = valve_typical.table(store, found.rooms, self.valves)
         self.vacation = Vacation(cfg.vacations, cfg.vacation_entity, cfg.vacation_arrival_time)
         self.vacation.returned = set(store.get("vacation_returned", []))
         self.persons: dict[str, PersonLearner] = {}
@@ -160,7 +166,13 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
     def on_state(self, entity_id: str, state: dict | None) -> None:
         if state is None:
             self.states.pop(entity_id, None)
+            self.__dict__.setdefault("_gone", set()).add(entity_id)  # 0.45.1: entfernt – ein Sensor zählt nicht
             return
+        self.__dict__.get("_gone", set()).discard(entity_id)
+        dropped = self.__dict__.get("_dropped")
+        if dropped and entity_id in dropped:  # 0.45.1: beim Aufbau als gelöscht entfernt, meldet sich doch
+            dropped.discard(entity_id)
+            sensor_gone.back(self.found, entity_id)
         self.states[entity_id] = state
         if entity_id in self._live_entities:
             self.update_live()
@@ -242,7 +254,9 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
             self.control_loop.plan(ts, sample, rooms)
         self.store.commit()
-        keep_data.daily(self.store, self.cfg.keep_days, now_ts)  # 0.44: Aufbewahrung, einmal am Tag
+        if keep_data.daily(self.store, self.cfg.keep_days, now_ts) is not None:  # 0.44: Aufbewahrung, einmal am Tag
+            valve_typical.refresh(self.store, list(self.rooms), now_ts)  # 0.45.1: typische Öffnung, auch im Betrieb
+            self.valve_typical = valve_typical.table(self.store, self.found.rooms, self.valves)
 
         step = ts - ts % int(ROOM_STEP_H * 3600)
         if self._last_room_step is None:

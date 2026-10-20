@@ -29,7 +29,7 @@ def js_run(tmp_path, names, body: str):
     return json.loads(res.stdout)
 
 
-ROOM_NAMES = ("esc", "field", "sibling", "climateEntities", "shortName", "VFOUND", "roomRows")
+ROOM_NAMES = ("esc", "field", "sibling", "climateEntities", "shortName", "VFOUND", "SGONE", "GONE_HINT", "roomRows")
 FOUND = {"climate.hk_wohnen": {"sensor": "sensor.alt_wohnen_heating", "how_text": "vom alten Thermostat",
                                "from_name": "Wohnen Zone", "how": "adopted", "from": "climate.alt_wohnen"}}
 
@@ -47,7 +47,8 @@ SET = {{ rooms: [{{ climate: "climate.hk_wohnen", name: "Wohnen" }}] }};
 out({{ found, own, none: roomRows() }});
 """)
     assert 'class="r-valve" list="dl-sensor" value="sensor.alt_wohnen_heating"' in got["found"]
-    hint = "gefunden vom alten Thermostat Wohnen Zone und schon genutzt – Speichern trägt sie fest ein"
+    hint = ("gefunden vom alten Thermostat Wohnen Zone und schon genutzt – nur solange es die alte Integration gibt; "
+            "ihre Werte bleiben nach dem Löschen in HeatPilot")                  # ehrlich seit 0.45.1
     assert hint in plain(got["found"])
     assert 'value="sensor.eigenes_ventil"' in got["own"] and "gefunden" not in got["own"]  # eingetragen hat Vorrang
     assert 'class="r-valve" list="dl-sensor" value=""' in got["none"] and "gefunden" not in got["none"]
@@ -70,7 +71,7 @@ out({{ with: restoreNotes({{ room_stats: {json.dumps(rooms)} }}), without: resto
 
 def test_settings_api_and_loader_carry_valve_found():
     web = (PKG / "web.py").read_text(encoding="utf-8")
-    assert '"valve_found": getattr(app.eng.found, "valve_found", None) or {}' in web
+    assert "**await sensor_gone.for_settings(app)," in web                # 0.45.1: valve_found nur, solange es ihn gibt
     js = source(script(), "loadSettings")
     assert "VFOUND = j.valve_found || {};" in js
     ask = source(script(), "JOB_ASK")

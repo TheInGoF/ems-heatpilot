@@ -16,9 +16,12 @@ temp, valve, flow):
   der Langzeitstatistik (für die Wärmezufuhr, wo es keine eigenen Messpunkte gibt). Ein Soll gibt es nicht.
 
 Die Zeilen sind keine Messpunkte (``room_samples``): Ventilmodell, Hausmittel und Raum-Verläufe sehen sie nicht. Nur
-das Raummodell lernt aus ihnen in Stundenschritten (``room_stats_learn``). Ein neuer Lauf ersetzt die Zeilen im
-Zeitraum – hat ein Raum keinen passenden alten Sensor mehr (Alias entfernt, passt nicht), fallen sie dort weg; älter
-als die Aufbewahrung (``keep_days``) bzw. die Langzeitstatistik-Tage wird nichts geholt.
+das Raummodell lernt aus ihnen in Stundenschritten (``room_stats_learn``). Seit 0.45.1 gehören eingelesene Zeilen
+HeatPilot: Ein neuer Lauf ergänzt nur (``save`` – neue Stunden, in gespeicherten nur fehlende Heizleistung bzw.
+Vorlauf). Fehlt die Quelle später (alter Sensor, Statistik oder Integration gelöscht, Alias entfernt, Prüfung passt
+nicht mehr), bleibt alles Gespeicherte; das Ergebnis nennt es je Raum (``kept``). Älter als die Aufbewahrung
+(``keep_days``) bzw. die Langzeitstatistik-Tage wird nichts geholt; die Aufbewahrung (``keep_data``) gilt wie für
+eigene Rohdaten.
 
 Liest von Home Assistant nur (Langzeitstatistik, Statistik-Liste, Registry, Zustände); schreibt nichts an HA.
 """
@@ -175,17 +178,25 @@ def rows_for(store, p: dict, stats: dict, flow: dict[int, float], span: tuple[in
     return rows, {**info, "why": None if rows else "keine Stunden ohne eigene Raumwerte in der Langzeitstatistik"}
 
 
-def save(store, key: str, rows: list, span: tuple[int, int]) -> None:
-    """Zeilen eines Raums im Zeitraum ersetzen (ein neuer Lauf rechnet sie neu)."""
-    store.db.execute("DELETE FROM room_stats WHERE room = ? AND ts >= ? AND ts < ?", (key, *span))
-    store.db.executemany("INSERT OR REPLACE INTO room_stats VALUES(?, ?, ?, ?, ?)", rows)
+def save(store, rows: list) -> None:
+    """Zeilen ergänzen (seit 0.45.1): Eine gespeicherte Stunde behält ihre Werte, nur fehlende Heizleistung bzw.
+    Vorlauf kommen dazu – nichts wird gelöscht, auch wenn die Quelle fehlt."""
+    store.db.executemany(
+        "INSERT INTO room_stats VALUES(?, ?, ?, ?, ?) ON CONFLICT(ts, room) DO UPDATE SET "
+        "valve = COALESCE(room_stats.valve, excluded.valve), flow = COALESCE(room_stats.flow, excluded.flow)", rows)
     store.commit()
 
 
-def _report(p: dict, rows: list, info: dict) -> dict:
+def kept(store, key: str) -> int:
+    """Gespeicherte Stunden eines Raums aus der Stundenstatistik (auch aus früheren Läufen)."""
+    return store.query("SELECT COUNT(*) AS n FROM room_stats WHERE room = ?", (key,))[0]["n"]
+
+
+def _report(store, p: dict, rows: list, info: dict) -> dict:
     valve = [r for r in rows if r[3] is not None]
     return {**p, **info, "hours": len(rows), "valve_hours": len(valve), "heating": bool(valve),
-            "first": rows[0][0] if rows else None, "last": rows[-1][0] if rows else None}
+            "first": rows[0][0] if rows else None, "last": rows[-1][0] if rows else None,
+            "kept": kept(store, p["room"])}
 
 
 async def _fetch(ha, ids: list[str], span: tuple[int, int]) -> dict:
@@ -197,7 +208,8 @@ async def _fetch(ha, ids: list[str], span: tuple[int, int]) -> dict:
 
 async def restore(ha, eng, idx, stat_list, now: int | None = None) -> dict:
     """Raumwerte aus der Stundenstatistik einlesen (siehe Moduldocstring). Ergebnis {hours, flow_stat, rooms: [je Raum
-    {room, name, temp_stat, heat_stat, heat_how, hours, valve_hours, heating, first, last, offset, why, heat_why}]}."""
+    {room, name, temp_stat, heat_stat, heat_how, hours, valve_hours, heating, first, last, offset, why, heat_why,
+    kept}]} – ``hours`` dieser Lauf, ``kept`` alle gespeicherten Stunden des Raums."""
     span = window(eng, int(time.time() if now is None else now))
     if span[0] >= span[1]:  # Langzeitstatistik abgeschaltet (0 Tage)
         return {"hours": 0, "flow_stat": None, "rooms": []}
@@ -211,8 +223,8 @@ async def restore(ha, eng, idx, stat_list, now: int | None = None) -> dict:
         else:
             rows, info = [], {"offset": None, "why": "kein alter Temperatursensor (Alias) – "
                                                      "unter Einstellungen → Räume wählen"}
-        save(eng.store, p["room"], rows, span)  # ohne passende Quelle fallen frühere Zeilen weg (wie beim Alias)
-        out.append(_report(p, rows, info))
+        save(eng.store, rows)  # 0.45.1: ergänzt nur – ohne Quelle bleibt Gespeichertes
+        out.append(_report(eng.store, p, rows, info))
         log.info("Raum %s aus der Stundenstatistik: %d Stunden (%d mit Heizleistung)%s", p["room"], len(rows),
                  out[-1]["valve_hours"], f" – {info['why']}" if info.get("why") else "")
     return {"hours": sum(r["hours"] for r in out), "flow_stat": flow_id if flow else None, "rooms": out}
