@@ -97,7 +97,9 @@ def make_app(app) -> web.Application:
     web_app = web.Application(middlewares=[api_errors])
 
     async def index(_req):
-        return web.FileResponse(STATIC / "index.html")
+        # nach einem Update nicht die alte Seite aus dem Zwischenspeicher zeigen (0.43.1): immer nachfragen,
+        # unverändert antwortet der Server mit 304
+        return web.FileResponse(STATIC / "index.html", headers={"Cache-Control": "no-cache"})
 
     async def icon(_req):
         return web.FileResponse(STATIC / "icon.svg", headers={"Cache-Control": "max-age=86400"})

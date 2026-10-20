@@ -440,10 +440,10 @@ def test_version_changelog_and_docs():
 
     from heatpilot import __version__
     root = Path(__file__).resolve().parents[1]
-    assert __version__ == "0.43.0"
-    assert 'version: "0.43.0"' in (root / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
+    assert __version__ >= "0.43.0"  # seit 0.43.1 prüft test_web_cache431 die genaue Version
+    assert f'version: "{__version__}"' in (root / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
     log = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert log.startswith("# Changelog\n\n## 0.43.0\n**Oberfläche aufgeräumt**")
+    assert "\n## 0.43.0\n**Oberfläche aufgeräumt**" in log
     head = log.split("\n## 0.43.0\n")[1].split("\n## ")[0]
     assert "tests/test_ui_v43.py" in head and "Beobachten" in head
     for personal in ("Ingo", "°C seit", "kWh", "climate."):  # keine persönlichen Werte
