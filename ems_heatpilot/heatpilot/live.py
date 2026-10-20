@@ -88,7 +88,10 @@ def now(eng) -> dict:
     prev = eng._live_prev or {}
     period = sample.get("min_period")
     lock_left = None
-    if period and eng._last_off_ts is not None and not sample.get("burner_on"):
+    code = str(eng._boiler("service_code") or "").strip().upper()
+    # 0.48: nur, wenn der Kessel die Taktsperre selbst meldet (0A) – bei 0H („keine Wärmeanforderung“) ist es keine;
+    # ohne Statuscode bleibt die Schätzung aus der Antipendelzeit
+    if period and eng._last_off_ts is not None and not sample.get("burner_on") and code in ("", "0A"):
         left = period * 60 - (time.time() - eng._last_off_ts)
         lock_left = round(left / 60) if left > 0 else None
     from .engine import num  # spät: engine importiert dieses Modul
