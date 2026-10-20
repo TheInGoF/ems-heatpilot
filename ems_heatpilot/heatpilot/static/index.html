@@ -3592,6 +3592,8 @@ const PICKERS = {
   // (api/entities: flow.fits bzw. heating.fits: keine andere Rolle, kein Heizkreis, nie „Heizen abschalten“)
   flow: { filter: (e) => !!(e.flow && e.flow.fits), label: "Vorlauf-Soll (number, °C)" },
   heating: { filter: (e) => !!(e.heating && e.heating.fits), label: "Heizbetrieb (switch)" },
+  // Antipendelzeit anpassen: number in Minuten ohne andere Rolle (api/entities: period.fits)
+  period: { filter: (e) => !!(e.period && e.period.fits), label: "Antipendelzeit (number, min)" },
   // Desinfektion auslösen (0.42): nur der Schalter „Desinfizieren“ (api/entities: disinfect.fits – switch, Name passt,
   // nie Einmalladung, Zirkulation oder ein anderer Kesselschalter)
   disinfect: { filter: (e) => !!(e.disinfect && e.disinfect.fits), label: "Schalter „Desinfizieren“ (switch)" },
@@ -4859,7 +4861,11 @@ const BOILER_LABEL = { aus: "Aus", trocken: "Beobachten", heatpilot: "HeatPilot 
 const BOILER_WHAT = { flow: "Vorlauf-Soll", heating: "Heizbetrieb" };
 const BOILER_ACTION = { flow_set: "Vorlauf-Soll gesetzt", heating_on: "Heizbetrieb an", heating_off: "Heizbetrieb aus",
   boiler_dry: "würde schreiben", boiler_check_failed: "nicht übernommen", boiler_foreign: "fremde Änderung",
-  boiler_paused: "pausiert", boiler_resumed: "wieder eingeschaltet", boiler_fallback: "zurückgeschaltet" };
+  boiler_paused: "pausiert", boiler_resumed: "wieder eingeschaltet", boiler_fallback: "zurückgeschaltet",
+  // Antipendelzeit anpassen (boiler_period): Wert in Minuten
+  boiler_period: "Antipendelzeit gesetzt", boiler_period_dry: "Antipendelzeit: würde schreiben",
+  boiler_period_failed: "Antipendelzeit nicht übernommen", boiler_period_foreign: "Antipendelzeit fremd geändert",
+  boiler_period_paused: "Antipendelzeit pausiert", boiler_period_back: "Antipendelzeit zurück" };
 const BOILER_RULES = { flow_min: 35, step_k: 1, flow_gap_s: 60, heat_hold_min: 5, check_s: 60, max_fails: 3,
   foreign_max: 2, boost_step_k: 2, boost_max_k: 10, flow_down_min: 10, heat_off_min: 15, blind_min: 15 };  // wie boiler_rule – falls der Status (noch) fehlt
 const FLAME = `<span class="boiler-ico">${ICON.boost}</span>`;
@@ -4885,7 +4891,8 @@ function boilerLine(b, note = "") {
   const text = String(b.status_text || "Kessel") + (pause && b.paused_since ? ` · seit ${clock(b.paused_since)}` : "");
   const acts = [pause ? '<button class="btn small" onclick="boilerResume()">wieder einschalten</button>' : "",
     dot === "dot-warn" ? '<a href="#" onclick="boilerOpenSettings();return false">Einstellungen → Kessel über HeatPilot</a>' : ""].filter(Boolean);
-  return `${readyDot(dot)}${esc(text)}` + boilerWarnings(b).map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join("") +
+  const per = b.mode !== "aus" && b.period && b.period.status_text ? `<span class="muted" id="ov-period">${esc(b.period.status_text)}</span>` : "";
+  return `${readyDot(dot)}${esc(text)}${per}` + boilerWarnings(b).map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join("") +
     (acts.length ? `<span class="boiler-acts">${acts.join(" ")}</span>` : "") + (note ? `<span class="dhw-note">${esc(note)}</span>` : "");
 }
 function renderBoilerLine(id, b, note = "") {
@@ -4938,8 +4945,11 @@ function boilerSectionHtml(s, x) {
       `<option${(s.boiler_idle || "pumpe") === k ? " selected" : ""} value="${k}">${l}</option>`).join("")}</select>`,
       "Pumpe läuft weiter (Standard): Heizbetrieb bleibt an, Vorlauf-Soll 20 °C – der Brenner springt nicht an. Heizbetrieb ganz aus: wie früher, z. B. im Sommer.") +
     field("Regler", `<label class="switch"><input id="f-regulator_removed" type="checkbox"${s.regulator_removed ? " checked" : ""}> Regler ist abgebaut</label>`,
-      "Angehakt: HeatPilot wartet nicht auf die Regler-Prüfung. Meldet EMS-ESP doch Werte eines Reglers, sperrt es trotzdem; die Prüfung nach jedem Schreiben bleibt.") + `</div>` +
-    `<div class="warnbox" id="boiler-warn"><details class="more"><summary>Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. <span class="m"></span></summary><div>${boilerWarnText(fb)}</div></details></div>` +
+      "Angehakt: HeatPilot wartet nicht auf die Regler-Prüfung. Meldet EMS-ESP doch Werte eines Reglers, sperrt es trotzdem; die Prüfung nach jedem Schreiben bleibt.") +
+    field("Antipendelzeit", `<label class="switch"><input id="f-boiler_period" type="checkbox"${s.boiler_period ? " checked" : ""}> Antipendelzeit anpassen</label>`,
+      boilerPeriodRule((st.period || {}).rules)) + `</div>` + boilerPeriodRef(s, x) +
+    (boilerRegWarn(s, st) ? `<div class="warnbox" id="boiler-warn"><details class="more"><summary>Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. <span class="m"></span></summary><div>${boilerWarnText(fb)}</div></details></div>`
+      : `<div class="hint" id="boiler-failsafe"><details class="more"><summary>Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür den Wächter anlegen. <span class="m"></span></summary><div>${boilerWarnText(fb, false)}</div></details></div>`) +
     `<div class="dhw-box" id="boiler-box">${boilerBoxHtml(x.status, x.readiness)}</div>`;
 }
 function boilerIntro(r) {
@@ -4958,15 +4968,19 @@ function boilerIntro(r) {
     `${r.blind_min} min der Rückfall-Vorlauf mit Heizbetrieb an; ` +
     `${r.check_s} s später prüft HeatPilot, ob der Kessel den Wert zeigt (${r.max_fails} Fehlschläge in Folge oder ${r.foreign_max} ` +
     "fremde Änderungen in 1 h: Pause). Taktet der Kessel und wartet ein Raum, hebt HeatPilot den Vorlauf in " +
-    `${r.boost_step_k}-K-Schritten bis +${r.boost_max_k} K (Takt-Boost). EMS-ESP bleibt nur lesend, die Taktsperre des Kessels bleibt, wie sie ist.`;
+    `${r.boost_step_k}-K-Schritten bis +${r.boost_max_k} K (Takt-Boost). EMS-ESP bleibt nur lesend, die Taktsperre des Kessels bleibt, wie sie ist – ` +
+    "außer mit „Antipendelzeit anpassen“ (unten).";
 }
-// Warnhinweis: Regler am Bus, Ausfall, Rückfallwert
-function boilerWarnText(fb) {
+// Warnkasten nur, solange laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt ist (ohne Status: Haken „Regler ist
+// abgebaut“); sonst nur der kurze Hinweis zu Wächter und Rückfall-Vorlauf
+const boilerRegWarn = (s, st) => st.regulator ? st.regulator.present !== false : !s.regulator_removed;
+// Warnhinweis: Regler am Bus (nur mit reg), Ausfall, Rückfallwert
+function boilerWarnText(fb, reg = true) {
   const back = fb === null || fb === undefined ? "den Rückfall-Vorlauf (unten)" : `den Rückfall-Vorlauf (jetzt ${fb} °C)`;
-  return "<b>Regler am Bus:</b> Ein Regler am EMS-Bus überschreibt alle 60 s, was am Kessel gesetzt wird – solange EMS-ESP einen " +
+  return (reg ? "<b>Regler am Bus:</b> Ein Regler am EMS-Bus überschreibt alle 60 s, was am Kessel gesetzt wird – solange EMS-ESP einen " +
     "Regler meldet (oder es unbekannt ist), schreibt HeatPilot nichts – und erst 30 min, nachdem EMS-ESP ihn zuletzt gemeldet " +
     "hat. Erst einige Tage „Beobachten“ prüfen (Übersicht → " +
-    "Vorschau und Vergleich), dann den Regler abbauen und EMS-ESP neu starten.<br><b>Fällt HeatPilot aus</b> (Add-on gestoppt, " +
+    "Vorschau und Vergleich), dann den Regler abbauen und EMS-ESP neu starten.<br>" : "") + "<b>Fällt HeatPilot aus</b> (Add-on gestoppt, " +
     "Home Assistant neu gestartet), bleibt der letzte Vorlauf stehen – nachts vielleicht 35 °C. Dafür den Wächter in Home " +
     `Assistant anlegen (Knopf „Anleitung Wächter“ unten).<br><b>Zurück auf „Aus“ oder „Beobachten“:</b> HeatPilot schreibt einmal ${back} ` +
     "und Heizbetrieb an – mit Regler am Bus nichts. Danach den Regler wieder anschließen bzw. den Kessel selbst stellen.";
@@ -4986,6 +5000,29 @@ function boilerEntityRef(what, s, x) {
     (rd.entity && rd.doubt ? ` <span class="msg-warn">${esc(rd.doubt)}</span>` : "") +
     "</p>";
 }
+// Antipendelzeit anpassen: Regel in zwei Sätzen + „mehr“, Entität (gewählt unter Entitäten) und Zeile für die Statusbox
+function boilerPeriodRule(r) {
+  r = { short_min: 10, long_min: 25, step_min: 5, hold_min: 15, check_s: 60, lo_min: 5, hi_min: 60, ...(r || {}) };
+  return `<details class="more"><summary>Kurz (${r.short_min} min), solange die Räume mit offenem Ventil die kleinste Brennerleistung abnehmen; ` +
+    `sonst der Wert vom Einschalten, mindestens ${r.long_min} min. Wirkt nur bei „HeatPilot steuert“ – bei „Beobachten“ steht im Protokoll, was HeatPilot schreiben würde. <span class="m"></span></summary>` +
+    `<div>Taktet der Kessel trotzdem, gilt sofort wieder der lange Wert; braucht kein Raum Wärme oder lädt Warmwasser, bleibt sie, wie sie ist. ` +
+    `Geschrieben wird nur bei Änderung ab ${r.step_min} min, höchstens alle ${r.hold_min} min, ganze Minuten von ${r.lo_min} bis ${r.hi_min}; ` +
+    `${r.check_s} s später prüft HeatPilot, ob der Kessel den Wert zeigt. Gesperrt wie das Vorlauf-Soll (Regler am Bus, „Heizen abschalten“). ` +
+    "Ändert jemand anderes den Wert, gilt er als neuer Grundwert. Beim Ausschalten (auch von „HeatPilot steuert“) schreibt HeatPilot einmal den Grundwert zurück.</div></details>";
+}
+function boilerPeriodRef(s, x) {
+  const p = (x.status || {}).period || {}, own = s.period_set_entity, sug = (x.suggested || {}).period;
+  const has = (v) => v !== null && v !== undefined;
+  const src = own ? `<code class="eid" title="${esc(own)}">${esc(own)}</code> (gewählt${sug && sug !== own ? `; Automatik wäre ${esc(sug)}` : ""}).`
+    : sug ? `<code class="eid" title="${esc(sug)}">${esc(sug)}</code> (automatisch erkannt).` : "keine number-Entität in Minuten erkannt – bitte wählen.";
+  const now = p.entity && has(p.current) ? ` jetzt ${fmt(p.current, 0)} min${has(p.base) ? ` · Grundwert ${fmt(p.base, 0)} min` : ""}` : "";
+  return `<p class="em-ref" id="boiler-period-ref">Antipendelzeit: ${src}${now}` +
+    (s.boiler_period && p.problem ? ` <span class="msg-err">${esc(p.problem)}</span>` : "") + "</p>";
+}
+function boilerPeriodFact(p) {
+  const t = String((p || {}).status_text || ""), i = t.indexOf(": ");
+  return i < 0 ? "" : `<b>${esc(t.slice(0, i))}:</b> ${esc(t.slice(i + 2))}`;
+}
 // Statusbox: Status, Fakten (Kessel jetzt, Ziel, Entscheidung, Verlauf), Hinweise, Pause, Wächter, Bereitschaft
 function boilerBoxHtml(b, rd, note = "") {
   if (!b) return '<span class="muted">Status nicht verfügbar</span>';
@@ -5004,6 +5041,7 @@ function boilerFacts(b) {
   const now = e.flow || e.heating ? `<b>Kessel jetzt:</b> Vorlauf-Soll ${boilerVal("flow", (e.flow || {}).current)} · Heizbetrieb ${boilerVal("heating", (e.heating || {}).current)}` : "";
   const items = [now, b.mode !== "aus" && t ? boilerTarget(t, b.mode) : "",
     t && t.load_text ? esc(t.load_text) : "", b.mode !== "aus" && !b.paused ? boilerDecision(b) : "",
+    b.mode !== "aus" ? boilerPeriodFact(b.period) : "",
     reg ? `<b>Regler am Bus:</b> ${reg.present === false ? "nein" : reg.present ? "ja – sperrt" : "unbekannt – sperrt"}` +
       (reg.text && reg.text !== b.blocked ? ` (${esc(reg.text)})` : "") : "",  // die Sperre steht schon im Status
     ...boilerHistory(b)].filter(Boolean);
@@ -5143,6 +5181,7 @@ function boilerOpenReady() {
 // Wert der Kessel-Zeilen im Protokoll: Vorlauf in °C, Heizbetrieb an/aus (Trockenlauf, Prüfung und fremde Änderung
 // tragen beim Heizbetrieb 1/0 – der Grund nennt, worum es geht)
 function boilerLogValue(l) {
+  if (/^boiler_period/.test(l.action)) return l.value === null || l.value === undefined ? "" : `${fmt(l.value, 0)} min`;
   if (l.action === "heating_on" || l.action === "heating_off") return l.action === "heating_on" ? "an" : "aus";
   const heat = !["flow_set", "boiler_fallback"].includes(l.action) && /^(?:(?:Trockenlauf|Beobachten): würde )?Heizbetrieb/.test(l.reason || "");
   return boilerVal(heat ? "heating" : "flow", l.value);
@@ -5685,6 +5724,7 @@ function collect() {
                    "boiler_fallback_flow"]) out[k] = v("f-" + k);  // Rückfall-Vorlauf (0.41)
   if ($("f-boiler_idle")) out.boiler_idle = $("f-boiler_idle").value;  // 0.46.5: wenn kein Raum Wärme braucht
   if ($("f-regulator_removed")) out.regulator_removed = $("f-regulator_removed").checked;  // 0.46.9: Regler abgebaut
+  if ($("f-boiler_period")) out.boiler_period = $("f-boiler_period").checked;  // 0.48: Antipendelzeit anpassen
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
   // Steuerung: Schalter (ohne Auswahl bleibt es bei Beobachten) und Wochenplan Mo..So

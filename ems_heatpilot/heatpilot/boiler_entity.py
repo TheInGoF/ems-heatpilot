@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import re
 
-from . import dhw_entity, disinfect_entity
+from . import boiler_period, dhw_entity, disinfect_entity
 from . import entity_guard as eg
 from .boiler_rule import FLOW_MIN
 from .regulator import regulator, regulator_block  # noqa: F401 – wie bisher auch hier zu holen
@@ -149,9 +149,11 @@ def same_entity(cfg, found, states: dict) -> str | None:
 
 def setting_problem(key: str, value: str) -> str | None:
     """Beim Speichern (``config.validate``): Entität, die sichtbar zu etwas anderem gehört – sie lässt sich nicht
-    speichern (Warmwasser-Soll, Vorlauf-Soll, Heizbetrieb, seit 0.42 der Schalter der Desinfektion)."""
+    speichern (Warmwasser-Soll, Vorlauf-Soll, Heizbetrieb, seit 0.42 der Schalter der Desinfektion, seit 0.48 die
+    Antipendelzeit)."""
     check = {"dhw_set_entity": dhw_entity.wrong_role, "flow_set_entity": flow_wrong,
-             "heating_switch_entity": heat_wrong, "disinfect_entity": disinfect_entity.setting_problem}.get(key)
+             "heating_switch_entity": heat_wrong, "disinfect_entity": disinfect_entity.setting_problem,
+             "period_set_entity": boiler_period.wrong}.get(key)  # 0.48: Antipendelzeit
     return check(value) if check else None
 
 

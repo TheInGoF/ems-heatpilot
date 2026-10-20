@@ -43,6 +43,7 @@ NAMES = ("fmt", "esc", "clock", "isoOff", "hhmm", "isoClock", "HP_OFF", "hpOff",
          "boilerWarnText", "boilerEntityRef", "boilerBoxHtml", "boilerFacts", "boilerTarget", "boilerDecision",
          "boilerHistory", "boilerWatchHtml", "boilerGuideHtml", "boilerGuide", "boilerModeHint", "boilerModeText",
          "boilerConfirm", "boilerReadyHtml", "boilerEntCell", "boilerLogValue",
+         "boilerRegWarn", "boilerPeriodRule", "boilerPeriodRef", "boilerPeriodFact",  # 0.48
          "PV_NOTE", "PV_WHAT", "PV_C", "PHASE", "WEEKDAYS", "tsOf", "tclock", "wday", "tipKey", "pvWrite", "pvRooms",
          "pvNote", "pvSummary", "pvTip", "pvTable", "NOTIFY_KIND", "notifyHtml", "notifyState")
 # DOM-Ersatz: $() liefert je id ein Objekt; RADIO ist die gewählte Stellung des Schalters, confirm() merkt sich die Frage
@@ -264,11 +265,14 @@ def test_status_line_and_box_when_writing(tmp_path):
                  "Ziel ist der Vorlauf, den der anspruchsvollste Raum braucht (gerechnet wie die Vorschau)",
                  "braucht kein Raum 35 °C, ist der Heizbetrieb aus",
                  "5 min Haltezeit", "60 s später prüft HeatPilot", "3 Fehlschläge in Folge oder 2 fremde Änderungen in 1 h: Pause",
-                 "2-K-Schritten bis +10 K (Takt-Boost)", "EMS-ESP bleibt nur lesend, die Taktsperre des Kessels bleibt, wie sie ist."):
+                 "2-K-Schritten bis +10 K (Takt-Boost)",
+                 "EMS-ESP bleibt nur lesend, die Taktsperre des Kessels bleibt, wie sie ist – außer mit „Antipendelzeit anpassen“"):
         assert text in rules, text
-    warn = plain(re.search(r'<div class="warnbox" id="boiler-warn">(.*?)</div>', sec).group(1))
-    assert warn.startswith("Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. "  # 0.43: Kurztext + mehr
-                        "Regler am Bus: Ein Regler am EMS-Bus überschreibt alle 60 s, was am Kessel gesetzt wird")
+    # 0.48: kein Regler am Bus (EMS-ESP meldet keinen) – statt des Warnkastens nur der kurze Hinweis (Kurztext + mehr)
+    assert 'id="boiler-warn"' not in sec
+    warn = plain(re.search(r'<div class="hint" id="boiler-failsafe">(.*?)</div></details>', sec).group(1))
+    assert warn.startswith("Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür den Wächter anlegen. Fällt "
+                           "HeatPilot aus (Add-on gestoppt") and "Regler am Bus:" not in warn
     assert "Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt der letzte Vorlauf stehen" in warn
     assert "Zurück auf „Aus“ oder „Beobachten“: HeatPilot schreibt einmal den Rückfall-Vorlauf (jetzt 45 °C) und Heizbetrieb an" in warn
 
@@ -492,8 +496,8 @@ def test_entity_page_offers_only_fitting_entities(tmp_path):
 
     ents, emap = asyncio.run(go())
     group = next(g for g in emap["groups"] if g["key"] == "kessel_hp")
-    assert group["title"] == "Kessel über HeatPilot" and [e["key"] for e in group["entries"]] == ["flow_set_entity",
-                                                                                                  "heating_switch_entity"]
+    assert group["title"] == "Kessel über HeatPilot" and [e["key"] for e in group["entries"]] == [
+        "flow_set_entity", "heating_switch_entity", "period_set_entity"]  # Antipendelzeit seit 0.48
     r = run_em(tmp_path, {"ent": ents, "map": emap}, """
       const ids = (k) => emOptions(EM_BY[k], "").list.map((x) => x.id);
       const all = (k, q) => emOptions(EM_BY[k], q).list.map((x) => [x.id, x.fit]);

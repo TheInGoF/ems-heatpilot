@@ -50,7 +50,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
-from . import boiler_power, disinfect_entity, room_identity, sensor_gone, web_adopt, web_restore, web_switch
+from . import boiler_period, boiler_power, disinfect_entity, room_identity, sensor_gone, web_adopt, web_restore, web_switch
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -189,7 +189,8 @@ def make_app(app) -> web.Application:
             # Weg B (0.41): Schalter, Vorschläge der Erkennung, Status (mit Anleitung Wächter), Bereitschaft
             "boiler_control": {"modes": list(boiler_rule.BOILER_MODES),
                                "suggested": {"flow": boiler_entity.suggest_flow(app.eng.found, app.eng.states),
-                                             "heating": boiler_entity.suggest_heat(app.eng.found, app.eng.states)},
+                                             "heating": boiler_entity.suggest_heat(app.eng.found, app.eng.states),
+                                             "period": boiler_period.suggest(app.eng.found, app.eng.states)},
                                "fallback_range": [boiler_rule.FALLBACK_MIN, boiler_rule.FALLBACK_MAX],
                                "status": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))},
             # 0.42: Mindestleistung – wirksamer Wert, Herkunft, Vorschlag (nie automatisch übernommen)
@@ -232,7 +233,8 @@ def make_app(app) -> web.Application:
                     if k in ("device_name", "device_model", "controller", "siblings", "ems")}
                    if eid.startswith("climate.") else {}),
                 **({"dhw": dhw_entity.picker(eid, st, app.eng.found),
-                    "flow": boiler_entity.flow_picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
+                    "flow": boiler_entity.flow_picker(eid, st, app.eng.found),
+                    "period": boiler_period.picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
                 **({"heating": boiler_entity.heat_picker(eid, st, app.eng.found),
                     "disinfect": disinfect_entity.picker(eid, st, app.eng.found)} if eid.startswith("switch.") else {}),
             })

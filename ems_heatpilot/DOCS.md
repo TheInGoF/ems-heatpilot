@@ -1155,7 +1155,8 @@ und Bereitschaft), `POST api/dhw/resume` („wieder einschalten“ – ohne Paus
 Seit 0.41 kann HeatPilot den Kessel selbst führen – **Vorlauf-Soll** live und **Heizbetrieb** an/aus. Das ist nur
 ohne Regler am EMS-Bus sinnvoll: Ein Regler (z. B. RC35-artig) überschreibt alle 60 s, was am Kessel gesetzt wird.
 Geschrieben wird über Home Assistant, wie beim Warmwasser-Soll – an EMS-ESP selbst schickt HeatPilot weiterhin nur
-Lese-Anfragen. Die Antipendelzeit (Taktsperre des Kessels) und alle anderen Kesselwerte fasst HeatPilot nie an.
+Lese-Anfragen. Die Antipendelzeit (Taktsperre des Kessels) fasst HeatPilot nur mit „Antipendelzeit anpassen“ an
+(seit 0.48, Standard aus, siehe unten), alle anderen Kesselwerte nie.
 
 **Schalter „Kessel über HeatPilot“** (Einstellungen → Kessel über HeatPilot, eigene Karte nach „Haus & Kessel“) –
 getrennt von Raumsteuerung und Warmwasser, drei Stellungen:
@@ -1268,6 +1269,36 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   Nacht-Wert stehen bleibt – und erinnert daran, den Regler wieder anzuschließen bzw. den Kessel selbst zu stellen. Mit
   Regler am Bus wird nichts zurückgeschrieben.
 
+**Antipendelzeit anpassen** (seit 0.48, Schalter in der Karte, Standard **aus**). Die Antipendelzeit (Taktsperre,
+EMS-ESP `burnminperiod`, in Home Assistant z. B. `number.boiler_burner_min_period`) hält den Brenner nach dem Abschalten
+aus. Fest auf 25 min blockiert sie Starts auch dann, wenn gerade genug Wärme abgenommen wird. Mit dem Schalter führt
+HeatPilot sie im selben 30-s-Schritt wie das Vorlauf-Soll mit:
+
+- **kurz, 10 min**, solange die Räume mit offenem Ventil die kleinste Brennerleistung beim Ziel-Vorlauf abnehmen
+  (dieselbe Abnahme-Rechnung wie für den Mindest-Vorlauf) und der Kessel nicht taktet – der Brenner kann dann auf
+  kleinster Stufe durchlaufen, und geht er doch aus, wartet ein neuer Start nicht 25 min. 10 min lassen auch im
+  ungünstigsten Fall höchstens 6 Starts je Stunde zu,
+- **lang = der Grundwert**: der Wert am Kessel beim Einschalten, **mindestens 25 min** (höchstens 60 min), wenn die
+  Abnahme nicht reicht oder unbekannt ist (Mindestleistung, Hausmodell) oder der Kessel taktet (ab 3 Starts in 1 h mit
+  Läufen unter 10 min),
+- **unverändert** ohne Wärmebedarf („nur Pumpe“, Heizbetrieb aus), ohne rechenbares Vorlauf-Soll und während einer
+  Warmwasser-Ladung.
+
+Geschrieben wird nur bei „HeatPilot steuert“ (bei „Beobachten“ steht im Protokoll „würde Antipendelzeit … schreiben“),
+nur über Home Assistant auf **die eine** `number`-Entität der Antipendelzeit (leer = erkannt; nur `number` in Minuten;
+wählbar unter Einstellungen → Entitäten → Kessel über HeatPilot → „Antipendelzeit (Entität)“), **ganze Minuten 5–60** und
+innerhalb der Grenzen der Entität – alles andere weist `Control` hart ab. Nur bei Änderung ab **5 min**, höchstens
+**alle 15 min**; **60 s** danach prüft HeatPilot, ob der Kessel den Wert zeigt (3 Fehlschläge in Folge: Pause nur dieser
+Funktion). Ändert jemand anderes den Wert, steht das im Protokoll und als Meldung, der neue Wert gilt als Grundwert und
+die 15 min beginnen neu (2 fremde Änderungen in 1 h: Pause). Gesperrt unter denselben Bedingungen wie der Kessel (Regler
+am Bus, „Heizen abschalten“ an, Entitäten, Pause). Eine Pause endet, wenn du den Schalter aus- und wieder einschaltest.
+**Ausschalten** (Schalter aus oder „Kessel über HeatPilot“ nicht mehr „HeatPilot steuert“) schreibt einmal den Grundwert
+zurück – nur, wenn HeatPilot seit dem Einschalten geschrieben hat, und nicht mit Regler am Bus. Fällt HeatPilot aus,
+bleibt der zuletzt geschriebene Wert stehen (nie unter 5 min). Die Statusbox zeigt „Antipendelzeit: 10 min (Abnahme
+reicht: …)“ bzw. „würde …“ bei „Beobachten“, Übersicht → Status dieselbe Zeile, solange die Funktion an ist; das Protokoll
+die Zeilen „Antipendelzeit gesetzt/würde schreiben/nicht übernommen/fremd geändert/pausiert/zurück“. Abfrage: `period`
+in `GET api/boiler`.
+
 **Wächter in Home Assistant.** Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – nachts vielleicht 35 °C. Dafür
 setzt HeatPilot jede Minute den Sensor `sensor.heatpilot_heartbeat` (Zeitstempel). Eine Automation in Home Assistant
 stellt den Kessel auf einen festen Wert, sobald er sich eine Stunde nicht ändert. Du legst sie selbst in der
@@ -1314,7 +1345,8 @@ HeatPilot anhalten und nach einer Stunde nachsehen, ob die Automation lief.
 **Anzeige:** Die Karte in den Einstellungen zeigt unter dem Schalter, welche zwei Entitäten gelten (gewählt unter
 Einstellungen → Entitäten → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die Wahl
 **„Wenn kein Raum Wärme braucht“** (Pumpe läuft weiter | Heizbetrieb ganz aus, seit 0.46.5), die
-Warnhinweise und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Takt-Boost,
+Warnhinweise (der Warnkasten „Regler am Bus“ nur, solange laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt
+ist – sonst, seit 0.48, nur ein kurzer Hinweis auf Wächter und Rückfall-Vorlauf) und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Takt-Boost,
 Fußboden-Grenze), die letzte Entscheidung, zuletzt geschrieben und geprüft, fremde Änderungen, Regler am Bus, den
 Wächter mit dem Knopf „Anleitung Wächter“ und – bei einer Pause – „wieder einschalten“. Heizen und Übersicht zeigen eine
 Statuszeile („Kessel: HeatPilot · Vorlauf 42 °C (Wohnzimmer hält 21,0 °C)

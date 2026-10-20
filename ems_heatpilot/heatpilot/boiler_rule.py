@@ -62,6 +62,8 @@ FIELDS: dict[str, tuple] = {
     "boiler_fallback_flow": ("int", FALLBACK_MIN, FALLBACK_MAX),
     "boiler_idle": ("choice", IDLE_MODES),
     "regulator_removed": ("bool",),  # 0.46.9: „Regler ist abgebaut“ – vom Nutzer bestätigt, Prüfung entfällt
+    "boiler_period": ("bool",),      # 0.48: „Antipendelzeit anpassen“ (boiler_period, period_control), Standard aus
+    "period_set_entity": ("entity", "number"),  # 0.48: Entität der Antipendelzeit, leer = erkannt
 }
 SWITCH_ENTITY = re.compile(r"^switch\.[a-z0-9_]+$")
 NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")
@@ -78,9 +80,11 @@ def clean_config(cfg) -> None:
     ein unlesbarer Rückfall-Vorlauf als Standard – alte und von Hand geänderte Einstellungen laden immer."""
     if cfg.boiler_control not in BOILER_MODES:
         cfg.boiler_control = "aus"
-    for key, pattern in (("flow_set_entity", NUMBER_ENTITY), ("heating_switch_entity", SWITCH_ENTITY)):
-        if getattr(cfg, key) and not pattern.match(str(getattr(cfg, key))):
+    for key, pattern in (("flow_set_entity", NUMBER_ENTITY), ("heating_switch_entity", SWITCH_ENTITY),
+                         ("period_set_entity", NUMBER_ENTITY)):
+        if not getattr(cfg, key, None) or not pattern.match(str(getattr(cfg, key))):
             setattr(cfg, key, None)
+    cfg.boiler_period = getattr(cfg, "boiler_period", False) is True  # nur ein echtes „an“ (0.48), sonst aus
     v = cfg.boiler_fallback_flow
     ok = isinstance(v, int) and not isinstance(v, bool) and FALLBACK_MIN <= v <= FALLBACK_MAX
     cfg.boiler_fallback_flow = v if ok else FALLBACK_DEFAULT

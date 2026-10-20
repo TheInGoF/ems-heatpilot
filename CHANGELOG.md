@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.48.0
+**Antipendelzeit anpassen**
+- Neuer Schalter unter Einstellungen → Kessel: „Antipendelzeit anpassen“ (Standard aus). Bei „HeatPilot steuert“ führt HeatPilot die Taktsperre des Kessels mit: **10 min**, solange die Räume mit offenem Ventil die kleinste Brennerleistung beim Ziel-Vorlauf abnehmen und der Kessel nicht taktet; sonst der **Grundwert** (Wert am Kessel beim Einschalten, mindestens 25 min); ohne Wärmebedarf und während Warmwasser lädt bleibt sie, wie sie ist. Bisher blockierte die feste Sperre Starts auch in guten Momenten
+- Geschrieben wird nur über Home Assistant auf die eine Entität der Antipendelzeit (wählbar unter Entitäten, leer = erkannt), ganze Minuten 5–60, nur bei Änderung ab 5 min und höchstens alle 15 min; Prüfung nach 60 s, fremde Änderungen werden erkannt und gemeldet, gesperrt wie das Vorlauf-Soll (Regler am Bus, „Heizen abschalten“). Beim Ausschalten schreibt HeatPilot einmal den Grundwert zurück. Bei „Beobachten“ steht nur im Protokoll, was HeatPilot schreiben würde
+- Statusbox und Übersicht → Status zeigen eine Zeile „Antipendelzeit: 10 min (Abnahme reicht: …)“, solange die Funktion an ist
+- Einstellungen → Kessel: Der Warnkasten „Ein Regler am Bus überschreibt das Vorlauf-Soll …“ erscheint nur noch, wenn laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt ist. Mit „Regler ist abgebaut“ bzw. ohne Regler steht nur noch ein kurzer Hinweis auf Wächter und Rückfall-Vorlauf
+- **Tests:** `tests/test_boiler_period48.py`, `tests/test_ui_v48.py`
+
 ## 0.47.5
 - Live → Kessel: „Taktsperre noch … min“ erscheint nur noch, wenn der Kessel die Taktsperre selbst meldet (Status 0A). Vorher schätzte HeatPilot sie aus der Antipendelzeit und zeigte sie auch bei „0H – keine Wärmeanforderung“; eine Sperre durch HeatPilot gab es dabei nie
 

@@ -36,6 +36,7 @@ from dataclasses import dataclass
 
 from . import sensor_gone
 from .boiler_entity import suggest_flow, suggest_heat
+from .boiler_period import suggest as suggest_period
 from .disinfect_entity import suggest as suggest_disinfect
 from .dhw_entity import suggest_entity
 from .discovery import device_sensors
@@ -56,8 +57,8 @@ GROUPS: dict[str, tuple[str, str]] = {
     "warmwasser": ("Warmwasser über HeatPilot", "Die Entitäten, auf die HeatPilot fürs Warmwasser schreiben darf "
                                                 ": das Warmwasser-Soll und – zum Desinfektionstermin – der "
                                                 "Schalter „Desinfizieren“."),
-    "kessel_hp": ("Kessel über HeatPilot", "Die zwei Entitäten, auf die HeatPilot am Kessel schreiben darf: "
-                                           "Vorlauf-Soll und Heizbetrieb."),
+    "kessel_hp": ("Kessel über HeatPilot", "Die Entitäten, auf die HeatPilot am Kessel schreiben darf: "
+                                           "Vorlauf-Soll und Heizbetrieb, seit 0.48 die Antipendelzeit."),
     "aussen": ("Außen & Wetter", "Außentemperatur und Vorhersage."),
     "gas": ("Gas & Anforderung", "Verbrauch und Anforderung."),
     "strom": ("Strom", "Hausleistung für die Nachtzeiten aus dem Stromverbrauch."),
@@ -85,6 +86,7 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "dhw": (("number",), ("°C",), ()),
     "flow_set": (("number",), ("°C",), ()),
     "heat_switch": (("switch",), (), ()),
+    "period_set": (("number",), ("min", "minutes"), ()),  # 0.48: Antipendelzeit
     "disinfect_switch": (("switch",), (), ()),
     "weather": (("weather",), (), ()),
     "gas": (("sensor",), ("m³", "m3", "kWh"), ("gas", "energy")),
@@ -99,7 +101,8 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
 # Auswahl in der Oberfläche mit eigener Regel (PICKERS): Warmwasser-Soll nur, was laut dhw_entity taugt; Vorlauf-Soll
 # und Heizbetrieb (0.41) nur, was laut boiler_entity taugt (``api/entities`` → ``flow`` bzw. ``heating``); der Schalter
 # der Desinfektion (0.42) nur, was laut disinfect_entity taugt (``disinfect``)
-PICKER = {"dhw": "dhw", "flow_set": "flow", "heat_switch": "heating", "disinfect_switch": "disinfect"}
+PICKER = {"dhw": "dhw", "flow_set": "flow", "heat_switch": "heating", "disinfect_switch": "disinfect",
+          "period_set": "period"}  # 0.48: Antipendelzeit (boiler_period.picker)
 
 # EMS-ESP-Rolle -> (Art, wofür HeatPilot sie braucht)
 ROLES: dict[str, tuple[str, str]] = {
@@ -181,6 +184,9 @@ FIELD_ENTRIES: dict[str, tuple[str, str, str, bool, bool, str]] = {
     "heating_switch_entity": ("kessel_hp", "Heizbetrieb (Entität)", "heat_switch", False, True,
                               "Nur diesen Schalter schaltet HeatPilot bei „Kessel über HeatPilot“ (switch, Heizbetrieb "
                               "aktiviert); leer = Vorschlag aus der Erkennung."),
+    "period_set_entity": ("kessel_hp", "Antipendelzeit (Entität)", "period_set", False, True,
+                          "Nur hierhin schreibt HeatPilot die Antipendelzeit bei „Antipendelzeit anpassen“ (number, "
+                          "Minuten, EMS-ESP burnminperiod); leer = Vorschlag aus der Erkennung."),
     "outdoor_sensors": ("aussen", "Außenfühler", "temp", True, True,
                         "Außentemperatur für Modelle und Vorschau – bei mehreren zählt das Minimum; leer = Außenfühler "
                         "am Kessel aus Home Assistant."),
@@ -367,6 +373,7 @@ def _field_values(c: _Ctx) -> dict:
         "disinfect_entity": (cfg.disinfect_entity, suggest_disinfect(f, c.states)),
         "flow_set_entity": (cfg.flow_set_entity, suggest_flow(f, c.states)),
         "heating_switch_entity": (cfg.heating_switch_entity, suggest_heat(f, c.states)),
+        "period_set_entity": (cfg.period_set_entity, suggest_period(f, c.states)),  # 0.48
         "outdoor_sensors": (cfg.outdoor_sensors, auto("outdoor", cfg.outdoor_sensors, f.outdoor)),
         "weather_entity": (cfg.weather_entity, auto("weather", cfg.weather_entity, f.weather)),
         "gas_sensor": (cfg.gas_sensor, auto("gas", cfg.gas_sensor, f.gas)),
@@ -383,6 +390,7 @@ def _field_entries(c: _Ctx) -> list[dict]:
     for key, (group, label, kind, multi, auto, purpose) in FIELD_ENTRIES.items():
         required = key == "outdoor_sensors" or (key == "dhw_set_entity" and c.cfg.dhw_control == "heatpilot") or (
             key in ("flow_set_entity", "heating_switch_entity") and c.cfg.boiler_control == "heatpilot") or (
+            key == "period_set_entity" and c.cfg.boiler_control == "heatpilot" and c.cfg.boiler_period) or (
             key == "disinfect_entity" and c.cfg.dhw_control == "heatpilot" and bool(c.cfg.dhw_disinfect_day))
         e = _base(key, group, label, kind, purpose, {"kind": "field", "name": key}, multi=multi, auto=auto,
                   required=required, alt=("weather_entity",) if key == "outdoor_sensors" else ())
