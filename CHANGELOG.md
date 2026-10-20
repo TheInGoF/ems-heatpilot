@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.44.1
+**Diagnose-Datei und gelernte Werte auch in der Home-Assistant-App**
+- Der direkte Link öffnete sich in der App außerhalb der Anmeldung – die gespeicherte Datei enthielt nur „401: Unauthorized“. Die Seite holt die Datei jetzt selbst und bietet danach **Speichern**, **Teilen** (wo das Gerät es kann, etwa iOS) und **Kopieren** an
+- **Tests:** neu `tests/test_ui_v441.py`
+
 ## 0.44.0
 **Eigene Daten sind die Wahrheit, Thermostat wechseln ohne Datenverlust** (an Home Assistant und den Kessel wird nichts Neues geschrieben; von Home Assistant nur gelesen, EMS-ESP nur abgefragt)
 - **Feste Raumkennung:** Jeder Raum-Eintrag bekommt ein Feld `id`, alle Geräte eines Raums teilen es (neue Datei `room_ids.py`). Vergeben beim ersten Start von 0.44 und beim Speichern; gespeicherte Einstellungen älterer Versionen bleiben gültig, es wird nur ergänzt. Im Auto-Modus ohne Raum-Einträge hängt die Kennung an Bereich bzw. Name. Der Speicherschlüssel bleibt die climate-Entität
