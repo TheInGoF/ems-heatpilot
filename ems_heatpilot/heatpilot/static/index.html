@@ -2009,6 +2009,7 @@ function ovCharts() {
 }
 // ---------------------------------------------------------------- Einstellungen
 let SET = null, ENT = [], SUG = null, SCHED = null, DEF = {}, CT = {}, CTRL = {}, BAL = {}, SLEEP = null;
+let VFOUND = {};  // 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (api/settings: valve_found)
 let DIS = null;  // Desinfektion (0.36.3): GET api/settings → disinfect
 let DHWC = null, NOTIFY = null;  // 0.38: GET api/settings → dhw_control (Weg W) und notify (Benachrichtigungen)
 // Modellgüte (0.43): ein Abzeichen, drei Stufen – lernt noch · vorläufig · verlässlich; name (optional) steht davor
@@ -3394,6 +3395,9 @@ function roomRows() {
     const lock = emsLock(c);  // Heizkreis von EMS-ESP (0.36.3): „macht mit“ gesperrt
     const wallHint = wall && !isSet ? "Vorschlag" : wall && !controller ? "Wandthermostat?" : "";
     const noTado = c.platform && c.platform !== "tado" && c.platform !== "homekit_controller";
+    // 0.45: Heizleistung vom alten Thermostat – HeatPilot nutzt sie schon, Speichern trägt sie fest ein
+    const vf = !r.heating_power && !g.heating_power && !sibling(c, "heating_power") ? VFOUND[c.id] : null;
+    const vfHint = vf ? `gefunden ${esc(vf.how_text)}${vf.from_name ? ` ${esc(vf.from_name)}` : ""} und schon genutzt – Speichern trägt sie fest ein` : "";
     return `<div class="room" data-climate="${esc(c.id)}" data-area="${esc(area)}">
       <div class="room-row"><input type="checkbox" class="r-on" title="Raum lernen" aria-label="lernen" ${on ? "checked" : ""}>
       <div class="r-main"><input class="r-name" value="${esc(r.name || shortName(g.name || c.name))}" placeholder="${esc(shortName(c.name))}" aria-label="Anzeigename"><div class="hint" title="${esc(c.id)}">${esc(c.id)} · in HA: ${esc(c.name)}</div></div>
@@ -3407,7 +3411,7 @@ function roomRows() {
       ${field("Fußboden", floorCell(c.id, r))}
       ${field("Voreinstellung (Stufe am Ventil)", `<input type="number" class="r-preset" min="0" max="${pmax}" step="1" value="${esc(r.preset ?? "")}" placeholder="–" title="Aktuelle Voreinstellung am Ventilunterteil, z. B. 5 – leer = unbekannt">`)}
       ${field("Stufen (0 = ohne)", `<input type="number" class="r-preset-max" min="0" max="${pmax}" step="1" value="${esc(r.preset_max ?? "")}" placeholder="–" title="Zahl der Stufen, z. B. 6 – leer = unbekannt, 0 = kein Voreinstellventil (Rücklaufverschraubung)">`)}
-      ${field("Ventil / Heizleistung", `<input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || sibling(c, "heating_power"))}" placeholder="Ventil % (optional)">`)}
+      ${field("Ventil / Heizleistung", `<input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || sibling(c, "heating_power") || (vf ? vf.sensor : ""))}" placeholder="Ventil % (optional)">`, vfHint)}
       ${field("Temperatur-Sensor", `<input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || sibling(c, "temperature"))}" placeholder="Temperatur (optional)">`)}
       ${field("Feuchte", `<input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || sibling(c, "humidity"))}" placeholder="Feuchte (optional)">`)}
       </div>${roomStates(c.id)}<div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
@@ -4087,7 +4091,7 @@ let JOB = null, JOB_TIMER = null, ADV_OPEN = false;
 const JOB_POLL_MS = 3000, JOB_SHOW_S = 900;  // alle 3 s fragen; ein fertiger Ablauf steht noch 15 min da
 const JOB_NAME = { restore: "Hausdaten wiederherstellen", relearn: "Aus gespeicherten Daten neu lernen", rooms: "Historie der neuen Räume nachholen" };
 const JOB_ASK = {
-  restore: "Hausdaten wiederherstellen?\n\nHeatPilot liest die Langzeitstatistik aus Home Assistant mit den alten Temperatursensoren der Räume neu ein und holt die Historie alter Thermostate nach, die es dort noch gibt – nur ergänzend: Es löscht nichts und ersetzt keinen gespeicherten Wert durch „unbekannt“. Jeden alten Sensor rechnet es um seinen Abstand zum gespeicherten Hausmittel um; einer, der nicht dazu passt, bleibt weg. Danach lernt es aus den gespeicherten Daten neu. Das dauert einige Minuten; an Home Assistant wird nichts geschrieben.",
+  restore: "Hausdaten wiederherstellen?\n\nHeatPilot liest die Langzeitstatistik aus Home Assistant mit den alten Temperatursensoren der Räume neu ein und holt die Historie alter Thermostate nach, die es dort noch gibt, dazu je Raum die Stundenwerte alter Sensoren (Temperatur, Heizleistung) – nur ergänzend: Es löscht nichts und ersetzt keinen gespeicherten Wert durch „unbekannt“. Jeden alten Sensor rechnet es um seinen Abstand zum gespeicherten Hausmittel um; einer, der nicht dazu passt, bleibt weg. Danach lernt es aus den gespeicherten Daten neu. Das dauert einige Minuten; an Home Assistant wird nichts geschrieben.",
   relearn: "Aus gespeicherten Daten neu lernen?\n\nHaus-, Raum- und Ventilmodelle, Lernkurve und Fremdwärme-Ereignisse rechnet HeatPilot aus den gespeicherten Stunden- und Messwerten neu. Es holt nichts aus Home Assistant und löscht keine Messwerte; Warmwasser- und Personenmodelle bleiben. Das dauert je nach Datenmenge einige Minuten.",
 };
 const jobRunning = () => !!(JOB && JOB.job && JOB.job.running);
@@ -4114,8 +4118,15 @@ const restoreOld = (r) => { const got = (r.old || []).filter((o) => o.rows).map(
 function restoreNotes(r) {
   const bad = (r.checks || []).filter((c) => c.ok === false).map((c) => `${esc(c.name)} (${esc(c.stat)} – ${esc(c.why || "passt nicht")})`);
   const gone = (r.old || []).filter((o) => !o.rows).map((o) => `${esc(o.from)} (${esc(o.why || "nichts")})`);
+  // 0.45: Räume aus der Stundenstatistik – je Raum Stunden (Zeitraum im Tooltip), ohne Heizleistung mit Grund
+  const rs = r.room_stats || [], h = (x) => `${fmt(x.hours, 0)} h`;
+  const got = rs.filter((x) => x.hours).map((x) => `<span title="${x.first ? `${tsDay(x.first)}–${tsDay(x.last)}` : ""}">${esc(x.name)} ${h(x)}</span>` +
+    (x.heating ? "" : ` <span title="${esc(x.heat_why || "")}">ohne Heizleistung</span>`));
+  const none = rs.filter((x) => !x.hours).map((x) => `${esc(x.name)} (${esc(x.why || "nichts")})`);
   return (bad.length ? ` Alter Sensor nicht verwendet: ${bad.join("; ")}.` : "") +
-    (gone.length ? ` Keine Raumwerte nachgeholt für ${gone.join("; ")}.` : "");
+    (gone.length ? ` Keine Raumwerte nachgeholt für ${gone.join("; ")}.` : "") +
+    (got.length ? ` Räume aus der Stundenstatistik: ${got.join(", ")}.` : "") +
+    (none.length ? ` Nicht aus der Stundenstatistik: ${none.join("; ")}.` : "");
 }
 // Stand des laufenden bzw. eben fertigen Ablaufs – "" ohne Ablauf oder wenn er länger als JOB_SHOW_S fertig ist
 function jobHtml(st) {
@@ -5514,6 +5525,7 @@ async function loadSettings() {
   SET = j.settings; SUG = j.suggested; SCHED = j.schedule;
   DEF = j.defaults || {}; CT = j.climate_targets || {}; CTRL = j.control || {}; BAL = j.balance || {};
   SLEEP = j.sleep || null;  // Nachtzeiten aus dem Stromverbrauch (0.36)
+  VFOUND = j.valve_found || {};  // 0.45: genutzt, zum Speichern angeboten
   DIS = j.disinfect || null;  // Desinfektion (0.36.3): Termin, Temperatur, Vorschlag
   DHWC = j.dhw_control || null; NOTIFY = j.notify || null;  // 0.38: Weg W und Benachrichtigungen
   BOILC = j.boiler_control || null;  // 0.41: Weg B – Schalter, Vorschläge, Status, Bereitschaft

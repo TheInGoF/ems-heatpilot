@@ -34,7 +34,7 @@ const ELS = {};
 const $ = (id) => ELS[id] || (ELS[id] = { id, value: "", disabled: false, textContent: "", className: "", innerHTML: "",
   style: { setProperty() {} } });
 let HEAT = null, DIS = null, ENT = [], SET = { rooms: [] }, SUG = {}, CTRL = {}, CT = {};
-let SWITCH = null, SWITCH_BUSY = false;
+let SWITCH = null, SWITCH_BUSY = false, VFOUND = {};  // VFOUND: gefundene Heizleistung (0.45)
 """
 NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boilerHtml",
          "DIS_NOT_YET", "splitWhen", "disinfectTile", "DAY_NAMES", "CHARGE_FROM", "DIS_BOILER",

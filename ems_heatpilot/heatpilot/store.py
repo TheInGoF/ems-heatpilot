@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS valve_dry_log(
     starts_h REAL, act_over_k REAL, act_starts REAL, checked INTEGER, pred_over_k REAL
 );
 CREATE TABLE IF NOT EXISTS valve_subst(ts INTEGER, room TEXT, PRIMARY KEY(ts, room));
+CREATE TABLE IF NOT EXISTS room_stats(
+    ts INTEGER, room TEXT, temp REAL, valve REAL, flow REAL,
+    PRIMARY KEY(ts, room)
+);
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
 CREATE INDEX IF NOT EXISTS idx_valve_dry_ts ON valve_dry_log(ts);
 CREATE INDEX IF NOT EXISTS idx_control_ts ON control_log(ts);

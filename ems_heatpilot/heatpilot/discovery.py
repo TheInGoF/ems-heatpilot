@@ -157,6 +157,9 @@ class Discovered:
     # Raum-Einstellungen als Räume nähme – die Oberfläche hakt nur diese vorab an (sonst dasselbe Ventil
     # doppelt über Tado-Cloud und HomeKit, Klimageräte fremder Plattformen als Raum)
     auto_rooms: list[str] = field(default_factory=list)
+    # seit 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (``room_heating.attach``) – zur Laufzeit genutzt,
+    # die Oberfläche bietet sie zum Speichern an: {Schlüssel: {sensor, name, from, from_name, how, how_text}}
+    valve_found: dict[str, dict] = field(default_factory=dict)
 
     def all_sensor_ids(self) -> list[str]:
         ids = list(self.boiler.values()) + list(self.thermostat.values()) + list(self.outdoor)
@@ -194,6 +197,7 @@ class Discovered:
             "power_units": self.power_units,
             "home_zone": self.home_zone if private else (self.home_zone is not None),
             "auto_rooms": self.auto_rooms,
+            "valve_found": self.valve_found,
         }
 
 

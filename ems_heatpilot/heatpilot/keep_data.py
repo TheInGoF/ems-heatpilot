@@ -1,9 +1,9 @@
 """Aufbewahrung (seit 0.44): eigene Rohdaten so lange aufheben, wie in den Einstellungen steht (``keep_days``).
 
 Einmal am Tag (``daily``, aus dem Takt) fallen Rohdaten weg, die älter als ``keep_days`` sind (Standard 720 Tage,
-erlaubt 365–3650): Messpunkte, Raum- und Personenwerte, Brennerereignisse, Ventil-Ersatzwerte, Fremdwärme-Ereignisse
-und Stundenwerte. Die kleinen Tabellen (Tageszähler ``daily``, Modelle und Einstellungen in ``kv``) bleiben. Kein
-VACUUM (die Datei wird nicht umgebaut; frei gewordener Platz wird wiederverwendet). Protokoll in kv ``keep.log``.
+erlaubt 365–3650): Messpunkte, Raum- und Personenwerte, Brennerereignisse, Ventil-Ersatzwerte, Fremdwärme-Ereignisse,
+Stundenwerte und Raumwerte aus der Stundenstatistik (0.45, ``room_stats``). Die kleinen Tabellen (Tageszähler
+``daily``, Modelle und Einstellungen in ``kv``) bleiben. Kein VACUUM (die Datei wird nicht umgebaut; frei gewordener Platz wird wiederverwendet). Protokoll in kv ``keep.log``.
 
 Die Grenze zählt nicht von der Wanduhr, sondern vom neuesten eigenen Messpunkt vor dem Takt – und dieser Bezug rückt
 je Prüfung höchstens ``MAX_STEP_DAYS`` weiter (kv ``keep.ref``). Eine falsch vorgehende Uhr löscht so nicht auf einen
@@ -28,7 +28,7 @@ LOG_MAX = 30
 MAX_STEP_DAYS = 2            # so weit rückt der Bezug je Prüfung höchstens vor
 FRESH_S = 3600               # Messpunkte jünger als das (der laufende Takt) zählen nicht als Bezug
 TABLES = (("samples", "ts"), ("room_samples", "ts"), ("person_samples", "ts"), ("burner_events", "ts"),
-          ("valve_subst", "ts"), ("room_events", "start_ts"), ("hourly", "ts"))
+          ("valve_subst", "ts"), ("room_events", "start_ts"), ("hourly", "ts"), ("room_stats", "ts"))
 
 
 def days_of(value) -> int:

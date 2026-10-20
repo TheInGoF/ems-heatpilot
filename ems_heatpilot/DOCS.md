@@ -869,7 +869,10 @@ kommt aus dem Ventil- bzw. Heizleistungssensor (Tado-Cloud); ohne Sensor (z. B. 
 werden dafür nur Messpunkte, die etwas sagen: Heizbetrieb an, Ventil offen oder Raum nicht über dem Soll – ein Sommer
 mit geschlossenem Ventil zählt nicht; wechselt die Art, beginnen Sprünge und Gütemaß neu). Meldet ein vorhandener
 Ventilsensor gerade nichts (Cloud-Ausfall), nimmt der Messpunkt zwar `hvac_action` wie bisher, das Ventilmodell lernt
-diesen Ersatzwert aber nicht (gemerkt in der Tabelle `valve_subst`). Der Heizkreis von EMS-ESP bekommt kein
+diesen Ersatzwert aber nicht (gemerkt in der Tabelle `valve_subst`). Seit 0.45 gilt dasselbe für einen veralteten
+Sensor: seit 6 Stunden kein neuer Wert, und das Thermostat widerspricht ihm (heizt bei 0 %, ruht bei mehr als 0 %).
+Hat ein Raum mindestens einen echten Ventilwert in %, zählen nur die echten – 0/100 % aus `hvac_action` anderer
+Geräte verwässern das Raumventil nicht. Der Heizkreis von EMS-ESP bekommt kein
 Ventilmodell – er ist kein Thermostat mit Ventil.
 
 - **Kennlinie:** Ventil (Median) je Abstand Soll − Raumtemperatur in 0,1-K-Stufen von 1 K über bis 2 K unter dem
@@ -1530,6 +1533,16 @@ verloren:
   gesperrt), danach das Ergebnis, z. B. „Stunden mit Innentemperatur 260 → 1.440, ohne 1.180 → 0“; Übersicht und
   Zertifikat rechnen dann neu. Nach „Gelerntes übernehmen“ nennt die Meldung den gemerkten alten Sensor und bietet
   „Hausdaten wiederherstellen“ an, wenn vielen Stunden die Innentemperatur fehlt.
+- **Räume aus der Stundenstatistik** (seit 0.45, Teil von „Hausdaten wiederherstellen“): Je Raum holt HeatPilot die
+  Stundenmittel seines alten Temperatursensors und der alten Heizleistung in % (am Gerät des alten Thermostats bzw. des
+  alten Sensors laut Registry, sonst genau eine %-Statistik mit passendem Namen) und des Vorlaufs aus der
+  Langzeitstatistik – nur für Stunden, in denen der Raum keine eigenen Raumwerte hat, und nicht weiter zurück als
+  Langzeitstatistik-Tage und Aufbewahrung. Die Temperatur wird um den geprüften Versatz des alten Sensors berichtigt
+  (gegen die eigenen Raumwerte, sonst über das Hausmittel); passt er nicht, bleibt der Raum leer. Diese Werte stehen
+  in einer eigenen Tabelle (`room_stats`): Das Raummodell lernt aus ihnen Aufheizen und Auskühlen in Stundenschritten
+  (ohne Heizleistung nur Stunden ohne Heizbetrieb), das Ventilmodell nicht (es braucht Soll-Sprünge in feiner
+  Auflösung), Hausmittel und Raum-Verläufe auch nicht. Das Ergebnis nennt je Raum die nachgeholten Stunden (Zeitraum
+  im Tooltip), ob es eine Heizleistung gab, und warum ein Raum leer blieb.
 - **Aus gespeicherten Daten neu lernen** (Einstellungen → Erweitert): Haus-, Raum- und Ventilmodelle, Lernkurve und
   Fremdwärme-Ereignisse aus den gespeicherten Stunden- und Messwerten neu berechnen – ab dem ersten eigenen
   Messpunkt auch die Räume. Holt nichts aus Home Assistant und löscht keine Messwerte; Warmwasser- und
@@ -1546,7 +1559,17 @@ Außentemperatur, aber keine Innentemperatur, steht dort ein Hinweis mit „Haus
 Hausmodell lernt solche Stunden nicht; auch die Grafik „Wärmebedarf des Hauses“ sagt dann, wie viele Stunden ihr
 fehlen. Darunter: was zuletzt neu gelernt bzw. übernommen wurde. Ein Klick auf die Karte führt zu „Modelle –
 Einzelheiten“ (Einstellungen → Diagnose). Die Kacheln mit Wärmeverlust, Heizlast und Trägheit erscheinen wie bisher erst mit
-plausiblem Hausmodell – die Karte steht immer da.
+plausiblem Hausmodell – die Karte steht immer da. Plausibel ist ein Raummodell u. a. nur, wenn Heizwirkung/Auskühlen bei
+Heizkörpern zwischen 0,3 und 3 liegt, bei Räumen mit Fußbodenheizung (seit 0.45) zwischen 0,3 und 6 – große
+Heizfläche, niedriger Vorlauf.
+
+**Heizleistung vom alten Thermostat** (seit 0.45): Hat ein Raum an keinem Gerät einen Ventil-/Heizleistungssensor
+(z. B. HomeKit), sucht HeatPilot die Heizleistung in % am alten Gerät des Raums – am alten Thermostat aus „Gelerntes
+übernehmen“ bzw. Thermostatwechsel, am Gerät des alten Temperatursensors, sonst genau ein Tado-Heizleistungssensor im
+gleichen Bereich bzw. mit passendem Namen. Läuft die alte Integration weiter, nutzt HeatPilot ihn zur Laufzeit wie einen
+Sensor am eigenen Gerät; die Einstellungen bleiben unverändert, ein eingetragener Sensor hat immer Vorrang. Unter
+Einstellungen → Räume → Einzelheiten steht er im Feld „Ventil / Heizleistung“ mit Herkunft („gefunden vom alten
+Thermostat …“) – Speichern trägt ihn fest ein. Meldet er nichts oder ist er veraltet, gilt der Wert als Ersatzwert.
 
 ### Thermostat wechseln
 
@@ -1579,7 +1602,7 @@ Werte; gespeicherte Werte gewinnen, nichts wird gelöscht. Danach lernen Haus-, 
 
 Einstellungen → Erweitert → **Daten aufbewahren (Tage)** (`keep_days`, Standard 720, erlaubt 365–3650): Einmal am Tag
 löscht HeatPilot eigene Rohdaten, die älter sind – Messpunkte, Raum- und Personenwerte, Brennerereignisse,
-Ventil-Ersatzwerte, Fremdwärme-Ereignisse und Stundenwerte. Tageswerte und Gelerntes bleiben. Home Assistant hält seine
+Ventil-Ersatzwerte, Fremdwärme-Ereignisse, Stundenwerte und Raumwerte aus der Stundenstatistik. Tageswerte und Gelerntes bleiben. Home Assistant hält seine
 Historie meist nur wenige Tage; HeatPilot hebt seine eigenen Werte also deutlich länger auf. Die Grenze zählt vom neuesten
 eigenen Messpunkt und rückt je Tag höchstens zwei Tage vor – eine falsch vorgehende Uhr löscht so nichts auf einen
 Schlag. Die Langzeitstatistik (`statistics_backfill_days`) wird höchstens so weit zurück geholt, wie aufbewahrt wird.

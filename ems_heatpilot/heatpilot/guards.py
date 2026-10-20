@@ -35,6 +35,8 @@ LIMITS = {
     "room_min_updates": 96,                  # mind. 2 Tage à 30 min
     # Vorlauf-Verhältnis (a+f)/b: 0,3 ≈ 130 °C, 3 ≈ 32 °C Vorlauf für 21 °C bei −12 °C
     "room_static_gain": (0.3, 3.0),
+    # Fußbodenheizung (seit 0.45): große Heizfläche, niedriger Vorlauf – (a+f)/b bis 6 ≈ 26 °C Vorlauf
+    "room_static_gain_floor": (0.3, 6.0),
     "room_min_excitation": 15.0,             # K·h Heizbetrieb gesehen
     "room_min_free_k": -1.0,                 # Endtemperatur ohne Heizung mind. außen − 1 K
     "room_tau_uncertainty": 0.5,             # relative Unsicherheit der Auskühlrate
@@ -74,7 +76,8 @@ def check_room(room) -> dict:
         reasons.append(f"erst {room.rls.updates} Lernschritte")
     _within("room_tau_h", room.tau_h, reasons, "Zeitkonstante h")
     _within("room_heat_gain", room.rls.theta[0], reasons, "Heizwirkung")
-    _within("room_static_gain", (room.a + room.f) / room.b, reasons, "Heizwirkung/Auskühlen")
+    gain = "room_static_gain_floor" if getattr(room, "floor", False) else "room_static_gain"
+    _within(gain, (room.a + room.f) / room.b, reasons, "Heizwirkung/Auskühlen")
     if getattr(room, "excitation", None) is not None and room.excitation < LIMITS["room_min_excitation"]:
         reasons.append(f"zu wenig Heizbetrieb gelernt ({room.excitation:.0f} K·h)")
     if room.c / room.b < LIMITS["room_min_free_k"]:
