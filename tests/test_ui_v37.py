@@ -91,10 +91,11 @@ def hour_of(p, hhmm):
 def test_overview_cards_after_tiles_with_own_request(tmp_path):
     page = html()
     ov = between(page, '<section id="view-overview" hidden>', "</section>")
-    ids = re.findall(r'^  <div class="(?:tiles|card)" id="([\w-]+)"', ov, re.M)
-    # schnell zu finden: gleich unter den Kacheln (seit 0.42.1 steht die Karte „Modelle“ darüber – test_ui_v421)
-    assert ids[:5] == ["models", "tiles", "pv", "cmp", "advice"]
-    assert '<h2>Vorschau (Trockenlauf)</h2>' in ov and "Trockenlauf gegen Regler/Automation (7 Tage)" in ov
+    # 0.43 Schritt 6: eigene Unterseite „Vorschau“ (Zeile zum Wochenplan, Vorschau, Vergleich zugeklappt darunter)
+    vs = between(ov, '<div id="ov-vorschau" hidden>', "</section>")
+    ids = re.findall(r'^  <(?:div|details) class="[\w -]+" id="([\w-]+)"', vs, re.M)
+    assert ids[:4] == ["sched", "pv", "cmp-fold", "cmp"]
+    assert '<h2>Vorschau (24 h)</h2>' in ov and "Vorschau gegen Ist (7 Tage)" in ov  # 0.43: Begriffe
     js = script()
     # eigene Abfrage beim Laden der Übersicht (nicht im summary, nicht im 30-s-Takt); ältere Version: Karten weg
     assert "loadPreview().catch(previewOff);" in between(js, "async function load() {", "// ---------------------------------------------------------------- Einstellungen")
@@ -154,7 +155,7 @@ def test_summary_and_basis_from_real_preview(tmp_path, berlin):
     assert plain(r["none"]).startswith("In den nächsten 24 h würde HeatPilot nichts schreiben – nur bei Änderung")
     assert plain(r["none"]).endswith("Was heute am Kessel steht, ist unbekannt – der erste Wert zählt als Schreibvorgang.")
     # Fühler 5 °C, Vorhersage für jetzt 6 °C: angeglichen, mit dem Versatz (0.37, Fund aus der Prüfung)
-    assert plain(r["basis"]) == ("Gerechnet wie bei „HeatPilot steuert“: Räume mit „macht mit“ nach dem Wunschzustand der "
+    assert plain(r["basis"]) == ("Gerechnet wie bei „HeatPilot steuert“: Räume mit „macht mit“ nach dem Ziel der "
                                  "Steuerung, die übrigen nach Tado. Außentemperatur aus der Vorhersage, an den Außenfühler "
                                  "angeglichen: Er misst jetzt 1 K weniger als vorhergesagt, der Unterschied klingt über 6 h "
                                  "ab. Vorlauf aus Wz.")

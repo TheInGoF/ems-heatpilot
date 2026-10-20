@@ -71,9 +71,9 @@ CAL_DAYS, CAL_MIN_N, CAL_MAX_K = 30, 3, 0.2  # Schätzung zeigen: so oft nachgem
 DAYS = 7
 EXAMPLES = 6
 KV_STATE = "valve_dry.state"
-NOTE = "Trockenlauf – HeatPilot schreibt nichts an die Thermostate"
+NOTE = "Beobachten – HeatPilot schreibt nichts an die Thermostate"
 NOTE_LIVE = ("Ventile führen ist an – HeatPilot schreibt an die Thermostate der Räume, die es führt; die übrigen nur "
-             "im Trockenlauf")
+             "beobachtet")
 RULES = ("drosseln", "gemeinsam")
 
 
@@ -465,7 +465,7 @@ def _head(s: dict) -> str:
     out = (f"In {days} Tagen hat HeatPilot {w['drosseln']}× früh gedrosselt und {w['gemeinsam']}× Räume gemeinsam "
            f"anfordern lassen – {written} Schreibvorgänge")
     if s["writes"] > written:
-        out += (f"; im Trockenlauf dazu {n['drosseln'] - w['drosseln']}× früh drosseln und "
+        out += (f"; beobachtet dazu {n['drosseln'] - w['drosseln']}× früh drosseln und "
                 f"{n['gemeinsam'] - w['gemeinsam']}× gemeinsam anfordern – {s['writes'] - written} Schreibvorgänge, "
                 "nicht geschrieben")
     return out

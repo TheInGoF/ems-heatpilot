@@ -165,7 +165,7 @@ def test_trigger_row_running_success_failure(tmp_path):
         out[kind] = (x, js_run(tmp_path, f"out(disinfectTriggerHtml({json.dumps(x)}));"))
     x, h = out["bereit"]
     assert plain(h) == (f"Auslösen: löst HeatPilot aus (So 17:30) Schalter {SW} (automatisch erkannt, jetzt aus) – "
-                        "ändern unter Entitäten")
+                        "ändern")  # 0.43: die Entität steht auf derselben Unterseite (Warmwasser)
     assert '<span class="dot dot-ok"></span>' in h and "emGo('warmwasser')" in h
     x, h = out["läuft"]
     since = re.search(r"seit (\d\d:\d\d)", plain(h)).group(1)
@@ -187,7 +187,7 @@ def test_trigger_row_regulator_off_dry_and_blocked(tmp_path):
     assert rows["regler"].startswith("Auslösen: macht der Regler Schalter")
     assert rows["aus"].startswith("Auslösen: aus – HeatPilot löst sie nur bei „Warmwasser-Soll: HeatPilot setzt“ ohne "
                                   "Regler am Bus aus Schalter")
-    assert rows["trocken"].startswith("Auslösen: Trockenlauf – würde So 17:30 auslösen Schalter")
+    assert rows["trocken"].startswith("Auslösen: Beobachten – würde So 17:30 auslösen Schalter")
     assert rows["gesperrt"].endswith("wartet seit 17:30: Warmwasser über HeatPilot ist pausiert – erst „wieder "
                                      "einschalten“")
     assert js_run(tmp_path, "out(disinfectTriggerHtml(null));") == ""
@@ -284,7 +284,7 @@ def test_entities_page_offers_only_the_disinfect_switch(tmp_path):
 def test_docs_and_changelog_name_the_places():
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     for text in ("Einstellungen → Warmwasser", "**Auslösen**", "Einstellungen → Entitäten → Warmwasser über HeatPilot",
-                 "„Desinfektion auslösen (Schalter)“", "Einstellungen → Haus & Kessel"):
+                 "„Desinfektion auslösen (Schalter)“", "Einstellungen → Kessel"):  # 0.43: Unterseite Kessel
         assert text in docs, text
     head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.0")[1].split("\n## ")[0]  # seit 0.42.1
     assert "**Oberfläche:**" in head and "tests/test_ui_v42.py" in head

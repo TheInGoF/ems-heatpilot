@@ -143,7 +143,7 @@ def same_entity(cfg, found, states: dict) -> str | None:
     flow, dhw = flow_target(cfg, found, states)[0], dhw_entity.target_entity(cfg, found, states)[0]
     if flow and flow == dhw:
         return (f"Vorlauf-Soll und Warmwasser-Soll sind dieselbe Entität ({flow}) – beide Schreibwege gesperrt; unter "
-                "Einstellungen → Entitäten zwei verschiedene wählen")
+                "Einstellungen → Kessel zwei verschiedene wählen")
     return None
 
 

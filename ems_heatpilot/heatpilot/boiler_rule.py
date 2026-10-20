@@ -59,7 +59,7 @@ SWITCH_ENTITY = re.compile(r"^switch\.[a-z0-9_]+$")
 NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")
 
 LABELS = {"flow": "Vorlauf-Soll", "heating": "Heizbetrieb"}
-REGULATOR_TEXT = "Regler am Bus – er überschreibt alle 60 s. Erst Trockenlauf prüfen, dann Regler abbauen"
+REGULATOR_TEXT = "Regler am Bus – er überschreibt alle 60 s. Erst „Beobachten“ prüfen, dann Regler abbauen"
 HINT_FAILSAFE = ("Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür der Wächter in Home Assistant "
                  "(Anleitung Wächter)")
 HINT_BACK = "Regler wieder anschließen bzw. den Kessel selbst stellen"

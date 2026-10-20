@@ -40,7 +40,7 @@ function vdDayChart(box, days) { CHART = days; }
 """
 NAMES = ("fmt", "esc", "clock", "timeOf", "shortName", "WEEKDAYS", "wday", "dateOf", "VALVE_E", "kUnder", "eText",
          "VALVE_REG", "switchKnown", "valveGraph", "valveHtml", "valveDetails", "valveCurveTable", "valveRoomsHtml", "valveRoomRow",
-         "VD_NOTE", "VD_RULE", "VD_C", "renderValves", "vdFacts", "vdRules", "vdActive", "vdDays", "vdDayName", "vdTable",
+         "QUALITY", "qualityBadge", "VD_NOTE", "VD_RULE", "VD_C", "renderValves", "vdFacts", "vdRules", "vdActive", "vdDays", "vdDayName", "vdTable",
          "vdExamples", "vdEffect")
 
 
@@ -101,11 +101,19 @@ def dry_summary(tmp_path) -> tuple[dict, int]:
 # ------------------------------------------------------------------ Einbau
 def test_dialog_overview_and_preview_are_wired():
     page, js = html(), script()
-    # Raum-Dialog: Abschnitt unter Steuerung und Geräten, nur mit valve_model (ältere Version: nichts, kein Aufruf)
-    assert 'ctlInfo(r) + (r.valve_model ? valveHtml(r.valve_model) : "");' in between(js, "function roomDlg(r) {", "// Was die Regelschleife")
-    # Graf erst mit Breite: nach showModal und bei jedem Neuaufbau des offenen Dialogs
-    assert "if (!d.open) d.showModal(); dlgValveChart(); }" in between(js, "function openDlg(kind, room) {", "function closeDlg()")
-    assert "d.built = key;\n    dlgValveChart();" in between(js, "function renderDlg() {", "function boostDlg(")
+    # 0.43: der Raum-Dialog ist nur Bedienung – das Ventilverhalten steht unter Übersicht → Räume (ovValve), der Dialog
+    # verlinkt dorthin („Verlauf und Ventilverhalten ›“); nur mit valve_model ein Abschnitt, sonst ein Satz
+    dlg = between(js, "function roomDlg(r) {", "// Was die Regelschleife")
+    assert "valveHtml(" not in dlg and "openOverview('raeume', '${esc(r.climate)}')" in dlg
+    ov = between(js, "function ovValve(c, scroll = true) {", "function ovValveClose()")
+    assert "(r.valve_model ? valveHtml(r.valve_model) : " in ov
+    # Graf erst mit Breite: openOverview zeigt die Übersicht vor ovValve; load() zeichnet den gewählten Raum neu
+    assert 'if (r.valve_model) valveChart($("dlg-valve-chart"), r.valve_model);' in ov
+    assert 'showTab("overview");\n  ovPage(p);\n  if (page === "raeume" && anchor) return ovValve(anchor);' in between(js, "function openOverview(page, anchor) {", "\n}\n")
+    # 0.43 Schritt 6: Ventilverhalten in der Detailzeile des Raums (Übersicht → Räume)
+    assert 'row.querySelector(".ov-rd-v").appendChild(box);' in ov
+    assert "if (OV_VALVE) ovValve(OV_VALVE, false);" in between(js, "async function load() {", "// ---------------------------------------------------------------- Einstellungen")
+    assert "dlgValveChart" not in js
     assert "if (!box || !box.clientWidth || !v || !valveGraph(v)) return;" in between(js, "function valveChart(box, v) {", "function valveCurveMarks(")
     # Tooltip über dem Dialog: ein offener Dialog liegt in der obersten Ebene – das Hinweisfeld kommt dort hinein
     tipfn = between(js, "function showTip(e, html, onHide) {", "function hideTip()")
@@ -115,10 +123,10 @@ def test_dialog_overview_and_preview_are_wired():
     assert '$("rooms-valves").innerHTML = valveRoomsHtml(s.rooms);' in between(js, "async function load() {", "// ---------------------------------------------------------------- Einstellungen")
     assert '<div class="scroll"><table id="rooms"></table></div>\n    <div id="rooms-valves"></div>' in page
     pv = between(page, '<div class="card" id="pv" style="margin-bottom:12px" hidden>', '<div class="card" id="cmp"')
-    assert '<div id="vd" hidden>\n      <h3>Ventile (Trockenlauf)</h3>' in pv and pv.index('id="pv-hours"') < pv.index('id="vd"')
+    assert '<div id="vd" hidden>\n      <h3>Ventile (Vorschau)</h3>' in pv and pv.index('id="pv-hours"') < pv.index('id="vd"')
     assert "renderValves(PV.valves);" in between(js, "function drawPreview() {", "function renderPreview(p)")
     assert 'function previewOff() { $("pv").hidden = true; $("cmp").hidden = true; }' in js  # #vd liegt in #pv
-    assert "openDlg(\"room\", c);" in between(js, "function openValve(c) {", "// ----")
+    assert "function openValve(c) { ovValve(c); }" in js  # Raumname in der Tabelle: Ventilverhalten darunter
 
 
 def test_ui_knows_no_write_path_for_valves():
@@ -152,12 +160,12 @@ def test_dialog_section_from_real_models(tmp_path):
     rows = [plain(x) for x in re.findall(r"<tr>(.*?)</tr>", p.split("Kennlinie als Tabelle")[0])]
     up, dn = m["p"]["response"]["up"], m["p"]["response"]["down"]
     assert rows[:4] == ["Art stetig – Ventil in %",
-                        f"Soll-Sprünge {m['p']['jumps']} ({up['n']} auf, {dn['n']} zu; belastbar ab 8, je Richtung 4)",
+                        f"Soll-Sprünge {m['p']['jumps']} ({up['n']} auf, {dn['n']} zu; verlässlich ab 8, je Richtung 4)",
                         f"öffnen (+0,5 K) Totzeit {half_up(up['dead_min'])} min, 63 % nach {half_up(up['t63_min'])} min ({up['n']}×)",
                         f"schließen (−0,5 K) Totzeit {half_up(dn['dead_min'])} min, 63 % nach {half_up(dn['t63_min'])} min ({dn['n']}×)"]
     # Satz und Tabelle zeigen dieselben Minuten (Halbe aufgerundet)
     assert f"reagiert auf +0,5 K in ≈ {half_up(up['t63_min'])} min, schließt in ≈ {half_up(dn['t63_min'])} min" in m["p"]["text"]
-    assert rows[4] == f"Beharrung {half_up(m['p']['steady_h'])} h (belastbar ab 48 h)"
+    assert rows[4] == f"Beharrung {half_up(m['p']['steady_h'])} h (verlässlich ab 48 h)"
     assert rows[5].startswith("Vorhersagefehler 30 min voraus ") and "(höchstens 20); „Ventil bleibt, wie es ist“ " in rows[5]
     assert "Prozentpunkte (höchstens das 0,7-Fache), ein Messschritt " in rows[5]
     assert rows[6].startswith("Reglermodell Kp ") and "%/(K·min)" in rows[6]
@@ -219,11 +227,11 @@ def test_overview_rows_per_room(tmp_path):
     p, up, dn = m["p"], m["p"]["response"]["up"], m["p"]["response"]["down"]
     assert rows[0][:5] == ["Wohnzimmer", "öffnet 0,2 · halb 0,6 · ganz 0,9", f"{half_up(up['t63_min'])} / {half_up(dn['t63_min'])} min",
                            f"{half_up(p['error']['pp_30'])} %-Punkte", "0,5 K"]
-    assert rows[0][5] == "belastbar" and '<span class="badge vb-ok">belastbar</span>' in h
+    assert rows[0][5] == "verlässlich" and '<span class="badge q-ok ok">verlässlich</span>' in h  # 0.43: qualityBadge
     assert '<a href="#" onclick="openValve(\'climate.wz\');return false">Wohnzimmer</a>' in h  # Name öffnet den Dialog
     assert rows[1][1:3] == ["an/aus: ein 0,3 · aus −0,1", f"schaltet in {half_up(m['bin']['response']['up']['dead_min'])} min"]
     assert rows[1][4] == "0,5 K" and rows[3][4] == "0,5 K angenommen"
-    assert rows[2][5] == "lernt " + "; ".join(m["few"]["reasons"]) and rows[2][4] == "0,1 K"
+    assert rows[2][5] == "lernt noch " + "; ".join(m["few"]["reasons"]) and rows[2][4] == "0,1 K"
     assert rows[3][1:4] == ["lernt noch", "–", "–"] and len(rows) == 4  # ohne Modell: keine Zeile
     assert f'title="{m["p"]["text"]}"' in h  # der ganze Satz beim Zeigen auf die Zeile
     assert r["old"] == "" and r["none"] == ""  # ältere Version: kein Abschnitt
@@ -240,14 +248,14 @@ def test_dry_run_section_from_real_house(tmp_path, berlin):
               "vd-days-box", "vd-ex", "vd-rooms", "vd-days"].map((id) => [id, get(id)])), chart: CHART }});""")
     ids = r["ids"]
     assert not ids["vd"]["hidden"] and ids["vd-text"]["text"] == v["text"]
-    assert ids["vd-note"]["html"].startswith("<b>Trockenlauf – HeatPilot schreibt nichts an die Thermostate.</b> Gezählt wird, was "
+    assert ids["vd-note"]["html"].startswith("<b>Beobachten – HeatPilot schreibt nichts an die Thermostate.</b> Gezählt wird, was "
                                              "HeatPilot mit den Thermostaten als Stellglied tun würde – in den letzten 7 Tagen, nach Räumen.")
     facts = [plain(x) for x in re.findall(r"<li>(.*?)</li>", ids["vd-facts"]["html"])]
     d, g, n = v["effect"]["drosseln"], v["effect"]["gemeinsam"], v["interventions"]
-    assert facts[0].startswith(f"Früh drosseln: {n['drosseln']}× ({d['reliable']} belastbar) – geschätzt ≈ ")
+    assert facts[0].startswith(f"Früh drosseln: {n['drosseln']}× ({d['reliable']} verlässlich) – geschätzt ≈ ")
     assert f"K weniger Überschwingen je Eingriff ({d['checked']} nachgeprüft); " in facts[0] and d["checked"] >= 3
     assert facts[0].endswith("K über Soll in der Stunde danach.") and "ohne Eingriff gemessen: im Mittel bis " in facts[0]
-    assert facts[1].startswith(f"Gemeinsam anfordern: {n['gemeinsam']}× ({g['reliable']} belastbar) – geschätzt ≈ "
+    assert facts[1].startswith(f"Gemeinsam anfordern: {n['gemeinsam']}× ({g['reliable']} verlässlich) – geschätzt ≈ "
                                f"{g['starts_saved_est']:.0f} Brennerstarts weniger (grob einer je mit angefordertem Raum)")
     assert facts[2] == (f"Schreibvorgänge: {v['writes']} – früh drosseln {v['writes_by']['drosseln']}, gemeinsam "
                         f"{v['writes_by']['gemeinsam']}, jeweils mit dem Zurücksetzen; nichts davon geschrieben.")

@@ -188,6 +188,19 @@ def test_writes_only_on_phase_change_and_sets_heat_first(tmp_path):
     assert st["log"][0]["name"] == "Wz" and len(st["log"]) == 3
 
 
+def test_status_names_only_coming_changes(tmp_path):
+    """0.43: „nächste Änderung“ nur, solange sie noch kommt – ein vergangener Wechsel (Takt noch nicht gelaufen) steht
+    nicht mehr im Text und nicht in next_change."""
+    eng, _, _, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 19.0)
+    step(eng, loop, ts_of(MON, 22))
+    st = loop.as_dict(ts_of((2026, 10, 13), 3, 0))
+    assert "nächste Änderung 03:30 Vorheizen" in st["status_text"] and st["next_phase"] == "vorheizen"
+    late = loop.as_dict(ts_of((2026, 10, 13), 3, 35))  # 03:30 ist vorbei, der Takt hat noch nicht neu gerechnet
+    assert late["status_text"] == "HeatPilot steuert · Nacht bis 04:30"
+    assert late["next_change"] is None and late["next_phase"] is None
+
+
 def test_never_writes_when_observing(tmp_path):
     eng, ha, ctl, loop = make(tmp_path, cfg=Config())  # Standard: beobachten
     climate(eng, "climate.wz", 20.0, 19.0, mode="off")

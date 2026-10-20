@@ -331,8 +331,8 @@ def test_dry_run_only_logs(tmp_path):
         step(eng, dc, t - 1200 + k * 600)
     assert switches(ha) == [] and actions(eng) == [ACT_DRY] and dc.control.disinfect_entity is None
     assert eng.store.control_log(1)[0]["reason"] == (
-        f"Trockenlauf: würde Desinfektion So 17:30 starten (70 °C, Schalter {SW})")
-    assert view(eng, dc, t)["text"] == "Desinfektion: Trockenlauf – würde So 17:30 auslösen"
+        f"Beobachten: würde Desinfektion So 17:30 starten (70 °C, Schalter {SW})")
+    assert view(eng, dc, t)["text"] == "Desinfektion: Beobachten – würde So 17:30 auslösen"
 
 
 # ------------------------------------------------------------------ einmal, nachholen, verpasst
@@ -669,7 +669,7 @@ def test_min_power_suggested_from_burnmaxpower_range_never_applied(tmp_path):
     assert eng.cfg.boiler_min_power_pct == 0.0 and boiler_power.pct(eng) == (None, None)
     kw, why = min_power_kw(eng)
     assert kw is None and why == ("Abnahme-Regel aus: Mindestleistung unbekannt – der Kessel meldet keine kleinste "
-                                  "Brennerleistung; sie unter Einstellungen → Haus & Kessel eintragen (Vorschlag 32 % "
+                                  "Brennerleistung; sie unter Einstellungen → Kessel eintragen (Vorschlag 32 % "
                                   "aus dem Bereich der maximalen Brennerleistung (32–100 %))")
     assert why in boiler_ready(eng, int(time.time()))["limits"]
     info = boiler_power.info(eng)
@@ -692,13 +692,13 @@ def test_min_power_from_entity_range_and_no_suggestion_without_range(tmp_path):
                                         "burnminpower": {"found": True, "value": 30}})
     assert boiler_power.pct(eng) == (30.0, "laut Kessel") and boiler_power.suggestion(eng) is None
     assert boiler_power.missing(eng) == ("Abnahme-Regel aus: Mindestleistung unbekannt – Nennleistung des Kessels "
-                                         "unter Einstellungen → Haus & Kessel eintragen")
+                                         "unter Einstellungen → Kessel eintragen")
     eng.ems = {"boiler": {"nompower": 18}}
     assert boiler_power.missing(eng) is None and min_power_kw(eng) == (pytest.approx(5.4), None)
     eng = power_engine(tmp_path / "d", boiler_min_power_pct=30.0)
     assert boiler_power.suggestion(eng) is None and boiler_power.pct(eng) == (30.0, "eingestellt")
     assert boiler_power.missing(power_engine(tmp_path / "e")).endswith(
-        "kleinste Brennerleistung (%) und Nennleistung des Kessels unter Einstellungen → Haus & Kessel eintragen")
+        "kleinste Brennerleistung (%) und Nennleistung des Kessels unter Einstellungen → Kessel eintragen")
 
 
 def test_emsesp_reads_burner_power_range_only_with_get():

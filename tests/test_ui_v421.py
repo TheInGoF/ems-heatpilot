@@ -107,20 +107,26 @@ def real(tmp_path_factory):
 # ------------------------------------------------------------------ Einbau
 def test_card_on_top_of_overview_and_details_under_diagnose():
     page, js = html(), script()
-    assert ('<p class="sub dhw-line" id="ov-boiler" hidden></p>\n  <div class="card" id="models" '
-            'style="margin-bottom:12px"><h2>Modelle</h2><p class="muted">Lade …</p></div>\n\n  <div class="tiles" '
-            'id="tiles"></div>') in page
+    # 0.43: vor den Modellen der Abschnitt „Status“ (erster Abschnitt) und die Statuszeile der Übersicht
+    # 0.43 Schritt 6: Startseite der Übersicht – Status, Startzeile, Empfehlungen, Ersparnis, Bereiche, Lernstand, Modelle
+    start = between(page, '<div id="ov-start">', '<div id="ov-haus" hidden>')
+    assert '<p class="sub" id="status">Lade …</p>' in start and '<div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>' in start
+    assert start.index('id="guards"') < start.index('id="models"') and '<div class="ov-kpis" id="tiles"></div>' in page
+    ov = between(page, '<section id="view-overview" hidden>', "</section>")
+    assert ov.index('id="ov-status"') < ov.index('id="models"')
     diag = between(page, '<section id="view-diag" hidden>', "</section>")
     assert diag.index('id="diag-checks"') < diag.index('<div class="card" id="diag-models"') < \
-        diag.index("Diagnose-Datei")
+        diag.index('id="heat-log-box"') < diag.index("Diagnose-Datei")  # 0.43: Protokoll aus dem Heizen
     ld = between(js, "async function load() {", "// " + "-" * 64 + " Einstellungen")
     starting = between(ld, "if (s.starting) {", "setTimeout(load, 5000)")
     assert '$("models").innerHTML = `<h2>Modelle</h2><p class="muted">HeatPilot startet' in starting  # auch beim Start
     assert ld.index("renderModels(s.models);") < ld.index('$("tiles").innerHTML')  # vor den Kacheln, ohne Bedingung
     assert "demandNote((s.models || {}).house);" in ld
-    demand = between(page, "Wärmebedarf des Hauses", 'id="chart-demand"')
+    demand = between(page, "Gas gegen Temperaturunterschied", 'id="chart-demand"')  # 0.43: Kurztext
     assert '<p class="muted" id="demand-note" hidden></p>' in demand
-    assert 'if (name === "diag") { exportSize(); loadSensors(); loadModels(); }' in source(js, "showTab")
+    # 0.43: Diagnose ist die letzte Unterseite der Einstellungen – beim Öffnen lädt loadDiagPage auch die Modelle
+    assert 'if (name === "diag") return openSettings("diagnose");' in source(js, "showTab")
+    assert "exportSize(); loadSensors(); loadModels();" in source(js, "loadDiagPage")
     assert 'showTab("diag");\n  $("diag-models").scrollIntoView' in source(js, "openModels")
     assert 'onclick="openModels()"' in source(js, "modelsHtml")  # Klick auf die Karte → Diagnose
 
@@ -359,7 +365,7 @@ def test_docs_and_changelog_name_the_places():
     for text in ("**Karte „Modelle“**", "„Modelle – Einzelheiten“", "**Alter Temperatursensor je Raum**",
                  "Einstellungen → Erweitert", "„Aus gespeicherten Daten neu lernen“", "Nicht berücksichtigt"):
         assert text in docs, text
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1].split("\n## ")[0]
+    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.1")[1].split("\n## ")[0]  # seit 0.43
     ui = next(line for line in head.splitlines() if line.startswith("- **Oberfläche:**"))
     for text in ("Karte „Modelle“", "Diagnose", "Alter Temperatursensor je Raum", "Erweitert", "Zertifikat"):
         assert text in ui, text

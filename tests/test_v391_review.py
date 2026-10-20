@@ -222,7 +222,10 @@ def test_collect_reads_only_the_choice():
 def _targets() -> tuple[set[str], set[str]]:
     js = script()
     cards = set(re.findall(r'card\("([^"]+)"', between(js, "function renderSettings()", "\nfunction ")))
-    return cards | {"Allgemein", "Entitäten"}, {title for title, _ in em.GROUPS.values()}
+    # 0.43: zehn Unterseiten der Einstellungen (Startliste SET_PAGES), „Diagnose“ die letzte
+    pages = set(re.findall(r'\["\w+", "([^"]+)", "\w+"\]', source(js, "SET_PAGES")))
+    assert {"Grundlagen", "Räume", "Entitäten", "Steuerung", "Warmwasser", "Kessel", "Diagnose"} <= pages
+    return cards | pages, {title for title, _ in em.GROUPS.values()}
 
 
 def _refs(text: str):
@@ -232,8 +235,8 @@ def _refs(text: str):
 
 def test_settings_references_name_existing_cards():
     cards, groups = _targets()
-    assert {"Steuerung", "Verbindung", "Räume", "Warmwasser", "Haus & Kessel"} <= cards
-    assert "Messwerte" not in cards and "Personen" not in cards
+    assert {"Steuerung", "Verbindung", "Räume", "Warmwasser", "Kessel", "Grundlagen", "Diagnose"} <= cards  # 0.43: Unterseiten
+    assert "Messwerte" not in cards
     files = [*sorted(PKG.glob("*.py")), PKG / "static" / "index.html", ROOT / "ems_heatpilot" / "DOCS.md",
              ROOT / "README.md"]
     bad_refs = []
@@ -253,13 +256,13 @@ def test_settings_references_name_existing_cards():
 def test_fixed_references(tmp_path):
     js = script()
     assert 'off("keine Wetter-Entität", "Einstellungen → Entitäten → Außen & Wetter")' in js
-    assert "Schalter unter Einstellungen → Warmwasser, Entität unter Einstellungen → Entitäten." in js
+    assert "Schalter und Entität unter Einstellungen → Warmwasser." in js  # 0.43: Schreib-Entität bei ihrer Funktion
     eng, _, _, _ = make(tmp_path, cfg=Config.from_raw({"control_mode": "heatpilot",
                                                         "rooms": [{"climate": "climate.wz", "managed": True}]}),
                         rooms=[wz()], outdoor=["sensor.out"])
     eng.found.persons = []
     notes = readiness.assess(eng, ts_of(MON, 12))["notes"]
-    assert "Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Entitäten → Personen & Urlaub)" in notes
+    assert "Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Anwesenheit & Urlaub)" in notes
 
 
 # ------------------------------------------------------------------ 6. Außenfühler am Kessel nur über EMS-ESP

@@ -173,7 +173,7 @@ class DhwControl(DhwStatus):
             d = self._guard(ts, d)
         if d.write and mode == "trocken":
             st["dry"] = {"ts": ts, "value": d.value, "from": ref}
-            self._log(ts, ACT_DRY, d.value, f"Trockenlauf: würde {d.value} °C schreiben ({why})")
+            self._log(ts, ACT_DRY, d.value, f"Beobachten: würde {d.value} °C schreiben ({why})")
         elif d.write and mode == "heatpilot":
             self.pending = (d.value, why)
         self.view = {"ts": ts, "wish": value, "reason": why, "current": current, "special": special,

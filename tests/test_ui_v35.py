@@ -78,7 +78,7 @@ def test_room_rows_preset_columns_and_collect():
     assert "const pmax = lim.preset_max || 12;" in rows
     # Hilfetexte: Zahl am Ventilunterteil, leer = unbekannt, Stufen 0 = kein Voreinstellventil
     assert "leer = unbekannt" in rows and "0 = kein Voreinstellventil" in rows
-    assert "<th>Voreinstellung <span class=\"hint\">(Stufe am Ventil)</span></th><th>Stufen" in js
+    assert '${field("Voreinstellung (Stufe am Ventil)", `<input type="number" class="r-preset"' in js  # 0.43: Raumliste
     assert "z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil" in js
     assert "Schlüsselgeräts</b> (Raumregler, sonst das erste)" in js
     coll = between(js, "function collect()", "async function saveSettings")

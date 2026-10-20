@@ -105,7 +105,7 @@ class BoilerStatus:
         if blind:
             fb = fallback(self.eng)
             late = now_ts - blind["since"] >= br.BLIND_S
-            dry = " (Trockenlauf: nur im Protokoll)" if self.mode != "heatpilot" else ""
+            dry = " (Beobachten: nur im Protokoll)" if self.mode != "heatpilot" else ""
             out.append(f"Kein Vorlauf-Soll rechenbar ({blind.get('why')}) – " + (
                 (f"Kessel auf Rückfall-Vorlauf {fb} °C und Heizbetrieb an{dry}" if fb is not None else
                  "Rückfall-Vorlauf läge unter 35 °C, HeatPilot schreibt nichts") if late else
@@ -126,7 +126,7 @@ class BoilerStatus:
         if mode == "heatpilot" and v.get("blocked"):
             return f"Kessel: gesperrt – {v['blocked']}"
         t = v.get("target")
-        lead, dry = ("Kessel: HeatPilot", "") if mode == "heatpilot" else ("Kessel: Trockenlauf", "würde ")
+        lead, dry = ("Kessel: HeatPilot", "") if mode == "heatpilot" else ("Kessel: Beobachten", "würde ")
         if t is None:
             return f"{lead} – noch nicht gerechnet"
         if t.heating is None:

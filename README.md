@@ -57,11 +57,11 @@ mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 - **Warmwasser-Empfehlung:** sparsamste Speichertemperatur nach Zapfprofil und Anwesenheit; die Legionellenladung des Reglers ist eingerechnet, die große Zapfung danach braucht keine eigene Ladung – im Standard nur Empfehlung; seit 0.38 setzt HeatPilot das Speicher-Soll auf Wunsch selbst (eigener Schalter „HeatPilot setzt“)
 - **Desinfektion (Legionellen) mit Terminvorschlag:** Termin in den Einstellungen, Temperatur vom Kessel; HeatPilot schlägt die Zeit kurz vor deiner größten regelmäßigen Zapfung vor („So 18 Uhr zapfst du am meisten – Desinfektion So 17:30“) und plant sie ein. Seit 0.42 löst HeatPilot sie ohne Regler am Bus selbst aus (mit „Warmwasser-Soll: HeatPilot setzt“): Schalter „Desinfizieren“ zum Termin, Prüfung nach 60 s, Erfolg bei Desinfektionstemperatur − 3 K (nur, wenn der Kessel sie bestätigt), sonst Meldung; danach wieder aus (bei kurzer Sperre weiter versucht, sonst Meldung) – höchstens einmal je Termin und je 24 h, verpasste binnen 12 h nachgeholt
 - **Vorhersage sichtbar:** Minimum und Trend der nächsten 12 h; der Vorheizplan nennt die Außentemperatur, mit der er rechnet
-- **Vorschau (Trockenlauf):** welchen Vorlauf, welchen Heizbetrieb und welches Warmwasser-Soll HeatPilot in den nächsten 24 h je Stunde am Kessel setzen würde – aus Raummodellen, Anwesenheit, Nachtplan, Vorhersage und Warmwasser-Empfehlung, mit den Schreibvorgängen, die es gäbe. Nur Anzeige – am Kessel schreibt HeatPilot davon nur das Warmwasser-Soll, und nur mit „HeatPilot setzt“ (seit 0.38)
-- **Ventile im Trockenlauf (seit 0.39):** wie oft HeatPilot ein Raum-Soll früh um einen Schritt gesenkt hätte (der Raum würde überschwingen) oder Räume gemeinsam hätte anfordern lassen, wenn der Kessel für einen Raum allein taktet – mit geschätzter Wirkung, wo die Modelle belastbar sind. Ohne den Schalter „Ventile führen“ nur Protokoll; mit ihm zeigt derselbe Abschnitt, was HeatPilot wirklich geschrieben hat („schreibt“) und was danach gemessen wurde
-- **Trockenlauf gegen Regler und Automation:** der stündlich gemerkte Plan neben dem, was Regler (z. B. ES73) und Warmwasser-Automation tatsächlich gesetzt haben – je Tag und über 7 Tage, mit Unterschied in K und Zahl der Schreibvorgänge
+- **Vorschau (24 h)** (bis 0.42 „Vorschau (Trockenlauf)“): welchen Vorlauf, welchen Heizbetrieb und welches Warmwasser-Soll HeatPilot in den nächsten 24 h je Stunde am Kessel setzen würde – aus Raummodellen, Anwesenheit, Nachtplan, Vorhersage und Warmwasser-Empfehlung, mit den Schreibvorgängen, die es gäbe. Nur Anzeige – am Kessel schreibt HeatPilot davon nur das Warmwasser-Soll, und nur mit „HeatPilot setzt“ (seit 0.38)
+- **Ventile beobachten (seit 0.39, bis 0.42 „Trockenlauf“):** wie oft HeatPilot ein Raum-Soll früh um einen Schritt gesenkt hätte (der Raum würde überschwingen) oder Räume gemeinsam hätte anfordern lassen, wenn der Kessel für einen Raum allein taktet – mit geschätzter Wirkung, wo die Modelle belastbar sind. Ohne den Schalter „Ventile führen“ nur Protokoll; mit ihm zeigt derselbe Abschnitt, was HeatPilot wirklich geschrieben hat („schreibt“) und was danach gemessen wurde
+- **Vorschau gegen Ist (7 Tage):** der stündlich gemerkte Plan neben dem, was Regler (z. B. ES73) und Warmwasser-Automation tatsächlich gesetzt haben – je Tag und über 7 Tage, mit Unterschied in K und Zahl der Schreibvorgänge
 - **Zertifikat als PDF:** Haus und Heizung auf einer Seite – Heizlast, Kesselgröße, Takten, Energieklasse und Gesamtbewertung, bezogen auf die letzten 12 Monate
-- **Diagnose und Export:** Selbsttest, Log und alle gelernten Werte als Datei zum Gegenprüfen – ohne Koordinaten und Zugangsdaten
+- **Diagnose und Export** (Einstellungen → Diagnose): Selbsttest, Bereitschaft, Protokoll, Log und alle gelernten Werte als Datei zum Gegenprüfen – ohne Koordinaten und Zugangsdaten
 - **Einrichtung komplett in der Oberfläche** – keine YAML-Optionen, Vorschläge vorausgefüllt
 - Oberfläche in der HA-Seitenleiste und Sensoren `sensor.heatpilot_*` für eigene Dashboards
 
@@ -130,8 +130,14 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 3. „EMS HeatPilot“ installieren und starten
 4. In der Seitenleiste „HeatPilot“ öffnen – der Reiter **Einstellungen** führt
    durch die Einrichtung (Vorschläge sind vorausgefüllt). Das Add-on hat keine YAML-Optionen. Welche Entitäten
-   HeatPilot liest – Kessel, Regler, Außen, Gas, Strom, Räume, Personen, Benachrichtigungen –, steht seit 0.39.1 geordnet
-   auf der Seite **Entitäten** (Umschalter oben in den Einstellungen): was gefunden ist, was fehlt, Auswahl mit Suche.
+   HeatPilot liest – Kessel, Regler, Außen, Gas, Strom, Räume –, steht geordnet auf der Unterseite **Entitäten**: was
+   gefunden ist, was fehlt, Auswahl mit Suche. Die Entitäten, auf die HeatPilot schreibt, wählst du bei ihrer Funktion
+   (Einstellungen → Warmwasser bzw. → Kessel).
+
+**Oberfläche (seit 0.43):** vier Reiter – **Heizen** (Räume bedienen), **Übersicht** (zuerst „Status“: Warmwasser,
+Kessel, Bereitschaft, Warnungen; dazu Haus, Räume, Warmwasser, Kessel, Anwesenheit, Vorschau), **Live** und
+**Einstellungen** (Startliste mit Unterseiten, zuletzt **Diagnose**). Die Schalter heißen überall
+„Aus · Beobachten · HeatPilot steuert“.
 
 Ausführliche Doku: [ems_heatpilot/DOCS.md](ems_heatpilot/DOCS.md) · Änderungen: [CHANGELOG.md](CHANGELOG.md)
 

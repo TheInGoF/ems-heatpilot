@@ -198,7 +198,9 @@ def test_ready_box_above_switch_loaded_from_api_heat(tmp_path):
     js = script()
     card = between(js, "function controlCard(s)", "function modeHint()")
     # Zustandsbox über dem Schalter
-    assert card.index('<div class="ready-box" id="ready-box"></div>') < card.index('<div class="seg" id="f-control_mode">')
+    # 0.43: die Box steht unter Diagnose, in der Steuerung nur ihr Kopfsatz (#ctl-ready) unter dem Schalter
+    assert card.index('<div class="seg" id="f-control_mode">') < card.index('<div id="ctl-ready" class="st-box"></div>')
+    assert '<div id="ready-box">' in between(html(), '<div class="card" id="ready-card">', "</div>")
     # Daten aus GET api/heat, nicht blockierend: erst der letzte Stand, dann frisch; Fehler → „Status nicht verfügbar“
     load = between(js, "async function loadReadiness() {", "function renderReadyBox(")
     assert 'await getJSON("api/heat")' in load and "HEAT = j;" in load
@@ -212,7 +214,7 @@ def test_ready_box_above_switch_loaded_from_api_heat(tmp_path):
             err: readyBoxHtml(null, "Keine Verbindung zum Add-on", false, false), wait: readyBoxHtml(null, "", false, false),
             ok: readyBoxHtml({{ ...R, level: "bereit", blockers: [], limits: [], notes: [] }}, "", false, false) }});""")
     box = r["box"]
-    assert plain(box).startswith("Bereit für die Steuerung? Eingeschränkt bereit – Küche lernt noch (Vorheizen nach Pauschale).")
+    assert plain(box).startswith("Eingeschränkt bereit – Küche lernt noch (Vorheizen nach Pauschale).")
     assert '<span class="dot dot-warn"></span>' in box and '<span class="dot dot-ok"></span>' in r["ok"]
     assert '<details id="ready-details" ontoggle=' in box and '<details id="ready-details" open' in r["open"]
     assert "Einzelheiten (3 Räume machen mit · 1 Hindernis · 1 Einschränkung · 2 Hinweise)" in plain(box)
@@ -228,8 +230,8 @@ def test_ready_box_above_switch_loaded_from_api_heat(tmp_path):
     for state in ("bereit", "lernt", "akzeptiert", "nicht dabei"):
         assert f">{state}</span>" in box
     assert "Räume, die ihr Soll nicht erreichen, heißen „akzeptiert“ – sie sind kein Hindernis." in plain(box)
-    assert plain(r["err"]) == "Bereit für die Steuerung? Status nicht verfügbar Keine Verbindung zum Add-on"
-    assert plain(r["wait"]) == "Bereit für die Steuerung? Lade Status …"
+    assert plain(r["err"]) == "Status nicht verfügbar Keine Verbindung zum Add-on"
+    assert plain(r["wait"]) == "Lade Status …"  # Titel trägt die Karte (0.43)
 
 
 def test_boiler_block_table_and_traffic_light(tmp_path):
@@ -262,21 +264,22 @@ def test_boiler_block_table_and_traffic_light(tmp_path):
     assert rows[3] == "Warmwasser-Einmalladung wwonetime nicht gefunden – – nötig"
     assert rows[4] == "Antipendelzeit burnminperiod 10 min 0 – 120 min nein Info"
     assert '<tr class="muted"><td>Warmwasser-Einmalladung' in w
-    assert ("Nur Anzeige. Was HeatPilot damit tut, steht in der Planung (docs/planung-vorlauf-ems.md). Geschrieben "
-            "wird nie über EMS-ESP, nur über Home Assistant und nur mit eigenem Schalter: Vorlauf-Soll und Heizbetrieb "
-            "seit 0.41 – siehe „Kessel über HeatPilot“") in plain(w)  # 0.41: Weg B
+    assert ("Geschrieben wird nie über EMS-ESP, nur über Home Assistant und nur mit eigenem Schalter: Vorlauf-Soll und "
+            "Heizbetrieb unter Einstellungen → Kessel") in plain(w)  # 0.41: Weg B; 0.43 ohne Planungsdatei und Versionen
     assert r["none"] == ""
 
 
 def test_heat_status_line_and_overview_badge(tmp_path):
     js = script()
-    assert "h += readyLine(r, c.mode === \"heatpilot\");" in between(js, "function heatStatus(c, r)", "function readyLine")
-    assert '$("heat-status").innerHTML = heatStatus(c, j.readiness);' in js
-    # Badge in der Übersicht nur bei Beobachten, Klick führt zu Einstellungen → Steuerung
+    # 0.43: die Bereitschaftszeile steht in Übersicht → Status (Block „Räume“), nicht mehr im Heizen
+    assert "const ready = readyLine(r, pil);" in between(js, "function ovRoomsHtml(c, r, sum)", "function ovLastHtml")
+    assert "readyLine" not in between(js, "function heatStatus(c, vac)", "function readyLine")
+    assert '$("heat-status").innerHTML = heatStatus(c, LAST_SUMMARY && LAST_SUMMARY.vacation);' in js
+    # 0.43 Schritt 6 (Ü1 aufgelöst): kein eigenes Badge mehr in der Übersicht – die Bereitschaft steht einmal im
+    # Status (readyLine mit „Einzelheiten ›“ nach Einstellungen → Diagnose), die Startzeile nur noch beim Start
     body = between(js, "async function load() {", "$(\"tiles\").innerHTML")
-    assert 'const readyBadge = s.control_mode !== "heatpilot" && rdv' in body
-    assert 'onclick="openReadiness();return false">Steuerung: ${rdv.word}</a>' in body
-    assert '</span>${readyBadge} · außen ${fmt(s.t_out)} °C' in body
+    assert "readyBadge" not in body and '$("status").hidden = true;' in body
+    assert "openReadiness()" in between(js, "function readyLine(r, pil)", "\n}\n")
     hl = {"bereit": "Bereit – 3 Räume schreibbar, 3 mit belastbarem Modell. Flur erreicht sein Soll nicht und wird akzeptiert.",
           "eingeschränkt": "Eingeschränkt bereit – Küche lernt noch (Vorheizen nach Pauschale).",
           "nicht bereit": "Nicht bereit – kein Raum macht mit."}
@@ -288,7 +291,7 @@ def test_heat_status_line_and_overview_badge(tmp_path):
             pil: Object.fromEntries(Object.entries(PIL).map(([level, headline]) => [level, readyLine({{ level, headline }}, true)])),
             none: readyLine(null, false), words: Object.values(READY).map((x) => x.word) }});""")
     w, p = r["watch"], r["pil"]
-    link = " Einzelheiten unter Einstellungen → Steuerung"
+    link = " Einzelheiten ›"  # 0.43: kurzer Link-Text
     assert plain(w["bereit"]) == ("HeatPilot wäre bereit zu steuern – 3 Räume schreibbar, 3 mit belastbarem Modell. "
                                   "Flur erreicht sein Soll nicht und wird akzeptiert." + link)
     assert plain(w["eingeschränkt"]) == "HeatPilot wäre eingeschränkt bereit: Küche lernt noch (Vorheizen nach Pauschale)." + link
@@ -301,7 +304,7 @@ def test_heat_status_line_and_overview_badge(tmp_path):
     assert r["none"] == "" and r["words"] == ["bereit", "eingeschränkt", "nicht bereit"]
     # „Einzelheiten“ öffnet die Einstellungen, klappt die Box auf und merkt sich das auch über ein Neuzeichnen
     op = between(js, "function openReadiness() {", "// Daten aus GET api/heat")
-    assert "READY_OPEN = true;" in op and 'showTab("settings");' in op
+    assert "READY_OPEN = true;" in op and 'openSettings("diagnose");' in op
     rb = between(js, "function renderReadyBox(r, err = \"\") {", "function readyBoxHtml(")
     assert "box.innerHTML = readyBoxHtml(r, err, READY_SHOW.details, READY_SHOW.boiler);" in rb
     assert "if (r || err) READY_OPEN = false;" in rb and 'box.closest("details.card")' in rb
@@ -312,7 +315,7 @@ def test_heatmap_has_legend_and_seq_steps(tmp_path):
     js = script()
     assert "const SEQ_N = 7, _ramps = {};" in js
     hm = between(js, "function heatmap(box, grid, o = {}) {", "// Legende unter dem Raster")
-    assert "heatLegend(svg, H - legH + 4, o, lo, hi, amax);" in hm
+    assert "heatLegend(svg, H - legH + 4, o, lo, hi, amax, W);" in hm  # 0.43: passt in die Breite
     assert 'if (none) fill = "none";' in hm  # fehlende Daten: nur Rahmen
     assert "breaks: [0.1, 0.25, 0.4, 0.5, 0.65, 0.85]" in js  # Gewohnheiten: feste Grenzen
     r = run_js(tmp_path, """

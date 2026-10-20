@@ -45,7 +45,7 @@ TOKEN_FILES = (
 OWN_PREFIXES = ("sensor.heatpilot_", "binary_sensor.heatpilot_")
 
 AUTH_HINT = (
-    "Bitte das Add-on neu starten. Hilft das nicht, im Reiter „Diagnose“ die "
+    "Bitte das Add-on neu starten. Hilft das nicht, unter Einstellungen → Diagnose die "
     "Diagnose-Datei herunterladen und weitergeben."
 )
 

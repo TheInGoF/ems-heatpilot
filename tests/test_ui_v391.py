@@ -58,9 +58,8 @@ def as_json(v):
 def test_room_table_has_floor_selection_instead_of_checkbox():
     js, page = script(), html()
     rows = between(js, "function roomRows()", "function applyAreas()")
-    assert "<td>${floorCell(c.id, r)}</td>" in rows
+    assert '${field("Fußboden", floorCell(c.id, r))}' in rows  # 0.43: Raumliste, Fußboden unter „Einzelheiten“
     assert 'class="r-floor" ${(SET.floor_heating_rooms' not in js  # das Häkchen ist in der Auswahl aufgegangen
-    assert '<th>Fußboden <span class="hint">(Anschluss, höchster Vorlauf)</span></th>' in js
     info = between(js, 'card("Räume", `', "${ENT.some(")
     for text in ("<b>mit Mischer</b>", "<b>mit RTL-Ventil</b>", "<b>direkt am Kessel</b>", "<b>höchste Vorlauf</b>",
                  "leer = ${FLOOR_MAX.def} °C", "HeatPilot plant nie einen Vorlauf darüber"):
@@ -205,8 +204,9 @@ function dhwModeHint() {}
 EM_NAMES = ("esc", "isTemp", "isSensor", "PICKERS", "dhwRank", "personRows", "EMAP", "EM_BY", "EM_OPEN", "EM_FOLD",
             "EM_MAX", "EM_PROBLEMS", "EM_BADGE", "EM_CUSTOM", "emInit", "emFits", "emOptions", "emItem", "emState",
             "emValue", "emHas", "emStateOf", "emSaved", "emCounts", "emRoomCount", "emCountText", "setNav", "emPage",
-            "emGroup", "emReq", "emRow", "emBadge", "emNow", "emEnt", "emEdit", "emExtra", "emRoomRows", "emPersons",
-            "emRef", "emCollect")
+            "emGroup", "emReq", "emRow", "emBadge", "emNow", "emEnt", "emEdit", "emExtra", "roomStates", "emPersons",
+            "emRef", "emCollect", "SET_PAGES", "SET_KEYS", "setInfo", "navRow", "EM_PAGE_OF", "emInline", "eid", "more",
+            "DHW_LABEL", "BOILER_LABEL")  # 0.43: Startliste der Einstellungen, Entitäten bei ihrer Funktion
 SECTION_B = "// ---------------------------------------------------------------- Entitäten (0.39.1)"
 
 
@@ -272,30 +272,32 @@ def api_answers(tmp_path, raw=None, drop=(), ems=None) -> dict:
 def test_settings_split_into_general_and_entities():
     js, page = script(), html()
     rs = between(js, "function renderSettings()", "function addVac()")
-    assert 'emInit(EMAP);' in rs and 'datalists() + setNav() + `<div id="set-general"${SET_PAGE === "general" ? "" : " hidden"}>`' in rs
-    assert '`</div><div id="set-entities"${SET_PAGE === "entities" ? "" : " hidden"}>${emPage(EMAP)}</div>`' in rs
+    # 0.43: zehn Unterseiten (Startliste) statt „Allgemein | Entitäten“; alle stehen im DOM
+    assert 'emInit(EMAP);' in rs and '$("set-menu").innerHTML = setNav();' in rs and '$("set-body").innerHTML = datalists() +' in rs
+    assert re.findall(r'page\("(\w+)"', rs) == ["grundlagen", "raeume", "entitaeten", "steuerung", "anwesenheit", "warmwasser",
+                                             "kessel", "benachrichtigungen", "erweitert"]  # Diagnose: #view-diag
+    assert 'page("entitaeten", sugBtn(' in rs and "emPage(EMAP)" in rs
     assert "emSum();" in rs
     titles = re.findall(r'card\("([^"]+)"', rs)
-    assert titles == ["Steuerung", "Verbindung", "Räume", "Gas & Kosten", "Komfort & Strategie", "Haus & Kessel",
-                      "Kessel über HeatPilot",  # 0.41: Weg B
-                      "Warmwasser", "Urlaub", "Erweitert"]  # Messwerte, Personen, Benachrichtigungen, Zuordnungen: Entitäten
+    assert titles == ["Verbindung", "Haus", "Gas & Kosten", "Räume", "Personen", "Urlaub", "Warmwasser steuern", "Temperaturen",
+                      "Kesseldaten", "Kessel steuern", "Benachrichtigungen", "Erweitert"]  # Steuerung: controlCard
     # „Allgemein“ ohne Entitätsfelder – höchstens ein Verweis
     for gone in ("Zuordnungen (Experten)", 'class="ov"', "outdoor-list", "power-list", "f-gas_sensor", "f-weather_entity",
                  "f-demand_sensor", "f-vacation_entity", "list=\"dl-any\"", "ROLES", "DISC."):
         assert gone not in js, gone
     assert 'card("Gas & Kosten", `${emRef("gas_sensor", "gas", "Gaszähler")}' in rs
-    assert '${emRef("vacation_entity", "personen", "Urlaubs-Schalter")}' in rs
+    assert '${emr("vacation_entity")}' in rs  # 0.43: Urlaubs-Schalter bei Anwesenheit & Urlaub
     assert "${powerRef(power, powerEx, missing)}" in between(js, "function controlCard(s)", "function modeHint()")
     assert 'id="dhw-entity-ref">Entität des Warmwasser-Solls: ${dhwEntityHint(s, x)}' in js
     # Räume bleiben in „Allgemein“ (Name, Gruppe, Komfort, Fußboden …) – die Seite „Entitäten“ springt dorthin
-    assert '<td><input class="r-valve" list="dl-sensor"' in between(js, "function roomRows()", "function applyAreas()")
+    assert '<input class="r-valve" list="dl-sensor"' in between(js, "function roomRows()", "function applyAreas()")
     load = between(js, "async function loadSettings()", "let OV_STALE")
     assert 'try { EMAP = await getJSON("api/entity_map"); if (EMAP.starting) EMAP = null; }' in load
     assert "catch (e) { EMAP = { error: e.message || String(e) }; }" in load
     assert "return emCollect(out);" in between(js, "function collect()", "async function saveSettings")
     assert 'if ($("em-persons")) out.persons =' in between(js, "function collect()", "async function saveSettings")
     assert len(re.findall(r'getJSON\("api/entity_map"\)', page)) == 1  # nur lesen, an einer Stelle
-    assert 'setPage("general");' in between(js, "function openReadiness() {", "// Daten aus GET api/heat")
+    assert 'openSettings("diagnose");' in between(js, "function openReadiness() {", "// Daten aus GET api/heat")
 
 
 def test_entities_section_knows_no_write_path():
@@ -367,7 +369,7 @@ def test_rows_render_status_and_escape(tmp_path):
     r = run_em(tmp_path, data, """const row = (k) => emRow(EM_BY[k]);
       out({ flow: row("flow_temp"), bp: row("burner_power"), dhw: row("dhw_active"), auto: row("dhw_temp"),
             nav: setNav(), sum: emCountText(emCounts(EMAP.groups[0].entries)), extra: emExtra(),
-            page: emPage(EMAP), err: emPage({ error: "<b>kaputt" }), none: emPage(null),
+            page: emPage(EMAP), inl: emInline("personen") + emInline("benachrichtigungen"), err: emPage({ error: "<b>kaputt" }), none: emPage(null),
             ref: emRef("gas_sensor", "gas", "Gaszähler"), rooms: emRoomCount(EMAP.groups[7].entries) });""")  # 0.41: Kessel über HeatPilot davor
     flow = plain(r["flow"])
     assert flow.startswith("Vorlauftemperatur (Ist) nötig Daraus lernt HeatPilot") and "nicht verfügbar" in flow
@@ -377,13 +379,19 @@ def test_rows_render_status_and_escape(tmp_path):
     assert "Ersatz kein eigener Wert – Speichertemperatur genügt" in plain(r["dhw"])
     assert "automatisch gefunden sensor.boiler_dhw_curtemp Speicher · 51.5 °C · Keller" in plain(r["auto"])
     assert " disabled>Automatik</button>" in r["auto"]  # schon automatisch
-    assert plain(r["nav"]) == "Allgemein Entitäten 4" and 'name="set-page" value="general" checked' in r["nav"]
+    # 0.43: dritte Unterseite „Diagnose“ (vier Reiter) – die Zahl bleibt am Reiter „Entitäten“
+    # 0.43: Startliste mit zehn Unterseiten in drei Gruppen – rot nur, wenn Nötiges fehlt (2)
+    assert re.findall(r'<h3 class="nav-h">(\w+)</h3>', r["nav"]) == ["Einrichten", "Steuern", "System"]
+    assert re.findall(r'data-page="(\w+)"', r["nav"]) == ["grundlagen", "raeume", "entitaeten", "steuerung", "anwesenheit",
+                                                         "warmwasser", "kessel", "benachrichtigungen", "erweitert", "diagnose"]
+    assert '<span class="em-alert" id="em-alert">2</span>' in r["nav"] and "Entitäten 15 von 67 gefunden 2" in plain(r["nav"])
     assert r["sum"] == "6 von 39 gefunden · 2 nötige fehlen · 2 nicht verfügbar"  # 0.41: Heizbetrieb aktiviert
     assert "<i>" not in r["extra"] and "&lt;i>=sensor.z" in r["extra"] and 'x&quot;>&lt;b>=sensor.y' in r["extra"]
     groups = re.findall(r'<details class="card em-group" id="em-g-(\w+)"', r["page"])
-    assert groups == [g["key"] for g in data["map"]["groups"]]
+    # 0.43: „Entitäten“ zeigt nur gelesene Werte; Schreib-Entitäten, Räume, Personen und Ziele stehen bei ihrer Funktion
+    assert groups == ["kessel", "regler", "aussen", "gas", "strom"]
     assert 'Weitere Werte, die die Erkennung nicht gefunden hat <span class="muted">(' in r["page"]
-    assert 'id="em-persons"' in r["page"] and '<div id="notify-list">Ziele</div>' in r["page"]
+    assert 'id="em-persons"' in r["inl"] and '<div id="notify-list">Ziele</div>' in r["inl"]
     assert "nur fehlende und nicht verfügbare" in r["page"]
     assert "<b>kaputt" not in r["err"] and "Nicht lesbar: &lt;b>kaputt" in r["err"] and "Speichern ändert sie nicht" in r["err"]
     assert "nicht geladen" in r["none"]

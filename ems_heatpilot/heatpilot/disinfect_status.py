@@ -35,11 +35,11 @@ HINT_HEATPILOT = ("HeatPilot löst sie aus – zum Termin schaltet es den Schalt
                   "Speicher die Desinfektionstemperatur erreicht")
 HINT_REGULATOR = ("Der Regler macht sie – er ist am Bus und desinfiziert selbst, seinen Termin hier eintragen; "
                   "HeatPilot löst sie erst aus, wenn kein Regler mehr am Bus ist")
-HINT_DRY = "Trockenlauf – zum Termin schreibt HeatPilot nur ins Protokoll, dass es die Desinfektion starten würde"
+HINT_DRY = "Beobachten – zum Termin schreibt HeatPilot nur ins Protokoll, dass es die Desinfektion starten würde"
 NOBODY = ("Desinfektionstermin eingetragen, aber niemand löst ihn aus – kein Regler am Bus; mit „Warmwasser-Soll: "
           "HeatPilot setzt“ löst HeatPilot die Desinfektion aus")
 RESULTS = {"gelungen": "gelungen", "fehlgeschlagen": "nicht gelaufen", "verpasst": "verpasst",
-           "abgebrochen": "abgebrochen", "regler": "macht der Regler", "trocken": "Trockenlauf"}
+           "abgebrochen": "abgebrochen", "regler": "macht der Regler", "trocken": "Beobachten"}
 
 
 def _who(cfg, reg: dict) -> str:
@@ -57,7 +57,7 @@ def _texts(cfg, who: str, label: str | None) -> tuple[str, str, str | None]:
     if who == "heatpilot":
         return f"Desinfektion: löst HeatPilot aus ({label})", HINT_HEATPILOT, None
     if who == "trocken":
-        return f"Desinfektion: Trockenlauf – würde {label} auslösen", HINT_DRY, None
+        return f"Desinfektion: Beobachten – würde {label} auslösen", HINT_DRY, None
     why = ("kein Termin eingestellt" if not rule.planned(cfg)
            else "HeatPilot löst sie nur bei „Warmwasser-Soll: HeatPilot setzt“ ohne Regler am Bus aus")
     return "Desinfektion: aus", NOT_YET, why

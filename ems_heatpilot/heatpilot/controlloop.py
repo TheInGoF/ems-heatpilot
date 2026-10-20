@@ -527,7 +527,10 @@ class ControlLoop:
         managing = cfg.is_managing()
         paused = self.paused(now_ts)
         names = {r.climate: r.name for r in self.eng.found.rooms}
-        managed = [r for r in self.rooms.values() if r["managed"] and r["next_change"]]
+        # nur Wechsel, die noch kommen (0.43): ein vergangener (der Takt hat ihn noch nicht neu berechnet) steht als
+        # Phase schon im Text – „nächste Änderung 03:30“ um 03:35 wäre falsch
+        managed = [r for r in self.rooms.values() if r["managed"] and r["next_change"]
+                   and datetime.fromisoformat(r["next_change"]).timestamp() > now_ts]
         nxt = min(managed, key=lambda r: r["next_change"]) if managed else None
         text = "Beobachten"
         now = local(now_ts)

@@ -191,8 +191,8 @@ class DisinfectControl(DisinfectStatus):
         if self.mode == "trocken":
             self._mark(k)
             st["last"] = {"due": k, "label": lab, "ts": ts, "end": ts, "ok": None, "result": "trocken",
-                          "text": "Trockenlauf – nur im Protokoll"}
-            self._log(ts, ACT_DRY, None, f"Trockenlauf: würde Desinfektion {lab} starten ({_c(temp)} °C, Schalter "
+                          "text": "Beobachten – nur im Protokoll"}
+            self._log(ts, ACT_DRY, None, f"Beobachten: würde Desinfektion {lab} starten ({_c(temp)} °C, Schalter "
                                          f"{self.entity_id or 'fehlt'})")
             return
         why = rule.blocker(self.eng, self.entity_id)

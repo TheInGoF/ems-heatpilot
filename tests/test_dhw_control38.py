@@ -208,8 +208,8 @@ def test_dry_run_only_logs_with_same_rule(tmp_path):
     assert ha.payloads == []           # nichts geschrieben
     rows = list(reversed(eng.store.control_log(10)))
     assert [(r["action"], r["value"]) for r in rows] == [(ACT_DRY, 55.0), (ACT_DRY, 50.0)]
-    assert rows[0]["reason"] == "Trockenlauf: würde 55 °C schreiben (Zapfung erwartet (≈8 K))"
-    assert dc.as_dict(t + 900)["status_text"].startswith("Trockenlauf · würde 50 °C seit 15:08")
+    assert rows[0]["reason"] == "Beobachten: würde 55 °C schreiben (Zapfung erwartet (≈8 K))"
+    assert dc.as_dict(t + 900)["status_text"].startswith("Beobachten · würde 50 °C seit 15:08")
 
 
 def test_heatpilot_writes_on_change_holds_and_checks_after_60_s(tmp_path):

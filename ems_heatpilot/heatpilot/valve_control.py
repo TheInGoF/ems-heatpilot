@@ -56,7 +56,7 @@ THROTTLE_PHASES = ("komfort", "vorheizen")  # nie nacht, abwesend, urlaub – do
 RULE_TEXT = {"drosseln": "früh drosseln", "gemeinsam": "gemeinsam anfordern"}
 PREFIX = "Ventil: "                         # Grund im Schreibprotokoll
 KEYS = ("active", "last", "lock", "hands", "raised")
-NOTE_RULES = (f"Höchstens ein Schritt vom Wunschsoll (Schrittweite des Thermostats, höchstens {de_num(MAX_STEP_K)} K), "
+NOTE_RULES = (f"Höchstens ein Schritt vom Ziel (Schrittweite des Thermostats, höchstens {de_num(MAX_STEP_K)} K), "
               f"nur bei Änderung, {HOLD_S // 60} min Haltezeit – Hand und Phasenwechsel gehen vor, wer Wärme braucht, "
               "bekommt sie sofort")
 
@@ -386,5 +386,5 @@ def _headline(switch: bool, managing: bool, rooms: list, ready: list[str], learn
         return f"Läuft – führt {rooms_word} ({_names(ready)}){rest}."
     if switch:
         return f"Eingeschaltet, wirkt erst mit „HeatPilot steuert“ – {rooms_word} wären bereit{rest}."
-    return (f"Aus – {rooms_word} wären bereit ({_names(ready)}){rest}; bis zum Einschalten nur Trockenlauf "
+    return (f"Aus – {rooms_word} wären bereit ({_names(ready)}){rest}; bis zum Einschalten nur Beobachten "
             "(Einstellungen → Steuerung).")

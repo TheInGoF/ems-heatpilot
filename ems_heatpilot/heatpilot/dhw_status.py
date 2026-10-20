@@ -100,7 +100,7 @@ class DhwStatus:
         if mode == "trocken":
             dry = st.get("dry")
             times.update({"since": _iso(dry["ts"])} if dry else {})
-            parts = ["Trockenlauf", f"würde {dry['value']} °C seit {{since}}" if dry else f"Kessel-Soll {_c(cur)} °C"]
+            parts = ["Beobachten", f"würde {dry['value']} °C seit {{since}}" if dry else f"Kessel-Soll {_c(cur)} °C"]
         else:
             last = st.get("last")
             parts = ["HeatPilot setzt"]

@@ -39,7 +39,7 @@ NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boi
          "DIS_NOT_YET", "splitWhen", "disinfectTile", "DAY_NAMES", "CHARGE_FROM", "DIS_BOILER",
          "disinfectHtml", "disinfectState", "disinfectSuggestHtml", "disinfectSync", "applyDisinfect",
          "EMS_LOCK", "ctlRooms", "allRooms", "shortName", "hm", "leftText", "tileColors", "PHASE", "ctl", "managing",
-         "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock",
+         "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock", "EM_BY", "roomStates",
          "FLOOR_KINDS", "FLOOR_MAX", "FLOOR_HINT", "floorKind", "floorCell", "roomRows",  # Fußboden seit 0.39.1
          "degC", "DIS_RESULT_CSS", "disWhen", "disDot", "disLast", "disNow", "disinfectTriggerHtml")  # Auslösen (0.42)
 
@@ -87,8 +87,8 @@ def test_ui_texts_equal_backend_constants(tmp_path):
 def test_dhw_card_has_disinfect_section_and_collect_saves_fields():
     js = script()
     # Abschnitt am Ende der Karte Warmwasser, Daten aus GET api/settings → disinfect
-    assert ('${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}\n    </div>${disinfectHtml(s, DIS)}`) +'
-            in js)
+    assert ('${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}\n    </div>${disinfectHtml(s, DIS)}`)) +'
+            in js)  # 0.43: Karte „Temperaturen“ der Unterseite Warmwasser
     load = between(js, "async function loadSettings()", "let OV_STALE")
     assert "DIS = j.disinfect || null;" in load and "let DIS = null;" in js
     assert "modeHint(); disinfectSync();" in between(js, "function renderSettings()", "function addVac()")
@@ -109,7 +109,8 @@ def test_disinfect_section_with_date_temperature_and_suggestion(tmp_path):
     s = {"dhw_disinfect_day": "So", "dhw_disinfect_time": "13:00", "dhw_disinfect_temp": 70.0}
     r = run_js(tmp_path, f"out(disinfectHtml({json.dumps(s)}, {json.dumps(d)}));")
     t = plain(r)
-    assert t.startswith("Desinfektion (Legionellen) Einmal je Woche heizt der Kessel den Speicher auf die Desinfektionstemperatur.")
+    assert t.startswith("Desinfektion (Legionellen) Einmal pro Woche heizt der Kessel den Speicher über 60 °C auf. "  # 0.43: Kurztext + mehr
+                        "Einmal je Woche heizt der Kessel den Speicher auf die Desinfektionstemperatur.")
     # Tag: „aus“ und Mo…So mit vollem Namen, gespeicherter Tag gewählt; Werte wie die Einstellung
     opts = re.findall(r'<option value="([^"]*)"( selected)?>([^<]*)</option>', r)
     assert [o[0] for o in opts] == list(DISINFECT_DAYS)
@@ -136,7 +137,7 @@ def test_disinfect_section_without_date_shows_reason_last_special_and_controller
     s = {"dhw_disinfect_day": "", "dhw_disinfect_time": "13:00", "dhw_disinfect_temp": 70.0}
     t = plain(run_js(tmp_path, f"out(disinfectHtml({json.dumps(s)}, {json.dumps(d)}));"))
     assert "Temperatur 70 °C eingestellt EMS-ESP meldet keine Desinfektionstemperatur – es gilt der eingestellte Wert" in t
-    assert "Kein Termin eingestellt · letzte Sonderladung So 13:40 (erkannt) · Regler meldet So 13:00" in t
+    assert "Kein Termin eingestellt · letzte Desinfektion So 13:40 (erkannt) · Regler meldet So 13:00" in t
     assert ("Zeitvorschlag Zapfprofil erst 2 Wochen gelernt – ein Vorschlag braucht mindestens 4 Wochen") in t
     assert "Vorschlag übernehmen" not in t
     # ältere Antwort ohne disinfect-Block: Abschnitt trotzdem bedienbar, Tage und Bereich als Rückfall
@@ -178,7 +179,8 @@ def test_apply_suggestion_fills_day_and_time_saving_only_with_speichern(tmp_path
 def test_overview_tile_next_date_or_last_special(tmp_path):
     js = script()
     load = between(js, "async function load() {", "LAST_DHW = w;")
-    assert load.index("disinfectTile(w.disinfect_plan),") < load.index("w.disinfect ? tile(")  # neben der ES73-Kachel
+    # 0.43: eine Kachel „Desinfektion“ – die ES73-Kachel nur, wenn kein Termin/keine Sonderladung bekannt ist
+    assert load.index("disinfectTile(w.disinfect_plan),") < load.index('w.disinfect && !disinfectTile(w.disinfect_plan) ? tile("Desinfektion",')
     _, plan = disinfect(tmp_path, suggest=False, confirmed=True, dhw_disinfect_day="So", dhw_disinfect_time="17:30")
     assert "suggestion" not in plan and plan["counts"]
     r = run_js(tmp_path, f"""const P = {json.dumps(plan)};
@@ -192,7 +194,7 @@ def test_overview_tile_next_date_or_last_special(tmp_path):
     assert '<div class="value">So 17:30</div>' in r["plan"]
     assert plain(r["other"]).endswith("eingestellt · 70 °C laut Kessel · Termin noch nicht bestätigt – kein Regler "
                                       "desinfiziert zu dieser Zeit")
-    assert plain(r["last"]) == ("Letzte Sonderladung So 13:40 erkannt · kein Desinfektionstermin eingestellt – "
+    assert plain(r["last"]) == ("Letzte Desinfektion So 13:40 erkannt · kein Desinfektionstermin eingestellt – "
                                 "Einstellungen → Warmwasser")
     assert 'class="tile off"' in r["none"] and plain(r["none"]).startswith("Desinfektion kein Termin")
     assert r["old"] == "" and 'class="tile"' in r["plan"]
@@ -211,12 +213,12 @@ SAVED = [{"climate": "climate.thermostat_hc1", "managed": True, "group": "Keller
 
 def test_room_table_locks_managed_for_ems_heating_circuit(tmp_path):
     r = run_js(tmp_path, f"ENT = {json.dumps(ENT)}; SET = {{ rooms: {json.dumps(SAVED)}, floor_heating_rooms: [] }}; out(roomRows());")
-    rows = {m.group(1): m.group(0) for m in re.finditer(r'<tr class="room" data-climate="([^"]+)".*?</tr>', r, re.S)}
+    rows = {m.group(1): m.group(0) for m in re.finditer(r'<div class="room" data-climate="([^"]+)".*?</details></div>', r, re.S)}
     box = lambda row: re.search(r'<input type="checkbox" class="r-managed"[^>]*>', row).group(0)  # noqa: E731
     ems, flur = rows["climate.thermostat_hc1"], rows["climate.flur"]
     assert "checked" not in box(ems) and f'disabled title="{LOCK_TEXT}"' in box(ems)  # gespeichertes „macht mit“ zählt nicht
     assert f'<div class="hint ems-lock">„macht mit“ gesperrt: {LOCK_TEXT}</div>' in ems
-    assert '<div class="hint ems-lock">gesperrt</div>' in ems
+    assert f'<label title="{LOCK_TEXT}">' in ems  # 0.43: Raumliste – der Grund steht am Häkchen
     # gleicher „Raum“ wie der Heizkreis: das Backend nimmt den ganzen Raum heraus – hier ebenso gesperrt
     assert "disabled" in box(flur) and f"„macht mit“ gesperrt: gleicher Raum wie der {LOCK_TEXT}" in flur
     # Tado-Zone „…_thermostat“ und Räume ohne EMS-ESP bleiben frei
@@ -250,7 +252,7 @@ def test_heat_tab_never_operates_ems_circuit(tmp_path):
     assert re.findall(r"<button[^>]*disabled", free) == []
     assert f'<div class="ctl-info ems-lock" id="dlg-ems">{LOCK_TEXT} – Soll und Betriebsart nur am Regler.</div>' in lock
     assert "Macht nicht mit" not in lock  # kein Verweis auf „macht mit“, das gesperrt ist
-    assert r["state"] == "nur Anzeige · 20°"
+    assert r["state"] == "Nur Anzeige · 20°"  # 0.43: Schema „Wer · Soll"
 
 
 # ------------------------------------------------------------------ Kessel-Block: wofür Desinfektion nötig ist

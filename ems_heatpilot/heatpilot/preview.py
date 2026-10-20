@@ -73,7 +73,7 @@ HOLD_BAND_K = 0.3      # … und so weit darüber auch; darüber kühlt er ab, d
 FORECAST_FADE_H = 6.0  # Versatz Außenfühler − Vorhersage (jetzt) klingt über so viele Stunden ab
 DAY_SP_H = 48          # Tages-Soll nicht gesteuerter Räume, nachts abgefragt: gemessen in so vielen Stunden
 CACHE_S = 300
-NOTE = "Trockenlauf – HeatPilot schreibt nichts an den Kessel"
+NOTE = "Beobachten – HeatPilot schreibt nichts an den Kessel"
 NOTE_BOILER = ("Kessel über HeatPilot schreibt Vorlauf und Heizbetrieb – die Vorschau zeigt den Plan aus dem Bedarf, "
                "Abnahme-Untergrenze und Takt-Boost rechnet HeatPilot live dazu")
 NO_MODELS = "Noch kein Raummodell plausibel (ohne Fußbodenheizung) – ohne Raummodelle kein Vorlauf-Soll"

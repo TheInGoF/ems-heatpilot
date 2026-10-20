@@ -29,8 +29,8 @@ def script() -> str:
 
 def test_settings_card_steuerung_first_with_switch_warning_plan_and_limits():
     js = script()
-    # Karte „Steuerung“ ganz oben, Schalter mit genau den zwei Stellungen, Warnhinweis laut Entwurf
-    assert 'card("Steuerung", controlCard(s)) +\n    card("Verbindung"' in js
+    # 0.43: eigene Unterseite „Steuerung“ (erste unter „Steuern“), Schalter mit genau den zwei Stellungen, Warnhinweis
+    assert 'page("steuerung", controlCard(s))' in js and '["steuerung", "Steuerung", "Steuern"]' in js
     assert 'name="control_mode" value="beobachten"' in js and 'name="control_mode" value="heatpilot"' in js
     assert "Zurück zu Tado nur hier" in js and "zuletzt geschriebene Soll stehen" in js
     assert "keinen automatischen Rückfall" in js
@@ -66,7 +66,9 @@ def test_heat_tab_pause_only_when_managing_and_status_from_control():
     js, markup = script(), html()
     assert 'id="heat-status"' in markup and 'id="heat-log-box"' in markup and 'id="heat-foot"' in markup
     render = js.split("function renderHeat()")[1].split("function act(")[0]
-    assert '(pil ? act("pause", "Pause"' in render  # vierte Kachel nur bei heatpilot
+    # 0.43: vierte Kachel „Pause“ immer da (das Raster springt nicht), bei Beobachten gesperrt
+    assert 'act("pause", "Pause", !pil ? "nur bei HeatPilot steuert"' in render and "!!c.paused_until, !pil);" in render
+    assert '${off ? " disabled" : ""}' in js.split("function act(")[1].split("\n}\n")[0]
     assert 'const managing = () => ctl().mode === "heatpilot"' in js
     assert "c.status_text" in js and "c.warnings" in js and "c.pause_left_min" in js
     # Pause-Dialog: 1 h / 2 h / 4 h / bis morgen / weiter über POST api/heat/pause {hours}
@@ -78,26 +80,29 @@ def test_heat_tab_pause_only_when_managing_and_status_from_control():
     assert "HEAT = { rooms: j.rooms, limits: j.limits, control: j.control, readiness: j.readiness }" in js
     # Protokoll: die letzten 20 Einträge
     assert "(c.log || []).slice(0, 20)" in js
-    # Fußzeile „schaltet nie von selbst“ nur noch bei Beobachten
-    assert '$("heat-foot").textContent = pil' in render
-    assert "schreibt die Solltemperaturen der Räume mit „macht mit“ selbst" in render
+    # Fußzeile seit 0.43 „Antippen zum Bedienen.“; der Satz je Modus steht in Übersicht → Status („schaltet nie von
+    # selbst“ nur noch bei Beobachten)
+    assert '<p class="muted" id="heat-foot">Antippen zum Bedienen.</p>' in markup
+    rooms = js.split("function ovRoomsHtml(c, r, sum)")[1].split("function ovLastHtml")[0]
+    assert "schreibt die Solltemperaturen der Räume mit „macht mit“ selbst" in rooms and "schaltet nie von selbst" in rooms
 
 
 def test_room_tile_state_from_control_status():
     js = script()
     st = js.split("function roomState(r)")[1].split("function roomTile")[0]
     assert "managing() && r.managed && c && c.phase" in st  # ohne Steuerung wie bisher
-    assert "`HeatPilot: ${PHASE[c.phase] || c.phase} ${d}`" in st and "`Vorheizen → ${d}`" in st
-    assert "manuell ${t}${until}" in st and "erreicht ≈ ${fmt(c.reach_c)}°" in st and "`Pause · ${t}`" in st
+    # 0.43: Schema „Wer · Soll“ (test_ui_v43 prüft alle Fälle in Node)
+    assert "`HeatPilot · ${PHASE[c.phase] || c.phase} ${d}`" in st and "`Vorheizen → ${d}`" in st
+    assert "Manuell · ${t}${until}" in st and "erreicht ≈ ${fmt(c.reach_c)}°" in st and "`Pause · ${t}`" in st
     assert "const PHASE = { komfort:" in js and '"urlaub"' not in st  # Phasennamen zentral
 
 
 def test_boost_and_schedule_texts_depend_on_tado_cloud():
     js = script()
     assert "BOOST.rooms.includes(r.climate) && !r.tado_cloud" in js
-    assert "Läuft als Timer in HeatPilot" in js and "Setzt in Tado einen Timer" in js
+    assert "Läuft in HeatPilot. Nach Ablauf stellt es das Ziel" in js and "Setzt in Tado einen Timer" in js
     sched = js.split("function schedDlg(j)")[1].split("function pauseDlg")[0]
-    assert "r.tado_cloud" in sched and "Tado-App" in sched and "Wunschzustand von HeatPilot" in sched
+    assert "r.tado_cloud" in sched and "Tado-App" in sched and "Ziel von HeatPilot" in sched
     assert "j.hint" in js  # Hinweis der Antwort („Zeitplan in der Tado-App fortsetzen“) wird gezeigt
 
 
@@ -107,7 +112,8 @@ def test_overview_shows_weekly_plan_when_managing():
     rs = js.split("function renderSchedule(s)")[1].split("function roomCheckText")[0]
     assert 's.control_mode === "heatpilot" && e.plan' in rs and "e.plan.map((d) =>" in rs
     assert "Zeitplan – HeatPilot steuert" in rs and "Zeitplan – Beobachten" in rs
-    assert '"HeatPilot steuert" : "Beobachten – greift nicht ein"' in js
+    # 0.43: Modus steht nicht mehr in der Übersicht (Ü1 aufgelöst), sondern in der Zeile im Heizen; Wochenplan als Zeile
+    assert "schedLine(`Heute Nacht" in rs and "openSettings('steuerung', 'night-plan')" in js
     # Einstellungen: „gelernt“-Hinweis entfällt beim Wochenplan
     assert 'src === "wochenplan") return ""' in js
 
