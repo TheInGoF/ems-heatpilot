@@ -335,12 +335,12 @@ class _Run:
                 needs.append((need[0], r.name, need[1]))
         cap, cap_why = floor_limit.cap_of(self.floors, wants)
         flow, heating, why, limited = self._capped(needs, self._flow(needs, t_out), cap, cap_why)
-        dhw, dhw_why, dhw_exact = self._dhw(t, pres)
+        dhw, dhw_why, dhw_exact, dhw_hold = self._dhw(t, pres)
         night = self.cfg.is_night_at(t) if self.cfg.is_managing() else self.eng.eff.is_night(t.time())
         return {"ts": int(t.timestamp()), "t": t, "t_out": t_out, "src": src, "flow": flow, "heating": heating,
                 "why": why, "dhw": dhw, "dhw_why": dhw_why, "sps": sps, "phases": phases, "night": night,
                 "home": pres.home_count, "vacation": pres.vacation,
-                "dhw_exact": dhw_exact, "cap": cap, "limited": limited}
+                "dhw_exact": dhw_exact, "dhw_hold": dhw_hold, "cap": cap, "limited": limited}
 
     def _floor_want(self, r: _Room, needs_heat: bool, sp: float | None, first: bool) -> bool | None:
         """Fordert ein Fußboden-Raum in diesem Schritt Wärme an (für die RTL-Grenze, ``floor_limit.cap_of``)? None =
@@ -395,10 +395,11 @@ class _Run:
             return top, True, f"{name} {reason} – begrenzt durch {cap_why}", True
         return flow, heating, why, False
 
-    def _dhw(self, t: datetime, pres: Presence) -> tuple[int | None, str, float | None]:
-        """(Warmwasser-Soll auf ganze Grad wie Weg W, Grund, Empfehlung ungerundet – für die Schwelle)."""
+    def _dhw(self, t: datetime, pres: Presence) -> tuple[int | None, str, float | None, float | None]:
+        """(Warmwasser-Soll auf ganze Grad wie Weg W, Grund, Empfehlung ungerundet – für die Schwelle, gehaltene
+        Speichertemperatur ``hold`` der Empfehlung – 0.46.1, nur zur Anzeige)."""
         if not self.dhw_check["ok"]:
-            return None, "lernt noch: " + "; ".join(self.dhw_check["reasons"]), None
+            return None, "lernt noch: " + "; ".join(self.dhw_check["reasons"]), None, None
         if pres.vacation:
             someone, arrival, unknown = False, pres.arrival, None
         else:
@@ -410,7 +411,8 @@ class _Run:
                                      vacation=pres.vacation)
         self.dhw_last = rec["target"]
         # dieselbe Rundung und Schwelle wie Weg W (0.38)
-        return dhw_control.wish(rec["target"], self.cfg), rec["reason"], dhw_control.unrounded(rec["target"], self.cfg)
+        return (dhw_control.wish(rec["target"], self.cfg), rec["reason"], dhw_control.unrounded(rec["target"], self.cfg),
+                rec.get("hold"))
 
     def advance(self, row: dict, dt_h: float) -> None:
         """Raumtemperaturen einen Schritt weiter: unter dem Soll heizen mit dem Vorlauf, am Soll hält das Thermostat
@@ -473,6 +475,7 @@ def _hour(h_ts: int, rows: list[dict], writes: list[dict], dis: list[datetime], 
         # Fußboden-Grenze (0.39.1): die der Stunde und ob sie den Vorlauf gesenkt hat
         "flow_cap": _dominant([r["cap"] for r in sel]), "flow_limited": bool(heating and lead["limited"]),
         "dhw": dhw, "dhw_reason": next(r["dhw_why"] for r in sel if r["dhw"] == dhw),
+        "dhw_hold": next(r["dhw_hold"] for r in sel if r["dhw"] == dhw),  # 0.46.1: Speicher bleibt über …
         "rooms": {n: _dominant([r["sps"][n] for r in sel]) for n in names},
         "phases": {n: _dominant([r["phases"][n] for r in sel]) for n in names},
         "night": _dominant([r["night"] for r in sel]), "home": _dominant([r["home"] for r in sel]),
@@ -488,7 +491,9 @@ def _steps(rows: list[dict]) -> list[dict]:
     for r in rows:
         key = (r["flow"] if r["heating"] else None, r["heating"], r["dhw"])
         if key != prev:
-            out.append({"t": r["t"].isoformat(), "flow": key[0], "heating": key[1], "dhw": key[2]})
+            # 0.46.1, nur Anzeige (Übersicht, nächste 12 h): Gründe und gehaltene Speichertemperatur beim Wechsel
+            out.append({"t": r["t"].isoformat(), "flow": key[0], "heating": key[1], "dhw": key[2],
+                        "flow_why": r["why"], "dhw_why": r["dhw_why"], "dhw_hold": r["dhw_hold"]})
             prev = key
     return out
 

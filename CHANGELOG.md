@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.46.1
+**Übersicht: Nächste 12 Stunden bei Warmwasser und Kessel** (nur Oberfläche und Anzeige – gerechnet und geschrieben wird nichts anders)
+- **Übersicht → Warmwasser:** neue Karte „Nächste 12 Stunden“ unter den Kacheln – Stufenlinie Warmwasser-Soll, gestrichelt die gehaltene Untergrenze („Speicher bleibt über …“), Nacht/Abwesenheit als Band, Abschnitte beschriftet (Nacht, niemand zu Hause/Urlaub, Aufheizen, Zapfung erwartet, Desinfektion); darunter nur die Wechsel als eine Zeile („Jetzt 55 °C · ab 22:00 45 °C (Nacht) · ab 05:30 55 °C (vor dem Aufstehen)“) und ob HeatPilot das Soll selbst setzt
+- **Übersicht → Kessel:** Karte „Nächste 12 Stunden“ oben – Stufenlinie Vorlauf-Soll, „Heizbetrieb aus“ als graue Fläche mit Beschriftung, darunter die Wechsel („Jetzt 43–44 °C · ab 23:00 Heizbetrieb aus · ab 05:00 46 °C (heizt vor)“); gleicher Grund hintereinander wird eine Spanne, An/Aus im 5-min-Takt ein Abschnitt („zeitweise aus“ bzw. „Heizbetrieb meist aus“) statt einer Textwand
+- **Daten:** dieselbe Antwort von `api/preview` wie die Vorschau (eine Abfrage je Laden, keine zusätzliche); Tooltip je Stunde wie dort, Link „Vorschau 24 h ›“. Ohne Vorschau steht in beiden Karten ein kurzer Satz. Die Vorschau-Unterseite bleibt unverändert
+- **Vorschau (nur Anzeige, Rechenweg unverändert):** je Stunde `dhw_hold` (gehaltene Speichertemperatur der Empfehlung), je Wechsel in `steps` dazu `flow_why`, `dhw_why` und `dhw_hold`
+- **Doku:** DOCS.md – Vorschau, Absatz „Nächste 12 Stunden“
+- **Tests:** neu `tests/test_ui_v461.py`
+
 ## 0.46.0
 **Warmwasser: Ziel mit Hysterese, Komfort solange jemand wach zu Hause ist** (an Home Assistant und den Kessel wird nichts Neues geschrieben; Weg W schreibt das Warmwasser-Soll mit denselben Regeln wie bisher – nur das Ziel ist anders)
 - **Hysterese eingerechnet** (neue Datei `dhw_target.py`, die Strategie aus `DhwModel.recommend`): Jedes Ziel ist die tiefste Speichertemperatur, die gehalten werden soll („Speicher bleibt über X °C“). Weil der Kessel erst bei Soll − Einschalthysterese lädt (EMS-ESP `dhw_hyston`, Rolle `dhw_hyst_on`), ist das empfohlene Soll X + Hysterese, auf 1 K aufgerundet, höchstens das Maximum. Meldet der Kessel keine Hysterese, gelten 5 K („Hysterese 5 K angenommen“ im Grund). Die Empfehlung hat dazu `hold`, `hyst`, `hyst_assumed` und den kurzen Grund `why`
