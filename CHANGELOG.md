@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.47.1
+**Status ohne Neuladen**
+- Einstellungen → Kessel, Warmwasser und Steuerung holen den Status jetzt alle 30 s selbst (wie Heizen und Übersicht) – neue Meldungen, Ziel, Entscheidung und letzter Schreibvorgang erscheinen ohne Neuladen der Seite
+
 ## 0.47.0
 **„Nicht gefunden“ sperrt nicht mehr**
 - Manche EMS-ESP-Stände beantworten die stündliche Abfrage einzelner Kesselwerte (`/api/boiler/<wert>`) nicht, obwohl es sie gibt – HeatPilot meldete dann „EMS-ESP lässt das Vorlauf-Soll nicht schreiben (selflowtemp nicht gefunden)“ und schrieb nicht. Jetzt sperrt nur noch ein ausdrückliches „nicht schreibbar“ von EMS-ESP; geschrieben wird ohnehin über Home Assistant, und die Prüfung 60 s nach jedem Schreiben bemerkt einen Fehlschlag. Gilt für Vorlauf-Soll, Heizbetrieb, Warmwasser-Soll und Desinfektion
