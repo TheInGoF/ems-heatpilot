@@ -63,9 +63,10 @@ def test_regular_but_rare_use_keeps_water_ready():
     assert rec["target"] >= cfg.dhw_comfort_temp and "oft gezapft" in rec["reason"]
 
 
-def test_comfort_margin_lifts_the_minimum():
+def test_comfort_margin_lifts_comfort_not_the_minimum():
+    """Umgekehrt seit 0.46: Die Reserve hebt den Komfort (wach, zu Hause) – nachts gilt das Minimum."""
     m = DhwModel()
     cfg = Config()
     m.comfort_margin = 4.0
-    rec = m.recommend(datetime(2026, 10, 14, 3, 0), True, None, cfg)
-    assert rec["target"] == cfg.dhw_min_temp + 4
+    assert m.recommend(datetime(2026, 10, 14, 1, 0), True, None, cfg)["hold"] == cfg.dhw_min_temp
+    assert m.recommend(datetime(2026, 10, 14, 12, 0), True, None, cfg)["hold"] == cfg.dhw_comfort_temp + 4

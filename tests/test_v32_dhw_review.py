@@ -246,8 +246,9 @@ def test_floor_reports_margin_bound_only_with_someone_home():
 
 def _irregular_household(weeks: int, seed: int = 1):
     """Eine Dusche täglich (10 K) zu wechselnder Uhrzeit 07:30–21:30: Keine Stunde erreicht die
-    Trefferquote, die Strategie sagt immer „keine Zapfung erwartet“ – die Reserve ist die einzige
-    Korrektur. Übergabe an den Schatten wie in engine.dhw_step."""
+    Trefferquote. Bis 0.45 sagte die Strategie „keine Zapfung erwartet“ und die Reserve war die einzige
+    Korrektur; seit 0.46 hält sie Komfort, solange jemand zu Hause und wach ist. Übergabe an den Schatten wie
+    in engine.dhw_step."""
     rng = random.Random(seed)
     cfg = _cfg()
     m, sh = DhwModel(), DhwShadow()
@@ -272,20 +273,24 @@ def _irregular_household(weeks: int, seed: int = 1):
                      burner_kw_prev=10.8 if heated else 0.0)
         before = rec or {}
         rec = m.recommend(now, True, None, cfg)
-        out = sh.step(m, round(t, 1), rec["target"], res["draw_k"], STEP, cfg.dhw_comfort_temp,
-                      dhw_min=cfg.dhw_min_temp, margin_bound=bool(before.get("margin_bound")), dhw_max=cfg.dhw_max_temp)
+        out = sh.step(m, round(t, 1), rec["hold"], res["draw_k"], STEP, cfg.dhw_comfort_temp,
+                      dhw_min=cfg.dhw_min_temp, margin_bound=bool(before.get("margin_bound")), dhw_max=cfg.dhw_max_temp,
+                      top=rec["target"])
         if out["raise_margin"] and m.charges >= 3:
             m.note_cold_draw()
         cold += out["cold_draw"]
     return m, cfg, cold
 
 
-def test_irregular_household_gets_a_reserve_above_the_minimum():
+def test_irregular_household_is_warm_while_awake_without_reserve():
+    """Umgekehrt seit 0.46: kein Boden „Minimum + Reserve“ mehr – wach und zu Hause gilt Komfort, nachts Minimum."""
     m, cfg, cold = _irregular_household(4)
     assert max(m.hit_daily) < 0.25  # keine Stunde „üblich“: das Profil hilft hier nicht
-    assert m.comfort_margin >= 4.0
-    rec = m.recommend(datetime(2026, 2, 2, 3, 0), True, None, cfg)
-    assert rec["reason"] == "keine Zapfung erwartet" and rec["target"] > cfg.dhw_min_temp
+    assert cold == 0 and m.comfort_margin == 0.0  # nie zu kalt: keine Reserve nötig
+    rec = m.recommend(datetime(2026, 2, 2, 12, 0), True, None, cfg)
+    assert rec["hold"] >= cfg.dhw_comfort_temp and rec["margin_bound"]
+    rec = m.recommend(datetime(2026, 2, 2, 1, 0), True, None, cfg)
+    assert rec["hold"] == cfg.dhw_min_temp and rec["reason"].startswith("Nacht") and not rec["margin_bound"]
 
 
 # ---------------------------------------------------------------------------- daten:2 Fühlerstufe

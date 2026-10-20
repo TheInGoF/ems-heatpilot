@@ -456,7 +456,7 @@ def test_preview_uses_same_rule_and_says_writes(tmp_path):
     p = pv.preview(eng, now)
     assert p["dhw_mode"] == "heatpilot" and p["dhw_writes"] == "schreibt" and p["start"]["dhw"] == 45.0
     first = next(w for h in p["hours"] for w in h["writes"] if w["what"] == "dhw")
-    assert first["value"] == 40 and first["from"] == 45.0 and first["ts"] >= now + HOLD_S
+    assert first["value"] == 55 and first["from"] == 45.0 and first["ts"] >= now + HOLD_S  # Komfort 50 + 5 K (0.46)
     dc.state["paused"] = {"ts": now, "reason": "x"}
     assert pv.preview(eng, now)["dhw_writes"] == "würde schreiben"
     eng.cfg.dhw_control = "trocken"

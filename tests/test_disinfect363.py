@@ -204,7 +204,7 @@ def test_planned_date_covers_bath_like_detected_special():
     assert dd.planned_for(m, cfg, sunday_17, 2.0) == [sunday_17 + ready]
     assert m.big_draw_expected(sunday_17, 2.0, dd.planned_for(m, cfg, sunday_17, 2.0)) is None
     rec = m.recommend(sunday_17, True, None, cfg)
-    assert rec["target"] <= cfg.dhw_comfort_temp and not rec["reason"].startswith("große Zapfung")
+    assert rec["hold"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1 and not rec["reason"].startswith("große Zapfung")
     # Termin erst nach der Wanne (19 Uhr), zur Wanne selbst (18 Uhr) oder mehr als 12 h davor: deckt nichts
     for at in (dtime(19, 0), dtime(18, 0), dtime(5, 0)):
         cfg.dhw_disinfect_time = at
@@ -271,9 +271,9 @@ def _sim_plan(weeks: int, cfg: Config, temp_dis: float = 70.0, es73_hour: int | 
             None if prev is None else dd.shadow_mirror(m, cfg, prev, now, temp_dis))
         if mirror is not None and not res["special"]:
             log["mirrors"].append(now)
-        out = sh.step(m, round(t, 1), rec["target"], res["draw_k"], STEP, cfg.dhw_comfort_temp,
+        out = sh.step(m, round(t, 1), rec["hold"], res["draw_k"], STEP, cfg.dhw_comfort_temp,
                       dhw_min=cfg.dhw_min_temp, margin_bound=bool(before.get("margin_bound")),
-                      dhw_max=cfg.dhw_max_temp, mirror=mirror)
+                      dhw_max=cfg.dhw_max_temp, mirror=mirror, top=rec["target"])
         prev = now
         if out["raise_margin"] and m.charges >= 3:
             m.note_cold_draw()

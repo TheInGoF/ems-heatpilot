@@ -295,14 +295,14 @@ def _cold_draw_through_engine(vacation: int, expect: bool, home: int = 1) -> Eng
         eng.dhw.hit_daily = [0.5] * 24  # Strategie erwartet immer eine Zapfung
     t0 = int(datetime(2026, 10, 12, 7, 0).timestamp())
     eng.dhw_shadow.t_sim = 35.0  # Schatten kalt
-    for i, temp in enumerate([45.0, 45.0, 30.0, 30.0]):
+    for i, temp in enumerate([45.0, 45.0, 25.0, 25.0]):  # 20 K: auch mit 5 K Hysterese im Schatten zu kalt (0.46)
         eng.dhw_step(t0 + i * 300, {"dhw_temp": temp, "dhw": 0, "vacation": vacation, "home_count": home})
     return eng
 
 
 def test_reserve_rises_when_it_lifts_the_target_and_never_on_vacation():
     assert _cold_draw_through_engine(0, expect=True).dhw.comfort_margin > 1.5
-    # keine Zapfung erwartet, jemand zu Hause: der Boden Minimum + Reserve wird angehoben (0.32c)
+    # keine Zapfung erwartet, jemand zu Hause und wach: seit 0.46 Komfort + Reserve – die Reserve hebt es an
     assert _cold_draw_through_engine(0, expect=False).dhw.comfort_margin > 1.5
     assert _cold_draw_through_engine(0, expect=False, home=0).dhw.comfort_margin == 0.0  # niemand da
     assert _cold_draw_through_engine(1, expect=True).dhw.comfort_margin == 0.0

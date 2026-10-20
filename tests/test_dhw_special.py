@@ -55,10 +55,10 @@ def _sim(weeks: int, legionella: bool = True, flag: bool = True):
                      burner_kw_prev=10.8 if heated else 0.0)
         before = rec or {}
         rec = m.recommend(now, True, None, cfg)
-        out = sh.step(m, round(t, 1), rec["target"], res["draw_k"], STEP, cfg.dhw_comfort_temp,
+        out = sh.step(m, round(t, 1), rec["hold"], res["draw_k"], STEP, cfg.dhw_comfort_temp,
                       dhw_min=cfg.dhw_min_temp,
                       margin_bound=bool(before.get("margin_bound")), dhw_max=cfg.dhw_max_temp,
-                      mirror=round(t, 1) if res["special"] else None)
+                      mirror=round(t, 1) if res["special"] else None, top=rec["target"])
         if out["raise_margin"] and m.charges >= 3:
             m.note_cold_draw()
         if out["cold_draw"]:
@@ -90,9 +90,10 @@ def test_bath_after_special_charge_is_covered_and_not_recommended_for(flag):
     sunday_17 = MONDAY + timedelta(days=6, hours=17)
     assert m.big_draw_expected(sunday_17, 2.0) is None
     rec = m.recommend(sunday_17, True, None, cfg)
-    assert rec["target"] <= cfg.dhw_comfort_temp and not rec["reason"].startswith("große Zapfung")
-    # So 12 Uhr, vor der Legionellenladung: keine Zapfung erwartet, Minimum reicht – die Ladung kommt ohnehin
-    assert m.recommend(MONDAY + timedelta(days=6, hours=12), True, None, cfg)["target"] == cfg.dhw_min_temp
+    assert rec["hold"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1 and not rec["reason"].startswith("große Zapfung")
+    # So 12 Uhr, vor der Legionellenladung: seit 0.46 Komfort (jemand zu Hause und wach), nicht höher für die Wanne
+    rec = m.recommend(MONDAY + timedelta(days=6, hours=12), True, None, cfg)
+    assert cfg.dhw_comfort_temp <= rec["hold"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1
 
 
 def test_uncovered_bath_still_lifts_the_target():

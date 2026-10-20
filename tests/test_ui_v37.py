@@ -178,7 +178,9 @@ def test_tooltip_per_hour_night_preheat_and_writes(tmp_path, berlin):
     r = run_js(tmp_path, f"const P = {json.dumps(p)}; out([pvTip(P, {night}), pvTip(P, {pre}), pvTip(P, 0)]);")
     t_night, t_pre, t_first = (plain(x) for x in r)
     assert t_night.startswith("Mo 23:00–00:00 · Nacht Vorlauf-Soll: Heizbetrieb aus kein Raum braucht Wärme – Heizbetrieb aus")
-    assert "Außen: 0 °C (Vorhersage)" in t_night and "Warmwasser-Soll: 40 °C" in t_night
+    # seit 0.46: Soll = Minimum 40 °C + Hysterese (unbekannt: 5 K angenommen)
+    assert "Außen: 0 °C (Vorhersage)" in t_night and "Warmwasser-Soll: 45 °C" in t_night
+    assert "Speicher darf bis 40 °C fallen" in t_night
     h = p["hours"][pre]
     peak = f" (bis {h['flow_max']} °C)" if h["flow_max"] > h["flow"] else ""
     assert f"Vorlauf-Soll: {h['flow']} °C{peak} {h['flow_reason']}" in t_pre
