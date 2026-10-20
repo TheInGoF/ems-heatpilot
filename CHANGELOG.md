@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.46.6
+**Kessel-Sperre nennt ihren Grund**
+- Einstellungen → Kessel zeigt bei „Zurzeit gesperrt“ den genauen Grund aus der Regler-Prüfung (z. B. „Der Regler antwortet EMS-ESP nicht, der Kessel schon – HeatPilot prüft noch (2 von 3 Abfragen, mindestens 5 min)“) statt nur „unbekannt“
+
 ## 0.46.5
 **Vorheizen sanft, Fußboden-Grenze mit RTL immer, Pumpe läuft weiter**
 - **Vorheizen sanft** (`controlloop.preheat_hours`): so früh, dass der niedrigste Vorlauf ab 35 °C reicht, der innerhalb von „Vorheizen höchstens“ ans Ziel kommt – statt kurz mit dem höchsten Vorlauf (morgens kurz sehr heiß, danach wieder 35 °C). Schafft es auch der höchste nicht im Deckel, beginnt es mit dem Deckel. Die Vorschau (und damit „Kessel über HeatPilot“) findet denselben niedrigen Vorlauf (`preview._preheat_flow`)

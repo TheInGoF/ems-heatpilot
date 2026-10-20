@@ -5083,7 +5083,7 @@ function boilerModeText(mode, saved, ents, st) {
   if (!ents.flow || !ents.heating) return `<span class="msg-err">Keine Entität für ${ents.flow ? "den Heizbetrieb" : "das Vorlauf-Soll"} – unter Entitäten wählen, sonst schreibt HeatPilot nichts.</span>`;
   return `HeatPilot schreibt das Vorlauf-Soll auf <code class="eid" title="${esc(ents.flow)}">${esc(ents.flow)}</code> und schaltet den Heizbetrieb über <code class="eid" title="${esc(ents.heating)}">${esc(ents.heating)}</code> – nur ohne Regler am Bus.` +
     (reg.present === true ? ' <span class="msg-warn">Zurzeit gesperrt: EMS-ESP meldet einen Regler.</span>'
-      : reg.present === null ? ' <span class="msg-warn">Zurzeit gesperrt: ob ein Regler am Bus ist, ist unbekannt.</span>' : "");
+      : reg.present === null ? ` <span class="msg-warn">Zurzeit gesperrt: ${esc(reg.text || "ob ein Regler am Bus ist, ist unbekannt")}.</span>` : "");  // 0.46.6: genauer Grund
 }
 // Umschalten auf „HeatPilot setzt“: einmal nachfragen – Trockenlauf geprüft, Wächter angelegt?
 function boilerConfirm(body) {
