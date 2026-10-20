@@ -22,7 +22,7 @@ import asyncio
 import logging
 import time
 
-from . import house_data, house_restore, room_adopt, room_alias
+from . import house_data, house_restore, room_adopt, room_alias, room_switch
 from .backfill import backfill_rooms
 
 log = logging.getLogger("heatpilot")
@@ -158,7 +158,8 @@ class JobsMixin:
             self.status = "hole die Historie der neuen Räume"
             rows = 0
             try:
-                rows = await backfill_rooms(self.ha, self.eng, rooms, self.cfg.backfill_days)
+                rows = await backfill_rooms(self.ha, self.eng, rooms, self.cfg.backfill_days,
+                                            span=room_switch.new_spans(self.store, rooms))
             except Exception as err:  # noqa: BLE001 – neu gelernt wird trotzdem
                 log.warning("Historie der neuen Räume nicht geholt: %s", err)
             await self._build(backfill=False, relearn=True)

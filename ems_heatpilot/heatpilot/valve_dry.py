@@ -42,7 +42,7 @@ import math
 from dataclasses import dataclass
 from datetime import timedelta
 
-from . import guards, valve_learn
+from . import guards, valve_learn, valve_since
 from . import valve_predict as vp
 from .analysis import cycling_stats
 from .control import TEMP_MAX, TEMP_MIN
@@ -501,7 +501,9 @@ def summary(eng, now_ts: int, days: int = DAYS, live: dict | None = None) -> dic
     names = {r.climate: r.name for r in eng.found.rooms}
     since = midnight(local(now_ts) - timedelta(days=days - 1))
     rows = eng.store.valve_dry_log(since)
-    checked = checked_rooms(eng.store.valve_dry_log(min(since, now_ts - CAL_DAYS * 86400)))
+    cut = valve_since.get(eng.store)  # Nachprüfung nur fürs heutige Ventil (0.44: Ventil neu lernen)
+    checked = checked_rooms([r for r in eng.store.valve_dry_log(min(since, now_ts - CAL_DAYS * 86400))
+                             if r["ts"] >= cut.get(r["room"], 0)])
     starts = [r for r in rows if r["action"] != "zurück"]
     on = bool(live and live.get("on"))
     out = {

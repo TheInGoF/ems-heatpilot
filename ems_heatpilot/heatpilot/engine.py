@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import plausibility, preview_log, regulator, schedule, sleep, valve_dry, valve_learn
+from . import keep_data, plausibility, preview_log, regulator, schedule, sleep, valve_dry, valve_learn
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -242,6 +242,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
             self.control_loop.plan(ts, sample, rooms)
         self.store.commit()
+        keep_data.daily(self.store, self.cfg.keep_days, now_ts)  # 0.44: Aufbewahrung, einmal am Tag
 
         step = ts - ts % int(ROOM_STEP_H * 3600)
         if self._last_room_step is None:

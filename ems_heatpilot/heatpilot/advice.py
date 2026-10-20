@@ -38,7 +38,7 @@ import time
 from collections import defaultdict
 from datetime import datetime
 
-from . import guards
+from . import guards, valve_since
 from .balance import (  # die Satzbausteine mit Unterstrich sind nur für build gedacht
     PRESET_EFFECT_DAYS, PRESET_FORGET_DAYS, PRESET_PAUSE_DAYS, _effect_text, _member_note, _preset_action,
     balance, preset_changes, sample_hours,
@@ -76,13 +76,15 @@ def _round5(minutes: float) -> int:
 
 def _load(store, since: int, rooms_sel: set[str] | None = None, persons: list[str] | None = None):
     rooms: dict[str, list[tuple]] = defaultdict(list)
+    cut = valve_since.get(store)  # Ventilöffnung vor „Ventil lernt ab“ (0.44) gehört zu einem anderen Ventil
     for r in store.query(
         "SELECT ts, room, temp, target, valve FROM room_samples WHERE ts >= ? ORDER BY ts", (since,)
     ):
         if rooms_sel is None or r["room"] in rooms_sel:  # abgewählte Räume zählen nicht
             # Tado „aus“ (Zeitplanblock oder Geofencing): kein Soll, aber Raumtemperatur -> Frostschutz
             target = r["target"] if r["target"] is not None or r["temp"] is None else OFF_TEMP
-            rooms[r["room"]].append((r["ts"], r["temp"], target, r["valve"]))
+            valve = r["valve"] if r["ts"] >= cut.get(r["room"], 0) else None
+            rooms[r["room"]].append((r["ts"], r["temp"], target, valve))
     home = store.home_by_ts(since, persons)
     vacation = {r["ts"] for r in store.query(
         "SELECT ts FROM samples WHERE ts >= ? AND vacation = 1", (since,))}

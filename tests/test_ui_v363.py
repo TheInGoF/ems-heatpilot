@@ -34,6 +34,7 @@ const ELS = {};
 const $ = (id) => ELS[id] || (ELS[id] = { id, value: "", disabled: false, textContent: "", className: "", innerHTML: "",
   style: { setProperty() {} } });
 let HEAT = null, DIS = null, ENT = [], SET = { rooms: [] }, SUG = {}, CTRL = {}, CT = {};
+let SWITCH = null, SWITCH_BUSY = false;
 """
 NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boilerHtml",
          "DIS_NOT_YET", "splitWhen", "disinfectTile", "DAY_NAMES", "CHARGE_FROM", "DIS_BOILER",
@@ -41,6 +42,7 @@ NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boi
          "EMS_LOCK", "ctlRooms", "allRooms", "shortName", "hm", "leftText", "tileColors", "PHASE", "ctl", "managing",
          "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock", "EM_BY", "roomStates",
          "FLOOR_KINDS", "FLOOR_MAX", "FLOOR_HINT", "floorKind", "floorCell", "roomRows",  # Fußboden seit 0.39.1
+         "swRoom", "relearnHtml",  # „Ventil neu lernen“ seit 0.44
          "degC", "DIS_RESULT_CSS", "disWhen", "disDot", "disLast", "disNow", "disinfectTriggerHtml")  # Auslösen (0.42)
 
 

@@ -77,11 +77,16 @@ Kessel“, Reiter „Diagnose“), gilt die neue Unterseite gleichen Inhalts. Di
   [Weg W](#warmwasser-über-heatpilot-weg-w))
 - **Benachrichtigungen** (seit 0.38, seit 0.39.1 unter Entitäten): Ziele in Home Assistant für Meldungen, mit
   „Testnachricht senden“ (siehe [Benachrichtigungen](#benachrichtigungen))
-- **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“, seit 0.42.1 „Hausdaten wiederherstellen“ und
-  „Aus gespeicherten Daten neu lernen“ (siehe [Räume wechseln](#räume-wechseln-z-b-tado-cloud--homekit))
+- **Erweitert:** Abtastintervall, Historie, Aufbewahrung (seit 0.44, `keep_days`: eigene Rohdaten so viele Tage
+  aufheben, Standard 720, erlaubt 365–3650 – täglich fallen ältere Messpunkte, Raum- und Personenwerte,
+  Brennerereignisse, Ventil-Ersatzwerte, Fremdwärme-Ereignisse und Stundenwerte weg; Tageszähler und Gelerntes
+  bleiben), „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu einlesen“), seit 0.42.1 „Hausdaten
+  wiederherstellen“ und „Aus gespeicherten Daten neu lernen“ (siehe [Räume wechseln](#räume-wechseln-z-b-tado-cloud--homekit))
 
 Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
-(„Vorschläge übernehmen“ setzt die Räume erneut und Gaszähler, Wetter und Außenfühler auf „Automatik“). **Speichern** prüft alle Eingaben,
+(„Vorschläge übernehmen“ setzt Gaszähler, Wetter und Außenfühler auf „Automatik“ und füllt leere Sensor-Felder der
+Räume; seit 0.44 bleiben gespeicherte Räume dabei, wie sie sind – vorher hakte der Knopf die automatische Auswahl an,
+und ein zweites Gerät im Raum konnte Schlüssel werden). **Speichern** prüft alle Eingaben,
 erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen in
 `/data/settings.json` und bleiben bei Updates erhalten.
 
@@ -1456,13 +1461,21 @@ verloren:
   Soll, Ventil, Feuchte – ein schon gespeicherter Messpunkt bleibt, wie er ist) und lernt dann aus den gespeicherten
   Daten neu. Die Langzeitstatistik wird dafür nicht neu gelesen, nichts wird gelöscht. Nur geänderte
   Leistungssensoren lesen die Historie wie bisher ganz neu ein (zusammenführend, siehe nächster Punkt).
-- **Nie mit „unbekannt“ überschreiben:** Liest HeatPilot die Langzeitstatistik oder die Historie neu ein (auch mit
-  „Historie neu einlesen“), behält jede Stunde ihre gespeicherte Außentemperatur, ihren Gaswert und ihre Anteile, wenn
-  die neue Quelle dazu nichts hat, und eine gespeicherte Innentemperatur immer. Ein Messpunkt behält jeden Wert, zu dem
-  Home Assistant nichts hat – etwa Vorlauf und Brenner direkt von EMS-ESP –; Brennerereignisse ersetzt das Neueinlesen
-  nur, wenn Home Assistant die Brenner-Entität hat, Raumwerte je Raum erst ab dem ersten Zeitpunkt seiner Historie in
-  Home Assistant – ältere und die alter Entitäten bleiben. Warmwasser- und Personenmodelle bleiben bei „Historie neu
-  einlesen“ stehen; Haus-, Raum- und Ventilmodelle lernen neu.
+- **Die eigene Datenbank ist die Wahrheit (seit 0.44):** Liest HeatPilot aus Home Assistant (erster Start,
+  „Lücken aus Home Assistant füllen“, Historie neuer Räume, „Hausdaten wiederherstellen“, Langzeitstatistik), löscht
+  und überschreibt das nichts Eigenes. Ein gespeicherter Messpunkt, Raum- und Personenwert bleibt, wie er ist; Home
+  Assistant ergänzt nur fehlende Zeitpunkte und leere Werte. Brennerereignisse aus Home Assistant kommen nur in
+  Zeiträume, in denen HeatPilot den Brenner nicht selbst verfolgt hat. Eine Stunde behält ihre gespeicherte
+  Außentemperatur, ihren Gaswert und ihre Anteile, wenn die neue Quelle dazu nichts hat, und eine gespeicherte
+  Innentemperatur immer. Warmwasser- und Personenmodelle bleiben beim Lückenfüllen stehen; Haus-, Raum- und
+  Ventilmodelle lernen neu.
+- **Thermostat gewechselt (seit 0.44):** Jeder Raum hat eine feste Kennung (Feld `id` am Raum-Eintrag, beim ersten
+  Start ergänzt). Bekommt ein Raum ein anderes Schlüsselgerät (Tado-Cloud → HomeKit, neues Thermostat), fragt
+  HeatPilot unter Räume: **gleiches Thermostat, neue Anbindung** (alle Daten und Gelerntes ziehen um), **anderes
+  Thermostat** (Raumwerte ziehen um, das Ventil lernt ab dem Wechsel neu) oder **alles neu lernen** (nichts zieht um,
+  die alten Werte bleiben „ohne Raum“ und lassen sich später übernehmen). Bis zur Wahl misst der Raum normal weiter.
+  Benennt Home Assistant nur die Entität um (dasselbe Gerät), zieht alles ohne Rückfrage um. „Ventil neu lernen“
+  verlernt jederzeit nur das Ventil eines Raums; gelöscht wird dabei nichts, das Verlernte steht im Protokoll.
 - **Innentemperatur aus einem Teil der Räume:** Fehlt einer Stunde ein Raum (sein neuer Sensor hat noch keine
   Statistik, für ihn gibt es keinen alten Sensor, das Thermostat meldete nichts), wäre das Mittel der übrigen um ihren
   Abstand zum Hausmittel verschoben – zwei Räume mit ±1,5 K ergäben 1,5 K zu warm, das Hausmodell läge weit daneben.
@@ -1534,6 +1547,42 @@ Hausmodell lernt solche Stunden nicht; auch die Grafik „Wärmebedarf des Hause
 fehlen. Darunter: was zuletzt neu gelernt bzw. übernommen wurde. Ein Klick auf die Karte führt zu „Modelle –
 Einzelheiten“ (Einstellungen → Diagnose). Die Kacheln mit Wärmeverlust, Heizlast und Trägheit erscheinen wie bisher erst mit
 plausiblem Hausmodell – die Karte steht immer da.
+
+### Thermostat wechseln
+
+Seit 0.44 hat jeder Raum eine feste Kennung. Meldet sich ein Raum mit einem anderen Thermostat (andere climate-Entität:
+Tado-Cloud → HomeKit, neu gekoppeltes Zigbee-Thermostat, getauschtes Gerät), steht unter Einstellungen → **Räume** oben
+ein Hinweis „… : anderes Thermostat erkannt“ mit dem bisherigen und dem neuen Thermostat und drei Knöpfen; Übersicht →
+Status zeigt so lange die Zeile „Thermostat gewechselt: … – wartet auf deine Wahl“. Nach dem Speichern der Einstellungen
+öffnet ein erkannter Wechsel die Seite von selbst.
+
+- **Gleiches Thermostat, neue Anbindung** – dasselbe Gerät, nur anders eingebunden: alle Messwerte und Gelerntes ziehen
+  um, Raum- und Ventilmodell rechnet HeatPilot daraus neu (dauert etwas, die Seite zeigt den Fortschritt).
+- **Anderes Thermostat – Ventil lernt neu** – wirklich ein anderes Gerät: Raumwerte (Temperaturen, Soll, Fremdwärme)
+  ziehen um, das Raummodell (Aufheizen, Auskühlen) bleibt. Das Ventil lernt ab dem ersten Wert des neuen Thermostats –
+  Ventilmodell, hydraulischer Abgleich und Nachprüfung im Beobachten zählen die alte Ventilöffnung nicht.
+- **Alles neu lernen** – nichts zieht um; die alten Werte bleiben unter „Gespeicherte Daten ohne Raum“ und lassen sich
+  später noch übernehmen.
+
+Jede Wahl kommt erst nach einer Rückfrage; bis dahin misst der Raum normal weiter. Benennt Home Assistant nur die
+Entität um (gleiches Gerät laut Registry), zieht alles ohne Rückfrage um. Unter „Einzelheiten“ jedes Raums verlernt
+**„Ventil neu lernen“** jederzeit nur das Ventil (z. B. nach Tausch des Ventilkopfs): Messwerte und Raummodell bleiben,
+das Ventil lernt ab jetzt. Alle Wechsel und was verlernt wurde stehen unter Räume im aufklappbaren Protokoll.
+
+### Home Assistant füllt nur Lücken
+
+Die eigene Datenbank ist die Wahrheit. **„Lücken aus Home Assistant füllen“** (Einstellungen → Erweitert, bis 0.43
+„Historie neu einlesen“) liest Langzeitstatistik und Recorder-Historie und ergänzt nur fehlende Zeitpunkte und leere
+Werte; gespeicherte Werte gewinnen, nichts wird gelöscht. Danach lernen Haus-, Raum- und Ventilmodelle neu.
+
+### Daten aufbewahren
+
+Einstellungen → Erweitert → **Daten aufbewahren (Tage)** (`keep_days`, Standard 720, erlaubt 365–3650): Einmal am Tag
+löscht HeatPilot eigene Rohdaten, die älter sind – Messpunkte, Raum- und Personenwerte, Brennerereignisse,
+Ventil-Ersatzwerte, Fremdwärme-Ereignisse und Stundenwerte. Tageswerte und Gelerntes bleiben. Home Assistant hält seine
+Historie meist nur wenige Tage; HeatPilot hebt seine eigenen Werte also deutlich länger auf. Die Grenze zählt vom neuesten
+eigenen Messpunkt und rückt je Tag höchstens zwei Tage vor – eine falsch vorgehende Uhr löscht so nichts auf einen
+Schlag. Die Langzeitstatistik (`statistics_backfill_days`) wird höchstens so weit zurück geholt, wie aufbewahrt wird.
 
 ## Wärmebedarf aus dem Tado-Soll
 
@@ -1681,9 +1730,9 @@ Schichten halten sie vom Lernen fern:
 Was ignoriert wurde, steht in der Übersicht unter „Leitplanken“, im Selbsttest
 (Einstellungen → Diagnose) und im Log. Beim Update auf 0.14 wird der Lernstand einmal
 mit diesem Schutz aus den gespeicherten und den Home-Assistant-Daten neu
-berechnet; „Historie neu einlesen“ macht dasselbe auf Knopfdruck. Seit 0.42.1 überschreibt das Neueinlesen dabei
-keine gespeicherten Werte mehr mit „unbekannt“ (auch nicht Kesselwerte, die direkt von EMS-ESP kamen), und
-Warmwasser- und Personenmodelle bleiben; ohne Home Assistant zu fragen, rechnet „Aus gespeicherten Daten neu
+berechnet; „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu einlesen“) macht dasselbe auf Knopfdruck. Seit
+0.44 gewinnen dabei immer die gespeicherten Werte – Home Assistant ergänzt nur, was fehlt –, und Warmwasser- und
+Personenmodelle bleiben; ohne Home Assistant zu fragen, rechnet „Aus gespeicherten Daten neu
 lernen“ (siehe [Räume wechseln](#räume-wechseln-z-b-tado-cloud--homekit)).
 
 ## Fußbodenheizung je Raum

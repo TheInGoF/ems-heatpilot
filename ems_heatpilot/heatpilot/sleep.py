@@ -195,7 +195,9 @@ def learn(store, now_ts: int) -> dict[str, dict]:
     for key in [k for k in nights if date.fromisoformat(k) < oldest]:
         del nights[key]
         changed = True
-    first = store.query("SELECT MIN(ts) AS t FROM samples WHERE power_w IS NOT NULL")[0]["t"]
+    since = store.get("power.since")  # 0.44: ältere Hausleistung gehört zu früher gewählten Sensoren
+    first = store.query("SELECT MIN(ts) AS t FROM samples WHERE power_w IS NOT NULL AND ts >= ?",
+                        (int(since) if isinstance(since, (int, float)) else 0,))[0]["t"]
     if first is not None:
         # erste Nacht, deren Fenster ganz nach dem ersten Messwert liegt – angebrochene Nächte nicht zählen
         day = _local(first).date() - timedelta(days=1)

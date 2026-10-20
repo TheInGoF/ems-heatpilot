@@ -27,7 +27,8 @@ Seit 0.42.1 „Gelerntes übernehmen“ (``web_adopt``): ``GET api/rooms/adopt``
 ``POST api/rooms/adopt`` (Messwerte einer alten Entität einem Raum zuordnen, Modelle neu lernen – nichts an HA),
 ``GET``/``POST api/rooms/aliases`` (alter Temperatursensor je Raum für die Langzeitstatistik); Hausdaten und Modelle
 (``web_restore``): ``GET api/models``, ``POST api/house/restore``, ``POST api/house/relearn``, ``GET api/house/job``;
-``summary.models`` (Karte „Modelle“).
+``summary.models`` (Karte „Modelle“). Seit 0.44 Thermostatwechsel (``web_switch``): ``GET``/``POST api/rooms/switch``,
+``POST api/rooms/valve_relearn``; ``POST api/settings`` nennt offene Wechsel (``switches``).
 
 Seit 0.39.1 ``GET api/entity_map`` (nur lesen): alle Rollen in Gruppen mit Zweck, nötig/optional, Filter und dem, was
 gilt (``entity_map``) – für die Seite „Entitäten“ in den Einstellungen. Gespeichert wird weiter über ``api/settings``.
@@ -49,7 +50,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
-from . import boiler_power, disinfect_entity, web_adopt, web_restore
+from . import boiler_power, disinfect_entity, room_identity, web_adopt, web_restore, web_switch
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -271,7 +272,8 @@ def make_app(app) -> web.Application:
         rooms = [{"name": r.name, "climate": r.climate, "controller": r.controller,
                   "members": [m["climate"] for m in r.members], **({"ems": True} if r.ems else {})}
                  for r in (app.eng.found.rooms if app.eng is not None else [])]
-        return json_response({"ok": True, "rooms": rooms, "preset_changes": changes})
+        switches = room_identity.open_switches(app.eng.store) if app.eng is not None else []  # 0.44: Wechsel offen?
+        return json_response({"ok": True, "rooms": rooms, "preset_changes": changes, "switches": switches})
 
     async def test_emsesp(req):
         host = (await req.json()).get("host", "").strip()
@@ -576,6 +578,8 @@ def make_app(app) -> web.Application:
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
     # 0.42.1: Gelerntes übernehmen und Aliasse (web_adopt), Hausdaten wiederherstellen, neu lernen, Modelle
-    for method, path, handler in web_adopt.routes(app, json_response) + web_restore.routes(app, json_response):
+    # 0.44: Thermostatwechsel und „Ventil neu lernen“ (web_switch)
+    for method, path, handler in (web_adopt.routes(app, json_response) + web_restore.routes(app, json_response)
+                                  + web_switch.routes(app, json_response)):
         web_app.router.add_route(method, path, handler)
     return web_app

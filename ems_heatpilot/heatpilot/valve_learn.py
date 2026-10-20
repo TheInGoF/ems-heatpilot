@@ -28,6 +28,7 @@ import time
 from itertools import pairwise
 
 from . import valve_model as vm
+from . import valve_since
 from .values import local
 
 HISTORY_DAYS = 60          # beim ersten Mal so weit zurück lernen
@@ -322,8 +323,8 @@ def _errors(model: vm.ValveModel, rows: list[Row], a: int, b: int) -> None:
 
 def learn_chunk(store, model: vm.ValveModel, climate: str, until: int, running_ext: int | None = None) -> bool:
     """Einen Abschnitt (höchstens ``CHUNK_S``) bis ``until`` lernen. True, wenn danach noch etwas offen ist."""
-    if model.learned_until is None:
-        since = until - HISTORY_DAYS * 86400
+    if model.learned_until is None:  # nicht vor „Ventil lernt ab“ (0.44: Ventil neu lernen, anderes Thermostat)
+        since = max(until - HISTORY_DAYS * 86400, valve_since.of(store, climate))
         first = store.query("SELECT MIN(ts) AS t FROM room_samples WHERE ts >= ? AND room = ?", (since, climate))
         # ohne Messwerte gibt es nichts nachzulernen: ab jetzt laufend (nicht jeden Takt erneut suchen)
         model.learned_until = until if not first or first[0]["t"] is None else int(first[0]["t"])

@@ -334,13 +334,18 @@ def test_apply_settings_reloads_history_when_power_sensors_change(tmp_path, monk
         await asyncio.sleep(0)
         assert reloads == []  # Sensoren gleich: kein Neueinlesen
         app.store.add_sample(1_000, {"power_w": 300.0, "power_ex_w": 10.0})
+        recent = int(time.time()) - 3600
+        app.store.add_sample(recent, {"power_w": 300.0, "power_ex_w": 10.0})
         current[0] = ["sensor.l1", "sensor.l2"]
         assert await app.apply_settings({"power_sensors": current[0]}) == []
         await asyncio.sleep(0)
         assert reloads == [True]
-        # Werte der alten Sensoren sind verworfen – sie zählen nicht als Nächte
-        row = app.store.query("SELECT power_w, power_ex_w FROM samples WHERE ts = 1000")[0]
+        # Werte der alten Sensoren zählen nicht als Nächte: seit 0.44 verworfen nur im Fenster, das HA neu füllt –
+        # ältere bleiben gespeichert, gelten aber erst ab kv power.since
+        row = app.store.query("SELECT power_w, power_ex_w FROM samples WHERE ts = ?", (recent,))[0]
         assert row["power_w"] is None and row["power_ex_w"] is None
+        assert app.store.query("SELECT power_w FROM samples WHERE ts = 1000")[0]["power_w"] == 300.0
+        assert app.store.get("power.since") > 1000
         current[1] = ["sensor.wm"]
         assert await app.apply_settings({"power_exclude": current[1]}) == []
         await asyncio.sleep(0)
