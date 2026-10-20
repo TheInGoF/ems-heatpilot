@@ -739,12 +739,12 @@ ul.rules li { margin: 3px 0; }
     <div class="card diag-files" id="diag-files">
       <h2>Dateien</h2>
       <p>Für die Fehlersuche: Log, Einstellungen, Modelle und 48 h Messwerte – ohne GPS und Zugangsdaten.</p>
-      <div class="row"><a class="btn primary" href="api/diagnostics/bundle" download style="text-decoration:none">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div>
+      <div class="row"><a class="btn primary" href="api/diagnostics/bundle" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-diag')">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div><div class="dl-msg muted" id="dl-diag"></div>
       <p>Alles Gelernte als Klartext zum Nachrechnen – ohne GPS.</p>
       <div class="row"><select id="export-days" class="sel">
         <option value="7">7 Tage</option><option value="14" selected>14 Tage</option><option value="30">30 Tage</option></select>
-        <a class="btn" id="export-btn" href="api/export?days=14" download style="text-decoration:none">Gelernte Werte herunterladen</a>
-        <span class="muted" id="export-size"></span></div>
+        <a class="btn" id="export-btn" href="api/export?days=14" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-export')">Gelernte Werte herunterladen</a>
+        <span class="muted" id="export-size"></span></div><div class="dl-msg muted" id="dl-export"></div>
       <details class="more" style="margin-top:8px"><summary>Was steht drin? <span class="m"></span></summary><div>Diagnose-Datei: Log, Selbsttest, Einstellungen, erkannte Entitäten, gelernte Modelle und die Messwerte der letzten 48 Stunden – ohne GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten; du kannst sie zur Fehlersuche weitergeben. Gelernte Werte: alles, was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in Klartext mit Gütemaß, dazu die Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage. Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat.</div></details>
     </div>
     <div class="card">
@@ -3897,6 +3897,40 @@ async function valveRelearn(btn) {
   await loadSwitch(j.ok ? `<span class="msg-ok">Ventil von ${esc(j.name || r.name)} verlernt – es lernt ab ${esc(isoWhen(j.valve_since))} neu.</span> Messwerte bleiben.`
     : `<span class="msg-err">Nicht verlernt: ${esc(j.error || "unbekannter Fehler")}</span>`);
   const box = $("room-switch"); if (box && box.scrollIntoView) box.scrollIntoView({ block: "nearest" });
+}
+
+// ---------------------------------------------------------------- Dateien herunterladen (0.44.1)
+// Ein direkter Link öffnet sich in der Home-Assistant-App außerhalb der Anmeldung (Datei enthält nur „401: Unauthorized“).
+// Deshalb holt die Seite die Datei selbst (wie die übrigen Abfragen) und bietet danach Speichern, Teilen und Kopieren an –
+// jeder Knopf ist ein eigener Klick, so lässt auch iOS das Teilen zu.
+let DL = null;  // {blob, name}
+async function dlClick(ev, link, msgId) {
+  ev.preventDefault();
+  const msg = $(msgId);
+  msg.textContent = "Lade …";
+  let r;
+  try { r = await fetch(link.getAttribute("href"), { cache: "no-store" }); }
+  catch (e) { msg.textContent = "Keine Verbindung zum Add-on: " + e; return false; }
+  if (!r.ok) { msg.textContent = `Fehler ${r.status} – bitte die Seite neu laden.`; return false; }
+  const m = (r.headers.get("content-disposition") || "").match(/filename="([^"]+)"/);
+  DL = { blob: await r.blob(), name: m ? m[1] : "heatpilot.json" };
+  const share = !!(navigator.canShare && navigator.canShare({ files: [dlFile()] }));
+  msg.innerHTML = `${esc(DL.name)} (${fmt(DL.blob.size / 1024, 0)} kB) · <button class="btn small" onclick="dlSave()">Speichern</button>` +
+    (share ? ` <button class="btn small" onclick="dlShare()">Teilen</button>` : "") +
+    ` <button class="btn small" onclick="dlCopy(this)">Kopieren</button>`;
+  return false;
+}
+const dlFile = () => new File([DL.blob], DL.name, { type: DL.blob.type || "application/json" });
+function dlSave() {
+  const url = URL.createObjectURL(DL.blob), a = document.createElement("a");
+  a.href = url; a.download = DL.name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+}
+async function dlShare() { try { await navigator.share({ files: [dlFile()], title: DL.name }); } catch (e) { /* abgebrochen */ } }
+async function dlCopy(btn) {
+  try { await navigator.clipboard.writeText(await DL.blob.text()); btn.textContent = "Kopiert"; }
+  catch (e) { btn.textContent = "Kopieren hier nicht möglich"; }
 }
 
 // ---------------------------------------------------------------- Karte „Modelle“ (0.42.1)
