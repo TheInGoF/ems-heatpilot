@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.47.0
+**„Nicht gefunden“ sperrt nicht mehr**
+- Manche EMS-ESP-Stände beantworten die stündliche Abfrage einzelner Kesselwerte (`/api/boiler/<wert>`) nicht, obwohl es sie gibt – HeatPilot meldete dann „EMS-ESP lässt das Vorlauf-Soll nicht schreiben (selflowtemp nicht gefunden)“ und schrieb nicht. Jetzt sperrt nur noch ein ausdrückliches „nicht schreibbar“ von EMS-ESP; geschrieben wird ohnehin über Home Assistant, und die Prüfung 60 s nach jedem Schreiben bemerkt einen Fehlschlag. Gilt für Vorlauf-Soll, Heizbetrieb, Warmwasser-Soll und Desinfektion
+- **Tests:** `tests/test_boiler467.py` ergänzt
+
 ## 0.46.9
 **„Regler ist abgebaut“ – der Nutzer gibt das Go**
 - Neuer Haken unter Einstellungen → Kessel: „Regler ist abgebaut“. Angehakt wartet HeatPilot nicht mehr auf die automatische Regler-Prüfung (manche EMS-ESP-Stände melden einen abgebauten Regler nie eindeutig). Nur wenn EMS-ESP trotzdem echte Werte eines Reglers liefert, bleibt es gesperrt; die Prüfung nach jedem Schreibvorgang (fremde Änderungen pausieren) bleibt wie bisher. Standard: aus – alte Einstellungen gelten unverändert

@@ -9,7 +9,9 @@ from test_boiler41 import T0, calls, house, step
 
 
 def _feedback_only(eng):
-    eng.ems_controls = {"selflowtemp": {"found": True, "writeable": True, "value": 30}}  # heatingactivated fehlt
+    # heatingactivated nur Rückmeldung (EMS-ESP: nicht schreibbar); seit 0.46.10 sperrt „nicht gefunden“ nicht mehr
+    eng.ems_controls = {"selflowtemp": {"found": True, "writeable": True, "value": 30},
+                        "heatingactivated": {"found": True, "writeable": False, "value": True}}
     eng.ems_controls_ts = time.time()
 
 
@@ -53,3 +55,13 @@ def test_boost_end_without_setpoint_uses_schedule_and_off_only_without_any(tmp_p
     done = [(p["service"], p.get("service_data")) for p in ha.payloads if p["domain"] == "climate"]
     assert done[-1] == ("set_temperature", {"temperature": 20.5})
     assert not any(srv == "set_hvac_mode" and data.get("hvac_mode") in ("auto", "off") for srv, data in done)
+
+
+def test_not_found_controls_do_not_block(tmp_path):
+    """0.46.10: EMS-ESP beantwortet die Abfrage einzelner Werte nicht („nicht gefunden“), obwohl es sie gibt – das
+    sperrt nicht; nur „ausdrücklich nicht schreibbar“ sperrt."""
+    eng, ha, bc = house(tmp_path)
+    eng.ems_controls, eng.ems_controls_ts = {}, time.time()  # nichts gefunden
+    assert be.write_problems(eng, bc.entities["flow"], bc.entities["heating"]) == []
+    eng.ems_controls = {"selflowtemp": {"found": True, "writeable": False}}
+    assert any("selflowtemp nicht schreibbar" in p for p in be.write_problems(eng, bc.entities["flow"], None))
