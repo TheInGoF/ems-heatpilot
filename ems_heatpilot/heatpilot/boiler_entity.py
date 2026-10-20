@@ -161,16 +161,31 @@ def heating_off(eng) -> str | None:
     return HEATING_OFF_TEXT if flag(eng._boiler("heating_off")) == 1 else None
 
 
+def heat_needed(cfg) -> bool:
+    """Braucht HeatPilot den Schalter Heizbetrieb? Nur bei „Heizbetrieb ganz aus“ – bei „Pumpe läuft weiter“ (Standard)
+    bleibt der Heizbetrieb an und HeatPilot führt den Kessel allein über das Vorlauf-Soll (0.46.7)."""
+    return getattr(cfg, "boiler_idle", "pumpe") == "aus"
+
+
+def heat_usable(eng, heat: str | None) -> bool:
+    """Lässt sich der Heizbetrieb schalten (Entität taugt, EMS-ESP lässt schreiben)? Bei manchen Kesseln ist
+    ``heatingactivated`` nur eine Rückmeldung – dann schaltet HeatPilot ihn nie (0.46.7)."""
+    return (heat_problem(heat, eng.states.get(heat) if heat else None, eng.found) is None
+            and eg.ems_write_blocked(eng, EMS_HEAT, HEAT_WHAT) is None)
+
+
 def write_problems(eng, flow: str | None, heat: str | None, now: float | None = None) -> list[str]:
     """Alle Hindernisse fürs Schreiben (dieselben wie in „Bereit für die Steuerung?“): Regler am Bus, Entitäten (auch
     dieselbe wie das Warmwasser-Soll), schreibbar laut EMS-ESP, „Heizen abschalten“, Obergrenze unter 35 °C. Leer =
     darf."""
     r = regulator(eng, now)
     out = [] if r["present"] is False else [r["text"]]
+    need_heat = heat_needed(eng.cfg)  # 0.46.7: der Schalter sperrt nur, wenn er gebraucht wird
     out += [p for p in (flow_problem(flow, eng.states.get(flow) if flow else None, eng.found),
-                        heat_problem(heat, eng.states.get(heat) if heat else None, eng.found),
+                        heat_problem(heat, eng.states.get(heat) if heat else None, eng.found) if need_heat else None,
                         same_entity(eng.cfg, eng.found, eng.states),
-                        eg.ems_write_blocked(eng, EMS_FLOW, FLOW_WHAT), eg.ems_write_blocked(eng, EMS_HEAT, HEAT_WHAT),
+                        eg.ems_write_blocked(eng, EMS_FLOW, FLOW_WHAT),
+                        eg.ems_write_blocked(eng, EMS_HEAT, HEAT_WHAT) if need_heat else None,
                         heating_off(eng)) if p]
     if eng.cfg.max_flow_temp < FLOW_MIN:
         out.append(f"Höchster Vorlauf {eng.cfg.max_flow_temp} °C liegt unter {FLOW_MIN} °C – kein Vorlauf-Soll möglich")

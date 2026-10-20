@@ -221,6 +221,10 @@ def _entity_info(eng, what: str, entity: str | None, source: str | None) -> tupl
             "min": num(attrs.get("min")), "max": num(attrs.get("max")), "ems_key": key, "writeable": ems["writeable"],
             "writeable_polled": ems["polled"]}
     blocked = eg.ems_write_blocked(eng, key, be.FLOW_WHAT if what == "flow" else be.HEAT_WHAT)
+    if what == "heating" and not be.heat_needed(eng.cfg) and (problem or blocked):  # 0.46.7: nur Rückmeldung
+        info["feedback_only"] = True
+        note = "nur Rückmeldung des Kessels – HeatPilot schaltet den Heizbetrieb nicht (Pumpe läuft weiter)"
+        return info, [], [note]
     return info, [p for p in (problem, blocked) if p], [doubt] if doubt else []
 
 
