@@ -13,7 +13,7 @@ from test_ui_v361 import NODE, html, plain, script, source
 ROOT = Path(__file__).resolve().parents[1]
 NAMES = ("fmt", "esc", "tsOf", "tclock", "wday", "WEEKDAYS", "clock", "timeTicks", "tipKey", "PV_C", "isoOff", "hhmm", "isoClock",
          "HP_OFF", "hpOff", "hpDate", "hpClock", "hpDay", "hpDayKey", "hpHours", "hpTicks", "NX_H", "NX_EMPTY", "nxWin",
-         "NX_KIND", "nxKind", "nxMin", "nxJoin", "nxSameVal", "nxSame", "nxRuns", "nxDis", "nxDur", "nxDeg", "nxVal",
+         "NX_KIND", "nxName", "nxKind", "nxMin", "nxJoin", "nxSameVal", "nxSame", "nxRuns", "nxDis", "nxDur", "nxDeg", "nxVal",
          "nxTime", "nxTip", "nxWidths", "nxRender", "drawNext", "nxCard", "NX_MORE")
 
 

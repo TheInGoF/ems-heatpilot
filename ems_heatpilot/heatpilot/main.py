@@ -238,7 +238,8 @@ class App(JobsMixin):
         entity = target_entity(cfg, found, eng.states)
         boiler = {"flow": flow_target(cfg, found, eng.states), "heating": heat_target(cfg, found, eng.states)}
         writes = {"flow": boiler["flow"][0], "heating": boiler["heating"][0], "max": cfg.max_flow_temp,
-                  "floors": floor_limit.floor_rooms(cfg, found.rooms)} if cfg.writes_boiler() else None
+                  "floors": floor_limit.floor_rooms(cfg, found.rooms),
+                  "pump": cfg.boiler_idle == "pumpe"} if cfg.writes_boiler() else None
         dis = disinfect_entity.target(cfg, found, eng.states)
         self.control = Control(self.ha, self.store, found.rooms, states=eng.states,
                                dhw_entity=entity[0] if cfg.writes_dhw() else None,

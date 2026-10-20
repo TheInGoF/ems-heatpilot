@@ -33,8 +33,8 @@ LIMITS = {
     "room_tau_h": (2.0, 300.0),
     "room_heat_gain": (1e-4, 1.0),
     "room_min_updates": 96,                  # mind. 2 Tage à 30 min
-    # Vorlauf-Verhältnis (a+f)/b: 0,3 ≈ 130 °C, 3 ≈ 32 °C Vorlauf für 21 °C bei −12 °C
-    "room_static_gain": (0.3, 3.0),
+    # Vorlauf-Verhältnis (a+f)/b: 0,3 ≈ 130 °C, 3 ≈ 32 °C, 6 ≈ 26 °C Vorlauf für 21 °C bei −12 °C
+    "room_static_gain": (0.3, 6.0),  # 0.46.5: große Heizkörper bei kleiner Heizlast (vorher 3)
     # Fußbodenheizung (seit 0.45): große Heizfläche, niedriger Vorlauf – (a+f)/b bis 6 ≈ 26 °C Vorlauf
     "room_static_gain_floor": (0.3, 6.0),
     "room_min_excitation": 15.0,             # K·h Heizbetrieb gesehen

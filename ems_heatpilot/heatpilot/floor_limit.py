@@ -6,10 +6,11 @@ Ein Raum-Eintrag der Einstellungen (Räume) sagt mit ``floor_type``, wie seine F
 * **mischer** – ein Mischer regelt die Fußboden-Temperatur selbst nach: Der Vorlauf darf höher sein, wie es gerade
   passt; aus diesem Raum kommt keine Grenze.
 * **rtl** – Rücklauftemperaturbegrenzer (RTL-Ventil): Ist der Boden kalt, fließt zuerst der volle Vorlauf hinein. Die
-  Grenze gilt, solange der Raum Wärme anfordert – ein Gerät des Raums (bei Gruppen genügt eines) mehr als 0,1 K unter
-  seinem Soll, Ventil über 5 % oder ``hvac_action`` „heating“ bzw. „preheating“ (Home Assistant: heizt vor): Fordert
-  der Heizkörper Wärme an, ist auch der Boden zu kalt. Ist es nicht bekannt (Thermostat ohne Zustand bzw. nicht
-  verfügbar, ausgeschaltet ohne ``hvac_action``), gilt sie auch (sicher).
+  Grenze gilt seit 0.46.5 **immer** (vorher nur, solange der Raum Wärme anforderte): Das RTL-Ventil öffnet, sobald der
+  Rücklauf kalt ist – auch wenn der Heizkörper im Raum gerade nichts anfordert. Die Anforderung (``demand``) – ein Gerät
+  des Raums (bei Gruppen genügt eines) mehr als 0,1 K unter seinem Soll, Ventil über 5 % oder ``hvac_action``
+  „heating“ bzw. „preheating“ (Home Assistant: heizt vor); unbekannt ohne Zustand bzw. nicht verfügbar, ausgeschaltet
+  ohne ``hvac_action`` – steht nur noch im Grund („fordert an“, „fordert nicht an“, „Anforderung unbekannt“).
 * **direkt** – direkt am Kessel: Die Grenze gilt immer, auch ohne Raummodell und ohne Messwert.
 
 Räume aus ``floor_heating_rooms`` (Einstellungen vor 0.39.1) ohne Anschluss heißen „unbekannt“ und gelten wie „direkt“;
@@ -18,11 +19,11 @@ Fußbodenheizung (Raummodelle, Abgleich, Zeitplan, Vorschau fragen dort): ``migr
 Anschluss. Bei einer Gruppe zählt jedes Gerät mit Fußboden-Angabe, es gilt die strengere (direkt vor RTL vor Mischer,
 die niedrigste Grenze).
 
-``flow_cap`` gibt die wirksame Grenze jetzt: das Minimum über die Fußboden-Räume, für die sie gerade gilt, mit Grund
+``flow_cap`` gibt die wirksame Grenze jetzt: das Minimum über die Fußboden-Räume ohne Mischer, mit Grund
 („Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C“); ``cap_of`` dasselbe für eine bekannte Anforderung je Raum.
 Die Vorschau nimmt jetzt (erster Schritt) dieselbe Anforderung aus den Messwerten wie ``flow_cap``, danach die Schritte,
-in denen der Raum laut Vorschau Wärme braucht; ist ein Gerät ohne Zustand (``blind``), bleibt sie offen – die Grenze
-gilt. Reine Funktionen, schreibt nichts.
+in denen der Raum laut Vorschau Wärme braucht; ist ein Gerät ohne Zustand (``blind``), bleibt sie offen – für den Grund.
+Reine Funktionen, schreibt nichts.
 """
 
 from __future__ import annotations
@@ -184,10 +185,9 @@ def blind(room: FloorRoom, readings: dict) -> bool:
 
 # ------------------------------------------------------------------ Grenze
 def applies(room: FloorRoom, need: bool | None) -> bool:
-    """Gilt die Grenze des Raums? Mischer nie, RTL solange er Wärme anfordert (offen: ja), direkt/unbekannt immer."""
-    if room.kind == "mischer":
-        return False
-    return need is not False if room.kind == "rtl" else True
+    """Gilt die Grenze des Raums? Mischer nie, sonst immer – seit 0.46.5 auch beim RTL-Ventil: Es öffnet, sobald der
+    Rücklauf kalt ist, unabhängig davon, ob der Raum Wärme anfordert (``need`` bleibt für die Anzeige)."""
+    return room.kind != "mischer"
 
 
 def why(room: FloorRoom, need: bool | None) -> str:
@@ -224,7 +224,7 @@ def rule(room: FloorRoom) -> str:
     """Wann die Grenze des Raums gilt – für Vorschau und Doku."""
     if room.kind == "mischer":
         return "ohne Grenze (Mischer)"
-    when = "solange er Wärme anfordert" if room.kind == "rtl" else "immer"
+    when = "immer"
     return f"höchstens {_deg(room.max_flow)} °C, {when} ({LABELS[room.kind]})"
 
 

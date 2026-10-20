@@ -15,7 +15,7 @@ import pytest
 
 from heatpilot import preview as pv
 from heatpilot.config import Config
-from heatpilot.controlloop import Presence, desired
+from heatpilot.controlloop import Presence, desired, preheat_hours
 from heatpilot.dhw import SLOTS, DhwModel
 from heatpilot.models import RoomModel
 from heatpilot.presence_plan import timeline
@@ -100,17 +100,24 @@ def test_night_lowers_flow_or_switches_heating_off_and_preheat_raises_it(tmp_pat
     night = h["23:00"]
     assert night["rooms"]["Wz"] == 18.0 and night["phases"]["Wz"] == "nacht" and night["night"] is True
     assert night["heating"] is False and night["flow"] is None
-    assert night["flow_reason"] == "kein Raum braucht Wärme – Heizbetrieb aus"
-    # vor dem Nachtende vorheizen (Raum ≈ 20 °C, braucht laut Modell ≈ 1 h): höherer Vorlauf als zum Halten,
-    # bis der Raum am Soll ist – auf die Minute in ``steps``, je Stunde der höchste in ``flow_max``
+    # seit 0.46.5 (Standard „Pumpe läuft weiter“): kein Bedarf heißt nur Pumpe – Heizbetrieb an, Vorlauf-Soll 20 °C
+    assert night["flow_reason"] == "kein Raum braucht Wärme – Pumpe läuft, Vorlauf-Soll 20 °C" and night["idle"] is True
+    # vor dem Nachtende vorheizen (Raum ≈ 20,3 °C): höherer Vorlauf als zum Halten, bis der Raum am Soll ist – auf die
+    # Minute in ``steps``, je Stunde der höchste in ``flow_max``. Seit 0.46.5 sanft: so früh, dass der niedrigste
+    # Vorlauf im Deckel (3 h) reicht – hier ≈ 2,8 h vorher mit 42 °C statt ≈ 1 h vorher mit dem maximalen (75 °C)
     pre = [s for s in p["steps"] if s["flow"] and s["flow"] > hold]
-    assert len(pre) == 1 and at(TUE, 3) <= datetime.fromisoformat(pre[0]["t"]) < at(TUE, 4, 30)
-    assert h["03:00"]["flow_max"] == pre[0]["flow"] and h["03:00"]["night"] is True
-    assert any(w["what"] == "flow" and w["value"] == pre[0]["flow"] for w in h["03:00"]["writes"])
-    assert h["04:00"]["phases"]["Wz"] == "vorheizen" and h["04:00"]["flow"] == hold  # schon warm: halten
+    assert len(pre) == 1 and at(TUE, 1, 30) <= datetime.fromisoformat(pre[0]["t"]) < at(TUE, 2)
+    assert 35 <= pre[0]["flow"] <= 45 < eng.cfg.max_flow_temp
+    assert h["01:00"]["flow_max"] == pre[0]["flow"] and h["01:00"]["night"] is True
+    assert any(w["what"] == "flow" and w["value"] == pre[0]["flow"] for w in h["01:00"]["writes"])
+    # schon warm: halten – und das Vorheizen bleibt bis zum Nachtende (0.46.5, kein Pendeln zurück in die Nacht)
+    assert all(x["phases"]["Wz"] == "vorheizen" for k, x in h.items() if "02:00" <= k <= "04:00")
+    assert h["04:00"]["flow"] == hold and h["04:00"]["heating"] is True
     assert h["06:00"]["flow"] == hold and h["06:00"]["phases"]["Wz"] == "komfort"
-    # Schreibvorgänge: Heizbetrieb aus um 21:00, an zum Vorheizen, Vorlauf hoch und wieder runter
-    assert p["writes_24h"]["heating"] >= 2 and p["writes_24h"]["flow"] >= 2
+    # Schreibvorgänge: Vorlauf 20 °C um 21:00 (nur Pumpe, seit 0.46.5 statt Heizbetrieb aus), hoch zum Vorheizen und
+    # wieder runter – der Heizbetrieb bleibt an
+    assert p["writes_24h"]["heating"] <= 1 and p["writes_24h"]["flow"] >= 3
+    assert any(w["what"] == "flow" and w["value"] == 20 for w in h["21:00"]["writes"])
     assert sum(len(x["writes"]) for x in p["hours"]) == sum(p["writes_24h"].values())
     flows = [w for x in p["hours"] for w in x["writes"] if w["what"] == "flow"]
     assert all(w["from"] is None or abs(w["value"] - w["from"]) >= 1 for w in flows)
@@ -339,21 +346,31 @@ def test_desired_preheat_uses_outdoor_at_target_time():
 
     colder = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 19.0, 5.0, cold)
     assert base.phase == colder.phase == "nacht"
-    assert colder.until < base.until  # kälter am Nachtende → früher vorheizen
     assert asked and all(t == at(TUE, 4, 30) for t in asked)  # gefragt wird nach dem Zielzeitpunkt
+    # seit 0.46.5 sanft: 19 → 21 °C braucht in beiden Fällen fast den ganzen Deckel (3 h) – kälter heißt dann ein
+    # höherer Vorlauf, nicht früher; der Beginn rechnet mit −10 °C
+    end = at(TUE, 4, 30)
+    assert end - colder.until == timedelta(hours=preheat_hours(m, 19.0, 21.0, cfg.max_flow_temp, -10.0, 3.0))
+    assert end - base.until == timedelta(hours=preheat_hours(m, 19.0, 21.0, cfg.max_flow_temp, 5.0, 3.0))
+    # reicht bei 5 °C schon der niedrigste Vorlauf (35 °C) in kürzerer Zeit, beginnt es bei Kälte früher
+    near = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 20.8, 5.0)
+    near_cold = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 20.8, 5.0, cold)
+    assert near_cold.until < near.until  # kälter am Nachtende → früher vorheizen
     # Vorhersage ohne Punkt: wie bisher mit der aktuellen Außentemperatur; Deckel bleibt
     assert desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 19.0, 5.0, lambda w: None) == base
     capped = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 15.0, 5.0, lambda w: -20.0)
     assert capped.until == at(TUE, 4, 30) - timedelta(hours=cfg.preheat_max_h)
-    # Ankunft: Außentemperatur zur Ankunft
+    # Ankunft: Außentemperatur zur Ankunft (Raum 20,8 °C wie oben: bei 5 °C reicht der niedrigste Vorlauf)
     away = Presence(home_count=0, arrival=at(MON, 17))
-    warm = desired(wz(), at(MON, 12), cfg, away, m, 19.0, 5.0)
-    cold_arr = desired(wz(), at(MON, 12), cfg, away, m, 19.0, 5.0, lambda w: -10.0 if w == at(MON, 17) else None)
+    warm = desired(wz(), at(MON, 12), cfg, away, m, 20.8, 5.0)
+    cold_arr = desired(wz(), at(MON, 12), cfg, away, m, 20.8, 5.0, lambda w: -10.0 if w == at(MON, 17) else None)
     assert cold_arr.until < warm.until
 
 
 def test_control_loop_passes_forecast(tmp_path):
-    eng, ha, loop = house(tmp_path, temp=19.0, weather="weather.home")
+    # Raum 20,8 °C: bei 5 °C reicht der niedrigste Vorlauf in kürzerer Zeit als dem Deckel – kälter beginnt dann früher
+    # (seit 0.46.5 sanft; bei 19 °C bräuchte es in beiden Fällen fast den ganzen Deckel)
+    eng, ha, loop = house(tmp_path, temp=20.8, weather="weather.home")
     ts = ts_of(MON, 23)
     sample, rooms, _ = eng.snapshot()
     loop.plan(ts, sample, rooms)

@@ -86,25 +86,25 @@ def rtl_house(tmp_path, temp, valve, action):
     return eng, ha
 
 
-@pytest.mark.parametrize("temp,valve,action,limited", [
+@pytest.mark.parametrize("temp,valve,action,demand", [
     (21.8, 30, "idle", True),       # 0,2 K unter dem Soll, Ventil 30 % – für das 0,3-K-Band der Vorschau „am Soll“
     (22.0, 0, "heating", True),
     (22.0, 0, "preheating", True),
     (22.0, 6, "idle", True),        # Ventil über 5 %
     (21.95, 0, "idle", False),      # 0,05 K darunter, Ventil zu: fordert nicht an
 ])
-def test_preview_now_uses_the_same_demand_as_readiness(tmp_path, temp, valve, action, limited):
+def test_preview_now_uses_the_same_demand_as_readiness(tmp_path, temp, valve, action, demand):
     eng, ha = rtl_house(tmp_path, temp, valve, action)
     now = ts_of(MON, 12)
     ready = readiness.assess(eng, now)["floor"]
     rows = pv._Run(eng, now).run()
-    assert rows[0]["cap"] == ready["cap"] == (50.0 if limited else None)
+    # seit 0.46.5 gilt die RTL-Grenze immer – dieselbe Anforderung wie „Bereit für die Steuerung?“ steht im Grund
+    assert rows[0]["cap"] == ready["cap"] == 50.0 and ready["rooms"][0]["demand"] is demand
+    assert ready["why"].endswith(("(RTL-Ventil, fordert an)" if demand else "(RTL-Ventil, fordert nicht an)")
+                                 + ": höchstens 50 °C")
     h0 = pv.preview(eng, now)["hours"][0]
     assert h0["flow_cap"] == ready["cap"]
-    if limited:
-        assert h0["flow"] == 50 and h0["flow_limited"] is True and h0["flow_reason"].endswith(ready["why"])
-    else:
-        assert h0["flow"] == 61 and h0["flow_limited"] is False
+    assert h0["flow"] == 50 and h0["flow_limited"] is True and h0["flow_reason"].endswith(ready["why"])
     assert ha.calls == []
 
 
@@ -113,7 +113,8 @@ def test_without_model_the_demand_of_now_holds_while_setpoint_stays(tmp_path):
     h = by_hour(pv.preview(eng, ts_of(MON, 12)))
     assert h["12:00"]["flow_cap"] == h["16:00"]["flow_cap"] == 50.0  # Soll 22 °C wie jetzt: fordert weiter an
     assert h["16:00"]["flow_reason"].endswith("Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C")
-    assert h["03:00"]["flow_cap"] is None  # nachts 18 °C bei 21,8 °C: fordert nicht an
+    # nachts 18 °C bei 21,8 °C: fordert nicht an – seit 0.46.5 gilt die RTL-Grenze trotzdem
+    assert h["03:00"]["flow_cap"] == 50.0
 
 
 def test_preview_docstring_and_docs_name_the_rule():
@@ -131,8 +132,9 @@ def test_preheating_counts_as_demand(action, expected):
     f = fl.floor_rooms(cfg_with("rtl", 50), [wz(), bad()])
     r = {"climate.bad": {"temp": 22.0, "target": 22.0, "valve": None, "action": action}}
     assert fl.demand(f[0], r) is expected
-    assert fl.flow_cap(f, r) == ((50.0, "Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C") if expected
-                                 else (None, None))
+    # seit 0.46.5 gilt die RTL-Grenze immer – die Anforderung steht im Grund
+    assert fl.flow_cap(f, r) == (50.0, "Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C" if expected
+                                 else "Fußboden Bad (RTL-Ventil, fordert nicht an): höchstens 50 °C")
 
 
 def test_heating_actions_constant():

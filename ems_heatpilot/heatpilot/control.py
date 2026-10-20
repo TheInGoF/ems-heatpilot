@@ -57,7 +57,7 @@ import math
 import time
 
 from . import boiler_entity, disinfect_entity, floor_limit
-from .boiler_rule import CHECK_MAX_S, CHECK_TOL_K, FLOW_MIN
+from .boiler_rule import CHECK_MAX_S, CHECK_TOL_K, FLOW_MIN, PUMP_FLOW
 from .config import NOTIFY_TARGET
 from .dhw_entity import entity_problem
 from .discovery import Room
@@ -107,7 +107,8 @@ class Control:
         – nur mit Schalter „heatpilot“ gesetzt, sonst None (dann ist ``set_dhw`` gesperrt).
         ``notify_targets`` (0.38): die eingestellten Benachrichtigungsziele (``notify.*``).
         ``boiler`` (0.41, Weg B): {"flow": number-Entität, "heating": switch-Entität, "max": max_flow_temp,
-        "floors": Fußboden-Räume (``floor_limit.floor_rooms``)} – nur mit Schalter „heatpilot“ gesetzt, sonst None
+        "floors": Fußboden-Räume (``floor_limit.floor_rooms``), "pump": „nur Pumpe“ erlaubt (0.46.5, Standard ja)} –
+        nur mit Schalter „heatpilot“ gesetzt, sonst None
         (dann sind ``set_flow``/``set_heating`` gesperrt); ``boiler_lock``: Aufruf, der den Grund liefert, solange
         nicht geschrieben werden darf (Regler am Bus). ``disinfect``/``disinfect_lock`` (0.42): der eine Schalter der
         Desinfektion (nur mit Termin und „HeatPilot setzt“, sonst None) und der Aufruf mit dem Grund, solange nicht
@@ -121,6 +122,7 @@ class Control:
         self.flow_entity = b.get("flow") if str(b.get("flow") or "").startswith("number.") else None
         self.heat_entity = b.get("heating") if str(b.get("heating") or "").startswith("switch.") else None
         self.flow_max, self.floors, self.boiler_lock = b.get("max"), list(b.get("floors") or ()), boiler_lock
+        self.flow_pump = bool(b.get("pump", True))  # 0.46.5: kein Bedarf – Vorlauf-Soll ab PUMP_FLOW unter 35 °C
         ok = str(disinfect or "").startswith("switch.") and disinfect != self.heat_entity
         self.disinfect_entity, self.disinfect_lock = (disinfect if ok else None), disinfect_lock
         # dieselbe Entität für Vorlauf- und Warmwasser-Soll: beide Schreibwege gesperrt (Weg B, 0.41)
@@ -295,7 +297,8 @@ class Control:
         return hi, None
 
     def _check_flow(self, entity_id: str, data: dict) -> None:
-        """Vorlauf-Soll (Weg B): nur die eine Entität, nur ``value``, ganzzahlig, 35 °C ≤ Wert ≤ ``max_flow_temp`` und
+        """Vorlauf-Soll (Weg B): nur die eine Entität, nur ``value``, ganzzahlig, 35 °C ≤ Wert ≤ ``max_flow_temp`` (bzw.
+        seit 0.46.5 „nur Pumpe“: genau ``PUMP_FLOW`` bzw. der Mindestwert der Entität, unter 35 °C, wenn erlaubt) und
         ≤ Fußboden-Grenze jetzt (``floor_limit.flow_cap`` mit den Messwerten), innerhalb der Grenzen der Entität; die
         Entität muss taugen (``boiler_entity.flow_problem``). Alles andere hart abgewiesen."""
         if not self.flow_entity or entity_id != self.flow_entity or self.flow_max is None:
@@ -303,14 +306,17 @@ class Control:
                                   "über HeatPilot“")
         value, (hi, why) = data.get("value"), self._flow_hi()
         whole = isinstance(value, int) and not isinstance(value, bool)
-        if set(data) != {"value"} or not whole or not FLOW_MIN <= value <= hi:
+        attrs = self._state(entity_id).get("attributes") or {}
+        e_lo, e_hi = _num(attrs.get("min")), _num(attrs.get("max"))
+        # nur Pumpe (0.46.5): genau ``PUMP_FLOW`` bzw. der Mindestwert der Entität darüber, unter 35 °C
+        idle = PUMP_FLOW if e_lo is None else max(PUMP_FLOW, math.ceil(e_lo - 1e-9))
+        pump = whole and self.flow_pump and value == idle < FLOW_MIN
+        if set(data) != {"value"} or not whole or not (FLOW_MIN <= value <= hi or pump):
             limit = f" ({why})" if why else ""
             raise PermissionError(f"Vorlauf-Soll {value!r} gesperrt – nur ganze Grad von {FLOW_MIN} bis {hi} °C{limit}")
         problem = boiler_entity.flow_problem(entity_id, self._state(entity_id))
         if problem:
             raise PermissionError(f"{problem} – gesperrt")
-        attrs = self._state(entity_id).get("attributes") or {}
-        e_lo, e_hi = _num(attrs.get("min")), _num(attrs.get("max"))
         if (e_lo is not None and value < e_lo) or (e_hi is not None and value > e_hi):
             raise PermissionError(f"Vorlauf-Soll {value} °C außerhalb der Grenzen von {entity_id}")
         self._boiler_guard(entity_id, "Vorlauf-Soll")

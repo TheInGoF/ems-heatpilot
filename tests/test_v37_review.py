@@ -148,7 +148,7 @@ def test_heating_stays_on_while_room_without_flow_is_below_setpoint(tmp_path):
     climate(eng, "climate.bad", 21.8, 22.0)
     eng.rooms["climate.bad"] = RoomModel("Bad")
     h0 = pv.preview(eng, ts_of(MON, 12))["hours"][0]
-    assert h0["heating"] is False and h0["flow_reason"] == "kein Raum braucht Wärme – Heizbetrieb aus"
+    assert h0["heating"] is False and h0["flow_reason"] == "kein Raum braucht Wärme – Pumpe läuft, Vorlauf-Soll 20 °C"
     # Temperatur unbekannt: Heizbetrieb bleibt an
     climate(eng, "climate.bad", None, 22.0)
     h0 = pv.preview(eng, ts_of(MON, 12))["hours"][0]

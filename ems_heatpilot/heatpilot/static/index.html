@@ -14,7 +14,7 @@
   --grid: #ecebe7;
   --series-1: #2a78d6; --series-2: #eb6834;
   --series-3: #1a9641; --series-4: #8e5bd0; --series-5: #8a8984;
-  --band-burner: rgba(235, 104, 52, .13); --band-dhw: rgba(42, 120, 214, .13);
+  --band-burner: rgba(235, 104, 52, .13); --band-dhw: rgba(42, 120, 214, .13); --band-pump: rgba(26, 150, 65, .08);
   --band-home: rgba(26, 150, 65, .14);
   --band-night: rgba(84, 96, 168, .12); --band-away: rgba(138, 137, 132, .17);
   --good: #008300; --warn: #c98500;
@@ -688,7 +688,7 @@ ul.rules li { margin: 3px 0; }
       <h2>Kessel</h2>
       <p class="live-sub" id="live-kessel-head"></p>
       <div id="live-kessel-seg"></div>
-      <div class="live-v" data-v="temp"><p class="muted">Vorlauf, Rücklauf und Soll – orange hinterlegt: Brenner heizt, blau: Warmwasser.</p><div class="legend" id="lg-boiler"></div><div id="ch-boiler"></div></div>
+      <div class="live-v" data-v="temp"><p class="muted">Vorlauf, Rücklauf und Soll – orange hinterlegt: Brenner heizt, blau: Warmwasser, grün: Pumpe läuft.</p><div class="legend" id="lg-boiler"></div><div id="ch-boiler"></div></div>
       <div class="live-v" data-v="burner" hidden><p class="muted">Leistung in % der Nennleistung und Pumpe – jede Treppe nach oben ist ein Start.</p><div class="legend" id="lg-burner"></div><div id="ch-burner"></div></div>
     </div>
     <div class="card live-card" id="live-dhw">
@@ -1296,16 +1296,18 @@ async function loadLive() {
   $("live-range").innerHTML = seg([["3", "3 h"], ["6", "6 h"], ["12", "12 h"], ["24", "24 h"]], $("live-hours").value, "setLiveHours", 'aria-label="Zeitraum"');
   const burnerNote = n.burner_on ? (n.dhw ? "lädt Warmwasser" : "heizt") + (n.flame !== null ? ` · Flamme ${fmt(n.flame)} µA` : "")
     : n.lock_left_min ? `Taktsperre noch ${n.lock_left_min} min` + (n.blocked ? " – Räume warten" : "") : "bereit";
-  // „Jetzt“ (0.43): sechs Kennzahlen; die übrigen Werte stehen in den Köpfen der Karten Kessel, Warmwasser und Räume
+  const pump = n.pump_on === null || n.pump_on === undefined ? (n.pump_mod !== null && n.pump_mod !== undefined ? (n.pump_mod > 0 ? "an" : "aus") : "–") : n.pump_on ? "an" : "aus";
+  // „Jetzt“ (0.43): Kennzahlen, seit 0.46.5 mit der Pumpe; die übrigen Werte stehen in den Köpfen der Karten Kessel, Warmwasser und Räume
   $("live-tiles").innerHTML = [
     kpi("Brenner", onOff(n.burner_on) + (n.burner_on && n.burner_pow !== null ? ` · ${fmt(n.burner_pow, 0)} %` : ""), "", burnerNote + (n.power_kw !== null && n.burner_on ? ` · ca. ${fmt(n.power_kw)} kW` : "")),
+    kpi("Pumpe", pump + (n.pump_mod !== null && n.pump_mod !== undefined ? ` · ${fmt(n.pump_mod, 0)} %` : ""), "",
+      n.pump_delay ? `Nachlauf ${fmt(n.pump_delay, 0)} min` : ""),
     kpi("Vorlauf", fmt(n.flow), "°C", `Vorlauf-Soll ${fmt(n.sel_flow, 0)} °C · Regler ${fmt(n.calc_flow, 0)} °C`),
     kpi("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "")),
     kpi("Außen", fmt(n.t_out), "°C"),
     kpi("Innen Ø", fmt(n.t_in), "°C", `${n.rooms.length} Räume`),
     kpi("Zu Hause", n.home === null ? "–" : fmt(n.home, 0), n.persons ? `von ${n.persons}` : ""),
   ].join("");
-  const pump = n.pump_on === null || n.pump_on === undefined ? (n.pump_mod !== null ? (n.pump_mod > 0 ? "an" : "aus") : "–") : n.pump_on ? "an" : "aus";
   const press = n.syspress === null || n.syspress === undefined ? "–" : `${fmt(n.syspress, 1)} bar` + (n.syspress < 1 ? " ⚠ niedrig – nachfüllen lassen" : n.syspress > 2.5 ? " ⚠ hoch" : "");
   $("live-kessel-head").innerHTML = [
     `Rücklauf ${fmt(n.ret)} °C` + (n.flow !== null && n.ret !== null ? ` (Spreizung ${fmt(n.flow - n.ret)} K)` : ""),
@@ -1343,13 +1345,16 @@ function drawLive() {
   const C = { flow: "var(--series-2)", ret: "var(--series-1)", sel: "var(--series-4)", calc: "var(--series-5)", boiler: "var(--series-3)" };
   const heatBand = s.burner_on.map((v, i) => v && !s.dhw[i] ? 1 : 0), dhwBand = s.dhw.map((v) => v ? 1 : 0);
   const bands = [{ name: "Brenner an (Heizen)", values: heatBand, color: "var(--band-burner)" }, { name: "Warmwasser lädt", values: dhwBand, color: "var(--band-dhw)" }];
+  // 0.46.5: Pumpenlauf hinterlegt (unter den Brenner-Bändern) – ohne Umschalten sehen, wann sie lief
+  const pumpBand = (s.pump_on || []).map((v, i) => v ?? ((s.pump_mod || [])[i] > 0 ? 1 : 0) ? 1 : 0);
   if (LIVE_VIEW.kessel === "temp") {
   legend("lg-boiler", [["Vorlauf", C.flow], ["Rücklauf", C.ret], ["Vorlauf-Soll (Kessel)", C.sel, 1], ["Vorlauf-Soll (Regler)", C.calc, 1], ["Kessel", C.boiler]]);
   timeChart($("ch-boiler"), ts, [
     { name: "Vorlauf", values: s.flow, color: C.flow }, { name: "Rücklauf", values: s.ret, color: C.ret },
     { name: "Vorlauf-Soll (Kessel)", values: s.sel_flow, color: C.sel, dash: "5 4", width: 1.5 },
     { name: "Vorlauf-Soll (Regler)", values: s.calc_flow, color: C.calc, dash: "2 3", width: 1.5 },
-    { name: "Kessel", values: s.boiler_temp, color: C.boiler, width: 1.5 }], { unit: "°C", bands, label: "Kesseltemperaturen" });
+    { name: "Kessel", values: s.boiler_temp, color: C.boiler, width: 1.5 }],
+    { unit: "°C", bands: [{ name: "Pumpe läuft", values: pumpBand, color: "var(--band-pump)" }, ...bands], label: "Kesseltemperaturen" });
   } else {
   legend("lg-burner", [["Brennerleistung", C.flow], ["Pumpe (Modulation)", C.ret]]);
   timeChart($("ch-burner"), ts, [
@@ -2393,7 +2398,8 @@ function pvLegend(p) {
     : (p.steps || []).some((s) => s.heating === true && s.flow !== null));
   if (p.hours.some((h) => h.night)) it.push(["band", "var(--band-night)", "Nacht"]);
   if (p.hours.some((h) => !h.night && (h.home === 0 || h.vacation))) it.push(["band", "var(--band-away)", p.hours.some((h) => h.vacation) ? "niemand zu Hause / Urlaub" : "niemand zu Hause"]);
-  if ((p.steps || []).some((s) => s.heating === false)) it.push(["strip", "var(--text-muted)", "Heizbetrieb aus"]);
+  const offs = (p.steps || []).filter((s) => s.heating === false);  // 0.46.5: ohne Bedarf läuft meist nur die Pumpe
+  if (offs.length) it.push(["strip", "var(--text-muted)", offs.every((s) => s.idle) ? "kein Bedarf – nur Pumpe" : "Heizbetrieb aus"]);
   const ws = p.hours.flatMap((h) => h.writes), own = p.dhw_writes === "schreibt";  // 0.38: „schreibt“ als gefüllter Ring
   const boil = p.flow_writes === "schreibt", mine = (w) => w.what === "dhw" ? own : boil;  // 0.41: auch Vorlauf/Heizbetrieb
   const ownD = own && ws.some((w) => w.what === "dhw"), ownF = boil && ws.some((w) => w.what !== "dhw");
@@ -2500,7 +2506,7 @@ function hourHover(group, f, hours, html) {
 function pvTip(p, i) {
   const h = p.hours[i], t = tsOf(h.t);
   const state = [h.vacation ? "Urlaub" : h.home === 0 ? "niemand zu Hause" : "", h.night ? "Nacht" : ""].filter(Boolean);
-  const flow = h.heating === false ? "<b>Heizbetrieb aus</b>" : h.flow === null || h.flow === undefined ? "–"
+  const flow = h.heating === false ? (h.idle ? "<b>kein Bedarf – nur Pumpe</b>" : "<b>Heizbetrieb aus</b>") : h.flow === null || h.flow === undefined ? "–"
     : `<b>${h.flow} °C</b>` + (h.flow_max > h.flow ? ` (bis ${h.flow_max} °C)` : "");
   const src = { vorhersage: " (Vorhersage)", angeglichen: " (Vorhersage, an den Fühler angeglichen)", aktuell: " (aktuell)" }[h.t_out_src] || "";
   const rows = [`${tipKey(PV_C.flow)}Vorlauf-Soll: ${flow}`, `<span class="tip-why">${esc(h.flow_reason)}</span>`,
@@ -2576,6 +2582,7 @@ function nxWin(p, now) {
 // Art eines Schritts aus dessen Grund (wie dhw_target bzw. die Kessel-Vorschau ihn schreiben)
 const NX_KIND = { night: "Nacht", home: "zu Hause", away: "niemand zu Hause", vac: "Urlaub", heat: "heizt auf",
   draw: "Zapfung erwartet", dis: "Desinfektion", off: "Heizung aus", pre: "Vorheizen", flow: "Vorlauf", flick: "zeitweise aus" };
+const nxName = (r) => r.pump ? "nur Pumpe" : NX_KIND[r.k];  // 0.46.5: ohne Bedarf läuft meist die Pumpe weiter
 function nxKind(x, kind) {
   if (kind === "flow") return x.heating === false ? "off" : /heizt vor/.test(x.flow_why || "") ? "pre" : "flow";
   const s = String(x.dhw_why || "");
@@ -2586,7 +2593,8 @@ function nxKind(x, kind) {
 const nxMin = (x, y) => x === null ? y : y === null ? x : Math.min(x, y), nxMax = (x, y) => x === null ? y : y === null ? x : Math.max(x, y);
 function nxJoin(q, r, k = q.k) {
   return Object.assign(q, { a: Math.min(q.a, r.a), b: Math.max(q.b, r.b), k, lo: nxMin(q.lo, r.lo), hi: nxMax(q.hi, r.hi),
-    hlo: nxMin(q.hlo, r.hlo), hhi: nxMax(q.hhi, r.hhi), offS: q.offS + r.offS, whys: [...new Set([...q.whys, ...r.whys])] });
+    hlo: nxMin(q.hlo, r.hlo), hhi: nxMax(q.hhi, r.hhi), offS: q.offS + r.offS, whys: [...new Set([...q.whys, ...r.whys])],
+    pump: !!q.pump && !!r.pump });  // 0.46.5: kein Bedarf, nur Pumpe – nur, wenn alles im Abschnitt so ist
 }
 // gleicher Wert: beide ohne oder höchstens 1 K auseinander (Spanne des Abschnitts ≤ 1 K)
 const nxSameVal = (q, r) => (q.lo === null) === (r.lo === null) && (q.lo === null || Math.max(q.hi, r.hi) - Math.min(q.lo, r.lo) <= 1);
@@ -2603,7 +2611,7 @@ function nxRuns(p, kind, w = nxWin(p)) {
     const a = Math.max(tsOf(x.t), w.x0), b = Math.min(i + 1 < st.length ? tsOf(st[i + 1].t) : w.end, w.x1);
     if (b <= a) return;
     const k = nxKind(x, kind), v = (kind === "dhw" ? x.dhw : k === "off" ? null : x.flow) ?? null, h = kind === "dhw" ? x.dhw_hold ?? null : null;
-    out.push({ a, b, k, lo: v, hi: v, hlo: h, hhi: h, drop: kind === "dhw" && /darf bis/.test(x.dhw_why || ""),
+    out.push({ a, b, k, lo: v, hi: v, hlo: h, hhi: h, drop: kind === "dhw" && /darf bis/.test(x.dhw_why || ""), pump: k === "off" && !!x.idle,
       offS: k === "off" ? b - a : 0, whys: [kind === "dhw" ? x.dhw_why : x.flow_why].filter(Boolean) });
   });
   if (kind === "dhw") for (const d of nxDis(p, w)) {
@@ -2644,7 +2652,7 @@ const nxDur = (s) => { const m = Math.round(s / 60), h = Math.floor(m / 60); ret
 const nxDeg = (lo, hi) => `${fmt(lo, 0)}${hi !== lo ? "–" + fmt(hi, 0) : ""} °C`;
 // Wert eines Abschnitts: [groß, klein]
 function nxVal(r, kind) {
-  if (r.k === "off") return ["aus", r.b - r.a - r.offS > 0 ? `zwischendurch ${nxDur(r.b - r.a - r.offS)} an` : ""];
+  if (r.k === "off") return [r.pump ? "Pumpe" : "aus", r.b - r.a - r.offS > 0 ? `zwischendurch ${nxDur(r.b - r.a - r.offS)} an` : ""];
   if (r.k === "flick") return [r.lo === null ? "an/aus" : `Vorlauf ${nxDeg(r.lo, r.hi)}`, `${nxDur(r.offS)} aus`];
   if (r.lo === null) return ["kein Soll", ""];
   if (kind === "flow") return [`Vorlauf ${nxDeg(r.lo, r.hi)}`, ""];
@@ -2660,14 +2668,14 @@ function nxTip(p, kind, r, i) {
     rows.push(`${tipKey(PV_C.dhw)}Warmwasser-Soll: <b>${r.lo === null ? "–" : nxDeg(r.lo, r.hi)}</b>`);
     if (small) rows.push(`${tipKey(PV_C.dhw, 1)}${r.drop ? "Speicher " + small : small}`);
   } else {
-    rows.push(`${tipKey(PV_C.flow)}${r.k === "off" ? "<b>Heizbetrieb aus</b>" : `Vorlauf-Soll: <b>${r.lo === null ? "–" : nxDeg(r.lo, r.hi)}</b>`}`);
+    rows.push(`${tipKey(PV_C.flow)}${r.k === "off" ? (r.pump ? "<b>kein Bedarf – nur Pumpe</b>" : "<b>Heizbetrieb aus</b>") : `Vorlauf-Soll: <b>${r.lo === null ? "–" : nxDeg(r.lo, r.hi)}</b>`}`);
     if (r.k === "flick") rows.push(`Heizbetrieb aus: ${nxDur(r.offS)} von ${nxDur(r.b - r.a)}`);
     else if (small) rows.push(small);
   }
   const whys = r.whys.slice(0, 3).map((x) => `<span class="tip-why">${esc(x)}</span>`);
   if (r.whys.length > 3) whys.push(`<span class="tip-why">… und ${r.whys.length - 3} weitere Gründe</span>`);
   const from = i ? `${hpDay(p, r.a)} ${hpClock(p, r.a)}` : `jetzt (${hpDay(p, r.a)} ${hpClock(p, r.a)})`;
-  return `<b>${NX_KIND[r.k]}</b> · ${from}–${hpClock(p, r.b)} (${nxDur(r.b - r.a)})<br>${[...rows, ...whys].join("<br>")}`;
+  return `<b>${nxName(r)}</b> · ${from}–${hpClock(p, r.b)} (${nxDur(r.b - r.a)})<br>${[...rows, ...whys].join("<br>")}`;
 }
 // Breiten in Prozent nach Dauer; zu schmale bekommen die Mindestbreite, der Rest teilt sich den übrigen Platz
 function nxWidths(fr, min = NX_MIN_W) {
@@ -2691,8 +2699,8 @@ function nxRender(box, p, kind, runs, w) {
   const seg = (r, i) => {
     const [v, small] = nxVal(r, kind), t = nxTime(p, r, i);
     return `<div class="nx-seg nx-k-${r.k}" role="listitem" tabindex="0" data-i="${i}" style="--nx-w:${wd[i].toFixed(2)}%"` +
-      ` aria-label="${esc(`${t}: ${NX_KIND[r.k]}, ${v}${small ? ", " + small : ""}`)}"><span class="nx-t">${t}</span>` +
-      `<span class="nx-a">${NX_KIND[r.k]}</span><span class="nx-v">${v}${small ? `<small>${small}</small>` : ""}</span></div>`;
+      ` aria-label="${esc(`${t}: ${nxName(r)}, ${v}${small ? ", " + small : ""}`)}"><span class="nx-t">${t}</span>` +
+      `<span class="nx-a">${nxName(r)}</span><span class="nx-v">${v}${small ? `<small>${small}</small>` : ""}</span></div>`;
   };
   box.innerHTML = `<div class="nx-tl"><div class="nx-bar" role="list" aria-label="${kind === "dhw" ? "Warmwasser" : "Kessel"}: nächste 12 Stunden">` +
     runs.map(seg).join("") + `</div><div class="nx-ticks" aria-hidden="true"><span class="nx-now">jetzt</span>` +
@@ -2741,7 +2749,7 @@ function pvTable(p) {
     const label = (day !== prevDay ? `${hpDay(p, t)} ` : "") + hpClock(p, t) + (twice ? ' <span class="muted" title="Zeitumstellung: diese Stunde gibt es heute zweimal">(2.)</span>' : "");
     prevDay = day;
     const state = [h.night ? "Nacht" : "", h.vacation ? "Urlaub" : h.home === 0 ? "weg" : ""].filter(Boolean).join(", ");
-    const flow = h.heating === false ? "aus" : degC(h.flow) + (h.flow_max > h.flow ? `<div class="muted">bis ${h.flow_max} °C</div>` : "");
+    const flow = h.heating === false ? (h.idle ? "Pumpe" : "aus") : degC(h.flow) + (h.flow_max > h.flow ? `<div class="muted">bis ${h.flow_max} °C</div>` : "");
     const mine = h.writes.filter((w) => (w.what === "dhw" ? own : boil)), would = h.writes.filter((w) => !mine.includes(w));
     const why = [`Vorlauf: ${esc(h.flow_reason)}`, `Warmwasser: ${esc(h.dhw_reason)}`, pvRooms(h, prev),
       h.disinfect ? `Desinfektion ${isoClock(h.disinfect.at)}` : "",
@@ -3624,7 +3632,7 @@ const climateEntities = () => ENT.filter((e) => e.id.startsWith("climate.")).sor
 // wählen“ und gilt bis dahin wie direkt am Kessel; Speichern ohne Wahl lässt ihn so
 const FLOOR_KINDS = { "": "kein Fußboden", mischer: "mit Mischer", rtl: "mit RTL-Ventil", direkt: "direkt am Kessel", unbekannt: "Anschluss wählen" };
 const FLOOR_MAX = { def: 45, min: 25, max: 70 };
-const FLOOR_HINT = { mischer: "Mischer regelt selbst – keine Grenze", rtl: "gilt, solange der Raum Wärme anfordert",
+const FLOOR_HINT = { mischer: "Mischer regelt selbst – keine Grenze", rtl: "gilt immer – das RTL öffnet, sobald der Rücklauf kalt ist",
   direkt: "gilt immer", unbekannt: "gilt immer, bis der Anschluss gewählt ist" };
 const floorKind = (c, r) => r.floor_type && r.floor_type !== "unbekannt" && FLOOR_KINDS[r.floor_type] ? r.floor_type
   : (SET.floor_heating_rooms || []).includes(c) ? "unbekannt" : "";
@@ -4917,7 +4925,10 @@ function boilerSectionHtml(s, x) {
     `<p class="hint" id="boiler-mode-hint" style="margin:6px 0 0"></p>` +
     boilerEntityRef("flow", s, x) + boilerEntityRef("heating", s, x) +
     `<div class="form-grid">${field("Rückfall-Vorlauf (°C)", `<input id="f-boiler_fallback_flow" type="number" step="1" min="${lo}" max="${hi}" value="${esc(set)}">`,
-      `${lo}–${hi} °C, ganze Grad. Schreibt HeatPilot einmal beim Zurückschalten auf „Aus“ oder „Beobachten“; denselben Wert setzt der Wächter${eff}.`)}</div>` +
+      `${lo}–${hi} °C, ganze Grad. Schreibt HeatPilot einmal beim Zurückschalten auf „Aus“ oder „Beobachten“; denselben Wert setzt der Wächter${eff}.`)}` +
+    field("Wenn kein Raum Wärme braucht", `<select id="f-boiler_idle">${[["pumpe", "Pumpe läuft weiter"], ["aus", "Heizbetrieb ganz aus"]].map(([k, l]) =>
+      `<option${(s.boiler_idle || "pumpe") === k ? " selected" : ""} value="${k}">${l}</option>`).join("")}</select>`,
+      "Pumpe läuft weiter (Standard): Heizbetrieb bleibt an, Vorlauf-Soll 20 °C – der Brenner springt nicht an. Heizbetrieb ganz aus: wie früher, z. B. im Sommer.") + `</div>` +
     `<div class="warnbox" id="boiler-warn"><details class="more"><summary>Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. <span class="m"></span></summary><div>${boilerWarnText(fb)}</div></details></div>` +
     `<div class="dhw-box" id="boiler-box">${boilerBoxHtml(x.status, x.readiness)}</div>`;
 }
@@ -4927,7 +4938,9 @@ function boilerIntro(r) {
     `(ganze Grad ab ${r.flow_min} °C bis zur maximalen Vorlauftemperatur, nie über der Fußboden-Grenze) und ` +
     "den Heizbetrieb (an/aus). Ziel ist der Vorlauf, den der " +
     "anspruchsvollste Raum braucht (gerechnet wie die Vorschau), mindestens so viel, dass die Räume die kleinste Kesselleistung " +
-    `abnehmen; braucht kein Raum ${r.flow_min} °C, ist der Heizbetrieb aus. Das Vorlauf-Soll nur bei Änderung ` +
+    `abnehmen; braucht kein Raum ${r.flow_min} °C, ist der Heizbetrieb aus – bei „Pumpe läuft weiter“ (Standard) bleibt er ` +
+    `an und das Vorlauf-Soll geht auf ${r.pump_flow ?? 20} °C, der Brenner springt nicht an. Heizt ein Raum auf oder vor, gilt ` +
+    `mindestens ${r.flow_min} °C. Das Vorlauf-Soll nur bei Änderung ` +
     `ab ${fmt(r.step_k)} K und höchstens einmal je ${r.flow_gap_s} s – anheben sofort, senken erst, wenn das Ziel ` +
     `${r.flow_down_min} min niedriger bleibt; den Heizbetrieb mit ${r.heat_hold_min} min Haltezeit, aus erst nach ` +
     `${r.heat_off_min} min ohne Bedarf, an nur mit bekanntem Vorlauf-Soll bis zur Grenze. Steht das Vorlauf-Soll am Kessel ` +
@@ -4990,6 +5003,7 @@ function boilerTarget(t, mode) {
   const lead = `<b>${mode === "trocken" ? "würde setzen" : "Ziel"}:</b> `;
   if (t.heating === null || t.heating === undefined) return `${lead}offen – ${esc(t.reason)}`;
   if (!t.heating) return `${lead}Heizbetrieb aus – ${esc(t.reason)}`;
+  if (t.idle) return `${lead}kein Bedarf – Pumpe läuft, Vorlauf-Soll ${degC(t.flow)} (Heizbetrieb bleibt an)`;  // 0.46.5
   const c = t.cycling || {}, parts = [`Bedarf ${degC(t.base)}`, t.load !== null && t.load !== undefined && t.load > (t.base || 0) ? `Abnahme mind. ${degC(t.load)}` : "",
     t.boost_k ? `Takt-Boost +${t.boost_k} K` + ((t.waiting || []).length ? ` (wartet: ${t.waiting.map(esc).join(", ")}` +
       `${c.cycling ? `; Kessel taktet: ${fmt(c.starts_h, 0)} Starts/h, Läufe Ø ${fmt(c.run_min, 0)} min` : ""})` : "") : "",
@@ -5592,7 +5606,7 @@ function renderSettings() {
       ${field("Grundpreis (€/Jahr)", num("f-gas_base_fee_eur_per_year", s.gas_base_fee_eur_per_year))}
     </div><p class="muted" id="kwh-hint"></p>`)) +
     page("raeume", card("Räume", `${more("Häkchen = HeatPilot lernt den Raum. „Macht mit“ = HeatPilot darf das Soll schreiben, tagsüber mit der Komforttemperatur.", `Nur Räume mit „macht mit“ schreibt HeatPilot bei „HeatPilot steuert“. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
-      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). <b>Fußboden</b>: Fußbodenheizung im Raum und wie sie angeschlossen ist – <b>mit Mischer</b> (er regelt die Temperatur selbst, keine Grenze), <b>mit RTL-Ventil</b> (am Anfang fließt der volle Vorlauf hinein: der <b>höchste Vorlauf</b> gilt, solange der Raum Wärme anfordert) oder <b>direkt am Kessel</b> (der höchste Vorlauf gilt immer; leer = ${FLOOR_MAX.def} °C). HeatPilot plant nie einen Vorlauf darüber; der Heizkörper im Raum gilt als Boost.
+      <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). <b>Fußboden</b>: Fußbodenheizung im Raum und wie sie angeschlossen ist – <b>mit Mischer</b> (er regelt die Temperatur selbst, keine Grenze), <b>mit RTL-Ventil</b> (am Anfang fließt der volle Vorlauf hinein, es öffnet, sobald der Rücklauf kalt ist: der <b>höchste Vorlauf</b> gilt immer) oder <b>direkt am Kessel</b> (der höchste Vorlauf gilt immer; leer = ${FLOOR_MAX.def} °C). HeatPilot plant nie einen Vorlauf darüber; der Heizkörper im Raum gilt als Boost.
       Unter jeder Entität stehen <b>Bereich</b> und <b>Gerät</b> aus Home Assistant; ein leeres Feld „Raum“ zeigt den Bereich als Platzhalter, „Bereiche übernehmen“ trägt ihn ein – Gespeichertes bleibt. Sensoren des Geräts (Temperatur, Feuchte, Heizleistung) sind vorbelegt.
       <b>Voreinstellung</b> und <b>Stufen</b>: die Zahl am Ventilunterteil (Durchflussbegrenzer), z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil. Damit nennt der hydraulische Abgleich konkrete Stufen und rechnet die Wirkung auf die anderen Räume; bei mehreren Geräten in einem Raum gilt der Wert des <b>Schlüsselgeräts</b> (Raumregler, sonst das erste), weitere Ventile dürfen eigene Werte haben.`)}
       <div id="room-switch"></div><div id="room-restore"></div><div id="room-adopt"></div>
@@ -5658,6 +5672,7 @@ function collect() {
                    "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp", "preheat_max_h",
                    "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days", "keep_days",
                    "boiler_fallback_flow"]) out[k] = v("f-" + k);  // Rückfall-Vorlauf (0.41)
+  if ($("f-boiler_idle")) out.boiler_idle = $("f-boiler_idle").value;  // 0.46.5: wenn kein Raum Wärme braucht
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
   // Steuerung: Schalter (ohne Auswahl bleibt es bei Beobachten) und Wochenplan Mo..So

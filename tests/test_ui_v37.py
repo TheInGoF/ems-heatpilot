@@ -143,7 +143,7 @@ def test_summary_and_basis_from_real_preview(tmp_path, berlin):
     p = preview_json(tmp_path)
     w = p["writes_24h"]
     n = w["flow"] + w["heating"] + w["dhw"]
-    assert w["heating"] >= 2 and w["dhw"] >= 1
+    assert w["heating"] >= 0 and w["dhw"] >= 1  # seit 0.46.5 ohne Bedarf nur Pumpe: Heizbetrieb bleibt an
     r = run_js(tmp_path, f"const P = {json.dumps(p)}; out({{ sum: pvSummary(P), basis: pvBasis(P),"
                          f" on: pvSummary({{ ...P, start: {{ ...P.start, heating: true }} }}),"
                          f" none: pvSummary({{ ...P, writes_24h: {{ flow: 0, heating: 0, dhw: 0 }}, start: {{}} }}) }});")
@@ -177,7 +177,9 @@ def test_tooltip_per_hour_night_preheat_and_writes(tmp_path, berlin):
     night, pre = hour_of(p, "23:00"), next(i for i, h in enumerate(p["hours"]) if "heizt vor" in h["flow_reason"])
     r = run_js(tmp_path, f"const P = {json.dumps(p)}; out([pvTip(P, {night}), pvTip(P, {pre}), pvTip(P, 0)]);")
     t_night, t_pre, t_first = (plain(x) for x in r)
-    assert t_night.startswith("Mo 23:00–00:00 · Nacht Vorlauf-Soll: Heizbetrieb aus kein Raum braucht Wärme – Heizbetrieb aus")
+    # seit 0.46.5 (Standard „Pumpe läuft weiter“): kein Bedarf – nur Pumpe
+    assert t_night.startswith("Mo 23:00–00:00 · Nacht Vorlauf-Soll: kein Bedarf – nur Pumpe kein Raum braucht Wärme – "
+                              "Pumpe läuft, Vorlauf-Soll 20 °C")
     # seit 0.46: Soll = Minimum 40 °C + Hysterese (unbekannt: 5 K angenommen)
     assert "Außen: 0 °C (Vorhersage)" in t_night and "Warmwasser-Soll: 45 °C" in t_night
     assert "Speicher darf bis 40 °C fallen" in t_night
@@ -194,7 +196,7 @@ def test_tooltip_per_hour_night_preheat_and_writes(tmp_path, berlin):
     assert any(w["what"] == "flow" and w["from"] == 45 for w in first) and "45 → " in t_first
     # Linien-Schlüssel statt Punkte, Werte fett, Gründe als eigene, umbrechende Zeile
     assert r[0].count('class="tip-key"') == 3 and "border-top:2px dashed var(--series-1)" in r[0]
-    assert '<span class="tip-why">kein Raum braucht Wärme – Heizbetrieb aus</span>' in r[0]
+    assert '<span class="tip-why">kein Raum braucht Wärme – Pumpe läuft, Vorlauf-Soll 20 °C</span>' in r[0]
 
 
 def test_table_rows_with_reasons_room_changes_and_dst(tmp_path, berlin):
@@ -209,7 +211,8 @@ def test_table_rows_with_reasons_room_changes_and_dst(tmp_path, berlin):
     assert "Räume: Wz 18 °C (Nacht)" in plain(rows[i21]) and "Räume:" not in plain(rows[1])
     cells = [plain(c) for c in re.findall(r'<tr class="pv-h"><td>(.*?)</td>', r)]
     assert cells[0] == "Mo 12:00" and cells[hour_of(p, "00:00")].startswith("Di 00:00 Nacht")
-    assert "Heizbetrieb aus" not in cells[0] and "aus" in plain(re.findall(r'<tr class="pv-h">(.*?)</tr>', r)[hour_of(p, "23:00")])
+    # seit 0.46.5 ohne Bedarf „Pumpe“ (Heizbetrieb bleibt an, 20 °C) statt „aus“
+    assert "Heizbetrieb aus" not in cells[0] and "Pumpe" in plain(re.findall(r'<tr class="pv-h">(.*?)</tr>', r)[hour_of(p, "23:00")])
     # Herbst: 02:00 kommt zweimal – die zweite ist gekennzeichnet
     q = preview_json(tmp_path / "b", now=int(datetime(2026, 10, 24, 12, 0).timestamp()))
     r = run_js(tmp_path, f"out(pvTable({json.dumps(q)}));")

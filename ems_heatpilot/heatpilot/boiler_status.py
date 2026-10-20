@@ -133,6 +133,9 @@ class BoilerStatus:
             return f"{lead} · kein Vorlauf-Soll – {t.reason}"
         if not t.heating:
             return f"{lead} · {dry}Heizbetrieb aus{' schalten' if dry else ''} ({_first(t.reason)})"
+        if getattr(t, "idle", False):  # 0.46.5: kein Bedarf – Heizbetrieb bleibt an, nur die Pumpe läuft
+            return f"{lead} · kein Bedarf – " + (f"würde Vorlauf-Soll {t.flow} °C setzen, Pumpe läuft weiter" if dry
+                                                 else f"Pumpe läuft, Vorlauf-Soll {t.flow} °C")
         parts = [f"{lead} · {dry}Vorlauf {t.flow} °C{' setzen' if dry else ''} ({_first(t.reason)})"]
         if t.load is not None and t.load > (t.base or 0):
             parts.append(f"Abnahme mind. {t.load} °C")
@@ -151,7 +154,7 @@ class BoilerStatus:
         return {"heating": t.heating, "flow": t.flow, "reason": t.reason, "base": t.base, "load": t.load,
                 "load_text": t.load_text, "boost_k": t.boost_k, "boost_wanted": t.boost_wanted,
                 "waiting": list(t.waiting), "cycling": t.cycling, "cap": t.cap, "cap_why": t.cap_why,
-                "limited": t.limited, "charging": t.charging, "t_out": t.t_out}
+                "limited": t.limited, "charging": t.charging, "t_out": t.t_out, "idle": getattr(t, "idle", False)}
 
     def _entity(self, what: str) -> dict:
         eid = self.entities[what]
@@ -192,6 +195,7 @@ class BoilerStatus:
             "status_text": self._status(), "warnings": self.warnings(now_ts),
             "notes": [br.HINT_FAILSAFE, "Die Antipendelzeit des Kessels bleibt, wie sie ist"],
             "rules": {"flow_min": lo, "flow_max": hi, "step_k": br.STEP_K, "flow_gap_s": br.FLOW_GAP_S,
+                      "pump_flow": br.PUMP_FLOW, "idle": self.eng.cfg.boiler_idle,  # 0.46.5: kein Bedarf
                       "heat_hold_min": br.HEAT_HOLD_S // 60, "heat_off_min": br.HEAT_OFF_S // 60,
                       "flow_down_min": br.FLOW_DOWN_S // 60, "blind_min": br.BLIND_S // 60,
                       "check_s": CHECK_S, "check_max_s": CHECK_MAX_S,
