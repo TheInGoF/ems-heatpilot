@@ -90,10 +90,11 @@ def test_bath_after_special_charge_is_covered_and_not_recommended_for(flag):
     sunday_17 = MONDAY + timedelta(days=6, hours=17)
     assert m.big_draw_expected(sunday_17, 2.0) is None
     rec = m.recommend(sunday_17, True, None, cfg)
-    assert rec["hold"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1 and not rec["reason"].startswith("große Zapfung")
+    # seit 0.46.2 ist Komfort (+ Reserve) das Soll: ``target`` statt ``hold``
+    assert rec["target"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1 and not rec["reason"].startswith("große Zapfung")
     # So 12 Uhr, vor der Legionellenladung: seit 0.46 Komfort (jemand zu Hause und wach), nicht höher für die Wanne
     rec = m.recommend(MONDAY + timedelta(days=6, hours=12), True, None, cfg)
-    assert cfg.dhw_comfort_temp <= rec["hold"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1
+    assert cfg.dhw_comfort_temp <= rec["target"] <= cfg.dhw_comfort_temp + m.comfort_margin + 1
 
 
 def test_uncovered_bath_still_lifts_the_target():

@@ -35,13 +35,13 @@ def test_tracker_outage_keeps_household_open_and_dhw_off_minimum(tmp_path):
         sample["dhw_set"] = 55.0
         check, (hold, target) = eng.dhw_recommend(t, sample)
         assert check["ok"]
-        seen.append((sample["home_count"], eng.dhw_rec["reason"], hold))
+        seen.append((sample["home_count"], eng.dhw_rec["reason"], target))
     assert [h for h, _, _ in seen] == [1, 1, 1, None, None, None]
     assert eng.persons["person.a"].home is True  # Learner behält den letzten bekannten Zustand
-    for _, reason, hold in seen[3:]:
+    for _, reason, target in seen[3:]:
         assert not reason.startswith("niemand zu Hause")
-        # seit 0.46: Anwesenheit offen, wach – Komfort (+ Reserve), nicht Minimum
-        assert hold >= cfg.dhw_comfort_temp > cfg.dhw_min_temp
+        # seit 0.46: Anwesenheit offen, wach – Komfort (+ Reserve), nicht Minimum; seit 0.46.2 ist Komfort das Soll
+        assert target >= cfg.dhw_comfort_temp > cfg.dhw_min_temp
 
 
 def test_home_count_rules_with_two_persons(tmp_path):

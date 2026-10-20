@@ -48,6 +48,11 @@ SENSOR_STEP_SHARE = 0.1    # Stufe = kleinster Betrag, der mindestens so oft vor
 HIT_K = 1.0               # ab so viel Temperaturabfall in einer Stunde zählt sie als „mit Zapfung“
 SPECIAL_COVER_H = 12.0     # so lange danach ist eine große Zapfung durch die Sonderladung gedeckt
 COLD_HOLD_H = 0.5      # Zapfschritte mit weniger Abstand sind ein Ereignis (Reserve, Komfortzähler)
+# Schatten (0.46.2): Die Zapfung eines Messschritts gilt als gleichmäßig über den Schritt verteilt, höchstens so
+# lange – nur so lange lädt der Kessel im Schatten schon während des Zapfens nach. Eine Dauer innerhalb des
+# Schritts misst HeatPilot nicht; 5 min ist kurz (eine Dusche dauert meist länger), längere Zapfungen ergeben
+# sich aus mehreren Schritten
+DRAW_SPREAD_H = 5 / 60
 
 
 def cooling_sample(d_t: float, since_charge_h: float) -> bool:
@@ -227,10 +232,18 @@ class DhwShadow:
         der Schatten sie schon unter dem Komfortwert bedient. Seit 0.36.3 kommt ``mirror`` auch einmal nach der
         Ladedauer eines bestätigten Desinfektionstermins (Desinfektionstemperatur, ``dhw_disinfect.shadow_mirror``):
         Die Strategie desinfiziert dann selbst – danach gilt dasselbe wie nach der Sonderladung des Reglers.
+
+        Seit 0.46.2 ist der Komfortwert das Soll (Speicher zwischen Komfort − Hysterese und Komfort): Mit ``top``
+        heißt „zu kalt“ unter Komfort − Hysterese (``top − target``), sonst zählte jede Zapfung im üblichen
+        Band und die Reserve wüchse um die Hysterese nach. Ebenfalls seit 0.46.2 zählt für „unter das Minimum“
+        der tiefste Stand im Ereignis, mit dem Nachladen des Kessels: Fällt der Speicher während der Zapfung
+        unter ``target``, lädt er mit der gelernten Laderate für die restliche Zapfdauer nach (``_event_step``).
         """
         out = {"loss_kwh": 0.0, "cold_draw": 0, "raise_margin": 0}
         if t_actual is None:
             return out
+        if top is not None:
+            comfort -= max(top - target, 0.0)
         if self.t_sim is None:
             self.t_sim = t_actual
         if mirror is not None and mirror > self.t_sim:
@@ -239,23 +252,28 @@ class DhwShadow:
             self._ride_h += dt_h
             self._ride = self._ride_h <= SPECIAL_COVER_H + 1e-6
         ev = self._ev
+        rate, full = max(model.charge_rate_kh, 5.0), max(target, top if top is not None else target)
         if ev is not None:
             ev["quiet"] += dt_h
             if ev["quiet"] > COLD_HOLD_H + 1e-6:
                 ev = self._ev = None
+            elif draw_k <= 0:
+                _event_step(ev, 0.0, dt_h, target, rate, full)  # zwischen den Zapfschritten lädt er weiter
         if draw_k > 0:
             if ev is None:
                 ev = self._ev = {"t0": self.t_sim, "k": 0.0, "quiet": 0.0, "counted": False,
                                  "bound": margin_bound is None or bool(margin_bound),
-                                 "special": self._ride and self.t_sim >= comfort - 1e-6}
+                                 "special": self._ride and self.t_sim >= comfort - 1e-6,
+                                 "t": self.t_sim, "low": self.t_sim, "on": False}
             ev["k"] += draw_k
             ev["quiet"] = 0.0
-            under = dhw_min is not None and ev["t0"] - ev["k"] < dhw_min
+            _event_step(ev, draw_k, dt_h, target, rate, full)
+            under = dhw_min is not None and ev["low"] < dhw_min
             short = ev["t0"] < comfort or under
             if not ev["counted"] and ev["k"] >= HIT_K and short and not ev["special"]:
                 ev["counted"] = True
                 out["cold_draw"] = 1
-                fixable = ev["t0"] < comfort or (dhw_min - (ev["t0"] - ev["k"]) <= DHW_MARGIN_MAX + 1e-6)
+                fixable = ev["t0"] < comfort or (dhw_min - ev["low"] <= DHW_MARGIN_MAX + 1e-6)
                 if dhw_max is not None:
                     fixable = fixable and ev["t0"] < dhw_max - 1e-6
                     if dhw_min is not None and ev["k"] > dhw_max - dhw_min:
@@ -273,3 +291,30 @@ class DhwShadow:
         if c is not None:
             out["loss_kwh"] = c * model.cooling_kh(self.t_sim) * dt_h
         return out
+
+
+def _event_step(ev: dict, k: float, dt_h: float, hold: float, rate: float, full: float) -> None:
+    """Speicher im Zapfereignis (``ev``: ``t``, ``low``, ``on``) einen Messschritt weiter.
+
+    Die Zapfung ``k`` läuft gleichmäßig über min(Schritt, ``DRAW_SPREAD_H``), der Rest des Schritts ohne Zapfung.
+    Fällt der Speicher unter ``hold`` (Soll − Hysterese), lädt der Kessel wie der echte – auch während des
+    Zapfens – mit ``rate`` (gelernte Laderate, K/h) bis ``full`` (Soll). ``low``: tiefster Stand im Ereignis.
+    Auskühlen in diesen Minuten bleibt außen vor (wie bisher beim Vergleich mit dem Minimum).
+    """
+    t = ev["t"]
+    d = min(dt_h, DRAW_SPREAD_H) if k > 0 else 0.0
+    if d > 0:
+        r = k / d
+        start = 0.0 if ev["on"] else max(t - hold, 0.0) / r  # ab da lädt der Kessel mit
+        if start < d:
+            ev["on"] = True
+            end = t - k + rate * (d - start)
+            ev["low"] = min(ev["low"], t - r * start, end)  # beim Einschalten bzw. am Zapfende
+            t = min(end, full)
+        else:
+            t -= k
+            ev["low"] = min(ev["low"], t)
+    if ev["on"]:
+        t = min(t + rate * (dt_h - d), full)
+        ev["on"] = t < full - 1e-6
+    ev["t"] = t

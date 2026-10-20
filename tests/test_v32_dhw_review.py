@@ -253,7 +253,7 @@ def _irregular_household(weeks: int, seed: int = 1):
     cfg = _cfg()
     m, sh = DhwModel(), DhwShadow()
     t, charging, rec, start = 55.0, False, None, datetime(2026, 1, 5)
-    cold, shower = 0, None
+    cold, shower = [], None  # zu kalte Zapfungen: (Zeit, Speicher durfte fallen?, Schatten davor)
     for i in range(weeks * 7 * 288):
         now = start + timedelta(minutes=5 * i)
         if now.hour == 0 and now.minute == 0:
@@ -278,7 +278,8 @@ def _irregular_household(weeks: int, seed: int = 1):
                       top=rec["target"])
         if out["raise_margin"] and m.charges >= 3:
             m.note_cold_draw()
-        cold += out["cold_draw"]
+        if out["cold_draw"]:
+            cold.append((now, rec["hold"] == cfg.dhw_min_temp, round(sh._ev["t0"], 1)))
     return m, cfg, cold
 
 
@@ -286,9 +287,13 @@ def test_irregular_household_is_warm_while_awake_without_reserve():
     """Umgekehrt seit 0.46: kein Boden „Minimum + Reserve“ mehr – wach und zu Hause gilt Komfort, nachts Minimum."""
     m, cfg, cold = _irregular_household(4)
     assert max(m.hit_daily) < 0.25  # keine Stunde „üblich“: das Profil hilft hier nicht
-    assert cold == 0 and m.comfort_margin == 0.0  # nie zu kalt: keine Reserve nötig
+    # wach nie zu kalt: keine Reserve nötig. Seit 0.46.2 (Komfort ist das Soll, Speicher 45–50 °C statt über 50 °C)
+    # geht der Speicher unten im Band in die Nacht: Eine Dusche kurz nach Nachtbeginn (hier Di 21:20) beginnt knapp
+    # unter Komfort − Hysterese (44,9 °C) und zählt als zu kalt – nachts fallen lassen bleibt wie in 0.46
+    assert len(cold) <= 1 and all(night and t0 >= 44.0 for _, night, t0 in cold), cold
+    assert m.comfort_margin == 0.0
     rec = m.recommend(datetime(2026, 2, 2, 12, 0), True, None, cfg)
-    assert rec["hold"] >= cfg.dhw_comfort_temp and rec["margin_bound"]
+    assert rec["target"] >= cfg.dhw_comfort_temp and rec["margin_bound"]  # seit 0.46.2: Komfort ist das Soll
     rec = m.recommend(datetime(2026, 2, 2, 1, 0), True, None, cfg)
     assert rec["hold"] == cfg.dhw_min_temp and rec["reason"].startswith("Nacht") and not rec["margin_bound"]
 

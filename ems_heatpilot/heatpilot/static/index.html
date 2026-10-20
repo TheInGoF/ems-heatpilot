@@ -1783,10 +1783,12 @@ function dhwChart(container, w) {
   });
 }
 
-// Warmwasser-Empfehlung (0.46): Soll groß, darunter die gehaltene Speichertemperatur (Soll − Hysterese) und der Grund
+// Warmwasser-Empfehlung (0.46): Soll groß, darunter der Speicherbereich und der Grund – seit 0.46.2 wie der Grundtext:
+// „Speicher 45–50 °C“ (Soll − Hysterese bis Soll) bzw. beim Fallenlassen „Speicher darf bis 40 °C fallen“
 function dhwRecNote(rec) {
   if (rec.hold === undefined || rec.hold === null) return esc(rec.reason);
-  return `Speicher bleibt über ${fmt(rec.hold)} °C (Hysterese ${fmt(rec.hyst)} K${rec.hyst_assumed ? " angenommen" : ""}) · ${esc(rec.why || rec.reason)}`;
+  const temp = rec.drop ? `Speicher darf bis ${fmt(rec.hold)} °C fallen` : `Speicher ${fmt(rec.hold)}–${fmt(rec.target, 0)} °C`;
+  return `${temp}${rec.hyst_assumed ? ` (Hysterese ${fmt(rec.hyst)} K angenommen)` : ""} · ${esc(rec.why || rec.reason)}`;
 }
 function tile(label, value, unit, note) {
   if (value === "–" || value === "" || value === null || value === undefined) return "";
@@ -2621,7 +2623,7 @@ function nxDhw(p, w) {
   el("path", { ...st, d: stepPath(s.ts, s.ends, s.vals, f.sx, f.sy), stroke: PV_C.dhw, "stroke-width": 2 }, f.svg);
   hourHover("nx-dhw", f, hts, (k) => pvTip(p, w.idx[k]));
   const it = [["lk", PV_C.dhw, "Warmwasser-Soll"]];
-  if (hold.some((v) => v !== null)) it.push(["lk dash", PV_C.dhw, "Speicher bleibt über"]);
+  if (hold.some((v) => v !== null)) it.push(["lk dash", PV_C.dhw, "Speicher darf bis hier fallen"]);  // Soll − Hysterese
   if (hrs.some((h) => h.night)) it.push(["band", "var(--band-night)", "Nacht"]);
   if (hrs.some((h) => !h.night && (h.home === 0 || h.vacation))) it.push(["band", "var(--band-away)", hrs.some((h) => h.vacation) ? "niemand zu Hause / Urlaub" : "niemand zu Hause"]);
   $("lg-nx-dhw").innerHTML = nxLegend(it);

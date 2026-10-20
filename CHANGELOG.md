@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.46.2
+**Warmwasser: Die Komforttemperatur ist das Soll** (an Home Assistant und den Kessel wird nichts Neues geschrieben; Weg W schreibt das Warmwasser-Soll mit denselben Regeln wie bisher – nur das Ziel ist niedriger)
+- **Komfort = Soll** (`dhw_target.py`): Komfort der Einstellungen (+ gelernte Reserve) ist das empfohlene Soll, auf 1 K aufgerundet, höchstens das Maximum (neu `capped()`); der Speicher pendelt zwischen Komfort − Hysterese und Komfort wie bei einer üblichen Automation – beim Standard-Komfort 50 °C und 5 K Hysterese 45–50 °C statt 50–55 °C. Grund „… – Speicher 45–50 °C“ statt „Speicher bleibt über …“
+- **Nur das Minimum mit Hysterese:** Nacht, niemand zu Hause, Urlaub → Soll = Minimum + Hysterese, wie in 0.46 („Speicher darf bis … °C fallen“)
+- **Große Zapfung:** Soll = höher von Komfort und Minimum + Bedarf, ohne Hysterese (der Kessel lädt während des Zapfens nach)
+- **Aufheizdauer** = (Komfort-Soll − Minimum) / Ladegeschwindigkeit + 0,5 h (bisher bis Komfort + Hysterese und 1 h Puffer): Vor dem Aufstehen und vor der Ankunft wird später geheizt. Zapfungen sieht die Strategie weiter mindestens 1 h voraus (`DRAW_AHEAD_H`) – mit der kürzeren Aufheizdauer kannte sie bei schnell ladendem Speicher die Dusche um 7 Uhr sonst erst um 7 Uhr
+- **Ladedauer vor der Ankunft** (Übersicht) bis Komfort statt Komfort + Hysterese
+- **Reserve einmal auf 0** (kv `dhw.margin_reset_0462`): Sie stammt aus der früheren Strategie. Gleich gespeichert, auch in der Sicherung des Zapfprofils („alle lange weg“), damit sie nicht zurückkommt
+- **Schatten der Ersparnis:** „zu kalt“ heißt unter Komfort − Hysterese (bisher unter Komfort) bzw. unter das Minimum – sonst zählte jede Zapfung im üblichen Band als zu kalt, und die Reserve wüchse wieder um die Hysterese an. Fürs Minimum zählt der tiefste Stand mit dem Nachladen: Fällt der Vergleichsspeicher während der Zapfung unter Soll − Hysterese, lädt er mit der gelernten Ladegeschwindigkeit für die restliche Zapfdauer nach (Zapfung eines Messschritts gleichmäßig über den Schritt, höchstens 5 min: `DRAW_SPREAD_H`) – Fälle, die der Kessel real abdeckt, zählen nicht mehr
+- **Oberfläche:** Kachel „Empfehlung jetzt“ wie der Grundtext („Speicher 45–50 °C“ bzw. „Speicher darf bis … °C fallen“, „Hysterese … K angenommen“ nur ohne Kesselwert; dazu `drop` in der Empfehlung); Legende der Karte „Nächste 12 Stunden“: „Speicher darf bis hier fallen“
+- **Zertifikat:** lange Hinweise in Zeilen werden unter dem Wert umbrochen statt über den Rand zu laufen
+- **Doku:** DOCS.md – Warmwasser-Strategie, „zu kalt“ im Vergleichsspeicher, Kachel und Legende
+- **Tests:** neu `tests/test_dhw_v462.py`; angepasst, Absicht erhalten (Komfort als Soll `target` statt `hold`, Aufheizdauer mit 0,5 h Puffer): `test_dhw`, `test_dhw_hyst46`, `test_dhw_control38`, `test_dhw_special`, `test_dhw_v28`, `test_dhw_v32b` (Wanne um das Nachladen größer), `test_preview37`, `test_ui_v461`, `test_v32_presence_review`, `test_v32_dhw_review` (eine Dusche kurz nach Nachtbeginn beginnt knapp unter Komfort − Hysterese und zählt als zu kalt)
+
 ## 0.46.1
 **Übersicht: Nächste 12 Stunden bei Warmwasser und Kessel** (nur Oberfläche und Anzeige – gerechnet und geschrieben wird nichts anders)
 - **Übersicht → Warmwasser:** neue Karte „Nächste 12 Stunden“ unter den Kacheln – Stufenlinie Warmwasser-Soll, gestrichelt die gehaltene Untergrenze („Speicher bleibt über …“), Nacht/Abwesenheit als Band, Abschnitte beschriftet (Nacht, niemand zu Hause/Urlaub, Aufheizen, Zapfung erwartet, Desinfektion); darunter nur die Wechsel als eine Zeile („Jetzt 55 °C · ab 22:00 45 °C (Nacht) · ab 05:30 55 °C (vor dem Aufstehen)“) und ob HeatPilot das Soll selbst setzt

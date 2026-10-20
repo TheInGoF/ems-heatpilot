@@ -104,6 +104,13 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
             self.persons[p] = PersonLearner.from_dict(saved) if saved else PersonLearner(p)
         saved = store.get("model.dhw")
         self.dhw = DhwModel.from_dict(saved) if saved else DhwModel()
+        if not store.get("dhw.margin_reset_0462"):  # 0.46.2: Reserve stammt aus der alten, zu kalten Strategie
+            self.dhw.comfort_margin = 0.0
+            if self.dhw._backup is not None:  # auch nicht über „alle lange weg“ (Zapfprofil-Sicherung) zurück
+                self.dhw._backup["comfort_margin"] = 0.0
+            if saved:  # gleich speichern: sonst käme sie nach einem Neustart vor dem nächsten Speichern zurück
+                store.put("model.dhw", self.dhw.to_dict())
+            store.put("dhw.margin_reset_0462", True)
         self.dhw_shadow = DhwShadow()
         # Zeiten/Temperaturen: Einstellungen sind Startwerte, gelernt wird aus Tado
         self.schedule_learned: dict | None = store.get("schedule.learned")
