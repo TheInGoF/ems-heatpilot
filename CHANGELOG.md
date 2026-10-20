@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.47.4
+**„Kein Wärmebedarf“ des Kessels ist kein fremder Schreiber**
+- Schreibt HeatPilot „nur Pumpe“ (20 °C), meldet mancher Kessel das Vorlauf-Soll danach als seinen eigenen Ruhewert (z. B. 7 °C). Das galt als „anderer Schreiber am Kessel“ und hätte nach zwei Fällen pausiert. Jetzt gelten zwei Vorlauf-Soll bis 20 °C als gleich – beides heißt „kein Wärmebedarf“
+- **Tests:** `tests/test_boiler467.py` ergänzt
+
 ## 0.47.3
 - Einstellungen → Diagnose: das Protokoll der Schreibvorgänge aktualisiert sich alle 30 s selbst (wie Kessel, Warmwasser und Steuerung seit 0.47.1)
 
