@@ -141,8 +141,10 @@ class EmsEsp:
 
     async def _fetch(self, device: str) -> tuple[dict | None, str]:
         """``GET /api/<gerät>`` (nur lesen): (Werte, Ausgang). ``ABSENT`` nur bei einer ausdrücklichen Meldung von
-        EMS-ESP statt Werten (z. B. 400 „unknown device“); Zeitüberlauf, keine Verbindung, Serverfehler, eine
-        unlesbare oder leere Antwort sind ``FAILED`` – dann ist unbekannt, ob es das Gerät gibt."""
+        EMS-ESP statt Werten (z. B. 400 „unknown device“) und – seit 0.46.4 – bei einer leeren Antwort (200, keine
+        Werte: EMS-ESP antwortet, das Gerät meldet nichts mehr, z. B. ein abgebauter Regler); Zeitüberlauf, keine
+        Verbindung, Serverfehler oder eine unlesbare Antwort sind ``FAILED`` – dann ist unbekannt, ob es das Gerät
+        gibt."""
         try:
             async with self._session.get(f"{self.base}/api/{device}") as resp:
                 code = resp.status
@@ -156,7 +158,9 @@ class EmsEsp:
             return None, FAILED
         if isinstance(data, dict) and data and set(data) <= MESSAGE_KEYS:
             return None, ABSENT if code < 500 else FAILED
-        if code != 200 or not isinstance(data, dict) or not data:
+        if code == 200 and isinstance(data, (dict, list)) and not data:
+            return None, ABSENT
+        if code != 200 or not isinstance(data, dict):
             return None, FAILED
         return flatten(data), OK
 

@@ -38,11 +38,19 @@ def load(store) -> dict:
     return dict(raw) if isinstance(raw, dict) else {}
 
 
+# Eingaben, die Home Assistant selbst schreibt (Automation, EMS-ESP-Fernfühler) – kein Lebenszeichen des Reglers
+# (0.46.4: number.…_remotetemp hielt einen abgebauten Regler „am Bus“)
+WRITABLE = ("number.", "select.", "switch.", "button.", "input_number.", "input_select.", "input_boolean.")
+INPUT_ROLES = ("hc_remotetemp",)
+
+
 def _fresh_ha(eng, now: float) -> str | None:
-    """Eine Entität des Reglers (Heizkreis) in Home Assistant, deren Wert in den letzten ``REGULATOR_FRESH_S`` kam."""
+    """Eine Entität des Reglers (Heizkreis) in Home Assistant, deren Wert in den letzten ``REGULATOR_FRESH_S`` kam –
+    nur, was der Regler selbst meldet (Sensoren), keine beschreibbaren Eingaben."""
     for role, eid in sorted((getattr(eng.found, "thermostat", None) or {}).items()):
         st = eng.states.get(eid) or {}
-        if not role.startswith("hc_") or st.get("state") in eg.OFF_STATES:
+        if (not role.startswith("hc_") or role in INPUT_ROLES or eid.startswith(WRITABLE)
+                or st.get("state") in eg.OFF_STATES):
             continue
         seen = parse_time(st.get("last_reported") or st.get("last_updated"))
         if seen is not None and now - seen.timestamp() <= REGULATOR_FRESH_S:

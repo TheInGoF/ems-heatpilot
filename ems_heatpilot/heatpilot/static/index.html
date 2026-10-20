@@ -22,6 +22,7 @@
   --err: #e34948; --err-text: #b42323; --warn-text: #7e5300; --good-text: #106b1e; --accent-text: #1c5cab;
   --surface-2: #f0efec;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+  --nx-w: auto;  /* 0.46.3: Breite eines Zeitstrahl-Abschnitts, je Abschnitt gesetzt */
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
@@ -490,11 +491,41 @@ label.switch input:checked { background: var(--series-1); } label.switch input:c
 code.eid { display: inline-block; max-width: 100%; vertical-align: bottom; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; overflow-wrap: normal; }
 p.empty { margin: 4px 0; }
-/* Nächste 12 Stunden (0.46.1): Wechsel als eine Zeile unter dem Grafen, darunter klein, ob HeatPilot das schreibt */
-.nx-line { margin: 6px 0 0; font-size: 13px; color: var(--text-primary); }
-.nx-line:empty { display: none; }
-.nx-line .muted { display: block; margin-top: 2px; font-size: 12px; }
-.legend i.off { background: var(--text-muted); opacity: .3; }
+/* Nächste 12 Stunden (0.46.3): Zeitstrahl – schmal eine Zeile je Abschnitt (Zeit | Art | Wert), ab 600 px Kartenbreite
+   waagrecht mit Breite nach Dauer und Stundenmarken; Art als ruhige Tönung, Text in Text-Tokens; „jetzt“-Strich links */
+.nx-tl { container-type: inline-size; margin-top: var(--s2); }
+.nx-bar { display: flex; flex-direction: column; gap: 2px; position: relative; }
+.nx-seg { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) auto; gap: var(--s2); align-items: baseline; padding: 6px var(--s2);
+  border-radius: 6px; border-left: 3px solid transparent; font-size: 13px; color: var(--text-primary); background: var(--surface-2);
+  cursor: default; outline: none; min-width: 0; }
+.nx-seg:first-child { border-left-color: var(--text-primary); }
+.nx-seg:hover, .nx-seg:focus-visible, .nx-seg.on { box-shadow: inset 0 0 0 2px var(--text-primary); }
+.nx-t { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.nx-a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nx-v { text-align: right; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nx-v small { display: block; font-weight: 400; font-size: 12px; color: var(--text-secondary); }
+.nx-k-night { background: var(--band-night); } .nx-k-home { background: var(--band-home); }
+.nx-k-away, .nx-k-vac { background: var(--band-away); } .nx-k-heat, .nx-k-pre { background: var(--band-burner); }
+.nx-k-draw { background: var(--band-dhw); } .nx-k-dis { background: var(--heat-bg); } .nx-k-off { background: var(--off-bg); }
+.nx-k-flick { background: repeating-linear-gradient(135deg, var(--off-bg) 0 6px, var(--surface-2) 6px 12px); }
+.nx-ticks { display: none; }
+@container (min-width: 600px) {
+  .nx-bar { flex-direction: row; gap: 0; }
+  .nx-bar::before { content: ""; position: absolute; left: 0; top: -4px; bottom: -4px; width: 2px; background: var(--text-primary); z-index: 1; }
+  .nx-seg { display: flex; flex-direction: column; justify-content: center; gap: 1px; flex: none; width: var(--nx-w); padding: 6px;
+    border-radius: 0; border-left: 1px solid var(--surface-1); overflow: hidden; }
+  .nx-seg:first-child { border-radius: 6px 0 0 6px; border-left: 0; }
+  .nx-seg:last-child { border-radius: 0 6px 6px 0; }
+  .nx-seg > span, .nx-v small { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+  .nx-t { font-size: 12px; }
+  .nx-ticks { display: block; position: relative; height: 18px; margin-top: 6px; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .nx-ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+  .nx-ticks span::before { content: ""; position: absolute; left: 50%; top: -6px; height: 4px; border-left: 1px solid var(--border); }
+  .nx-ticks .nx-now { left: 0; transform: none; color: var(--text-primary); font-weight: 600; }
+  .nx-ticks .nx-now::before { display: none; }
+}
+.nx-note { margin: 6px 0 0; font-size: 12px; }
+.nx-note:empty { display: none; }
 /* Heizen (0.43): eine Zeile zum Raumbetrieb (Antippen → Übersicht → Status), vier Kacheln immer, Meldung als Einblendung,
    breit höchstens 760 px mit Raumkacheln in --cols Spalten */
 .heat-line { display: flex; align-items: center; gap: var(--s2); width: 100%; margin: 0 0 var(--s3); padding: 2px 0; border: 0;
@@ -829,9 +860,8 @@ ul.rules li { margin: 3px 0; }
   <!-- 0.46.1: was HeatPilot die nächsten 12 h plant (aus api/preview, drawNext) -->
   <div class="card nx-card" id="nx-dhw">
     <h2>Nächste 12 Stunden</h2>
-    <div class="legend" id="lg-nx-dhw"></div>
     <div id="ch-nx-dhw"><p class="muted empty">Noch keine Vorschau – sobald HeatPilot die nächsten Stunden berechnet hat, steht hier der Plan.</p></div>
-    <p class="nx-line" id="nx-dhw-line"></p>
+    <p class="nx-note muted" id="nx-dhw-note"></p>
   </div>
   <div class="card">
     <div class="row" style="justify-content:space-between"><h2>Wann gezapft wird</h2>
@@ -851,9 +881,8 @@ ul.rules li { margin: 3px 0; }
   <div id="ov-kessel" hidden>
   <div class="card nx-card" id="nx-flow">
     <h2>Nächste 12 Stunden</h2>
-    <div class="legend" id="lg-nx-flow"></div>
     <div id="ch-nx-flow"><p class="muted empty">Noch keine Vorschau – sobald HeatPilot die nächsten Stunden berechnet hat, steht hier der Plan.</p></div>
-    <p class="nx-line" id="nx-flow-line"></p>
+    <p class="nx-note muted" id="nx-flow-note"></p>
   </div>
   <div class="card" id="ov-burner">
     <h2>Brenner</h2>
@@ -2268,7 +2297,7 @@ const span10 = (ys) => { const lo = Math.min(...ys), hi = Math.max(...ys), m = M
   return hi - lo >= 10 ? {} : { yMin: Math.min(lo, m), yMax: Math.max(hi, m + 10) }; };
 const pvBandOf = (h) => h.night ? "var(--band-night)" : h.home === 0 || h.vacation ? "var(--band-away)" : null;
 // „11:05 Vorlauf 45 → 25 °C“ bzw. „21:00 Heizbetrieb aus“
-const pvWrite = (w) => `${clock(w.t)} ${PV_WHAT[w.what] || esc(w.what)} ` + (w.what === "heating" ? (w.value ? "an" : "aus")
+const pvWrite = (w) => `${isoClock(w.t)} ${PV_WHAT[w.what] || esc(w.what)} ` + (w.what === "heating" ? (w.value ? "an" : "aus")
   : `${w.from === null || w.from === undefined ? "" : fmt(w.from, 0) + " → "}${fmt(w.value, 0)} °C`);
 
 async function loadPreview() {
@@ -2380,7 +2409,7 @@ function pvFlowChart(box, p, hours, x0, x1) {
   const outs = p.hours.map((h) => h.t_out), mids = hours.map((t) => Math.max(t + 1800, x0));
   const ys = [...flows, ...outs].filter((v) => v !== null && v !== undefined);
   if (!ys.length) { box.innerHTML = `<p class="muted">Weder Vorlauf-Soll noch Außentemperatur.</p>`; return; }
-  const f = frame(box, [x0, x1], ys, { xTicks: timeTicks, height: 190, label: "Vorlauf-Soll und Außentemperatur", ...span10(ys) });
+  const f = frame(box, [x0, x1], ys, { xTicks: (a, b) => hpTicks(p, a, b), height: 190, label: "Vorlauf-Soll und Außentemperatur", ...span10(ys) });
   pvBands(f, hours, p.hours.map(pvBandOf));
   pvStrip(f, st, ends, p.steps.map((s) => s.heating === false));
   const line = { fill: "none", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
@@ -2395,12 +2424,12 @@ function pvDhwChart(box, p, hours, x0, x1) {
   if (!ys.length) { box.innerHTML = `<p class="muted">Kein Warmwasser-Soll${p.dhw_note ? " – " + esc(p.dhw_note) : ""}.</p>`; return; }
   const dis = p.hours.map((h) => h.disinfect).filter(Boolean);
   const yr = dis.length ? [...ys, Math.max(...ys) + 8] : ys;  // Platz über der Linie für „Desinfektion …“
-  const f = frame(box, [x0, x1], yr, { xTicks: timeTicks, height: 140, label: "Warmwasser-Soll", ...span10(yr) });
+  const f = frame(box, [x0, x1], yr, { xTicks: (a, b) => hpTicks(p, a, b), height: 140, label: "Warmwasser-Soll", ...span10(yr) });
   pvBands(f, hours, p.hours.map(pvBandOf));
   for (const d of dis) {
     const x = f.sx(tsOf(d.at)), right = x > f.W - f.m.r - 110;
     el("line", { x1: x, x2: x, y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-secondary)", "stroke-width": 1, "stroke-dasharray": "2 3" }, f.svg);
-    el("text", { x: right ? x - 4 : x + 4, y: f.m.t + 10, "text-anchor": right ? "end" : "start" }, f.svg).textContent = `Desinfektion ${clock(d.at)}`;
+    el("text", { x: right ? x - 4 : x + 4, y: f.m.t + 10, "text-anchor": right ? "end" : "start" }, f.svg).textContent = `Desinfektion ${isoClock(d.at)}`;
   }
   el("path", { d: stepPath(st, ends, vals, f.sx, f.sy), fill: "none", stroke: PV_C.dhw, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" }, f.svg);
   pvMarks(f, p.hours.flatMap((h) => h.writes).filter((w) => w.what === "dhw"), PV_C.dhw, p.dhw_writes === "schreibt");
@@ -2478,200 +2507,244 @@ function pvTip(p, i) {
     `${tipKey(PV_C.out, 1)}Außen: <b>${fmt(h.t_out)} °C</b>${src}`,
     `${tipKey(PV_C.dhw)}Warmwasser-Soll: ${h.dhw === null || h.dhw === undefined ? "–" : `<b>${h.dhw} °C</b>`}`,
     `<span class="tip-why">${esc(h.dhw_reason)}</span>`];
-  if (h.disinfect) rows.push(`Desinfektion ${clock(h.disinfect.at)} · ${fmt(h.disinfect.temp, 0)} °C`);
+  if (h.disinfect) rows.push(`Desinfektion ${isoClock(h.disinfect.at)} · ${fmt(h.disinfect.temp, 0)} °C`);
   const own = p.dhw_writes === "schreibt", boil = p.flow_writes === "schreibt";  // schreibt wirklich: 0.38 Warmwasser, 0.41 Kessel
   const mine = h.writes.filter((w) => (w.what === "dhw" ? own : boil)), would = h.writes.filter((w) => !mine.includes(w));
   if (would.length) rows.push("würde schreiben:", ...would.map(pvWrite));
   if (mine.length) rows.push("schreibt:", ...mine.map(pvWrite));
   if (!h.writes.length) rows.push(own || boil ? "nichts zu schreiben" : "würde nichts schreiben");
-  return `${wday(t)} ${tclock(t)}–${tclock(t + 3600)}${state.length ? " · " + state.join(" · ") : ""}<br>${rows.join("<br>")}`;
+  return `${hpDay(p, t)} ${hpClock(p, t)}–${hpClock(p, t + 3600)}${state.length ? " · " + state.join(" · ") : ""}<br>${rows.join("<br>")}`;
 }
-// ---------------------------------------------------------------- Nächste 12 Stunden (0.46.1)
+// ---------------------------------------------------------------- Ortszeit von Home Assistant (0.46.3)
+// Uhrzeiten der Vorschau aus dem Versatz ihrer ISO-Zeiten (Ortszeit des Backends), nicht aus der Zeitzone des Browsers:
+// Zeitstrahl, Tooltip und 24-h-Vorschau zeigen so dieselben Uhrzeiten, auch wenn der Browser anders eingestellt ist.
+// Versatz zu einem Zeitpunkt = der des letzten Stunden-/Schrittbeginns davor (Zeitumstellung beginnt zur vollen Stunde)
+const isoOff = (iso) => {
+  const m = /(?:Z|([+-])(\d\d):?(\d\d))$/.exec(String(iso || ""));
+  return !m ? null : m[1] ? (m[1] === "-" ? -1 : 1) * (m[2] * 3600 + m[3] * 60) : 0;
+};
+const hhmm = (d) => d.toISOString().slice(11, 16);
+const isoClock = (iso) => { const o = isoOff(iso); return o === null ? clock(iso) : hhmm(new Date((tsOf(iso) + o) * 1000)); };
+const HP_OFF = new WeakMap();
+function hpOff(p, ts) {
+  if (!p || typeof p !== "object") return null;
+  let o = HP_OFF.get(p);
+  if (!o) {
+    o = [...(p.hours || []).map((h) => h.t), ...(p.steps || []).map((s) => s.t), p.now].filter(Boolean)
+      .map((t) => [tsOf(t), isoOff(t)]).filter((x) => x[1] !== null && !Number.isNaN(x[0])).sort((a, b) => a[0] - b[0]);
+    HP_OFF.set(p, o);
+  }
+  if (!o.length) return null;
+  let off = o[0][1];
+  for (const [t, v] of o) { if (t > ts) break; off = v; }
+  return off;
+}
+const hpDate = (p, ts) => { const o = hpOff(p, ts); return o === null ? null : new Date((ts + o) * 1000); };
+const hpClock = (p, ts) => { const d = hpDate(p, ts); return d ? hhmm(d) : tclock(ts); };
+const hpDay = (p, ts) => { const d = hpDate(p, ts); return d ? WEEKDAYS[(d.getUTCDay() + 6) % 7] : wday(ts); };
+const hpDayKey = (p, ts) => { const d = hpDate(p, ts); return d ? d.toISOString().slice(0, 10) : new Date(ts * 1000).toDateString(); };
+// volle Ortsstunden zwischen x0 und x1, deren Stunde durch every teilbar ist
+function hpHours(p, x0, x1, every) {
+  const out = [];
+  for (let v = Math.ceil(x0 / 1800) * 1800; v <= x1; v += 1800) {
+    const d = hpDate(p, v), m = d ? d.getUTCMinutes() : new Date(v * 1000).getMinutes(), h = d ? d.getUTCHours() : new Date(v * 1000).getHours();
+    if (!m && h % every === 0) out.push([v, hpClock(p, v)]);
+  }
+  return out;
+}
+// Achse der 24-h-Vorschau: volle Ortsstunden, Abstand wie timeTicks
+const hpTicks = (p, x0, x1) => hpOff(p, x0) === null ? timeTicks(x0, x1)
+  : hpHours(p, x0, x1, x1 - x0 > 13 * 3600 ? 4 : x1 - x0 > 7 * 3600 ? 2 : 1);
+// ---------------------------------------------------------------- Nächste 12 Stunden (0.46.1, Zeitstrahl seit 0.46.3)
 // Übersicht → Warmwasser und → Kessel: was HeatPilot ab jetzt plant – aus derselben Vorschau (PV, api/preview, keine
-// eigene Abfrage). Stufenlinie wie in der Vorschau, Tooltip je Stunde wie dort (pvTip), darunter nur die Wechsel.
-const NX_H = 12;
+// eigene Abfrage) und deren genauen Schritten (steps, je Wechsel). Abschnitte mit Uhrzeit von–bis, Art und Wert;
+// ab 600 px Kartenbreite waagrecht (Breite nach Dauer, Stundenmarken), schmaler als Liste. Antippen/Überfahren/Fokus:
+// Einzelheiten im Tooltip. Gleiche Art und Wert (±1 K) ist ein Abschnitt, kürzere als 30 min zählen zum Nachbarn.
+const NX_H = 12, NX_MIN_S = 1800, NX_DIS_S = 3600, NX_NOW_MAX_S = 2 * 3600, NX_MIN_W = 9;
 const NX_EMPTY = "Noch keine Vorschau – sobald HeatPilot die nächsten Stunden berechnet hat, steht hier der Plan.";
-// Zeitfenster: ab dem ersten Rechenschritt (jetzt) 12 h, höchstens bis zum Ende der Vorschau; idx = Stunden darin
-function nxWin(p) {
+const nxNow = () => Date.now() / 1000;
+// Fenster: ab jetzt 12 h, höchstens bis zum Ende der Vorschau. Jetzt = Rechenzeitpunkt der Vorschau (p.now, nicht der
+// Beginn des 5-min-Schritts davor); ist die Vorschau schon etwas alt, die Uhr (höchstens 2 h weiter)
+function nxWin(p, now) {
   const hs = (p && p.hours) || [];
   if (!hs.length) return null;
   const st = p.steps || [], end = tsOf(hs[hs.length - 1].t) + 3600;
-  const x0 = st.length ? Math.max(tsOf(st[0].t), tsOf(hs[0].t)) : tsOf(hs[0].t), x1 = Math.min(x0 + NX_H * 3600, end);
-  return { x0, x1, end, idx: hs.map((h, i) => i).filter((i) => tsOf(hs[i].t) + 3600 > x0 && tsOf(hs[i].t) < x1) };
+  let x0 = Math.max(tsOf(hs[0].t), st.length ? tsOf(st[0].t) : -Infinity, p.now ? tsOf(p.now) : -Infinity);
+  if (now !== undefined && now > x0) x0 = Math.min(now, x0 + NX_NOW_MAX_S);
+  return x0 < end ? { x0, x1: Math.min(x0 + NX_H * 3600, end), end } : null;
 }
-// Stufen im Fenster (auf das Fenster beschnitten): Beginn, Ende, Wert val(step), dazu die Stufe selbst
-function nxSteps(p, w, val) {
-  const st = p.steps || [], out = { ts: [], ends: [], vals: [], src: [] };
-  st.forEach((s, i) => {
-    const a = Math.max(tsOf(s.t), w.x0), b = Math.min(i + 1 < st.length ? tsOf(st[i + 1].t) : w.end, w.x1);
+// Art eines Schritts aus dessen Grund (wie dhw_target bzw. die Kessel-Vorschau ihn schreiben)
+const NX_KIND = { night: "Nacht", home: "zu Hause", away: "niemand zu Hause", vac: "Urlaub", heat: "heizt auf",
+  draw: "Zapfung erwartet", dis: "Desinfektion", off: "Heizung aus", pre: "Vorheizen", flow: "Vorlauf", flick: "zeitweise aus" };
+function nxKind(x, kind) {
+  if (kind === "flow") return x.heating === false ? "off" : /heizt vor/.test(x.flow_why || "") ? "pre" : "flow";
+  const s = String(x.dhw_why || "");
+  return /^Nacht/.test(s) ? "night" : /^Urlaub/.test(s) ? "vac" : /^niemand zu Hause/.test(s) ? "away"
+    : /^vor (dem Aufstehen|der Ankunft)|aufheizen/.test(s) ? "heat"
+    : /^(Zapfung erwartet|hier wird oft gezapft|große Zapfung)/.test(s) ? "draw" : /^Desinfektion/.test(s) ? "dis" : "home";
+}
+const nxMin = (x, y) => x === null ? y : y === null ? x : Math.min(x, y), nxMax = (x, y) => x === null ? y : y === null ? x : Math.max(x, y);
+function nxJoin(q, r, k = q.k) {
+  return Object.assign(q, { a: Math.min(q.a, r.a), b: Math.max(q.b, r.b), k, lo: nxMin(q.lo, r.lo), hi: nxMax(q.hi, r.hi),
+    hlo: nxMin(q.hlo, r.hlo), hhi: nxMax(q.hhi, r.hhi), offS: q.offS + r.offS, whys: [...new Set([...q.whys, ...r.whys])] });
+}
+// gleicher Wert: beide ohne oder höchstens 1 K auseinander (Spanne des Abschnitts ≤ 1 K)
+const nxSameVal = (q, r) => (q.lo === null) === (r.lo === null) && (q.lo === null || Math.max(q.hi, r.hi) - Math.min(q.lo, r.lo) <= 1);
+const nxSame = (q, r) => q.k === r.k && (q.k === "flick" || q.k === "off" || (q.drop === r.drop && nxSameVal(q, r)));
+// Abschnitte im Fenster: aus den Schritten, Desinfektion (Termin der Stunden-Vorschau) eine Stunde als eigener
+// Abschnitt; Gleiches zusammen, dann der kürzeste unter 30 min in den Nachbarn („zeitweise aus“, sonst gleiche Art,
+// sonst den längeren) –
+// beim Kessel wird an + aus dabei „zeitweise aus“ – bis keiner mehr zu kurz ist
+function nxRuns(p, kind, w = nxWin(p)) {
+  if (!w) return [];
+  const st = p.steps || [];
+  let out = [];
+  st.forEach((x, i) => {
+    const a = Math.max(tsOf(x.t), w.x0), b = Math.min(i + 1 < st.length ? tsOf(st[i + 1].t) : w.end, w.x1);
     if (b <= a) return;
-    out.ts.push(a); out.ends.push(b); out.vals.push(val(s) ?? null); out.src.push(s);
+    const k = nxKind(x, kind), v = (kind === "dhw" ? x.dhw : k === "off" ? null : x.flow) ?? null, h = kind === "dhw" ? x.dhw_hold ?? null : null;
+    out.push({ a, b, k, lo: v, hi: v, hlo: h, hhi: h, drop: kind === "dhw" && /darf bis/.test(x.dhw_why || ""),
+      offS: k === "off" ? b - a : 0, whys: [kind === "dhw" ? x.dhw_why : x.flow_why].filter(Boolean) });
   });
+  if (kind === "dhw") for (const d of nxDis(p, w)) {
+    const a = tsOf(d.at), b = Math.min(a + NX_DIS_S, w.x1), cut = [];
+    for (const r of out) {
+      if (r.b <= a || r.a >= b) { cut.push(r); continue; }
+      if (r.a < a) cut.push({ ...r, b: a });
+      if (r.b > b) cut.push({ ...r, a: b });
+    }
+    cut.push({ a, b, k: "dis", lo: d.temp ?? null, hi: d.temp ?? null, hlo: null, hhi: null, drop: false, offS: 0,
+      whys: [`Desinfektion, Termin ${isoClock(d.at)}${d.temp ? ` (${fmt(d.temp, 0)} °C)` : ""}`] });
+    out = cut.sort((x, y) => x.a - y.a);
+  }
+  const merge = () => { for (let i = out.length - 1; i > 0; i--) if (nxSame(out[i - 1], out[i])) nxJoin(out[i - 1], out.splice(i, 1)[0]); };
+  merge();
+  for (;;) {
+    let i = -1;
+    out.forEach((r, k) => { if (out.length > 1 && r.k !== "dis" && r.b - r.a < NX_MIN_S && (i < 0 || r.b - r.a < out[i].b - out[i].a)) i = k; });
+    if (i < 0) break;
+    const r = out[i], L = out[i - 1], R = out[i + 1];
+    const q = !L || L.k === "dis" ? R : !R || R.k === "dis" ? L : (L.k === "flick") !== (R.k === "flick") ? (L.k === "flick" ? L : R)
+      : (L.k === r.k) !== (R.k === r.k) ? (L.k === r.k ? L : R) : L.b - L.a >= R.b - R.a ? L : R;
+    if (!q || q.k === "dis") break;
+    const flick = kind === "flow" && q.k !== "off" && (r.k === "off" || r.k === "flick" || q.k === "flick");
+    nxJoin(q, r, flick ? "flick" : q.k);
+    out.splice(i, 1);
+    merge();
+  }
   return out;
 }
-// Kurzer Grund aus dem der Vorschau: „Nacht – Speicher darf bis 40 °C fallen“ → „Nacht“,
-// „Wohnzimmer heizt vor bis 06:00“ → „heizt vor“
-const NX_WHY = { dhw: [[/^vor dem Aufstehen/, "vor dem Aufstehen"], [/^vor der Ankunft/, "vor der Ankunft"],
-  [/^große Zapfung/, "große Zapfung üblich"], [/^(Zapfung erwartet|hier wird oft gezapft)/, "Zapfung erwartet"],
-  [/^Ankunft unbekannt/, "Ankunft unbekannt"], [/^lernt noch/, "lernt noch"]],
-  flow: [[/begrenzt durch/, "Fußboden-Grenze"], [/heizt vor/, "heizt vor"], [/heizt auf/, "heizt auf"],
-    [/Heizbetrieb bleibt an/, "Heizbetrieb bleibt an"], [/ hält /, "hält Soll"]] };
-function nxWhy(s, kind) {
-  s = String(s ?? "");
-  const hit = NX_WHY[kind].find(([re]) => re.test(s));
-  return hit ? hit[1] : s.split(" – ")[0];
+// Desinfektionstermine im Fenster (je Termin einmal)
+function nxDis(p, w) {
+  const seen = new Set();
+  return (p.hours || []).map((h) => h.disinfect).filter((d) => d && d.at && tsOf(d.at) >= w.x0 && tsOf(d.at) < w.x1)
+    .filter((d) => !seen.has(d.at) && seen.add(d.at));
 }
-// Beschriftung eines Warmwasser-Abschnitts im Grafen: lang, sonst kurz, sonst keine (dann nur im Tooltip)
-const NX_LABEL = { "vor dem Aufstehen": ["Aufheizen"], "vor der Ankunft": ["Aufheizen"], "niemand zu Hause": ["niemand zu Hause", "weg"],
-  "Zapfung erwartet": ["Zapfung erwartet", "Zapfung"], "große Zapfung üblich": ["Zapfung erwartet", "Zapfung"],
-  "jemand zu Hause": [], "Anwesenheit unbekannt": [], "Ankunft unbekannt": [], "lernt noch": [] };
-const nxLabel = (why) => NX_LABEL[why] || [why];
-// Wechsel als Abschnitte: gleicher Wert oder gleicher Grund hintereinander → ein Abschnitt (Wert bzw. Spanne);
-// beim Kessel ist „Heizbetrieb aus“ ein eigener Abschnitt. Abschnitte kürzer als NX_MIN_S hintereinander (Ein/Aus im
-// 5-min-Takt) werden ein Block „zeitweise aus“; ist der kürzer als NX_MIN_S, zählt er zum Abschnitt davor – sonst
-// stünde hier eine Textwand. „Jetzt“ und der Abschnitt am Ende des Fensters gelten nie als kurz.
-const NX_MIN_S = 1800;
-function nxRuns(p, kind) {
-  const w = nxWin(p);
-  if (!w) return [];
-  const s = nxSteps(p, w, (x) => kind === "dhw" ? x.dhw : x.heating === true ? x.flow : null), out = [];
-  const range = (q, lo, hi) => { if (lo !== null) { q.lo = q.lo === null ? lo : Math.min(q.lo, lo); q.hi = q.hi === null ? hi : Math.max(q.hi, hi); } };
-  const join = (q, r) => { q.b = r.b; q.onS += r.onS; q.offS += r.offS; q.mixed = q.mixed || r.mixed || q.off !== r.off; range(q, r.lo, r.hi); };
-  const same = (q, r) => q.off === r.off && q.why === r.why && (q.lo === null) === (r.lo === null);
-  s.src.forEach((x, i) => {
-    const v = s.vals[i], off = kind === "flow" && x.heating === false, d = s.ends[i] - s.ts[i];
-    const n = { a: s.ts[i], b: s.ends[i], lo: v, hi: v, why: off ? "" : nxWhy(kind === "dhw" ? x.dhw_why : x.flow_why, kind),
-      off, onS: off ? 0 : d, offS: off ? d : 0 }, r = out[out.length - 1];
-    if (r && r.off === off && (r.lo === null) === (v === null) && (off || (r.lo === v && r.hi === v) || r.why === n.why)) join(r, n);
-    else out.push(n);
+const nxDur = (s) => { const m = Math.round(s / 60), h = Math.floor(m / 60); return h ? `${h} h${m % 60 ? ` ${m % 60} min` : ""}` : `${m} min`; };
+const nxDeg = (lo, hi) => `${fmt(lo, 0)}${hi !== lo ? "–" + fmt(hi, 0) : ""} °C`;
+// Wert eines Abschnitts: [groß, klein]
+function nxVal(r, kind) {
+  if (r.k === "off") return ["aus", r.b - r.a - r.offS > 0 ? `zwischendurch ${nxDur(r.b - r.a - r.offS)} an` : ""];
+  if (r.k === "flick") return [r.lo === null ? "an/aus" : `Vorlauf ${nxDeg(r.lo, r.hi)}`, `${nxDur(r.offS)} aus`];
+  if (r.lo === null) return ["kein Soll", ""];
+  if (kind === "flow") return [`Vorlauf ${nxDeg(r.lo, r.hi)}`, ""];
+  if (r.k === "dis" || r.hlo === null) return [`Soll ${nxDeg(r.lo, r.hi)}`, ""];
+  return [`Soll ${nxDeg(r.lo, r.hi)}`, r.drop ? `darf bis ${fmt(r.hlo, 1)} °C fallen` : `Speicher ${fmt(r.hlo, 1)}–${fmt(r.hi, 0)} °C`];
+}
+// Uhrzeit von–bis; der erste Abschnitt beginnt jetzt
+const nxTime = (p, r, i) => `${i ? hpClock(p, r.a) : "jetzt"}–${hpClock(p, r.b)}`;
+// Tooltip im Stil der Vorschau: Art, Zeiten, Werte, Gründe
+function nxTip(p, kind, r, i) {
+  const [v, small] = nxVal(r, kind), rows = [];
+  if (kind === "dhw") {
+    rows.push(`${tipKey(PV_C.dhw)}Warmwasser-Soll: <b>${r.lo === null ? "–" : nxDeg(r.lo, r.hi)}</b>`);
+    if (small) rows.push(`${tipKey(PV_C.dhw, 1)}${r.drop ? "Speicher " + small : small}`);
+  } else {
+    rows.push(`${tipKey(PV_C.flow)}${r.k === "off" ? "<b>Heizbetrieb aus</b>" : `Vorlauf-Soll: <b>${r.lo === null ? "–" : nxDeg(r.lo, r.hi)}</b>`}`);
+    if (r.k === "flick") rows.push(`Heizbetrieb aus: ${nxDur(r.offS)} von ${nxDur(r.b - r.a)}`);
+    else if (small) rows.push(small);
+  }
+  const whys = r.whys.slice(0, 3).map((x) => `<span class="tip-why">${esc(x)}</span>`);
+  if (r.whys.length > 3) whys.push(`<span class="tip-why">… und ${r.whys.length - 3} weitere Gründe</span>`);
+  const from = i ? `${hpDay(p, r.a)} ${hpClock(p, r.a)}` : `jetzt (${hpDay(p, r.a)} ${hpClock(p, r.a)})`;
+  return `<b>${NX_KIND[r.k]}</b> · ${from}–${hpClock(p, r.b)} (${nxDur(r.b - r.a)})<br>${[...rows, ...whys].join("<br>")}`;
+}
+// Breiten in Prozent nach Dauer; zu schmale bekommen die Mindestbreite, der Rest teilt sich den übrigen Platz
+function nxWidths(fr, min = NX_MIN_W) {
+  const n = fr.length, fixed = new Set();
+  if (n * min >= 100) return fr.map(() => 100 / n);
+  for (;;) {
+    const rest = fr.reduce((s, f, i) => fixed.has(i) ? s : s + f, 0), room = 100 - fixed.size * min;
+    const w = fr.map((f, i) => fixed.has(i) ? min : f / rest * room), low = w.findIndex((x, i) => !fixed.has(i) && x < min);
+    if (low < 0) return w;
+    fixed.add(low);
+  }
+}
+function nxRender(box, p, kind, runs, w) {
+  const wd = nxWidths(runs.map((r) => (r.b - r.a) / (w.x1 - w.x0))), left = [];
+  wd.reduce((s, x, i) => (left[i] = s) + x, 0);
+  const at = (ts) => {  // Lage eines Zeitpunkts in % – innerhalb seines Abschnitts nach der Zeit (passt zu den Breiten)
+    const k = Math.max(runs.findIndex((r) => ts < r.b), 0), r = runs[k];
+    return left[k] + wd[k] * Math.min(Math.max((ts - r.a) / (r.b - r.a), 0), 1);
+  };
+  const marks = hpHours(p, w.x0, w.x1, (box.clientWidth || 0) >= 800 ? 2 : 3).map(([ts, t]) => [at(ts), t]).filter(([x]) => x > 7 && x < 95);
+  const seg = (r, i) => {
+    const [v, small] = nxVal(r, kind), t = nxTime(p, r, i);
+    return `<div class="nx-seg nx-k-${r.k}" role="listitem" tabindex="0" data-i="${i}" style="--nx-w:${wd[i].toFixed(2)}%"` +
+      ` aria-label="${esc(`${t}: ${NX_KIND[r.k]}, ${v}${small ? ", " + small : ""}`)}"><span class="nx-t">${t}</span>` +
+      `<span class="nx-a">${NX_KIND[r.k]}</span><span class="nx-v">${v}${small ? `<small>${small}</small>` : ""}</span></div>`;
+  };
+  box.innerHTML = `<div class="nx-tl"><div class="nx-bar" role="list" aria-label="${kind === "dhw" ? "Warmwasser" : "Kessel"}: nächste 12 Stunden">` +
+    runs.map(seg).join("") + `</div><div class="nx-ticks" aria-hidden="true"><span class="nx-now">jetzt</span>` +
+    marks.map(([x, t]) => `<span style="left:${x.toFixed(2)}%">${t}</span>`).join("") + "</div></div>";
+  if (!box.querySelectorAll) return;
+  box.querySelectorAll(".nx-seg").forEach((n) => {
+    const show = (e) => {
+      box.querySelectorAll(".nx-seg.on").forEach((m) => m.classList.remove("on"));
+      n.classList.add("on");
+      showTip(e, nxTip(p, kind, runs[+n.dataset.i], +n.dataset.i), () => n.classList.remove("on"));
+    };
+    n.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") show(e); });
+    n.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hideTip(); });
+    n.addEventListener("click", show);
+    n.addEventListener("focus", () => { const b = n.getBoundingClientRect(); show({ target: n, pointerType: "mouse", clientX: b.left + 8, clientY: b.bottom - 4 }); });
+    n.addEventListener("blur", hideTip);
   });
-  const res = [];
-  for (const r of out) {
-    const q = res[res.length - 1], short = q && r.b - r.a < NX_MIN_S && r.b < w.x1;
-    if (short && q.flick) join(q, r);
-    else if (short) res.push({ ...r, flick: true });
-    else if (q && !q.flick && same(q, r)) join(q, r);
-    else res.push(r);
-  }
-  for (let i = res.length - 1; i > 0; i--) {  // kurze Blöcke zum Abschnitt davor, danach Gleiches zusammen
-    if (res[i].flick && res[i].b - res[i].a < NX_MIN_S) join(res[i - 1], res.splice(i, 1)[0]);
-  }
-  for (let i = res.length - 1; i > 0; i--) if (!res[i].flick && !res[i - 1].flick && same(res[i - 1], res[i])) join(res[i - 1], res.splice(i, 1)[0]);
-  for (const r of res) if (r.mixed) { r.off = r.offS > r.onS; if (!r.off && !r.why) r.why = "heizt"; }
-  return res;
-}
-// „Jetzt 55 °C · ab 22:00 45 °C (Nacht) · ab 05:30 55 °C (vor dem Aufstehen)“; extra: [ts, Text] dazwischen
-function nxLine(runs, extra = []) {
-  const deg = (r) => r.lo === null ? "kein Soll" : `${fmt(r.lo, 0)}${r.hi !== r.lo ? "–" + fmt(r.hi, 0) : ""} °C`;
-  const val = (r) => r.off ? (r.mixed ? "Heizbetrieb meist aus" : "Heizbetrieb aus") : deg(r);
-  const why = (r, i) => r.off ? "" : [i ? r.why : "", r.mixed ? "zeitweise aus" : ""].filter(Boolean).join(", ");
-  return runs.map((r, i) => [r.a, (i ? `ab ${tclock(r.a)} ` : "Jetzt ") + val(r) + (why(r, i) ? ` (${esc(why(r, i))})` : "")])
-    .concat(extra).sort((x, y) => x[0] - y[0]).map((x) => x[1]).join(" · ");
-}
-// Text mittig über einem Abschnitt, wenn er hineinpasst (11 px ≈ 6,2 px je Zeichen)
-function nxText(f, a, b, names, y) {
-  const l = Math.max(f.sx(a), f.m.l), r = Math.min(f.sx(b), f.W - f.m.r), t = names.find((n) => n.length * 6.2 + 6 <= r - l);
-  if (t) el("text", { x: (l + r) / 2, y, "text-anchor": "middle", class: "halo" }, f.svg).textContent = t;
-}
-// Beschriftungen oben in zwei Zeilen, je am Beginn des Abschnitts: erste freie Zeile, lang oder kurz, sonst keine.
-// Ein Zeitpunkt (Desinfektion, event) darf am rechten Rand links neben seiner Linie stehen
-function nxLanes(f, items) {
-  const ends = [-Infinity, -Infinity], right = f.W - f.m.r;
-  for (const [ts, names, event] of items.sort((a, b) => a[0] - b[0])) {
-    const x = Math.max(f.sx(ts), f.m.l) + 3;
-    for (const n of names) {
-      const wd = n.length * 6.2, x0 = x + wd <= right ? x : event ? x - 6 - wd : -1, k = ends.findIndex((e) => x0 >= e + 6);
-      if (x0 < f.m.l || k < 0) continue;
-      el("text", { x: x0, y: f.m.t + 10 + 12 * k, class: "halo" }, f.svg).textContent = n;
-      ends[k] = x0 + wd;
-      break;
-    }
-  }
 }
 function drawNext() {
-  const p = PV && PV.preview, w = nxWin(p);
-  nxDhw(p, w);
-  nxFlow(p, w);
+  const p = PV && PV.preview, w = nxWin(p, nxNow());
+  nxCard("dhw", p, w);
+  nxCard("flow", p, w);
 }
-function nxDhw(p, w) {
-  const box = $("ch-nx-dhw"), line = $("nx-dhw-line");
+function nxCard(kind, p, w) {
+  const box = $(`ch-nx-${kind}`), note = $(`nx-${kind}-note`);
   if (!box) return;
-  $("lg-nx-dhw").innerHTML = ""; line.innerHTML = "";
+  note.innerHTML = "";
   if (!w) return empty(box, NX_EMPTY);
-  const s = nxSteps(p, w, (x) => x.dhw), hold = nxSteps(p, w, (x) => x.dhw_hold).vals;
-  const ys = [...s.vals, ...hold].filter((v) => v !== null);
-  if (!s.vals.some((v) => v !== null)) return empty(box, `Kein Warmwasser-Soll${p.dhw_note ? " – " + esc(p.dhw_note) : ""}.`);
-  const hrs = w.idx.map((i) => p.hours[i]), hts = hrs.map((h) => tsOf(h.t));
-  const dis = hrs.map((h) => h.disinfect).filter((d) => d && tsOf(d.at) >= w.x0 && tsOf(d.at) < w.x1);
-  const lo = Math.min(...ys), hi = Math.max(...ys), yr = [...ys, hi + Math.max(6, (hi - lo) * 0.4)];  // Platz für zwei Zeilen
-  const f = frame(box, [w.x0, w.x1], yr, { xTicks: timeTicks, height: 150, label: "Warmwasser-Soll der nächsten 12 Stunden", ...span10(yr) });
-  pvBands(f, hts, hrs.map(pvBandOf));
-  const lab = [];  // Abschnitte nach dem Grund der Stunde (gleicher Grund hintereinander einer), dazu die Desinfektion
-  for (let i = 0, j; i < hrs.length; i = j + 1) {
-    const k = nxWhy(hrs[i].dhw_reason, "dhw");
-    for (j = i; j + 1 < hrs.length && nxWhy(hrs[j + 1].dhw_reason, "dhw") === k; j++);
-    if (nxLabel(k).length) lab.push([Math.max(hts[i], w.x0), nxLabel(k)]);
+  const runs = nxRuns(p, kind, w), dhw = kind === "dhw";
+  if (!runs.some((r) => (r.lo !== null && r.k !== "dis") || r.k === "off")) {  // Desinfektion allein ist kein Plan
+    const n = dhw ? p.dhw_note : p.flow_note;
+    return empty(box, `Kein ${dhw ? "Warmwasser" : "Vorlauf"}-Soll${n ? " – " + esc(n) : ""}.`);
   }
-  for (const d of dis) {
-    const x = f.sx(tsOf(d.at));
-    el("line", { x1: x, x2: x, y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-secondary)", "stroke-width": 1, "stroke-dasharray": "2 3" }, f.svg);
-    lab.push([tsOf(d.at), [`Desinfektion ${tclock(tsOf(d.at))}`, "Desinfektion"], true]);
-  }
-  nxLanes(f, lab);
-  const st = { fill: "none", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
-  el("path", { ...st, d: stepPath(s.ts, s.ends, hold, f.sx, f.sy), stroke: PV_C.dhw, "stroke-width": 1.5, "stroke-dasharray": "5 4" }, f.svg);
-  el("path", { ...st, d: stepPath(s.ts, s.ends, s.vals, f.sx, f.sy), stroke: PV_C.dhw, "stroke-width": 2 }, f.svg);
-  hourHover("nx-dhw", f, hts, (k) => pvTip(p, w.idx[k]));
-  const it = [["lk", PV_C.dhw, "Warmwasser-Soll"]];
-  if (hold.some((v) => v !== null)) it.push(["lk dash", PV_C.dhw, "Speicher darf bis hier fallen"]);  // Soll − Hysterese
-  if (hrs.some((h) => h.night)) it.push(["band", "var(--band-night)", "Nacht"]);
-  if (hrs.some((h) => !h.night && (h.home === 0 || h.vacation))) it.push(["band", "var(--band-away)", hrs.some((h) => h.vacation) ? "niemand zu Hause / Urlaub" : "niemand zu Hause"]);
-  $("lg-nx-dhw").innerHTML = nxLegend(it);
-  line.innerHTML = nxLine(nxRuns(p, "dhw"), dis.map((d) => [tsOf(d.at), `${tclock(tsOf(d.at))} Desinfektion (${fmt(d.temp, 0)} °C)`])) +
-    `<span class="muted">${p.dhw_writes === "schreibt" ? "HeatPilot setzt dieses Soll selbst." : "Nur Vorschlag – HeatPilot schreibt das Warmwasser-Soll nicht."} ${NX_MORE}</span>`;
-}
-function nxFlow(p, w) {
-  const box = $("ch-nx-flow"), line = $("nx-flow-line");
-  if (!box) return;
-  $("lg-nx-flow").innerHTML = ""; line.innerHTML = "";
-  if (!w) return empty(box, NX_EMPTY);
-  const s = nxSteps(p, w, (x) => x.heating === true ? x.flow : null), off = s.src.map((x) => x.heating === false);
-  const ys = s.vals.filter((v) => v !== null);
-  if (!ys.length && !off.some(Boolean)) return empty(box, `Kein Vorlauf-Soll${p.flow_note ? " – " + esc(p.flow_note) : ""}.`);
-  const yr = ys.length ? ys : [30];
-  const f = frame(box, [w.x0, w.x1], yr, { xTicks: timeTicks, height: 150, label: "Vorlauf-Soll der nächsten 12 Stunden", ...span10(yr) });
-  const top = f.m.t, bottom = f.H - f.m.b;
-  for (let i = 0, j; i < off.length; i = j + 1) {  // Heizbetrieb aus: graue Fläche, mittig beschriftet
-    for (j = i; j + 1 < off.length && off[j + 1] === off[i]; j++);
-    if (!off[i]) continue;
-    const a = Math.max(f.sx(s.ts[i]), f.m.l), b = Math.min(f.sx(s.ends[j]), f.W - f.m.r);
-    el("rect", { x: a, y: top, width: Math.max(b - a, 0), height: bottom - top, fill: "var(--text-muted)", "fill-opacity": 0.16 }, f.svg);
-    nxText(f, s.ts[i], s.ends[j], ["Heizbetrieb aus", "aus"], (top + bottom) / 2 + 4);
-  }
-  el("path", { d: stepPath(s.ts, s.ends, s.vals, f.sx, f.sy), fill: "none", stroke: PV_C.flow, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" }, f.svg);
-  hourHover("nx-flow", f, w.idx.map((i) => tsOf(p.hours[i].t)), (k) => pvTip(p, w.idx[k]));
-  const it = ys.length ? [["lk", PV_C.flow, "Vorlauf-Soll"]] : [];
-  if (off.some(Boolean)) it.push(["off", "", "Heizbetrieb aus"]);
-  $("lg-nx-flow").innerHTML = nxLegend(it);
-  line.innerHTML = nxLine(nxRuns(p, "flow")) +
-    `<span class="muted">${p.flow_writes === "schreibt" ? "HeatPilot schreibt Vorlauf und Heizbetrieb selbst." : "Nur Vorschlag – HeatPilot schreibt nichts an den Kessel."} ${NX_MORE}</span>`;
+  nxRender(box, p, kind, runs, w);
+  note.innerHTML = (dhw ? (p.dhw_writes === "schreibt" ? "HeatPilot setzt dieses Soll selbst." : "Nur Vorschlag – HeatPilot schreibt das Warmwasser-Soll nicht.")
+    : p.flow_writes === "schreibt" ? "HeatPilot schreibt Vorlauf und Heizbetrieb selbst." : "Nur Vorschlag – HeatPilot schreibt nichts an den Kessel.") + " " + NX_MORE;
 }
 const NX_MORE = `<a href="#" onclick="ovPage('vorschau');return false">Vorschau 24 h ›</a>`;
-const nxLegend = (it) => it.map(([cls, c, name]) => `<span><i class="${cls}"${c ? ` style="${cls.startsWith("lk") ? "border-top-color" : "background"}:${c}"` : ""}></i>${name}</span>`).join("");
 // Tabelle je Stunde: Werte in einer Zeile, darunter Gründe, Raum-Soll (nur Änderungen) und Schreibvorgänge
 function pvTable(p) {
   let prevDay = null;
   const own = p.dhw_writes === "schreibt", boil = p.flow_writes === "schreibt";  // „schreibt“: 0.38 Warmwasser, 0.41 Kessel
   const rows = p.hours.map((h, i) => {
-    const t = tsOf(h.t), day = new Date(t * 1000).toDateString(), prev = i ? p.hours[i - 1] : null;
-    const twice = prev && tclock(tsOf(prev.t)) === tclock(t);  // Zeitumstellung im Herbst: dieselbe Uhrzeit zweimal
-    const label = (day !== prevDay ? `${wday(t)} ` : "") + tclock(t) + (twice ? ' <span class="muted" title="Zeitumstellung: diese Stunde gibt es heute zweimal">(2.)</span>' : "");
+    const t = tsOf(h.t), day = hpDayKey(p, t), prev = i ? p.hours[i - 1] : null;
+    const twice = prev && hpClock(p, tsOf(prev.t)) === hpClock(p, t);  // Zeitumstellung im Herbst: dieselbe Uhrzeit zweimal
+    const label = (day !== prevDay ? `${hpDay(p, t)} ` : "") + hpClock(p, t) + (twice ? ' <span class="muted" title="Zeitumstellung: diese Stunde gibt es heute zweimal">(2.)</span>' : "");
     prevDay = day;
     const state = [h.night ? "Nacht" : "", h.vacation ? "Urlaub" : h.home === 0 ? "weg" : ""].filter(Boolean).join(", ");
     const flow = h.heating === false ? "aus" : degC(h.flow) + (h.flow_max > h.flow ? `<div class="muted">bis ${h.flow_max} °C</div>` : "");
     const mine = h.writes.filter((w) => (w.what === "dhw" ? own : boil)), would = h.writes.filter((w) => !mine.includes(w));
     const why = [`Vorlauf: ${esc(h.flow_reason)}`, `Warmwasser: ${esc(h.dhw_reason)}`, pvRooms(h, prev),
-      h.disinfect ? `Desinfektion ${clock(h.disinfect.at)}` : "",
+      h.disinfect ? `Desinfektion ${isoClock(h.disinfect.at)}` : "",
       would.length ? `würde schreiben: ${would.map(pvWrite).join(", ")}` : "",
       mine.length ? `schreibt: ${mine.map(pvWrite).join(", ")}` : ""].filter(Boolean).join(" · ");
     return `<tr class="pv-h"><td>${label}${state ? `<div class="muted">${state}</div>` : ""}</td>` +

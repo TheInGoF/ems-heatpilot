@@ -42,7 +42,7 @@ const CONFIRMS = [], confirm = (m) => { CONFIRMS.push(m); return CONFIRM; };
 const document = { querySelector: () => null,
   querySelectorAll: (sel) => sel.includes("n-on") ? CHECKED.map((id) => ({ dataset: { id } })) : [] };
 """
-NAMES = ("fmt", "esc", "clock", "timeOf", "degC", "READY", "readyDot", "ICON", "DROP", "field", "shortName",
+NAMES = ("fmt", "esc", "clock", "isoOff", "hhmm", "isoClock", "HP_OFF", "hpOff", "hpDate", "hpClock", "hpDay", "hpDayKey", "hpHours", "hpTicks", "timeOf", "degC", "READY", "readyDot", "ICON", "DROP", "field", "shortName",
          "DHW_LABEL", "DHW_NOTES", "DHW_PAUSE", "dhwStatus", "dhwDecision", "dhwWarnings", "dhwDot", "dhwLine", "renderDhwLine", "dhwEntityHint",
          "dhwBoxHtml", "dhwModeText", "dhwSectionHtml", "dhwConfirm", "dhwReadyHtml", "NOTIFY_KIND", "notifyHtml",
          "notifyState", "notifySync", "ACTION_NAME", "DHW_ACTION", "heatLogRows", "renderHeatLog",

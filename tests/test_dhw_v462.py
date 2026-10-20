@@ -183,10 +183,10 @@ def test_charge_before_arrival_goes_to_comfort_not_comfort_plus_hysteresis(tmp_p
 
 def test_version_changelog_docs():
     from heatpilot import __version__
-    assert __version__ == "0.46.2"
+    assert __version__ >= "0.46.2"
     assert f'version: "{__version__}"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert log.split("\n## ")[1].startswith("0.46.2\n")
+    assert "\n## 0.46.2\n" in log  # seit 0.46.3 nicht mehr oben
     head = log.split("\n## 0.46.2\n")[1].split("\n## ")[0]
     for t in ("Komforttemperatur ist das Soll", "Minimum + Hysterese", "0,5 h", "dhw.margin_reset_0462",
               "DRAW_SPREAD_H", "Speicher darf bis hier fallen", "Zertifikat", "tests/test_dhw_v462.py"):

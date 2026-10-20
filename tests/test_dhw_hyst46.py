@@ -154,7 +154,7 @@ def test_ui_card_and_files():
     assert "Speicher bleibt über" not in html
     assert "`Speicher darf bis ${fmt(rec.hold)} °C fallen` : `Speicher ${fmt(rec.hold)}–${fmt(rec.target, 0)} °C`" in html
     assert 'rec.hyst_assumed ? ` (Hysterese ${fmt(rec.hyst)} K angenommen)` : ""' in html
-    assert '"lk dash", PV_C.dhw, "Speicher darf bis hier fallen"' in html
+    assert "darf bis" in html  # seit 0.46.3 Zeitstrahl statt Graf mit Legende
     assert 'id="dhw-hyst-note"' in html and "w.hyst_hint" in html
     for name in ("dhw_target.py", "dhw.py", "engine_dhw.py", "dhw_watch.py", "preview.py"):
         text = (ROOT / "ems_heatpilot" / "heatpilot" / name).read_text(encoding="utf-8")
