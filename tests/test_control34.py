@@ -367,7 +367,8 @@ def test_local_boost_in_observe_mode_restores_previous_setpoint(tmp_path):
     step(eng, loop, ts_of(MON, 12))
     assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": 19.5})
     assert [a for a in ha.calls if a[1] == "set_hvac_mode"] == []  # war schon heat
-    # Raum stand auf „aus“: Boost schaltet ein, danach wieder aus
+    # Raum stand auf „aus“ (seit 0.46.8: HomeKit meldet so auch ein ruhendes Tado): Boost schaltet ein, danach gilt
+    # das Soll laut Zeitplan – nie „aus“, solange es einen Zeitplan gibt
     climate(eng, "climate.wz", 20.0, None, mode="off")
     run(ctl.boost(["climate.wz"], 23, 60))
     assert ha.calls[-2:] == [("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "heat"}),
@@ -375,7 +376,8 @@ def test_local_boost_in_observe_mode_restores_previous_setpoint(tmp_path):
     climate(eng, "climate.wz", 20.0, 23.0)
     ctl.boosts["climate.wz"]["end"] = ts_of(MON, 12, 59)
     step(eng, loop, ts_of(MON, 13))
-    assert ha.calls[-1] == ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "off"})
+    assert ha.calls[-1][1] == "set_temperature" and ha.calls[-1][3]["temperature"] > 5
+    assert ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "off"}) not in ha.calls[-2:]
 
 
 def test_tado_cloud_entity_keeps_tado_timer_and_schedule(tmp_path):
