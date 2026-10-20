@@ -19,6 +19,7 @@ from . import boiler_entity as be
 from . import boiler_rule as br
 from . import entity_guard as eg
 from . import floor_limit, watchdog
+from .boiler_period import ACTIONS as PERIOD_ACTIONS
 from .boiler_rule import (CHECK_MAX_S, CHECK_S, CHECK_TOL_K, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_S, MAX_FAILS,
                           _ago, _iso, shown)
 from .values import local, num
@@ -27,7 +28,8 @@ from .values import local, num
 ACT_FLOW, ACT_ON, ACT_OFF = "flow_set", "heating_on", "heating_off"
 ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, ACT_FALLBACK = (
     "boiler_dry", "boiler_check_failed", "boiler_foreign", "boiler_paused", "boiler_resumed", "boiler_fallback")
-ACTIONS = (ACT_FLOW, ACT_ON, ACT_OFF, ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, ACT_FALLBACK)
+ACTIONS = (ACT_FLOW, ACT_ON, ACT_OFF, ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, ACT_FALLBACK,
+           *PERIOD_ACTIONS)  # 0.48: Antipendelzeit (boiler_period)
 LOG_ROOM, LOG_NAME = "boiler", "Kessel"
 
 
@@ -193,7 +195,8 @@ class BoilerStatus:
                          "guide": watchdog.guide(flow_ent, heat_ent, fb, self.eng.cfg.notify_targets, worst_cap(self.eng))},
             "heartbeat": {"entity": watchdog.HEARTBEAT, "last": _iso(getattr(self.eng, "heartbeat_ts", None))},
             "status_text": self._status(), "warnings": self.warnings(now_ts),
-            "notes": [br.HINT_FAILSAFE, "Die Antipendelzeit des Kessels bleibt, wie sie ist"],
+            "notes": [br.HINT_FAILSAFE, self.period.note()],
+            "period": self.period.as_dict(),  # 0.48: Antipendelzeit anpassen
             "rules": {"flow_min": lo, "flow_max": hi, "step_k": br.STEP_K, "flow_gap_s": br.FLOW_GAP_S,
                       "pump_flow": br.PUMP_FLOW, "idle": self.eng.cfg.boiler_idle,  # 0.46.5: kein Bedarf
                       "heat_hold_min": br.HEAT_HOLD_S // 60, "heat_off_min": br.HEAT_OFF_S // 60,

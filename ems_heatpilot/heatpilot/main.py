@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from aiohttp import web
 
 from . import __version__
-from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
+from . import boiler_period, boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
 from . import room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel
 from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
 from .app_jobs import JobsMixin
@@ -222,6 +222,8 @@ class App(JobsMixin):
         schreiben, noch über die alte Schreibstelle (``BoilerControl.fallback``), damit der Kessel nicht auf einem
         Nacht-Wert stehen bleibt. Ein Fehler hält den Aufbau nicht auf."""
         ctl = old.boiler_control
+        if ctl is not None:  # 0.48: Antipendelzeit nicht mehr geführt – einmal den Grundwert zurück (nie ein Fehler)
+            await ctl.period.back(self.cfg)
         if ctl is None or old.cfg.boiler_control != "heatpilot" or self.cfg.boiler_control == "heatpilot":
             return
         try:
@@ -236,8 +238,10 @@ class App(JobsMixin):
         Desinfektion und Meldungen geht von der alten Engine über; die alten Schleifen schreiben nichts mehr."""
         cfg = self.cfg
         entity = target_entity(cfg, found, eng.states)
-        boiler = {"flow": flow_target(cfg, found, eng.states), "heating": heat_target(cfg, found, eng.states)}
+        boiler = {"flow": flow_target(cfg, found, eng.states), "heating": heat_target(cfg, found, eng.states),
+                  "period": boiler_period.target(cfg, found, eng.states)}  # 0.48: Antipendelzeit
         writes = {"flow": boiler["flow"][0], "heating": boiler["heating"][0], "max": cfg.max_flow_temp,
+                  "period": boiler["period"][0] if cfg.boiler_period else None,
                   "floors": floor_limit.floor_rooms(cfg, found.rooms),
                   "pump": cfg.boiler_idle == "pumpe"} if cfg.writes_boiler() else None
         dis = disinfect_entity.target(cfg, found, eng.states)

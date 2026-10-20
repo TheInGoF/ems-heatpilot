@@ -385,7 +385,7 @@ def test_rows_render_status_and_escape(tmp_path):
     assert re.findall(r'<h3 class="nav-h">(\w+)</h3>', r["nav"]) == ["Einrichten", "Steuern", "System"]
     assert re.findall(r'data-page="(\w+)"', r["nav"]) == ["grundlagen", "raeume", "entitaeten", "steuerung", "anwesenheit",
                                                          "warmwasser", "kessel", "benachrichtigungen", "erweitert", "diagnose"]
-    assert '<span class="em-alert" id="em-alert">2</span>' in r["nav"] and "Entitäten 15 von 67 gefunden 2" in plain(r["nav"])
+    assert '<span class="em-alert" id="em-alert">2</span>' in r["nav"] and "Entitäten 15 von 68 gefunden 2" in plain(r["nav"])  # 0.48: + Antipendelzeit
     assert r["sum"] == "6 von 39 gefunden · 2 nötige fehlen · 2 nicht verfügbar"  # 0.41: Heizbetrieb aktiviert
     assert "<i>" not in r["extra"] and "&lt;i>=sensor.z" in r["extra"] and 'x&quot;>&lt;b>=sensor.y' in r["extra"]
     groups = re.findall(r'<details class="card em-group" id="em-g-(\w+)"', r["page"])
@@ -416,7 +416,8 @@ def test_collect_sends_overrides_and_fields_through_settings(tmp_path):
     assert set(s) == {"overrides", "persons", "dhw_set_entity", "outdoor_sensors", "weather_entity", "gas_sensor",
                       "demand_sensor", "power_sensors", "power_exclude", "vacation_entity",
                       "flow_set_entity", "heating_switch_entity",  # Weg B seit 0.41
-                      "disinfect_entity"}  # Desinfektion auslösen seit 0.42
+                      "disinfect_entity",  # Desinfektion auslösen seit 0.42
+                      "period_set_entity"}  # Antipendelzeit seit 0.48
     c = r["changed"]
     assert c["overrides"] == ["burner_power=sensor.boiler_curflowtemp"] and c["gas_sensor"] == "sensor.gaszaehler"
     assert c["outdoor_sensors"] == ["sensor.boiler_outdoortemp"] and c["power_sensors"] == []

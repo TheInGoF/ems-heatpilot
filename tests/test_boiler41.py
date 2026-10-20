@@ -646,7 +646,7 @@ def test_api_boiler_resume_heat_entities(tmp_path):
             assert ents[FLOW]["flow"]["fits"] and ents[HEAT]["heating"]["fits"]
             s = await (await client.get("/api/settings")).json()
             assert s["settings"]["boiler_control"] == "heatpilot" and s["boiler_control"]["suggested"] == {
-                "flow": FLOW, "heating": HEAT}
+                "flow": FLOW, "heating": HEAT, "period": None}  # 0.48: Antipendelzeit (hier keine erkannt)
             assert s["boiler_control"]["fallback_range"] == [35, 75]
             summ = await (await client.get("/api/summary")).json()
             assert summ["boiler_control"]["mode"] == "heatpilot"

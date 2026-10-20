@@ -10,7 +10,8 @@ Schalter ``boiler_control`` (Standard „aus“), getrennt von Raumsteuerung (``
   ``switch.turn_on``/``turn_off`` auf die eine Entität des Heizbetriebs (``Control.set_flow``/``set_heating``: nur
   diese, ganzzahlig, 35 °C…``max_flow_temp`` und Fußboden-Grenze – alles andere hart abgewiesen). **Solange ein Regler
   am Bus ist** (oder es unbekannt ist), wird nicht geschrieben: Er überschreibt alle 60 s, was am Kessel gesetzt wird
-  (``boiler_entity.regulator``). EMS-ESP bleibt nur lesend; die Antipendelzeit fasst HeatPilot nie an.
+  (``boiler_entity.regulator``). EMS-ESP bleibt nur lesend. Seit 0.48 läuft im selben Schritt die Antipendelzeit mit
+  (``period_control``, nur mit „Antipendelzeit anpassen“; Standard aus – dann fasst HeatPilot sie nie an).
 
 Ablauf je Schritt (``plan`` im 30-s-Takt der Live-Werte, danach ``apply``; ``main.boiler_step``):
 
@@ -57,6 +58,7 @@ from .boiler_status import fallback as fallback_flow
 from .boiler_watch import (BLOCKED_NOTE_S, K_BLIND, K_BLOCKED, K_FAIL, K_FOREIGN, K_PAUSED,  # noqa: F401
                            K_REJECTED, K_WATCHDOG, BoilerWatch, same)
 from .dhw_control import special_running
+from .period_control import PeriodControl
 from .discovery_roles import BOILER_ROLES
 from .values import flag, num
 
@@ -95,6 +97,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         self.view: dict = {}
         self.stopped = False
         self._saved: str | None = None
+        self.period = PeriodControl(self, ents.get("period"), carry.period if carry is not None else None)  # 0.48
 
     def stop(self) -> None:
         """Außer Dienst (main.build): vorgemerkte Schreibvorgänge werden verworfen."""
@@ -163,6 +166,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             self.view = {"ts": ts}
             self._settle(ts)
             self._save()
+            self.period.plan(ts, None, now)
             return
         self.verify(now)
         target, st["boost"] = boiler_flow.compute(self.eng, ts, st.get("boost"), self.bounds())
@@ -194,6 +198,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         st["last_plan"] = ts
         self._settle(ts)
         self._save()
+        self.period.plan(ts, target, now)  # 0.48: Antipendelzeit mit demselben Ziel und derselben Sperre
 
     def _decide(self, mode: str, ts: int, target, cur: dict, blocked: str | None) -> dict[str, Decision]:
         """Vorlauf-Soll und Heizbetrieb nach den Regeln (``boiler_rule``) – mit dem Schutz über der Grenze."""
@@ -350,8 +355,12 @@ class BoilerControl(BoilerStatus, BoilerWatch):
 
     # -------------------------------------------------------------- Schreiben
     async def apply(self, now: float | None = None) -> int:
-        """Vorgemerktes schreiben – nur über ``Control``, nur bei „heatpilot“, nicht pausiert, ohne Hindernis, nicht
-        nach einem Neuaufbau. Merkt je Wert die Prüfung nach 60 s vor. Gibt die Zahl der Schreibvorgänge zurück."""
+        """Vorgemerktes schreiben (Vorlauf-Soll, Heizbetrieb, seit 0.48 Antipendelzeit) – Zahl der Schreibvorgänge."""
+        return await self._apply(now) + await self.period.apply(now)
+
+    async def _apply(self, now: float | None = None) -> int:
+        """Vorlauf-Soll und Heizbetrieb – nur über ``Control``, nur bei „heatpilot“, nicht pausiert, ohne Hindernis,
+        nicht nach einem Neuaufbau. Merkt je Wert die Prüfung nach 60 s vor."""
         pending, self.pending = self.pending, []
         if not pending:
             return 0

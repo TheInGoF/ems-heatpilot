@@ -397,7 +397,8 @@ def test_rendered_texts_without_internals():
 def test_terms_and_short_texts():
     """Begriffe aus Abschnitt 2 und Kurztexte aus Abschnitt 5 des Umbauplans."""
     js, page = _code(script()), html()
-    for old in ("Wunschsoll", "Wunschzustand", "Antipendelzeit", "Legionellenschaltung", "Timer ·", "Sonderladung",
+    # „Antipendelzeit“ seit 0.48 wieder: Einstellung „Antipendelzeit anpassen“ (so vom Nutzer gewünscht)
+    for old in ("Wunschsoll", "Wunschzustand", "Legionellenschaltung", "Timer ·", "Sonderladung",
                 "Heizbedarf", "Wärmebedarf", "Soll Kessel", "Soll Regler", "Trockenlauf gegen", "Vorschau (Trockenlauf)",
                 "im Reiter Heizen)", "Protokoll (Reiter Heizen)"):
         assert old not in js, old

@@ -25,7 +25,8 @@ der Grenzen der Entität) und ``switch.turn_on``/``turn_off`` auf die eine Entit
 nur, wenn die Entität taugt (``boiler_entity``) und kein Regler am Bus ist (``boiler_lock``); eingeschaltet wird nur,
 wenn das Vorlauf-Soll am Kessel laut Home Assistant höchstens bei der Grenze liegt oder HeatPilot gerade einen Wert
 darunter geschrieben hat (``_flow_safe``). Sind Vorlauf-Soll und Warmwasser-Soll dieselbe Entität, sind beide
-Schreibwege gesperrt (``conflict``). Die Antipendelzeit und alle anderen Kesselwerte bleiben unberührt.
+Schreibwege gesperrt (``conflict``). Seit 0.48 dazu ``number.set_value`` auf die eine Entität der Antipendelzeit
+(``boiler_period.PeriodWrite``: nur mit „Antipendelzeit anpassen“, ganze Minuten 5–60, gesperrt wie das Vorlauf-Soll).
 
 Seit 0.42 (Desinfektion auslösen) genau ein weiterer: ``switch.turn_on``/``turn_off`` auf die eine Entität des Schalters
 „Desinfizieren“ (``set_disinfect``; ``disinfect_entity.check_call``: nur diese, ohne Daten, tauglich) – nur mit Termin
@@ -33,13 +34,12 @@ und Warmwasser-Soll „HeatPilot setzt“ gesetzt, und nur, solange nichts sperr
 keine Pause von Weg W). Nie dieselbe Entität wie der Heizbetrieb.
 
 Alles andere – andere Dienste, andere ``number``-Entitäten, Werte außerhalb der Grenzen, Entitäten außerhalb der
-gewählten Räume – wird hart abgewiesen (``PermissionError``).
-Ebenso seit 0.36.3 jeder Schreibvorgang auf den Heizkreis von EMS-ESP (``climate.…_thermostat_hc1``),
-auch wenn er als Raum gewählt ist: Gehört das Ziel zu einem Raum mit ``Room.ems`` (Gerät von EMS-ESP,
-siehe ``ems_lock``), wird es hart abgewiesen (``PermissionError``) – sonst ginge ``climate.set_temperature``
-über Home Assistant an den Regler. An EMS-ESP selbst schickt HeatPilot nur Lese-Anfragen (``emsesp.py``,
-GET); auch das Warmwasser-Soll geht über Home Assistant. Jeder erfolgreiche Schreibvorgang landet im Protokoll
-``control_log`` (Raum bzw. Entität, Dienst, Wert, Grund).
+gewählten Räume – wird hart abgewiesen (``PermissionError``). Ebenso seit 0.36.3 jeder Schreibvorgang auf den
+Heizkreis von EMS-ESP (``climate.…_thermostat_hc1``), auch wenn er als Raum gewählt ist: Gehört das Ziel zu einem Raum
+mit ``Room.ems`` (Gerät von EMS-ESP, siehe ``ems_lock``), wird es hart abgewiesen (``PermissionError``) – sonst ginge
+``climate.set_temperature`` über Home Assistant an den Regler. An EMS-ESP selbst schickt HeatPilot nur Lese-Anfragen
+(``emsesp.py``, GET); auch das Warmwasser-Soll geht über Home Assistant. Jeder erfolgreiche Schreibvorgang landet im
+Protokoll ``control_log`` (Raum bzw. Entität, Dienst, Wert, Grund).
 
 Ein Raum ist eine Gruppe (``discovery.Room``): mit Raumregler wird nur dieser beschrieben,
 sonst alle Ventile des Raums. Boost auf Knopfdruck: Tado-Cloud-Entitäten über den Tado-Timer,
@@ -56,7 +56,7 @@ import logging
 import math
 import time
 
-from . import boiler_entity, disinfect_entity, floor_limit
+from . import boiler_entity, boiler_period, disinfect_entity, floor_limit
 from .boiler_rule import CHECK_MAX_S, CHECK_TOL_K, FLOW_MIN, PUMP_FLOW
 from .config import NOTIFY_TARGET
 from .dhw_entity import entity_problem
@@ -66,7 +66,7 @@ from .ha_client import HAConnectionLost
 
 log = logging.getLogger(__name__)
 
-# ("number", "set_value") nur für das Warmwasser-Soll (Weg W, 0.38) und das Vorlauf-Soll (Weg B, 0.41),
+# ("number", "set_value") nur für Warmwasser-Soll (0.38), Vorlauf-Soll (Weg B, 0.41) und Antipendelzeit (0.48),
 # ("switch", "turn_on"/"turn_off") nur für den Heizbetrieb (Weg B, 0.41) und den Schalter der Desinfektion (0.42)
 ALLOWED = {("tado", "set_climate_timer"), ("climate", "set_temperature"), ("climate", "set_hvac_mode"),
            ("number", "set_value"), ("switch", "turn_on"), ("switch", "turn_off")}
@@ -97,7 +97,7 @@ def _num(value) -> float | None:
         return None
 
 
-class Control:
+class Control(boiler_period.PeriodWrite):
     def __init__(self, ha, store, rooms: list, states: dict | None = None, dhw_entity: str | None = None,
                  dhw_limits: tuple[float, float] | None = None, notify_targets=(), boiler: dict | None = None,
                  boiler_lock=None, disinfect: str | None = None, disinfect_lock=None) -> None:
@@ -123,6 +123,7 @@ class Control:
         self.heat_entity = b.get("heating") if str(b.get("heating") or "").startswith("switch.") else None
         self.flow_max, self.floors, self.boiler_lock = b.get("max"), list(b.get("floors") or ()), boiler_lock
         self.flow_pump = bool(b.get("pump", True))  # 0.46.5: kein Bedarf – Vorlauf-Soll ab PUMP_FLOW unter 35 °C
+        self.period_entity = boiler_period.entity_for(b, self.dhw_entity)  # 0.48: Antipendelzeit (``period``)
         ok = str(disinfect or "").startswith("switch.") and disinfect != self.heat_entity
         self.disinfect_entity, self.disinfect_lock = (disinfect if ok else None), disinfect_lock
         # dieselbe Entität für Vorlauf- und Warmwasser-Soll: beide Schreibwege gesperrt (Weg B, 0.41)
@@ -240,8 +241,8 @@ class Control:
             raise PermissionError(self.conflict)
         if domain == "number" and self.flow_entity and entity_id == self.flow_entity:
             self._check_flow(entity_id, data)  # nur das Vorlauf-Soll, nur in den Grenzen (Weg B, 0.41)
-        elif domain == "number":
-            self._check_dhw(entity_id, data)  # nur das eingestellte Warmwasser-Soll, nur in den Grenzen (0.38)
+        elif domain == "number":  # Antipendelzeit (0.48) bzw. das eingestellte Warmwasser-Soll (0.38), in den Grenzen
+            (self._check_period if entity_id == self.period_entity else self._check_dhw)(entity_id, data)
         elif domain == "switch" and self.disinfect_entity and entity_id == self.disinfect_entity:  # Desinfektion (0.42)
             disinfect_entity.check_call(entity_id, self.disinfect_entity, data, self._state(entity_id),
                                         self.disinfect_lock() if self.disinfect_lock is not None else None)
