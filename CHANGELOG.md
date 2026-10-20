@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.46.4
+**Abgebauter Regler blockiert nicht mehr**
+- Beschreibbare Eingaben des Reglers in Home Assistant (z. B. `number.…_remotetemp`, das eine Automation bzw. der EMS-ESP-Fernfühler schreibt) zählen nicht mehr als „frische Regler-Werte“ – nur Sensoren, die der Regler selbst meldet. Vorher hielt so ein Wert einen abgebauten Regler dauerhaft „am Bus“, und HeatPilot übernahm den Kessel nicht
+- Eine leere Antwort von EMS-ESP für ein Gerät (200, keine Werte) gilt als „meldet nichts“ statt „unbekannt“ – nach dem Abbau des Reglers gibt EMS-ESP genau das zurück. Die Sicherheitsfrist bleibt: frei erst 30 min nach dem letzten Lebenszeichen und nach 3 Abfragen über mindestens 5 min
+- **Tests:** neu `tests/test_regulator464.py`, angepasst `tests/test_v41_review.py`
+
+## 0.46.3
+**Übersicht: „Nächste 12 Stunden“ als Zeitstrahl** (nur Oberfläche – gerechnet und geschrieben wird nichts anders, `api/preview` unverändert)
+- **Zeitstrahl statt Graf** bei Übersicht → Warmwasser und → Kessel: Abschnitte mit Uhrzeit von–bis, Art und Wert – Warmwasser: Nacht, zu Hause, niemand zu Hause, Urlaub, heizt auf, Zapfung erwartet, Desinfektion mit „Soll 50 °C“ und klein „Speicher 45–50 °C“ bzw. „darf bis … °C fallen“; Kessel: Heizung aus, Vorheizen, Vorlauf, zeitweise aus mit „Vorlauf 38–42 °C“ bzw. „aus“. Wechselzeile und Legende entfallen
+- **Abschnitte** aus denselben Schritten (`steps`) wie bisher: gleiche Art und Wert (±1 K) ein Abschnitt; kürzer als 30 min zählt zum Nachbarn (Block „zeitweise aus“, sonst gleiche Art, sonst der längere) – beim Kessel wird An/Aus dabei „zeitweise aus“ (klein: wie lange aus). Desinfektion: eine Stunde ab dem Termin als eigener Abschnitt
+- **Zeiten:** Ursachen von „Zeiten passen nicht“ – Graf, Beschriftung und Tooltip gingen nach vollen Stunden (Stundenwert = was den größten Teil der Stunde gilt), die Wechselzeile nach den genauen 5-min-Schritten; „Jetzt“ begann am 5-min-Raster vor dem Rechenzeitpunkt; alle Uhrzeiten in der Zeitzone des Browsers. Jetzt: Abschnitt und Tooltip aus denselben Schritten, der erste Abschnitt beginnt jetzt (Rechenzeitpunkt `now` der Vorschau bzw. die Uhr, wenn die Vorschau schon etwas alt ist, höchstens 2 h weiter), Uhrzeiten aus der **Ortszeit** des Backends (Versatz der ISO-Zeiten, `hpClock`/`hpDay`, unabhängig von der Browser-Zeitzone) – auch in Tooltip, Tabelle und Achse der 24-h-Vorschau (volle Ortsstunden)
+- **Marker:** „jetzt“-Strich am Anfang; Überfahren, Antippen oder Tastatur-Fokus hebt den Abschnitt hervor und zeigt im gewohnten Tooltip Art, Zeiten, Dauer, Werte und die Gründe (`dhw_why`/`flow_why`)
+- **Layout:** ab 600 px Kartenbreite waagrecht, Breite nach Dauer (Mindestbreite, Text gekürzt), darunter Stundenmarken alle 3 h (ab 800 px alle 2 h); schmaler eine Zeile je Abschnitt (Zeit | Art | Wert), kein waagrechtes Scrollen. Art als ruhige Tönung aus den vorhandenen Tokens, hell und dunkel. Link „Vorschau 24 h ›“ und der Hinweis „HeatPilot setzt …“/„Nur Vorschlag“ bleiben klein darunter
+- **Doku:** DOCS.md – Absatz „Nächste 12 Stunden“
+- **Tests:** neu `tests/test_ui_v463.py` (Abschnitte, Zusammenfassen, Falten unter 30 min, „zeitweise aus“, Ortszeit bei Browser in UTC/New York, erster Abschnitt jetzt, nur 12 h, leere Vorschau); die Oberflächen-Tests aus `test_ui_v461` mit gleicher Absicht dorthin; `test_ui_v37`, `test_ui_v38`, `test_ui_v41` um die Zeit-Helfer ergänzt; Versionstest von `test_dhw_v462` mit `>=`
+
 ## 0.46.2
 **Warmwasser: Die Komforttemperatur ist das Soll** (an Home Assistant und den Kessel wird nichts Neues geschrieben; Weg W schreibt das Warmwasser-Soll mit denselben Regeln wie bisher – nur das Ziel ist niedriger)
 - **Komfort = Soll** (`dhw_target.py`): Komfort der Einstellungen (+ gelernte Reserve) ist das empfohlene Soll, auf 1 K aufgerundet, höchstens das Maximum (neu `capped()`); der Speicher pendelt zwischen Komfort − Hysterese und Komfort wie bei einer üblichen Automation – beim Standard-Komfort 50 °C und 5 K Hysterese 45–50 °C statt 50–55 °C. Grund „… – Speicher 45–50 °C“ statt „Speicher bleibt über …“

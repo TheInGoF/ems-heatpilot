@@ -41,7 +41,7 @@ STUBS = """
 const ELS = {};
 const $ = (id) => ELS[id] || (ELS[id] = { id, hidden: false, textContent: "", innerHTML: "" });
 """
-NAMES = ("fmt", "esc", "clock", "kelvin", "dateOf", "WEEKDAYS", "PHASE", "timeTicks", "PV_NOTE", "PV_C", "PV_WHAT", "PV",
+NAMES = ("fmt", "esc", "clock", "isoOff", "hhmm", "isoClock", "HP_OFF", "hpOff", "hpDate", "hpClock", "hpDay", "hpDayKey", "hpHours", "hpTicks", "kelvin", "dateOf", "WEEKDAYS", "PHASE", "timeTicks", "PV_NOTE", "PV_C", "PV_WHAT", "PV",
          "CMP_GRID_MIN", "tsOf", "tclock", "wday", "degC", "tipKey", "span10", "pvBandOf", "pvWrite", "pvSummary", "pvBasis",
          "pvTip", "pvTable", "pvRooms", "stepPath", "dayTicks", "renderCompare", "cmpFacts", "cmpDays", "cmpGrid")
 

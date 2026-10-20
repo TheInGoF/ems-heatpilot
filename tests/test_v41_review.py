@@ -108,7 +108,7 @@ def test_failed_thermostat_query_keeps_the_lock(tmp_path):
 def test_answers_of_emsesp_are_told_apart(tmp_path):
     ems = EmsEsp("ems.local")
     for answer, outcome in (((400, {"message": "unknown device"}), ABSENT), ((200, {"error": "no device"}), ABSENT),
-                            ((500, {"message": "busy"}), FAILED), ((200, {}), FAILED), ((404, ValueError()), FAILED),
+                            ((500, {"message": "busy"}), FAILED), ((200, {}), ABSENT), ((404, ValueError()), FAILED),  # 0.46.4: leer = Gerät meldet nichts
                             (asyncio.TimeoutError(), FAILED), (aiohttp.ClientConnectionError("weg"), FAILED),
                             ((200, {"hc1": {"seltemp": 21}}), OK)):
         _read(ems, answer)

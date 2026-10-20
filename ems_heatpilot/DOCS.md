@@ -770,13 +770,15 @@ Plan aus dem Bedarf. Die
 Vorschau ist ein Vorschlag zum Vergleichen; wann und ob umgestellt wird, entscheidest
 du. Zu finden in der Übersicht, Abschnitt „Vorschau (Trockenlauf)“.
 
-**Nächste 12 Stunden** (seit 0.46.1): Kurz steht derselbe Plan auch in Übersicht → Warmwasser (unter den Kacheln) und
-Übersicht → Kessel (oben) – ab jetzt 12 h als Stufenlinie: Warmwasser-Soll mit der gehaltenen Untergrenze gestrichelt
-(seit 0.46.2 „Speicher darf bis hier fallen“ – Soll − Hysterese), Abschnitte beschriftet (Nacht, niemand zu Hause/Urlaub, Aufheizen, Zapfung erwartet,
-Desinfektion); beim Kessel das Vorlauf-Soll, Stunden mit „Heizbetrieb aus“ grau. Darunter nur die Wechsel als eine Zeile,
-etwa „Jetzt 55 °C · ab 22:00 45 °C (Nacht) · ab 05:30 55 °C (vor dem Aufstehen)“; gleicher Grund hintereinander wird
-eine Spanne („Jetzt 43–44 °C“), An/Aus im Minutentakt ein Abschnitt („zeitweise aus“). Tooltip je Stunde wie in der Vorschau. Die Karten nutzen dieselbe Abfrage wie die
-Vorschau – ist noch keine da, steht dort nur ein kurzer Satz.
+**Nächste 12 Stunden** (seit 0.46.1, seit 0.46.3 als Zeitstrahl): Kurz steht derselbe Plan auch in Übersicht → Warmwasser
+(unter den Kacheln) und Übersicht → Kessel (oben) – ab jetzt 12 h in Abschnitten mit Uhrzeit von–bis, Art und Wert.
+Warmwasser: Nacht, zu Hause, niemand zu Hause, Urlaub, heizt auf, Zapfung erwartet, Desinfektion mit „Soll 50 °C“ und
+klein „Speicher 45–50 °C“ bzw. „darf bis 40 °C fallen“. Kessel: Vorlauf, Vorheizen, Heizung aus, zeitweise aus
+(„Vorlauf 38–42 °C“ bzw. „aus“). Gleiche Art und Wert (±1 K) ist ein Abschnitt; kürzere als 30 min zählen zum Nachbarn,
+An/Aus im Minutentakt wird „zeitweise aus“. Der erste Abschnitt beginnt jetzt, alle Uhrzeiten in Ortszeit von Home
+Assistant (auch wenn der Browser in einer anderen Zeitzone läuft) – dieselben wie in Tooltip und 24-h-Vorschau.
+Überfahren, Antippen oder Tab zeigt die Einzelheiten mit den Gründen. Breit (ab 600 px) waagrecht mit Stundenmarken,
+schmal als Liste. Die Karten nutzen dieselbe Abfrage wie die Vorschau – ist noch keine da, steht dort nur ein kurzer Satz.
 
 Gerechnet wird in 5-min-Schritten von jetzt bis zum Ende der 24. vollen Stunde:
 

@@ -36,7 +36,7 @@ from test_ui_v39 import as_json, berlin  # noqa: F401 – berlin ist eine Fixtur
 ROOT = Path(__file__).resolve().parents[1]
 SECTION = "// ---------------------------------------------------------------- Kessel über HeatPilot (Weg B, 0.41)"
 SECTION_END = "// ---------------------------------------------------------------- Benachrichtigungen (0.38)"
-NAMES = ("fmt", "esc", "clock", "timeOf", "degC", "READY", "readyDot", "ICON", "field", "shortName", "DROP", "DHW_ACTION",
+NAMES = ("fmt", "esc", "clock", "isoOff", "hhmm", "isoClock", "HP_OFF", "hpOff", "hpDate", "hpClock", "hpDay", "hpDayKey", "hpHours", "hpTicks", "timeOf", "degC", "READY", "readyDot", "ICON", "field", "shortName", "DROP", "DHW_ACTION",
          "ACTION_NAME", "heatLogRows", "renderHeatLog",
          "BOILER_LABEL", "BOILER_WHAT", "BOILER_ACTION", "BOILER_RULES", "FLAME", "WD_DOT", "BOILC", "BOILER_OPEN",
          "boilerWarnings", "boilerDot", "boilerVal", "boilerLine", "renderBoilerLine", "boilerSectionHtml", "boilerIntro",
