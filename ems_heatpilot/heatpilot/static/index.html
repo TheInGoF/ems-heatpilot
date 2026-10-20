@@ -490,6 +490,11 @@ label.switch input:checked { background: var(--series-1); } label.switch input:c
 code.eid { display: inline-block; max-width: 100%; vertical-align: bottom; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; overflow-wrap: normal; }
 p.empty { margin: 4px 0; }
+/* Nächste 12 Stunden (0.46.1): Wechsel als eine Zeile unter dem Grafen, darunter klein, ob HeatPilot das schreibt */
+.nx-line { margin: 6px 0 0; font-size: 13px; color: var(--text-primary); }
+.nx-line:empty { display: none; }
+.nx-line .muted { display: block; margin-top: 2px; font-size: 12px; }
+.legend i.off { background: var(--text-muted); opacity: .3; }
 /* Heizen (0.43): eine Zeile zum Raumbetrieb (Antippen → Übersicht → Status), vier Kacheln immer, Meldung als Einblendung,
    breit höchstens 760 px mit Raumkacheln in --cols Spalten */
 .heat-line { display: flex; align-items: center; gap: var(--s2); width: 100%; margin: 0 0 var(--s3); padding: 2px 0; border: 0;
@@ -821,6 +826,13 @@ ul.rules li { margin: 3px 0; }
   <div id="ov-warmwasser" hidden>
   <div class="ov-kpis" id="dhw-tiles"></div>
   <p class="muted" id="dhw-hyst-note" style="margin:0 0 8px" hidden></p>
+  <!-- 0.46.1: was HeatPilot die nächsten 12 h plant (aus api/preview, drawNext) -->
+  <div class="card nx-card" id="nx-dhw">
+    <h2>Nächste 12 Stunden</h2>
+    <div class="legend" id="lg-nx-dhw"></div>
+    <div id="ch-nx-dhw"><p class="muted empty">Noch keine Vorschau – sobald HeatPilot die nächsten Stunden berechnet hat, steht hier der Plan.</p></div>
+    <p class="nx-line" id="nx-dhw-line"></p>
+  </div>
   <div class="card">
     <div class="row" style="justify-content:space-between"><h2>Wann gezapft wird</h2>
       <div class="row" id="dhw-mode"><button class="btn small primary" data-m="day" onclick="setDhwMode('day')">Typischer Tag</button><button class="btn small" data-m="week" onclick="setDhwMode('week')">Woche</button></div></div>
@@ -837,6 +849,12 @@ ul.rules li { margin: 3px 0; }
   </div>
   </div>
   <div id="ov-kessel" hidden>
+  <div class="card nx-card" id="nx-flow">
+    <h2>Nächste 12 Stunden</h2>
+    <div class="legend" id="lg-nx-flow"></div>
+    <div id="ch-nx-flow"><p class="muted empty">Noch keine Vorschau – sobald HeatPilot die nächsten Stunden berechnet hat, steht hier der Plan.</p></div>
+    <p class="nx-line" id="nx-flow-line"></p>
+  </div>
   <div class="card" id="ov-burner">
     <h2>Brenner</h2>
     <div class="ov-kpis" id="ov-burner-kpis"></div>
@@ -2256,6 +2274,7 @@ async function loadPreview() {
   if (j.starting) return;
   PV = j;
   drawPreview();
+  drawNext();  // 0.46.1: Übersicht → Warmwasser / Kessel, nächste 12 h – dieselbe Antwort, keine zweite Abfrage
 }
 function previewOff() { $("pv").hidden = true; $("cmp").hidden = true; }  // ältere Version ohne api/preview
 function drawPreview() {
@@ -2465,6 +2484,178 @@ function pvTip(p, i) {
   if (!h.writes.length) rows.push(own || boil ? "nichts zu schreiben" : "würde nichts schreiben");
   return `${wday(t)} ${tclock(t)}–${tclock(t + 3600)}${state.length ? " · " + state.join(" · ") : ""}<br>${rows.join("<br>")}`;
 }
+// ---------------------------------------------------------------- Nächste 12 Stunden (0.46.1)
+// Übersicht → Warmwasser und → Kessel: was HeatPilot ab jetzt plant – aus derselben Vorschau (PV, api/preview, keine
+// eigene Abfrage). Stufenlinie wie in der Vorschau, Tooltip je Stunde wie dort (pvTip), darunter nur die Wechsel.
+const NX_H = 12;
+const NX_EMPTY = "Noch keine Vorschau – sobald HeatPilot die nächsten Stunden berechnet hat, steht hier der Plan.";
+// Zeitfenster: ab dem ersten Rechenschritt (jetzt) 12 h, höchstens bis zum Ende der Vorschau; idx = Stunden darin
+function nxWin(p) {
+  const hs = (p && p.hours) || [];
+  if (!hs.length) return null;
+  const st = p.steps || [], end = tsOf(hs[hs.length - 1].t) + 3600;
+  const x0 = st.length ? Math.max(tsOf(st[0].t), tsOf(hs[0].t)) : tsOf(hs[0].t), x1 = Math.min(x0 + NX_H * 3600, end);
+  return { x0, x1, end, idx: hs.map((h, i) => i).filter((i) => tsOf(hs[i].t) + 3600 > x0 && tsOf(hs[i].t) < x1) };
+}
+// Stufen im Fenster (auf das Fenster beschnitten): Beginn, Ende, Wert val(step), dazu die Stufe selbst
+function nxSteps(p, w, val) {
+  const st = p.steps || [], out = { ts: [], ends: [], vals: [], src: [] };
+  st.forEach((s, i) => {
+    const a = Math.max(tsOf(s.t), w.x0), b = Math.min(i + 1 < st.length ? tsOf(st[i + 1].t) : w.end, w.x1);
+    if (b <= a) return;
+    out.ts.push(a); out.ends.push(b); out.vals.push(val(s) ?? null); out.src.push(s);
+  });
+  return out;
+}
+// Kurzer Grund aus dem der Vorschau: „Nacht – Speicher darf bis 40 °C fallen“ → „Nacht“,
+// „Wohnzimmer heizt vor bis 06:00“ → „heizt vor“
+const NX_WHY = { dhw: [[/^vor dem Aufstehen/, "vor dem Aufstehen"], [/^vor der Ankunft/, "vor der Ankunft"],
+  [/^große Zapfung/, "große Zapfung üblich"], [/^(Zapfung erwartet|hier wird oft gezapft)/, "Zapfung erwartet"],
+  [/^Ankunft unbekannt/, "Ankunft unbekannt"], [/^lernt noch/, "lernt noch"]],
+  flow: [[/begrenzt durch/, "Fußboden-Grenze"], [/heizt vor/, "heizt vor"], [/heizt auf/, "heizt auf"],
+    [/Heizbetrieb bleibt an/, "Heizbetrieb bleibt an"], [/ hält /, "hält Soll"]] };
+function nxWhy(s, kind) {
+  s = String(s ?? "");
+  const hit = NX_WHY[kind].find(([re]) => re.test(s));
+  return hit ? hit[1] : s.split(" – ")[0];
+}
+// Beschriftung eines Warmwasser-Abschnitts im Grafen: lang, sonst kurz, sonst keine (dann nur im Tooltip)
+const NX_LABEL = { "vor dem Aufstehen": ["Aufheizen"], "vor der Ankunft": ["Aufheizen"], "niemand zu Hause": ["niemand zu Hause", "weg"],
+  "Zapfung erwartet": ["Zapfung erwartet", "Zapfung"], "große Zapfung üblich": ["Zapfung erwartet", "Zapfung"],
+  "jemand zu Hause": [], "Anwesenheit unbekannt": [], "Ankunft unbekannt": [], "lernt noch": [] };
+const nxLabel = (why) => NX_LABEL[why] || [why];
+// Wechsel als Abschnitte: gleicher Wert oder gleicher Grund hintereinander → ein Abschnitt (Wert bzw. Spanne);
+// beim Kessel ist „Heizbetrieb aus“ ein eigener Abschnitt. Abschnitte kürzer als NX_MIN_S hintereinander (Ein/Aus im
+// 5-min-Takt) werden ein Block „zeitweise aus“; ist der kürzer als NX_MIN_S, zählt er zum Abschnitt davor – sonst
+// stünde hier eine Textwand. „Jetzt“ und der Abschnitt am Ende des Fensters gelten nie als kurz.
+const NX_MIN_S = 1800;
+function nxRuns(p, kind) {
+  const w = nxWin(p);
+  if (!w) return [];
+  const s = nxSteps(p, w, (x) => kind === "dhw" ? x.dhw : x.heating === true ? x.flow : null), out = [];
+  const range = (q, lo, hi) => { if (lo !== null) { q.lo = q.lo === null ? lo : Math.min(q.lo, lo); q.hi = q.hi === null ? hi : Math.max(q.hi, hi); } };
+  const join = (q, r) => { q.b = r.b; q.onS += r.onS; q.offS += r.offS; q.mixed = q.mixed || r.mixed || q.off !== r.off; range(q, r.lo, r.hi); };
+  const same = (q, r) => q.off === r.off && q.why === r.why && (q.lo === null) === (r.lo === null);
+  s.src.forEach((x, i) => {
+    const v = s.vals[i], off = kind === "flow" && x.heating === false, d = s.ends[i] - s.ts[i];
+    const n = { a: s.ts[i], b: s.ends[i], lo: v, hi: v, why: off ? "" : nxWhy(kind === "dhw" ? x.dhw_why : x.flow_why, kind),
+      off, onS: off ? 0 : d, offS: off ? d : 0 }, r = out[out.length - 1];
+    if (r && r.off === off && (r.lo === null) === (v === null) && (off || (r.lo === v && r.hi === v) || r.why === n.why)) join(r, n);
+    else out.push(n);
+  });
+  const res = [];
+  for (const r of out) {
+    const q = res[res.length - 1], short = q && r.b - r.a < NX_MIN_S && r.b < w.x1;
+    if (short && q.flick) join(q, r);
+    else if (short) res.push({ ...r, flick: true });
+    else if (q && !q.flick && same(q, r)) join(q, r);
+    else res.push(r);
+  }
+  for (let i = res.length - 1; i > 0; i--) {  // kurze Blöcke zum Abschnitt davor, danach Gleiches zusammen
+    if (res[i].flick && res[i].b - res[i].a < NX_MIN_S) join(res[i - 1], res.splice(i, 1)[0]);
+  }
+  for (let i = res.length - 1; i > 0; i--) if (!res[i].flick && !res[i - 1].flick && same(res[i - 1], res[i])) join(res[i - 1], res.splice(i, 1)[0]);
+  for (const r of res) if (r.mixed) { r.off = r.offS > r.onS; if (!r.off && !r.why) r.why = "heizt"; }
+  return res;
+}
+// „Jetzt 55 °C · ab 22:00 45 °C (Nacht) · ab 05:30 55 °C (vor dem Aufstehen)“; extra: [ts, Text] dazwischen
+function nxLine(runs, extra = []) {
+  const deg = (r) => r.lo === null ? "kein Soll" : `${fmt(r.lo, 0)}${r.hi !== r.lo ? "–" + fmt(r.hi, 0) : ""} °C`;
+  const val = (r) => r.off ? (r.mixed ? "Heizbetrieb meist aus" : "Heizbetrieb aus") : deg(r);
+  const why = (r, i) => r.off ? "" : [i ? r.why : "", r.mixed ? "zeitweise aus" : ""].filter(Boolean).join(", ");
+  return runs.map((r, i) => [r.a, (i ? `ab ${tclock(r.a)} ` : "Jetzt ") + val(r) + (why(r, i) ? ` (${esc(why(r, i))})` : "")])
+    .concat(extra).sort((x, y) => x[0] - y[0]).map((x) => x[1]).join(" · ");
+}
+// Text mittig über einem Abschnitt, wenn er hineinpasst (11 px ≈ 6,2 px je Zeichen)
+function nxText(f, a, b, names, y) {
+  const l = Math.max(f.sx(a), f.m.l), r = Math.min(f.sx(b), f.W - f.m.r), t = names.find((n) => n.length * 6.2 + 6 <= r - l);
+  if (t) el("text", { x: (l + r) / 2, y, "text-anchor": "middle", class: "halo" }, f.svg).textContent = t;
+}
+// Beschriftungen oben in zwei Zeilen, je am Beginn des Abschnitts: erste freie Zeile, lang oder kurz, sonst keine.
+// Ein Zeitpunkt (Desinfektion, event) darf am rechten Rand links neben seiner Linie stehen
+function nxLanes(f, items) {
+  const ends = [-Infinity, -Infinity], right = f.W - f.m.r;
+  for (const [ts, names, event] of items.sort((a, b) => a[0] - b[0])) {
+    const x = Math.max(f.sx(ts), f.m.l) + 3;
+    for (const n of names) {
+      const wd = n.length * 6.2, x0 = x + wd <= right ? x : event ? x - 6 - wd : -1, k = ends.findIndex((e) => x0 >= e + 6);
+      if (x0 < f.m.l || k < 0) continue;
+      el("text", { x: x0, y: f.m.t + 10 + 12 * k, class: "halo" }, f.svg).textContent = n;
+      ends[k] = x0 + wd;
+      break;
+    }
+  }
+}
+function drawNext() {
+  const p = PV && PV.preview, w = nxWin(p);
+  nxDhw(p, w);
+  nxFlow(p, w);
+}
+function nxDhw(p, w) {
+  const box = $("ch-nx-dhw"), line = $("nx-dhw-line");
+  if (!box) return;
+  $("lg-nx-dhw").innerHTML = ""; line.innerHTML = "";
+  if (!w) return empty(box, NX_EMPTY);
+  const s = nxSteps(p, w, (x) => x.dhw), hold = nxSteps(p, w, (x) => x.dhw_hold).vals;
+  const ys = [...s.vals, ...hold].filter((v) => v !== null);
+  if (!s.vals.some((v) => v !== null)) return empty(box, `Kein Warmwasser-Soll${p.dhw_note ? " – " + esc(p.dhw_note) : ""}.`);
+  const hrs = w.idx.map((i) => p.hours[i]), hts = hrs.map((h) => tsOf(h.t));
+  const dis = hrs.map((h) => h.disinfect).filter((d) => d && tsOf(d.at) >= w.x0 && tsOf(d.at) < w.x1);
+  const lo = Math.min(...ys), hi = Math.max(...ys), yr = [...ys, hi + Math.max(6, (hi - lo) * 0.4)];  // Platz für zwei Zeilen
+  const f = frame(box, [w.x0, w.x1], yr, { xTicks: timeTicks, height: 150, label: "Warmwasser-Soll der nächsten 12 Stunden", ...span10(yr) });
+  pvBands(f, hts, hrs.map(pvBandOf));
+  const lab = [];  // Abschnitte nach dem Grund der Stunde (gleicher Grund hintereinander einer), dazu die Desinfektion
+  for (let i = 0, j; i < hrs.length; i = j + 1) {
+    const k = nxWhy(hrs[i].dhw_reason, "dhw");
+    for (j = i; j + 1 < hrs.length && nxWhy(hrs[j + 1].dhw_reason, "dhw") === k; j++);
+    if (nxLabel(k).length) lab.push([Math.max(hts[i], w.x0), nxLabel(k)]);
+  }
+  for (const d of dis) {
+    const x = f.sx(tsOf(d.at));
+    el("line", { x1: x, x2: x, y1: f.m.t, y2: f.H - f.m.b, stroke: "var(--text-secondary)", "stroke-width": 1, "stroke-dasharray": "2 3" }, f.svg);
+    lab.push([tsOf(d.at), [`Desinfektion ${tclock(tsOf(d.at))}`, "Desinfektion"], true]);
+  }
+  nxLanes(f, lab);
+  const st = { fill: "none", "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" };
+  el("path", { ...st, d: stepPath(s.ts, s.ends, hold, f.sx, f.sy), stroke: PV_C.dhw, "stroke-width": 1.5, "stroke-dasharray": "5 4" }, f.svg);
+  el("path", { ...st, d: stepPath(s.ts, s.ends, s.vals, f.sx, f.sy), stroke: PV_C.dhw, "stroke-width": 2 }, f.svg);
+  hourHover("nx-dhw", f, hts, (k) => pvTip(p, w.idx[k]));
+  const it = [["lk", PV_C.dhw, "Warmwasser-Soll"]];
+  if (hold.some((v) => v !== null)) it.push(["lk dash", PV_C.dhw, "Speicher bleibt über"]);
+  if (hrs.some((h) => h.night)) it.push(["band", "var(--band-night)", "Nacht"]);
+  if (hrs.some((h) => !h.night && (h.home === 0 || h.vacation))) it.push(["band", "var(--band-away)", hrs.some((h) => h.vacation) ? "niemand zu Hause / Urlaub" : "niemand zu Hause"]);
+  $("lg-nx-dhw").innerHTML = nxLegend(it);
+  line.innerHTML = nxLine(nxRuns(p, "dhw"), dis.map((d) => [tsOf(d.at), `${tclock(tsOf(d.at))} Desinfektion (${fmt(d.temp, 0)} °C)`])) +
+    `<span class="muted">${p.dhw_writes === "schreibt" ? "HeatPilot setzt dieses Soll selbst." : "Nur Vorschlag – HeatPilot schreibt das Warmwasser-Soll nicht."} ${NX_MORE}</span>`;
+}
+function nxFlow(p, w) {
+  const box = $("ch-nx-flow"), line = $("nx-flow-line");
+  if (!box) return;
+  $("lg-nx-flow").innerHTML = ""; line.innerHTML = "";
+  if (!w) return empty(box, NX_EMPTY);
+  const s = nxSteps(p, w, (x) => x.heating === true ? x.flow : null), off = s.src.map((x) => x.heating === false);
+  const ys = s.vals.filter((v) => v !== null);
+  if (!ys.length && !off.some(Boolean)) return empty(box, `Kein Vorlauf-Soll${p.flow_note ? " – " + esc(p.flow_note) : ""}.`);
+  const yr = ys.length ? ys : [30];
+  const f = frame(box, [w.x0, w.x1], yr, { xTicks: timeTicks, height: 150, label: "Vorlauf-Soll der nächsten 12 Stunden", ...span10(yr) });
+  const top = f.m.t, bottom = f.H - f.m.b;
+  for (let i = 0, j; i < off.length; i = j + 1) {  // Heizbetrieb aus: graue Fläche, mittig beschriftet
+    for (j = i; j + 1 < off.length && off[j + 1] === off[i]; j++);
+    if (!off[i]) continue;
+    const a = Math.max(f.sx(s.ts[i]), f.m.l), b = Math.min(f.sx(s.ends[j]), f.W - f.m.r);
+    el("rect", { x: a, y: top, width: Math.max(b - a, 0), height: bottom - top, fill: "var(--text-muted)", "fill-opacity": 0.16 }, f.svg);
+    nxText(f, s.ts[i], s.ends[j], ["Heizbetrieb aus", "aus"], (top + bottom) / 2 + 4);
+  }
+  el("path", { d: stepPath(s.ts, s.ends, s.vals, f.sx, f.sy), fill: "none", stroke: PV_C.flow, "stroke-width": 2, "stroke-linejoin": "round", "vector-effect": "non-scaling-stroke" }, f.svg);
+  hourHover("nx-flow", f, w.idx.map((i) => tsOf(p.hours[i].t)), (k) => pvTip(p, w.idx[k]));
+  const it = ys.length ? [["lk", PV_C.flow, "Vorlauf-Soll"]] : [];
+  if (off.some(Boolean)) it.push(["off", "", "Heizbetrieb aus"]);
+  $("lg-nx-flow").innerHTML = nxLegend(it);
+  line.innerHTML = nxLine(nxRuns(p, "flow")) +
+    `<span class="muted">${p.flow_writes === "schreibt" ? "HeatPilot schreibt Vorlauf und Heizbetrieb selbst." : "Nur Vorschlag – HeatPilot schreibt nichts an den Kessel."} ${NX_MORE}</span>`;
+}
+const NX_MORE = `<a href="#" onclick="ovPage('vorschau');return false">Vorschau 24 h ›</a>`;
+const nxLegend = (it) => it.map(([cls, c, name]) => `<span><i class="${cls}"${c ? ` style="${cls.startsWith("lk") ? "border-top-color" : "background"}:${c}"` : ""}></i>${name}</span>`).join("");
 // Tabelle je Stunde: Werte in einer Zeile, darunter Gründe, Raum-Soll (nur Änderungen) und Schreibvorgänge
 function pvTable(p) {
   let prevDay = null;
@@ -3277,6 +3468,7 @@ function drawOverview() {
   ovCharts();
   if (OV_PAGE === "haus") drawWeek();
   if (OV_PAGE === "vorschau") drawPreview();
+  if (OV_PAGE === "warmwasser" || OV_PAGE === "kessel") drawNext();  // volle Breite der sichtbaren Karte
   if (OV_PAGE === "raeume" && OV_VALVE) ovValve(OV_VALVE, false);
   if (OV_PAGE === "anwesenheit") loadPresence().catch(() => {});
 }
