@@ -4928,7 +4928,9 @@ function boilerSectionHtml(s, x) {
       `${lo}–${hi} °C, ganze Grad. Schreibt HeatPilot einmal beim Zurückschalten auf „Aus“ oder „Beobachten“; denselben Wert setzt der Wächter${eff}.`)}` +
     field("Wenn kein Raum Wärme braucht", `<select id="f-boiler_idle">${[["pumpe", "Pumpe läuft weiter"], ["aus", "Heizbetrieb ganz aus"]].map(([k, l]) =>
       `<option${(s.boiler_idle || "pumpe") === k ? " selected" : ""} value="${k}">${l}</option>`).join("")}</select>`,
-      "Pumpe läuft weiter (Standard): Heizbetrieb bleibt an, Vorlauf-Soll 20 °C – der Brenner springt nicht an. Heizbetrieb ganz aus: wie früher, z. B. im Sommer.") + `</div>` +
+      "Pumpe läuft weiter (Standard): Heizbetrieb bleibt an, Vorlauf-Soll 20 °C – der Brenner springt nicht an. Heizbetrieb ganz aus: wie früher, z. B. im Sommer.") +
+    field("Regler", `<label class="switch"><input id="f-regulator_removed" type="checkbox"${s.regulator_removed ? " checked" : ""}> Regler ist abgebaut</label>`,
+      "Angehakt: HeatPilot wartet nicht auf die Regler-Prüfung. Meldet EMS-ESP doch Werte eines Reglers, sperrt es trotzdem; die Prüfung nach jedem Schreiben bleibt.") + `</div>` +
     `<div class="warnbox" id="boiler-warn"><details class="more"><summary>Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. <span class="m"></span></summary><div>${boilerWarnText(fb)}</div></details></div>` +
     `<div class="dhw-box" id="boiler-box">${boilerBoxHtml(x.status, x.readiness)}</div>`;
 }
@@ -5673,6 +5675,7 @@ function collect() {
                    "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days", "keep_days",
                    "boiler_fallback_flow"]) out[k] = v("f-" + k);  // Rückfall-Vorlauf (0.41)
   if ($("f-boiler_idle")) out.boiler_idle = $("f-boiler_idle").value;  // 0.46.5: wenn kein Raum Wärme braucht
+  if ($("f-regulator_removed")) out.regulator_removed = $("f-regulator_removed").checked;  // 0.46.9: Regler abgebaut
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
   // Steuerung: Schalter (ohne Auswahl bleibt es bei Beobachten) und Wochenplan Mo..So

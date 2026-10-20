@@ -101,6 +101,8 @@ def regulator(eng, now: float | None = None) -> dict:
     if fresh and (eng.ems or {}).get("thermostat"):
         return {"present": True, "source": "ems",
                 "text": f"EMS-ESP meldet einen Regler (Gerät thermostat) – {REGULATOR_TEXT}"}
+    if getattr(eng.cfg, "regulator_removed", False):  # 0.46.9: Nutzer sagt „Regler abgebaut“ – kein Warten
+        return {"present": False, "source": "user", "text": "Kein Regler am Bus (von dir bestätigt: Regler abgebaut)"}
     eid = _fresh_ha(eng, now)
     if eid:
         return {"present": True, "source": "ha",

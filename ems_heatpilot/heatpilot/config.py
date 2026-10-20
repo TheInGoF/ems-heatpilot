@@ -322,6 +322,7 @@ class Config:
     flow_set_entity: str | None = None
     heating_switch_entity: str | None = None
     boiler_fallback_flow: int = boiler_rule.FALLBACK_DEFAULT
+    regulator_removed: bool = False  # 0.46.9: Nutzer bestätigt „Regler abgebaut“ (regulator.regulator)
     boiler_idle: str = "pumpe"  # 0.46.5: kein Wärmebedarf – Pumpe läuft weiter (Vorlauf-Soll 20 °C) | aus
     design_outdoor_temp: float = -12.0
     # fürs Zertifikat; 0 = unbekannt bzw. aus EMS-ESP (nompower, burnminpower)
