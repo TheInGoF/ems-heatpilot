@@ -6,19 +6,24 @@ Hausmodell (Stunde und Tag, ohne Warmwasser). Stündlich lernt es Nachtzeiten un
 Tado und die Schlafenszeiten aus dem Stromverbrauch. In die Datenbank schreibt es die Stundenwerte,
 die Fremdwärme-Ereignisse, die Zähler verworfener Gaswerte, die Tagesschnappschüsse der Modelle und
 die gelernten Zeiten (``schedule.learned``, ``KV_MANAGED_UNTIL``, die Nächte aus dem Stromverbrauch über
-``sleep.learn``). Seit 0.39 lernt es das Ventilverhalten je Raum (``learn_valves`` über ``valve_learn``). Es steuert
-nichts.
+``sleep.learn``). Seit 0.39 lernt es das Ventilverhalten je Raum (``learn_valves`` über ``valve_learn``). Seit 0.42.1
+lernt es nach „Gelerntes übernehmen“ (``room_adopt``) Raum- und Ventilmodell des Raums von vorn (``relearn_adopted``),
+und ``aggregate_hour`` führt Stundenwerte zusammen: Was in der Stunde unbekannt ist (keine Raumwerte, kein
+Gaszählerstand …), behält den gespeicherten Wert; fehlen Räume, ersetzt das Mittel der übrigen keine gespeicherte
+Innentemperatur und füllt eine Lücke nur um ihren Versatz berichtigt (``indoor_mean``). Es steuert nichts.
 """
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections import deque
 from datetime import datetime, timedelta
 
-from . import plausibility, schedule, sleep, valve_learn
+from . import indoor_mean, plausibility, schedule, sleep, valve_learn
 from .models import DAILY_MIN_HOURS, ROOM_STEP_H, RoomModel
+from .valve_model import ValveModel
 from .values import local, midnight
 
 log = logging.getLogger(f"{__package__}.engine")  # im Protokoll wie vor der Aufteilung: heatpilot.engine
@@ -72,13 +77,65 @@ class LearnMixin:
 
     def relearn_rooms(self, climates: set[str]) -> None:
         """Neue/umgestellte Raummodelle sofort aus der gespeicherten Historie lernen."""
+        log.info("Lerne Räume %s aus der gespeicherten Historie neu", sorted(climates))
+        for _ in self.relearn_steps(climates):
+            pass
+
+    def relearn_steps(self, climates: set[str]):
+        """Raumschritte der Räume ``climates`` von den ältesten Raumwerten bis zum letzten Raumschritt des Takts lernen;
+        nach jedem Tag ein ``yield``. Das Ende wird jedes Mal neu gelesen – was der Takt inzwischen weiterzählt, lernt
+        die Schleife noch mit (der Takt lässt Räume in ``_room_busy`` aus)."""
         first = self.store.query("SELECT MIN(ts) AS t FROM room_samples")[0]["t"]
         if first is None:
             return
         step = int(ROOM_STEP_H * 3600)
-        log.info("Lerne Räume %s aus der gespeicherten Historie neu", sorted(climates))
-        for st in range(first - first % step + step, self._last_room_step, step):
+        st, n = first - first % step + step, 0
+        while self._last_room_step is not None and st < self._last_room_step:
             self.learn_rooms(st, st + step, only=climates)
+            st, n = st + step, n + 1
+            if n % max(int(24 / ROOM_STEP_H), 1) == 0:
+                yield st
+
+    def _reset_adopted(self, climate: str) -> bool:
+        """Raum- und Ventilmodell des Raums von vorn (siehe ``relearn_adopted``); True, wenn jetzt nachzulernen ist."""
+        room = self.found.room_of(climate)
+        if room is None or room.climate != climate:
+            return False
+        model = RoomModel(room.name, floor=climate in self.cfg.floor_heating_rooms)
+        if self.house.balance_plausible:
+            model.adopt_house_tau(self.house.tau_cool_h)
+        self.rooms[climate] = model
+        if climate in self.valves:  # nicht für den Heizkreis von EMS-ESP
+            self.valves[climate] = ValveModel.from_dict(None, valve_learn.binary_device(room))
+        for state in (self.room_ext, self._room_temp_hist, self._room_valve_prev):
+            state.pop(climate, None)
+        if self._last_room_step is None:
+            return False
+        self.store.db.execute("DELETE FROM room_events WHERE room = ?", (climate,))
+        return True
+
+    def relearn_adopted(self, climate: str) -> None:
+        """Gelerntes übernommen (0.42.1, ``room_adopt``): Raum- und Ventilmodell des Raums von vorn aus den gespeicherten
+        Messwerten – das Raummodell gleich (``relearn_rooms``, mit Startwert aus dem Haus; seine Fremdwärme-Ereignisse
+        werden dabei neu erkannt), das Ventilmodell im Takt in Abschnitten (``learn_valves``). Andere Räume und Modelle
+        bleiben, wie sie sind; es wird nichts geschrieben."""
+        if self._reset_adopted(climate):
+            self.relearn_rooms({climate})
+        self.store.commit()
+
+    async def relearn_adopted_async(self, climate: str) -> None:
+        """Wie ``relearn_adopted``, gibt aber nach jedem Tag die Ereignisschleife frei. Solange lässt der Takt den Raum
+        aus (``_room_busy``) und speichert sein halbes Modell nicht."""
+        if self._reset_adopted(climate):
+            busy = self.__dict__.setdefault("_room_busy", set())
+            busy.add(climate)
+            try:
+                log.info("Lerne Raum %s aus der gespeicherten Historie neu", climate)
+                for _ in self.relearn_steps({climate}):
+                    await asyncio.sleep(0)
+            finally:
+                busy.discard(climate)
+        self.store.commit()
 
     def learn_rooms(self, start: int, end: int, only: set[str] | None = None) -> None:
         sys_rows = {
@@ -89,8 +146,9 @@ class LearnMixin:
                 (start, end),
             )
         }
+        busy = (self.__dict__.get("_room_busy") or set()) if only is None else set()  # lernt gerade neu (0.42.1)
         for climate, model in self.rooms.items():
-            if only is not None and climate not in only:
+            if (only is not None and climate not in only) or climate in busy:
                 continue
             rows = self.store.query(
                 "SELECT ts, temp, valve FROM room_samples WHERE room=? AND ts BETWEEN ? AND ? ORDER BY ts",
@@ -231,8 +289,8 @@ class LearnMixin:
             "SELECT * FROM samples WHERE ts >= ? AND ts < ? ORDER BY ts", (hour, hour + 3600)
         )
         if len(rows) < 2:
-            if learn:
-                self.learn_house_days(hour - 3600)  # Stunde fehlt (Neustart): offene Tage trotzdem abschließen
+            if learn:  # Stunde fehlt (Neustart): offene Tage abschließen und, gibt es Stundenwerte aus der
+                self.learn_house_hour(hour)  # Langzeitstatistik, die Stunde davor daraus lernen (seit 0.42.1)
             return
         # Gas bis zum ersten Wert der nächsten Stunde – sonst fehlen die letzten 5 min jeder Stunde
         gas_rows = self.store.query(
@@ -266,7 +324,7 @@ class LearnMixin:
         dhw = [r["dhw"] for r in rows if r["dhw"] is not None]
         home = [r["home_count"] for r in rows if r["home_count"] is not None]
         vac = [r["vacation"] for r in rows if r["vacation"] is not None]
-        t_in = self._mean_room_temp(hour, hour + 3600)
+        t_in, t_src, complete = self._mean_room_temp(hour, hour + 3600)
         # Anteil des Gases fürs Warmwasser: nach Brennerleistung gewichtet (eine 15-min-Ladung mit
         # voller Leistung ist mehr als ein Viertel der Stunde, wenn der Kessel sonst taktet)
         pw_all = pw_dhw = 0.0
@@ -288,18 +346,38 @@ class LearnMixin:
             spike,
             dhw_energy,
             self.ext_frac(hour),
+            t_src,
         )
-        self.store.add_hourly([row])
+        # zusammenführen (0.42.1): was hier unbekannt ist (keine Raumwerte, kein Gaszählerstand …), behält den
+        # gespeicherten Wert; der Gaswert einer Stunde mit bekannten Zählerständen gilt auch, wenn er verworfen ist.
+        # Innentemperatur aus unvollständigen Räumen füllt nur eine Lücke
+        self.store.add_hourly([row], replace=("gas_kwh", "gas_spike_kwh") if raw_kwh is not None else (),
+                              keep=() if complete else ("t_in",))
         self.store.commit()
         if learn:
             self.learn_house_hour(hour)
 
-    def _mean_room_temp(self, start: int, end: int) -> float | None:
-        r = self.store.query(
-            "SELECT AVG(temp) AS t FROM room_samples WHERE ts >= ? AND ts < ? AND temp IS NOT NULL",
-            (start, end),
-        )
-        return r[0]["t"] if r and r[0]["t"] is not None else None
+    def _mean_room_temp(self, start: int, end: int) -> tuple[float | None, str | None, bool]:
+        """Innentemperatur der Stunde aus den Raumwerten: (Wert, Herkunft, vollständig). Vollständig – mindestens so
+        viele Schlüssel mit Werten wie Räume gewählt sind –: das Mittel aller Raumwerte wie bisher („rooms“).
+        Unvollständig (seit 0.42.1: ein Raum fehlt, etwa nach einem Wechsel der Thermostate nur ein Raum nachgeholt):
+        jeder Schlüssel um seinen Versatz zum Hausmittel der Tage davor berichtigt („rooms~“, ``indoor_mean``) –
+        sonst wäre die Stunde um den Abstand der übrigen Räume verschoben; ohne jeden Bezug davor das einfache Mittel
+        („rooms-“). ``aggregate_hour`` füllt damit nur Lücken."""
+        rows = self.store.query(
+            "SELECT room, AVG(temp) AS t, COUNT(*) AS n FROM room_samples WHERE ts >= ? AND ts < ? AND temp IS NOT NULL "
+            "GROUP BY room", (start, end))
+        if not rows:
+            return None, None, False
+        if len(rows) >= len(self.found.rooms):
+            return sum(r["t"] * r["n"] for r in rows) / sum(r["n"] for r in rows), "rooms", True
+        if self.store.query("SELECT 1 FROM hourly WHERE ts = ? AND t_in IS NOT NULL", (start - start % 3600,)):
+            return None, None, False  # gespeicherte Innentemperatur bleibt – nichts zu berichtigen
+        fitted = indoor_mean.room_fits(self.store, [r["room"] for r in rows], start)
+        if fitted is None:  # kein Bezug (ein Raum fehlt von Anfang an): einfaches Mittel wie bisher
+            return sum(r["t"] * r["n"] for r in rows) / sum(r["n"] for r in rows), indoor_mean.PLAIN_SRC, False
+        value, _ = indoor_mean.mean([(r["room"], r["t"]) for r in rows], fitted)
+        return value, "rooms~" if value is not None else None, False
 
     def learn_house_hour(self, hour: int) -> None:
         """Lernt die Stunde *vor* ``hour`` – mit beiden Nachbarn für eine mittige Ableitung.

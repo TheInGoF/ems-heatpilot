@@ -307,8 +307,10 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
     def save(self) -> None:
         self.store.put("model.dhw", self.dhw.to_dict())
         self.store.put("model.house", self.house.to_dict())
+        busy = self.__dict__.get("_room_busy") or set()  # lernt gerade neu (0.42.1): kein halbes Modell speichern
         for climate, m in self.rooms.items():
-            self.store.put(f"model.room.{climate}", m.to_dict())
+            if climate not in busy:
+                self.store.put(f"model.room.{climate}", m.to_dict())
         for climate, v in self.valves.items():
             self.store.put(f"model.valve.{climate}", v.to_dict())
         for p, learner in self.persons.items():

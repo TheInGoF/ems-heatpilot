@@ -770,10 +770,9 @@ def test_no_write_path_to_emsesp_and_files_small():
 def test_version_changelog_docs():
     from heatpilot import __version__
 
-    assert __version__ == "0.42.0"
-    assert 'version: "0.42.0"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1].split("\n## ")[0]
-    assert head.startswith("0.42.0") and "Desinfektion auslösen" in head and "Mindestleistung" in head
+    assert __version__ >= "0.42.0"  # seit 0.42.1 prüft test_adopt421 die genaue Version
+    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.0")[1].split("\n## ")[0]
+    assert head.startswith("\n") and "Desinfektion auslösen" in head and "Mindestleistung" in head
     assert "tests/test_disinfect42.py" in head and "tests/test_ui_v42.py" in head
     for personal in ("Ingo", "BK15", "Sieger", "ES73"):
         assert personal not in head, personal

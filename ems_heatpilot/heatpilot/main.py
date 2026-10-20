@@ -4,7 +4,14 @@ Seit 0.41 läuft im 30-s-Takt der Live-Werte auch Weg B (``boiler_step``: Kessel
 schreiben), der Heartbeat ``sensor.heatpilot_heartbeat`` (jede Minute) und das Lesen der Wächter-Automationen
 (alle 10 min, nur lesen). Beim Zurückschalten von „heatpilot“ schreibt die alte Schreibstelle einmal den
 Rückfall-Vorlauf (``App._boiler_back``). Seit 0.42 läuft im selben Takt das Auslösen der Desinfektion zum Termin
-(``disinfect_step``: nur mit Warmwasser-Soll „HeatPilot setzt“, ohne Regler am Bus).
+(``disinfect_step``: nur mit Warmwasser-Soll „HeatPilot setzt“, ohne Regler am Bus). Seit 0.42.1 übernimmt
+``App.adopt_room`` auf Rückfrage Gelerntes von alten Raum-Entitäten (``room_adopt``) – ohne Neueinlesen der Historie –
+und merkt sich deren alten Temperatursensor (``room_alias``). ``App.restore_house`` stellt Hausdaten wieder her
+(Langzeitstatistik mit den Aliassen, nur zusammenführend), ``App.relearn`` lernt aus den gespeicherten Daten neu
+(``house_restore``). Ein Raumwechsel in den Einstellungen holt nur die Historie der neuen Räume nach und lernt dann
+aus den gespeicherten Daten neu (``App.update_rooms``) – kein Neueinlesen von allem mehr. Diese Abläufe stehen in
+``app_jobs``; ``App.build(relearn=True)`` baut dafür die neue Engine. Bricht ein Neustart das Neulernen ab, setzt
+``App.build`` es beim Start fort; „Historie neu einlesen“ behält Warmwasser- und Personenmodelle (``_learning_plan``).
 """
 
 from __future__ import annotations
@@ -17,7 +24,8 @@ from datetime import datetime, timedelta
 from aiohttp import web
 
 from . import __version__
-from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, watchdog
+from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
+from .app_jobs import JobsMixin
 from .backfill import run_backfill
 from .boiler_control import BoilerControl
 from .boiler_entity import flow_target, heat_target, regulator_block, same_entity
@@ -61,8 +69,9 @@ DATA_VERSION = 13  # 3: Warmwasser-Auskühlen · 4: große Zapfungen · 5: Ladee
 #                  auch sie.
 
 
-class App:
-    """Hält Verbindung, Datenbank und die laufende Engine – Einstellungen ohne Neustart übernehmen."""
+class App(JobsMixin):
+    """Hält Verbindung, Datenbank und die laufende Engine – Einstellungen ohne Neustart übernehmen. Übernehmen,
+    Wiederherstellen und Neulernen (0.42.1) stehen in ``app_jobs.JobsMixin``."""
 
     def __init__(self) -> None:
         self._status = "verbinde mit Home Assistant"
@@ -76,6 +85,7 @@ class App:
         self._lock = asyncio.Lock()
         self._registry: tuple[float, Registry] | None = None
         self._reset = False
+        self.job = None  # 0.42.1: laufendes bzw. letztes Wiederherstellen/Neulernen (app_jobs)
         # neuer Datenstand (Ausreißer-Schutz 0.14, Warmwasser 0.17.1): älteren Lernstand einmal neu berechnen
         if self.store.get("data_version", 0) < DATA_VERSION:
             self._reset = bool(self.store.get("backfill_done"))
@@ -116,44 +126,68 @@ class App:
             self._registry = (time.time(), Registry(entities, *parts))
         return self._registry[1]
 
-    async def build(self, backfill: bool = True) -> None:
-        """(Neu) aufbauen: Konfiguration laden, Entitäten finden, Engine starten."""
+    async def build(self, backfill: bool = True, relearn: bool = False) -> None:
+        """(Neu) aufbauen: Konfiguration laden, Entitäten finden, Engine starten. ``relearn`` (0.42.1): die neue Engine
+        lernt aus den gespeicherten Daten neu (``house_restore``), ohne etwas aus Home Assistant neu zu holen."""
         async with self._lock:
-            self.cfg = Config.load()
-            states = await self.ha.get_states()
-            found = discover(states, await self.registry(), self.cfg)
-            old = self.eng
-            if self._reset:
-                since = (datetime.now() - timedelta(days=self.cfg.backfill_days + 1)).date().isoformat()
-                self.store.reset_learning(since)
-                self._reset = False
-                backfill = True
-                log.info("Lernstand wird aus den gespeicherten und den HA-Daten neu berechnet")
-            elif old is not None:
-                old.save()  # Lernstand sichern, die neue Engine lädt ihn
-            eng = Engine(self.cfg, self.store, found)
-            if backfill:
-                self.status = "übernehme Historie"
-                await run_backfill(self.ha, eng)
-            for s in await self.ha.get_states():
-                eng.on_state(s["entity_id"], s)
-            for entity_id, s in self.pending.items():
-                eng.on_state(entity_id, s)
-            self.pending.clear()
-            if old is not None:
-                if old.found.weather == eng.found.weather:  # Vorhersage nur von derselben Wetter-Entität
-                    eng.forecast, eng.forecast_ts = old.forecast, old.forecast_ts
-                eng.live = old.live
-                if old.cfg.emsesp_host == eng.cfg.emsesp_host:  # Kesselsteuerungen bis zur nächsten Abfrage
-                    eng.ems_controls, eng.ems_controls_ts = old.ems_controls, old.ems_controls_ts
-                    eng.ems, eng.ems_ts = old.ems, old.ems_ts  # letzte Werte mit ihrer Zeit (Weg B: Regler am Bus)
-                    eng.regulator_watch = old.regulator_watch  # Regler zuletzt gesehen, Folge „kein Gerät“ (0.41)
-                await self._release_valves(old, found)
-                await self._boiler_back(old, eng)
-            self.eng = eng
-            self._build_control(eng, found, old)
-            self._restart_emsesp()
-            self.status = "läuft"
+            await self._build(backfill, relearn)
+
+    async def _build(self, backfill: bool, relearn: bool = False) -> None:
+        """``build`` unter der schon gehaltenen Sperre."""
+        self.cfg = Config.load()
+        states = await self.ha.get_states()
+        found = discover(states, await self.registry(), self.cfg)
+        old = self.eng
+        backfill, relearn, since, kept = self._learning_plan(found, backfill, relearn, old)
+        eng = Engine(self.cfg, self.store, found)
+        if backfill:
+            self.status = "übernehme Historie"
+            await run_backfill(self.ha, eng)
+            house_restore.put_back(eng, kept)
+        elif relearn:
+            self.status = "lerne aus den gespeicherten Daten neu"
+            await house_restore.relearn(eng, since)
+        for s in await self.ha.get_states():
+            eng.on_state(s["entity_id"], s)
+        for entity_id, s in self.pending.items():
+            eng.on_state(entity_id, s)
+        self.pending.clear()
+        if old is not None:
+            if old.found.weather == eng.found.weather:  # Vorhersage nur von derselben Wetter-Entität
+                eng.forecast, eng.forecast_ts = old.forecast, old.forecast_ts
+            eng.live = old.live
+            if old.cfg.emsesp_host == eng.cfg.emsesp_host:  # Kesselsteuerungen bis zur nächsten Abfrage
+                eng.ems_controls, eng.ems_controls_ts = old.ems_controls, old.ems_controls_ts
+                eng.ems, eng.ems_ts = old.ems, old.ems_ts  # letzte Werte mit ihrer Zeit (Weg B: Regler am Bus)
+                eng.regulator_watch = old.regulator_watch  # Regler zuletzt gesehen, Folge „kein Gerät“ (0.41)
+            await self._release_valves(old, found)
+            await self._boiler_back(old, eng)
+        self.eng = eng
+        self._build_control(eng, found, old)
+        self._restart_emsesp()
+        self.status = "läuft"
+
+    def _learning_plan(self, found, backfill: bool, relearn: bool, old: Engine | None) -> tuple:
+        """Was die neue Engine lernt: alles neu aus den gespeicherten und den HA-Daten (neuer Datenstand bzw. „Historie
+        neu einlesen“ – dann bleiben Warmwasser- und Personenmodelle, 0.42.1), aus den gespeicherten Daten neu
+        (``relearn`` oder ein durch einen Neustart unterbrochenes Neulernen, ``house_restore.pending``) oder weiter wie
+        bisher. Gibt (backfill, relearn, since, behaltene Modelle) zurück."""
+        if self._reset:
+            kept = house_restore.keep_models(self.store) if self._reset == "keep" else {}
+            since_day = (datetime.now() - timedelta(days=self.cfg.backfill_days + 1)).date().isoformat()
+            self.store.reset_learning(since_day)
+            self.store.put(house_restore.PENDING, None)  # der Neuaufbau lernt ohnehin alles neu
+            self._reset = False
+            log.info("Lernstand wird aus den gespeicherten und den HA-Daten neu berechnet")
+            return True, False, None, kept
+        if relearn or house_restore.pending(self.store):
+            if not relearn:
+                log.info("Neu lernen wurde unterbrochen (Neustart) – HeatPilot lernt jetzt aus den gespeicherten "
+                         "Daten neu")
+            return False, True, house_restore.prepare(self.store, [r.climate for r in found.rooms]), {}
+        if old is not None:
+            old.save()  # Lernstand sichern, die neue Engine lädt ihn
+        return backfill, False, None, {}
 
     async def _release_valves(self, old: Engine, found) -> None:
         """Ventile führen (0.40): Führt die neue Schleife einen Raum nicht mehr („Beobachten“, „macht mit“ aus, Raum
@@ -244,11 +278,6 @@ class App:
         rooms_after = self._room_inputs()
         changed = sorted(c for c, v in rooms_after.items() if rooms_before is not None and rooms_before.get(c) != v)
         reload = False
-        if changed:
-            # Sensoren eines Raums geändert oder Raum neu: dessen Werte gibt es bisher nicht in den
-            # gespeicherten Daten – Historie aus Home Assistant neu holen und neu lernen
-            log.info("Räume mit neuen Sensoren/neu gewählt: %s – Historie wird neu eingelesen", ", ".join(changed))
-            reload = True
         if power_before is not None and power_before != self._power_inputs():
             # Leistungssensoren (0.36) geändert: Hausleistung der Vergangenheit neu holen, Nächte neu rechnen
             log.info("Leistungssensoren geändert – Historie wird neu eingelesen")
@@ -256,6 +285,11 @@ class App:
             reload = True
         if reload:
             asyncio.create_task(self.reload_history())
+        elif changed:
+            # Sensoren eines Raums geändert oder Raum neu: seit 0.42.1 nur die Historie dieser Räume nachholen (nichts
+            # überschreiben, keine Langzeitstatistik) und aus den gespeicherten Daten neu lernen
+            log.info("Räume mit neuen Sensoren/neu gewählt: %s – ihre Historie wird nachgeholt", ", ".join(changed))
+            self.start_job("rooms", set(changed))
         if before is not None and sorted(before) != sorted(self.eng.found.persons):
             self.store.recount_home(self.eng.found.persons)
             log.info("Personen geändert (%s) – Anwesenheit in den gespeicherten Daten neu gezählt",
@@ -275,8 +309,9 @@ class App:
         return tuple(self.eng.found.power), tuple(self.eng.found.power_exclude)
 
     async def reload_history(self) -> None:
-        """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers)."""
-        self._reset = True
+        """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers) – seit 0.42.1
+        zusammenführend (``backfill``), Warmwasser- und Personenmodelle bleiben (``house_restore.keep_models``)."""
+        self._reset = "keep"
         await self.build(backfill=True)
 
     async def refresh_rooms(self) -> None:

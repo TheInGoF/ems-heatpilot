@@ -67,7 +67,8 @@ keine YAML-Optionen. Oben schaltet **„Allgemein | Entitäten“** zwischen den
   [Weg W](#warmwasser-über-heatpilot-weg-w))
 - **Benachrichtigungen** (seit 0.38, seit 0.39.1 unter Entitäten): Ziele in Home Assistant für Meldungen, mit
   „Testnachricht senden“ (siehe [Benachrichtigungen](#benachrichtigungen))
-- **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“
+- **Erweitert:** Abtastintervall, Historie, „Historie neu einlesen“, seit 0.42.1 „Hausdaten wiederherstellen“ und
+  „Aus gespeicherten Daten neu lernen“ (siehe [Räume wechseln](#räume-wechseln-z-b-tado-cloud--homekit))
 
 Felder sind mit Vorschlägen der automatischen Erkennung vorausgefüllt
 („Vorschläge übernehmen“ setzt die Räume erneut und Gaszähler, Wetter und Außenfühler auf „Automatik“). **Speichern** prüft alle Eingaben,
@@ -175,6 +176,12 @@ Reiter **Diagnose** auf der HeatPilot-Seite:
   (Vorlauf, Raum, Speicher), Gaszähler zählt nicht obwohl der Brenner lief,
   Aufzeichnungslücken, EMS-ESP nicht erreichbar, Programmfehler der letzten 24 h,
   Modelle ohne Empfehlung (mit Grund).
+- **„Modelle – Einzelheiten“** (seit 0.42.1, Ziel eines Klicks auf die Karte „Modelle“ in der Übersicht):
+  Hausmodell mit Gründen, Wärmeverlust ± Unsicherheit, Vorhersagefehler, Lernschritte und die Datenlage der
+  Stundenwerte – gespeichert (mit Zeitraum und Lücken), mit Gas, Außen- und Innentemperatur (daraus lernt das
+  Hausmodell), ohne Innentemperatur, ohne verwertbaren Gaswert, ohne Außentemperatur; je Raum und Ventil Zustand und
+  Grund, Warmwasser, was zuletzt wiederhergestellt, neu gelernt oder übernommen wurde (siehe
+  [Räume wechseln](#räume-wechseln-z-b-tado-cloud--homekit)).
 - **Log** – alle Meldungen mit Zeit und Fehlerdetails, filterbar. Wichtige
   Zustandswechsel (Leitplanken, Urlaub, Ankunft, Vorheizplan, Heizfreigabe,
   Warmwasser-Empfehlung) werden protokolliert. „Ausführliches Log“ (Einstellungen →
@@ -213,7 +220,13 @@ letzten 12 Monate Messung und zeigt, gemessen statt geschätzt:
 - **Warmwasser & Verbrauch:** Warmhalteverlust des Speichers, Gasverbrauch und -kosten
 - **Urteil** in Klartext und ein Stempel: „GEMESSEN“ oder „VORLÄUFIG“ (mit Grund),
   solange das Hausmodell unsicher ist, weniger als 500 Heizstunden oder noch kein
-  Frost gemessen wurden
+  Frost gemessen wurden, seit 0.42.1 auch, solange vielen Stunden die Innentemperatur fehlt
+- **Grundlage** (seit 0.42.1): über welchen Zeitraum es rechnet, aus wie vielen Stunden und seit wann das Hausmodell
+  gelernt hat und welche Stunden fehlen – mit Grund (ohne Innentemperatur, ohne verwertbaren Gaswert, ohne
+  Außentemperatur, ohne Stundenwert) statt still weniger zu nehmen. In der Übersicht steht das unter dem Zertifikat
+  („Grundlage: Stundenwerte … · Hausmodell aus … Stunden … seit …“, darunter „Nicht berücksichtigt:“ je Grund mit
+  Zeitraum; fehlt vielen Stunden die Innentemperatur, mit dem Knopf „Hausdaten wiederherstellen“), in PDF und
+  Druckansicht in einem Satz im Absatz „Grundlage“
 
 **Gesamtbewertung:** Alles auf einen Nenner – je Bereich 0–100 Punkte, linear zwischen
 „sehr gut“ und „schlecht“: Gebäude nach Energiekennwert (30 → 250 kWh/m²a) bzw. ohne
@@ -1421,6 +1434,97 @@ leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder
 „macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Entitäten →
 Räume.
 
+## Räume wechseln (z. B. Tado-Cloud → HomeKit)
+
+Messwerte und Modelle eines Raums hängen an seinem Schlüssel – der climate-Entität seines Thermostats. Wechselt die
+Integration (Tado-Cloud → HomeKit, Thermostat neu gekoppelt oder getauscht), hat derselbe Raum eine neue Entität: Raum-
+und Ventilmodell begännen von vorn, die Messwerte der alten Entität lägen ohne Raum in der Datenbank, und der neue
+Temperatursensor hat in Home Assistant erst wenige Tage Langzeitstatistik. Seit 0.42.1 geht dabei nichts mehr
+verloren:
+
+- **Raumwechsel speichern** holt nur die Historie der neuen bzw. geänderten Räume aus Home Assistant nach (Temperatur,
+  Soll, Ventil, Feuchte – ein schon gespeicherter Messpunkt bleibt, wie er ist) und lernt dann aus den gespeicherten
+  Daten neu. Die Langzeitstatistik wird dafür nicht neu gelesen, nichts wird gelöscht. Nur geänderte
+  Leistungssensoren lesen die Historie wie bisher ganz neu ein (zusammenführend, siehe nächster Punkt).
+- **Nie mit „unbekannt“ überschreiben:** Liest HeatPilot die Langzeitstatistik oder die Historie neu ein (auch mit
+  „Historie neu einlesen“), behält jede Stunde ihre gespeicherte Außentemperatur, ihren Gaswert und ihre Anteile, wenn
+  die neue Quelle dazu nichts hat, und eine gespeicherte Innentemperatur immer. Ein Messpunkt behält jeden Wert, zu dem
+  Home Assistant nichts hat – etwa Vorlauf und Brenner direkt von EMS-ESP –; Brennerereignisse ersetzt das Neueinlesen
+  nur, wenn Home Assistant die Brenner-Entität hat, Raumwerte je Raum erst ab dem ersten Zeitpunkt seiner Historie in
+  Home Assistant – ältere und die alter Entitäten bleiben. Warmwasser- und Personenmodelle bleiben bei „Historie neu
+  einlesen“ stehen; Haus-, Raum- und Ventilmodelle lernen neu.
+- **Innentemperatur aus einem Teil der Räume:** Fehlt einer Stunde ein Raum (sein neuer Sensor hat noch keine
+  Statistik, für ihn gibt es keinen alten Sensor, das Thermostat meldete nichts), wäre das Mittel der übrigen um ihren
+  Abstand zum Hausmittel verschoben – zwei Räume mit ±1,5 K ergäben 1,5 K zu warm, das Hausmodell läge weit daneben.
+  Deshalb ersetzt ein Mittel über weniger Räume nie eine gespeicherte Innentemperatur. Fehlt sie, füllt HeatPilot sie
+  mit jeder Quelle um ihren üblichen Abstand zum gespeicherten Hausmittel berichtigt (Median über gemeinsame Stunden);
+  eine Quelle ohne genug gemeinsame Stunden, mit zu großer Streuung oder ohne Zusammenhang mit dem Hausmittel bleibt
+  weg – lieber eine Stunde ohne Innentemperatur als eine falsche. Ohne gespeichertes Hausmittel (erster Start) gilt
+  wie bisher das einfache Mittel. Woher die Innentemperatur einer Stunde kommt, merkt sich HeatPilot (Raumwerte bzw.
+  welche Statistik).
+- **Gespeicherte Daten ohne Raum:** Über der Raum-Tabelle (Einstellungen → Räume) stehen die alten Entitäten mit
+  gespeicherten Messwerten, mit Herkunft und Tagen. Gibt es für einen Raum einen sicheren Treffer (gleicher Name, die
+  Tado-Zone heißt wie der Bereich, gleicher Bereich in Home Assistant – und die alte Entität hat deutlich mehr Tage),
+  steht dort „Gelerntes von … übernehmen“ mit Knopf; jede alte Entität lässt sich außerdem selbst zuordnen
+  („übernehmen in …“). Auch eine Entität, die heute nur Mitläufer eines Raums ist (z. B. beide Integrationen im
+  selben Bereich), steht dort mit „Mitläufer im Raum …“ – ihre alten Messwerte zählen sonst für kein Raummodell; sie
+  lässt sich nur in ihren Raum übernehmen. Hat der Raum zu denselben Zeitpunkten schon eigene Messwerte (die neue
+  Entität lief eine Weile parallel), nennen Liste und Rückfrage diese Überschneidung. Nach der Rückfrage („Die
+  Messwerte von … werden Raum … zugeordnet, Raum- und Ventilmodell neu berechnet. … Nicht rückgängig zu machen.“)
+  ordnet HeatPilot in einem Schritt die Messwerte der alten Entität dem Raum zu; an Zeitpunkten mit eigenem Messpunkt
+  bleiben die Werte des Raums, nur was ihm fehlt, kommt aus der alten Entität – eine gemessene Ventilöffnung geht dabei
+  vor einer, die nur aus „heizt/heizt nicht“ abgeleitet ist. Ebenso Fremdwärme-Ereignisse, Ventil-Protokoll und
+  Hydraulik-Änderungen; Raum- und Ventilmodell lernen daraus neu (in Tagesabschnitten, die Seite bleibt bedienbar),
+  „Bereit für die Steuerung?“
+  bewertet den Raum neu. Das geht nur mit gespeicherten Einstellungen (sonst „Erst speichern“). Nichts davon wird an
+  Home Assistant geschrieben.
+- **Alter Temperatursensor (Alias):** Beim Übernehmen merkt sich HeatPilot den Temperatursensor der alten Entität –
+  am alten Gerät, solange die alte Integration noch eingerichtet ist, sonst eine °C-Statistik in Home Assistant, deren
+  Name zum alten Raum passt (nur bei genau einem Treffer). Für die Langzeitstatistik nimmt HeatPilot je Raum und
+  Stunde den aktuellen Sensor und, wo er (noch) keine Werte hat, den alten – beide um ihren Abstand zum Hausmittel
+  berichtigt. Auch ohne Übernahme lässt sich der alte Sensor je Raum wählen; ein Sensor, den ein anderer Raum schon
+  nutzt (aktueller oder alter), wird abgewiesen.
+- **Alter Temperatursensor je Raum** (Einstellungen → Räume, aufklappbar unter „Gespeicherte Daten ohne Raum“; lädt
+  erst beim Aufklappen die Liste der Langzeitstatistiken aus Home Assistant): je Raum der aktuelle Sensor, der gemerkte
+  alte mit Herkunft („Sensor am alten Gerät“, „Langzeitstatistik mit passendem Namen“, „selbst gewählt“) und eine
+  Auswahl – zuerst die Vorschläge des Raums (ein eindeutiger ist vorgewählt), dann alle °C-Statistiken, die kein
+  anderer Raum nutzt; Außenfühler und der aktuelle Sensor stehen nicht darin. „merken“ speichert nur die Zuordnung –
+  an den Messwerten ändert sich erst mit „Hausdaten wiederherstellen“ etwas; „– kein alter Sensor –“ entfernt sie.
+  Nach dem Wiederherstellen steht in der Zeile, ob der alte Sensor zum gespeicherten Hausmittel passt (mit seinem
+  Abstand) und wie viele Stunden er gefüllt hat – oder warum er nicht verwendet wurde. Wird ein alter Sensor, der
+  Stunden gefüllt hat, ersetzt oder entfernt, fragt HeatPilot nach und nimmt diese Stunden zurück (sie waren vorher
+  ohne Innentemperatur); „Hausdaten wiederherstellen“ füllt sie danach mit den übrigen Quellen neu. Gesperrt, solange
+  Raumänderungen nicht gespeichert sind.
+- **Hausdaten wiederherstellen** (Einstellungen → Erweitert, bei den Hinweisen in Einstellungen → Räume und in der
+  Karte „Modelle“; mit Rückfrage, die die alten Sensoren nennt – auch die, die HeatPilot dabei selbst setzt): Räume
+  ohne alten Sensor bekommen ihren eindeutigen Vorschlag, dann liest HeatPilot die Langzeitstatistik mit den alten
+  Sensoren neu ein – nur zusammenführend: Es ergänzt fehlende Innentemperaturen (berichtigt wie oben), löscht nichts
+  und ersetzt nichts durch „unbekannt“. Gibt es eine alte climate-Entität noch in Home Assistant – übernommen oder
+  als Herkunft eines alten Sensors –, holt es auch ihre Historie als Raumwerte des neuen Raums nach (nur, wo der Raum
+  keinen Messpunkt hat). Das Ergebnis nennt alte Sensoren, die nicht passten, und alte Thermostate, deren Werte nicht
+  nachgeholt wurden (mit Grund). Danach lernt es aus den gespeicherten Daten neu. Das läuft im Hintergrund: Unter dem Knopf, in der Karte
+  „Modelle“ und unter Einstellungen → Räume steht „Läuft: Hausdaten wiederherstellen – …“ (die Knöpfe sind so lange
+  gesperrt), danach das Ergebnis, z. B. „Stunden mit Innentemperatur 260 → 1.440, ohne 1.180 → 0“; Übersicht und
+  Zertifikat rechnen dann neu. Nach „Gelerntes übernehmen“ nennt die Meldung den gemerkten alten Sensor und bietet
+  „Hausdaten wiederherstellen“ an, wenn vielen Stunden die Innentemperatur fehlt.
+- **Aus gespeicherten Daten neu lernen** (Einstellungen → Erweitert): Haus-, Raum- und Ventilmodelle, Lernkurve und
+  Fremdwärme-Ereignisse aus den gespeicherten Stunden- und Messwerten neu berechnen – ab dem ersten eigenen
+  Messpunkt auch die Räume. Holt nichts aus Home Assistant und löscht keine Messwerte; Warmwasser- und
+  Personenmodelle bleiben, ebenso die Modelle alter Entitäten ohne Raum (mit ihnen ihr Name für „Gelerntes
+  übernehmen“). Läuft nach dem Wiederherstellen und nach einem Raumwechsel von selbst; den Stand zeigt die Seite wie
+  beim Wiederherstellen. Abläufe laufen nacheinander – ein später gestarteter zeigt „Wartet: …“. Startet HeatPilot
+  neu, während es neu lernt, lernt es beim Start fertig.
+
+**Karte „Modelle“** (oben in der Übersicht, auch während des Lernens): Hausmodell plausibel oder lernt, Wärmeverlust ±
+Unsicherheit, Vorhersagefehler, aus wie vielen Stunden und Tageswerten es wirklich gelernt hat – von wie vielen
+Stunden mit Gas, Außen- und Innentemperatur seit wann (ältester Tag mit Innentemperatur); gelernt wird nur in der
+Heizperiode, ohne Warmwasser und Fremdwärme; Räume plausibel n von m, Ventile belastbar n von m, Warmwasser. Haben viele Stunden Gas und
+Außentemperatur, aber keine Innentemperatur, steht dort ein Hinweis mit „Hausdaten wiederherstellen“ – das
+Hausmodell lernt solche Stunden nicht; auch die Grafik „Wärmebedarf des Hauses“ sagt dann, wie viele Stunden ihr
+fehlen. Darunter: was zuletzt neu gelernt bzw. übernommen wurde. Ein Klick auf die Karte führt zu „Modelle –
+Einzelheiten“ (Reiter Diagnose). Die Kacheln mit Wärmeverlust, Heizlast und Trägheit erscheinen wie bisher erst mit
+plausiblem Hausmodell – die Karte steht immer da.
+
 ## Wärmebedarf aus dem Tado-Soll
 
 Tado senkt nachts die Solltemperatur sofort ab, die Ventile schließen aber
@@ -1567,7 +1671,10 @@ Schichten halten sie vom Lernen fern:
 Was ignoriert wurde, steht in der Übersicht unter „Leitplanken“, im Selbsttest
 (Reiter Diagnose) und im Log. Beim Update auf 0.14 wird der Lernstand einmal
 mit diesem Schutz aus den gespeicherten und den Home-Assistant-Daten neu
-berechnet; „Historie neu einlesen“ macht dasselbe auf Knopfdruck.
+berechnet; „Historie neu einlesen“ macht dasselbe auf Knopfdruck. Seit 0.42.1 überschreibt das Neueinlesen dabei
+keine gespeicherten Werte mehr mit „unbekannt“ (auch nicht Kesselwerte, die direkt von EMS-ESP kamen), und
+Warmwasser- und Personenmodelle bleiben; ohne Home Assistant zu fragen, rechnet „Aus gespeicherten Daten neu
+lernen“ (siehe [Räume wechseln](#räume-wechseln-z-b-tado-cloud--homekit)).
 
 ## Fußbodenheizung je Raum
 
