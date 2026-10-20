@@ -27,7 +27,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import backfill, house_data, room_adopt, room_alias
+from . import backfill, house_data, room_adopt, room_alias, valve_since
 from .dhw import DhwModel
 from .discovery import Room, device_sensors
 from .models import ROOM_STEP_H
@@ -122,6 +122,18 @@ def old_entities(eng) -> list[tuple[str, str]]:
     return sorted(pairs.items())
 
 
+def old_until(eng) -> dict[str, tuple[int, int]]:
+    """Alte Entitäten aus einem Thermostatwechsel „anderes Thermostat“ (``valve: False`` im Protokoll, 0.44): ihre
+    Historie nur bis zum Wechsel („Ventil lernt ab“ des Raums) – danach maß dort das neue Thermostat."""
+    out: dict[str, tuple[int, int]] = {}
+    for e in eng.store.get(room_adopt.KV_LOG) or []:
+        if isinstance(e, dict) and e.get("from") and e.get("to"):
+            out.pop(e["from"], None)  # der zuletzt genannte Raum gilt
+            if e.get("valve") is False:
+                out[e["from"]] = (0, valve_since.of(eng.store, e["to"]) or int(e.get("ts") or 0))
+    return out
+
+
 def old_rooms(eng, idx) -> tuple[list[Room], dict[str, str], list[dict]]:
     """Alte climate-Entitäten (``old_entities``), die es in Home Assistant noch gibt, als Räume zum Nachholen ihrer
     Historie – mit ihren Sensoren laut Registry; dazu, unter welchem Raum ihre Werte gespeichert werden, und je alter
@@ -147,7 +159,7 @@ async def _fetch_old(ha, eng, idx) -> tuple[int, list[dict]]:
     rooms, key_of, report = old_rooms(eng, idx)
     total = 0
     for r in rooms:
-        n = await backfill.backfill_rooms(ha, eng, [r], eng.cfg.backfill_days, key_of)
+        n = await backfill.backfill_rooms(ha, eng, [r], eng.cfg.backfill_days, key_of, old_until(eng))
         total += n
         report.append({"from": r.climate, "to": key_of[r.climate], "rows": n,
                        "why": None if n else "keine Zeitpunkte ohne eigenen Messpunkt im Recorder-Fenster"})

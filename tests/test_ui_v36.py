@@ -102,11 +102,11 @@ def test_collect_sends_power_lists_and_auto_flag():
     em = between(js, "function emCollect(out) {", "\n}\n")
     assert 'else if (s.kind === "field" && !EM_CUSTOM[e.key]) out[s.name] = e.multi ? [...(v || [])] : String(v || "").trim();' in em
     assert 'out.night_plan_auto = $("f-night_plan_auto").checked;' in coll
-    # Speichern: geänderte Sensoren → Hinweis, dass die Historie neu eingelesen wird
+    # Speichern: geänderte Sensoren → Hinweis, dass die Historie eingelesen wird (seit 0.44: Lücken aus HA füllen)
     save = between(js, "async function saveSettings()", "function saveNote(j)")
     assert 'const reload = !same("power_sensors") || !same("power_exclude");' in save
     assert "const same = (k) => !(k in body) ||" in save  # nicht mitgeschickt (Seite nicht geladen): nichts neu einlesen
-    assert "Historie wird neu eingelesen – die gelernten Nachtzeiten erscheinen danach." in save
+    assert "Lücken aus Home Assistant werden gefüllt – die gelernten Nachtzeiten erscheinen danach." in save
     # Daten aus der api/settings-Payload: sleep neben settings/schedule
     load = between(js, "async function loadSettings()", "let OV_STALE")
     assert "SLEEP = j.sleep || null;" in load

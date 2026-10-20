@@ -139,6 +139,10 @@ Kessel, Bereitschaft, Warnungen; dazu Haus, Räume, Warmwasser, Kessel, Anwesenh
 **Einstellungen** (Startliste mit Unterseiten, zuletzt **Diagnose**). Die Schalter heißen überall
 „Aus · Beobachten · HeatPilot steuert“.
 
+**Seit 0.44:** Wechselt ein Raum das Thermostat, fragt HeatPilot, ob Gelerntes übernommen wird (gleiches Thermostat, neu
+angebunden), nur das Ventil neu lernt (anderes Thermostat) oder alles neu lernt. Die eigene Datenbank ist die Wahrheit:
+Home Assistant füllt nur Lücken, eigene Werte bleiben 720 Tage (einstellbar).
+
 Ausführliche Doku: [ems_heatpilot/DOCS.md](ems_heatpilot/DOCS.md) · Änderungen: [CHANGELOG.md](CHANGELOG.md)
 
 ## Entwicklung

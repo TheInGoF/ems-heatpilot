@@ -278,11 +278,10 @@ def test_f3_stale_power_values_outside_backfill_window_count_as_nights(tmp_path)
     # 42 Tage: zuerst war ein falscher Sensor gewählt (konstant 5 W, z. B. eine Lampe)
     fill(store, start=start, days=42, power=lambda d: 5.0)
     # Sensorwechsel: apply_settings verwirft die Hausleistung (clear_power), reload_history → reset_learning +
-    # delete_range(backfill 30 Tage) + neu einlesen
+    # neu einlesen (seit 0.44 ohne Löschen: HA füllt nur Lücken – die verworfene Hausleistung ist eine)
     store.clear_power()
     store.reset_learning("2026-01-01")
     t_bf = now - 30 * 86400
-    store.delete_range(t_bf, now)
     fill(store, start=datetime.fromtimestamp(t_bf), days=30)
     nights = sleep.learn(store, now)
     s = sleep.summary(nights, now, Config(power_sensors=["sensor.l1"]), ["sensor.l1"], [])

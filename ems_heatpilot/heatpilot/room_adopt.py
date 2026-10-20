@@ -25,8 +25,11 @@ Raum in der Datenbank („verwaist“), und die Historie der neuen Entität in H
 * ``tally_file`` – Zählung für die Übersicht über eine eigene, nur lesende Verbindung (``web_adopt`` im Hintergrund-
   Thread – die Ereignisschleife bleibt frei).
 
-Schreibt nichts an Home Assistant oder den Kessel und liest die HA-Historie nicht neu ein (das Neueinlesen ersetzt
-Raumwerte seit 0.42.1 nur ab dem ersten Zeitpunkt der HA-Historie des Raums – übernommene ältere Werte bleiben).
+Seit 0.44 nutzt ``room_switch`` ``adopt`` auch beim erkannten Thermostatwechsel (``valve=False``: anderes
+Thermostat – die alte Ventilöffnung ergänzt das neue Ventil nicht, das Ventil-Protokoll bleibt beim alten Schlüssel).
+
+Schreibt nichts an Home Assistant oder den Kessel und liest die HA-Historie nicht neu ein (Lesen aus HA füllt seit
+0.44 nur Lücken – übernommene und eigene Werte bleiben).
 """
 
 from __future__ import annotations
@@ -309,7 +312,10 @@ def _merge_overlap(db, p: dict, binary: bool) -> tuple[int, int]:
     """Zeitpunkte, an denen der Raum selbst einen Messpunkt hat: seine Werte bleiben, was ihm fehlt, kommt aus der alten
     Zeile; eine gemessene Ventilöffnung der alten Zeile geht vor einer aus ``hvac_action`` abgeleiteten (``binary``:
     der Raum hat keinen Ventilsensor; sonst jede 0 bzw. 100 % gegen eine Öffnung dazwischen) bzw. als Ersatzwert
-    markierten. Gibt (Zeitpunkte, ergänzte) zurück."""
+    markierten. Vor ``cut`` (0.44, Thermostatwechsel: vor dem Wechsel) gewinnt dagegen die alte Zeile – sie ist der
+    eigene Messwert des Raums, die neue dort nur aus der HA-Historie des neuen Thermostats; die neue füllt nur, was der
+    alten fehlt. Gibt (Zeitpunkte, ergänzte) zurück."""
+    cut = int(p.get("cut") or 0)
     rows = db.execute(
         "SELECT n.ts AS ts, n.temp AS t, n.target AS g, n.valve AS v, n.humidity AS h, o.temp AS ot, "
         "o.target AS og, o.valve AS ov, o.humidity AS oh, "
@@ -318,9 +324,14 @@ def _merge_overlap(db, p: dict, binary: bool) -> tuple[int, int]:
         "FROM room_samples n JOIN room_samples o ON o.ts = n.ts AND o.room = :old WHERE n.room = :new", p).fetchall()
     upd, mark, unmark = [], [], []
     for r in rows:
+        if r["ts"] < cut:
+            upd, mark, unmark = _old_wins(r, p["new"], upd, mark, unmark)
+            continue
         valve, subst = r["v"], r["ns"]
         measured = r["ov"] is not None and not r["os"]  # alte Zeile: Ventilöffnung gemessen, kein Ersatzwert
-        if r["ov"] is not None and valve is None:
+        if not p.get("valve", True):
+            pass  # anderes Thermostat (0.44): die alte Ventilöffnung ergänzt das neue Ventil nicht
+        elif r["ov"] is not None and valve is None:
             valve, subst = r["ov"], r["os"]
         elif measured and (subst or binary or (valve in OPEN_SHUT and r["ov"] not in OPEN_SHUT)):
             valve, subst = r["ov"], False  # 0/100 % aus hvac_action gegen gemessene Öffnung
@@ -337,6 +348,19 @@ def _merge_overlap(db, p: dict, binary: bool) -> tuple[int, int]:
     return len(rows), len(upd)
 
 
+def _old_wins(r, new_key: str, upd: list, mark: list, unmark: list) -> tuple[list, list, list]:
+    """Ein Zeitpunkt vor dem Wechsel: die alte (eigene) Zeile gilt, die neue füllt nur ihre leeren Spalten."""
+    def pick(o, n):
+        return o if o is not None else n
+    valve, subst = (r["ov"], r["os"]) if r["ov"] is not None else (r["v"], r["ns"])
+    new = (pick(r["ot"], r["t"]), pick(r["og"], r["g"]), valve, pick(r["oh"], r["h"]))
+    if new != (r["t"], r["g"], r["v"], r["h"]):
+        upd.append((*new, r["ts"], new_key))
+    if bool(subst) != bool(r["ns"]):
+        (mark if subst else unmark).append((r["ts"], new_key))
+    return upd, mark, unmark
+
+
 def _move_rows(db, p: dict, binary: bool = False) -> dict:
     """Messwerte und was an ihren Zeitpunkten hängt: Zeitpunkte ohne eigenen Messpunkt des Raums wandern, an den
     übrigen ergänzt die alte Zeile den Raum (``_merge_overlap``) und fällt dann weg."""
@@ -346,8 +370,9 @@ def _move_rows(db, p: dict, binary: bool = False) -> dict:
     _, filled = _merge_overlap(db, p, binary)
     db.execute(f"UPDATE OR IGNORE valve_subst SET room = :new WHERE room = :old AND ts NOT IN ({own})", p)
     db.execute("DELETE FROM valve_subst WHERE room = :old", p)
-    db.execute(f"UPDATE valve_dry_log SET room = :new WHERE room = :old AND ts NOT IN ({own})", p)
-    db.execute("DELETE FROM valve_dry_log WHERE room = :old", p)
+    if p.get("valve", True):  # anderes Thermostat (0.44): das Ventil-Protokoll bleibt beim alten Schlüssel
+        db.execute(f"UPDATE valve_dry_log SET room = :new WHERE room = :old AND ts NOT IN ({own})", p)
+        db.execute("DELETE FROM valve_dry_log WHERE room = :old", p)
     moved = db.execute("UPDATE OR IGNORE room_samples SET room = :new WHERE room = :old", p).rowcount
     skipped = db.execute("DELETE FROM room_samples WHERE room = :old", p).rowcount
     db.execute("UPDATE OR IGNORE room_events SET room = :new WHERE room = :old", p)
@@ -379,9 +404,14 @@ def _rewrite_kv(store, old: str, new: str) -> None:
         _put(db, ADVICE_KEY, {**moved, **rest})  # Einträge des Raums gehen vor
 
 
-def adopt(store, old: str, new: str, now_ts: int | None = None, binary: bool = False) -> dict:
+def adopt(store, old: str, new: str, now_ts: int | None = None, binary: bool = False, valve: bool = True,
+          cut: int | None = None, then=None) -> dict:
     """Messwerte von ``old`` dem Raum ``new`` zuordnen – alles in einer Transaktion (bei einem Fehler bleibt alles,
-    wie es war). ``binary``: der Raum hat keinen Ventilsensor (Ventil nur aus ``hvac_action``). Gibt {rows, skipped
+    wie es war). ``binary``: der Raum hat keinen Ventilsensor (Ventil nur aus ``hvac_action``). ``valve=False``
+    (0.44, anderes Thermostat): die alte Ventilöffnung ergänzt keinen Messpunkt des Raums und das Ventil-Protokoll
+    bleibt beim alten Schlüssel (``room_switch`` lässt das Ventil ab dem Wechsel neu lernen). ``cut`` (0.44): vor
+    diesem Zeitpunkt gewinnt an gleichen Zeitpunkten die alte Zeile. ``then(db, res)``: weitere Schreibvorgänge in
+    derselben Transaktion (``room_switch``: Wechsel schließen, „Ventil lernt ab“). Gibt {rows, skipped
     (Zeitpunkte, die der Raum schon hatte), filled (davon aus der alten Zeile ergänzt), from_days, first_ts, last_ts}
     zurück. Schreibt nichts an Home Assistant."""
     if old == new:
@@ -390,10 +420,13 @@ def adopt(store, old: str, new: str, now_ts: int | None = None, binary: bool = F
     db = store.db
     db.commit()  # Offenes des Takts abschließen – die Übernahme ist eine eigene Transaktion
     with db:     # alles oder nichts: Commit am Ende, Rollback bei einem Fehler
-        res = _move_rows(db, {"old": old, "new": new}, binary)
+        res = _move_rows(db, {"old": old, "new": new, "valve": valve, "cut": cut}, binary)
         _rewrite_kv(store, old, new)
         entries = store.get(KV_LOG) or []
-        _put(db, KV_LOG, [*entries, {"ts": now_ts, "from": old, "to": new, "rows": res["rows"]}][-LOG_MAX:])
+        entry = {"ts": now_ts, "from": old, "to": new, "rows": res["rows"], **({} if valve else {"valve": False})}
+        _put(db, KV_LOG, [*entries, entry][-LOG_MAX:])
+        if then is not None:
+            then(db, res)
     return res
 
 

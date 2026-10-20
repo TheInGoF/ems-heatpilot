@@ -135,7 +135,8 @@ def test_ui_knows_no_write_path_for_valves():
     js = re.sub(r"^\s*//.*$", "", between(script(), SECTION, SECTION_END), flags=re.M)  # ohne Kommentarzeilen
     for word in ("fetch(", "getJSON(", "heatPost(", "api/", "POST", "set_temperature", "method:"):
         assert word not in js, word
-    assert not re.search(r'"api/[^"]*valve', script())
+    # seit 0.44 gibt es „Ventil neu lernen“ (api/rooms/valve_relearn): verlernt nur das Modell, schreibt nichts an Ventile
+    assert not re.search(r'"api/(?!rooms/valve_relearn")[^"]*valve', script())
 
 
 def test_constants_match_backend(tmp_path):

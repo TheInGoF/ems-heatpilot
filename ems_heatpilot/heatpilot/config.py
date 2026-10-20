@@ -65,6 +65,7 @@ FIELDS: dict[str, tuple] = {
     "sample_interval_s": ("int", 60, 900),
     "backfill_days": ("int", 0, 365),
     "statistics_backfill_days": ("int", 0, 1095),
+    "keep_days": ("int", 365, 3650),  # Aufbewahrung eigener Rohdaten (0.44, keep_data)
     "outdoor_sensors": ("entities",),
     "rooms": ("rooms",),
     "persons": ("entities",),
@@ -246,9 +247,22 @@ def validate(raw: dict) -> tuple[dict, list[str]]:
         hi = clean.get("dhw_max_temp", raw.get("dhw_max_temp"))
         if None not in (lo, mid, hi) and not (float(lo) <= float(mid) <= float(hi)):
             errors.append("Warmwasser: Minimum ≤ Komfort ≤ Maximum")
+    stat, keep = clean.get("statistics_backfill_days"), clean.get("keep_days")
+    if not errors and None not in (stat, keep) and int(stat) > int(keep):
+        errors.append("Langzeitstatistik: höchstens so viele Tage wie die Aufbewahrung (keep_days)")  # 0.44
     if clean.get("flow_set_entity") and clean.get("flow_set_entity") == clean.get("dhw_set_entity"):
         errors.append("Vorlauf-Soll und Warmwasser-Soll: zwei verschiedene Entitäten wählen")  # Weg B (0.41)
     return clean, errors
+
+
+def _clamp_statistics(cfg) -> None:
+    """Langzeitstatistik nie weiter zurück holen, als die Aufbewahrung behält (0.44): sonst löscht ``keep_data`` am
+    selben Tag, was „Lücken füllen“ gerade geholt hat."""
+    try:
+        keep = min(max(int(cfg.keep_days), 365), 3650)
+        cfg.statistics_backfill_days = min(int(cfg.statistics_backfill_days), keep)
+    except (TypeError, ValueError):
+        pass
 
 
 @dataclass
@@ -260,6 +274,7 @@ class Config:
     sample_interval_s: int = 300
     backfill_days: int = 30
     statistics_backfill_days: int = 365
+    keep_days: int = 720  # 0.44: eigene Rohdaten so viele Tage aufheben (keep_data), danach täglich löschen
     outdoor_sensors: list[str] = field(default_factory=list)
     # Räume: [{name, climate, temperature?, heating_power?, humidity?,
     #          group?, controller?, managed?, comfort?, preset?, preset_max?}], leer = Tado automatisch.
@@ -390,6 +405,7 @@ class Config:
         cfg.valve_control = cfg.valve_control is True  # nur ein echtes „an“ (0.40): sonst aus, nichts schreiben
         if cfg.dhw_disinfect_day not in DISINFECT_DAYS:
             cfg.dhw_disinfect_day = ""  # unbekannter Tag: kein Termin
+        _clamp_statistics(cfg)
         try:
             cfg.night_plan = _clean_night_plan(cfg.night_plan)
         except (TypeError, ValueError, AttributeError):

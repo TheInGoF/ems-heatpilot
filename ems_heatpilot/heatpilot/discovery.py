@@ -64,6 +64,8 @@ class Room:
     # seit 0.36.3: Heizkreis von EMS-ESP (ein Gerät des Raums gehört zu EMS-ESP) – nie „macht mit“,
     # Control weist jeden Schreibvorgang darauf hart ab (EMS-ESP nur lesen)
     ems: bool = False
+    # seit 0.44: feste Raumkennung (``room_ids``) – bleibt, wenn der Schlüssel (das Thermostat) wechselt
+    room_id: str | None = None
 
     @property
     def climates(self) -> list[str]:

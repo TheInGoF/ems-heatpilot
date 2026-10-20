@@ -6,11 +6,11 @@
    alle Einzelwerte -> Raummodelle, Takten, Anwesenheitsmuster. Beim Neuberechnen
    lernen die Personen davor aus den eigenen gespeicherten Messwerten (oft länger als 10 Tage).
 
-Kein Export nötig – das Add-on holt sich alles selbst. Was HA liefert, ersetzt die gespeicherten Werte desselben
-Zeitraums – seit 0.42.1 zusammenführend: Ein Messpunkt behält, wozu HA nichts hat (``merge_stored``, z. B. Kesselwerte
-direkt von EMS-ESP), Brennerereignisse werden nur mit Brenner-Entität in HA ersetzt, Raumwerte je Raum erst ab dem
-ersten Zeitpunkt seiner HA-Historie (``room_starts``) – ältere, z. B. von einer alten Entität übernommene
-(``room_adopt``), und Schlüssel ohne Raum bleiben.
+Kein Export nötig – das Add-on holt sich alles selbst. Seit 0.44 füllt HA nur Lücken („Lücken aus Home Assistant
+füllen“, früher „Historie neu einlesen“): Die eigene Datenbank ist die Wahrheit, nichts Eigenes wird gelöscht oder
+überschrieben. Ein gespeicherter Messpunkt, Raum- oder Personenwert bleibt; HA ergänzt fehlende Zeitpunkte und leere
+Spalten (``merge_stored``, ``Store.add_sample``/``add_room_samples`` mit ``fill``). Brennerereignisse aus HA kommen nur
+in Zeiträume ohne eigene Messpunkte mit Brennerzustand (``own_burner``) – sonst doppelt.
 
 Seit 0.42.1 außerdem:
 
@@ -31,6 +31,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from bisect import bisect_left
 from itertools import groupby
 from datetime import datetime, timedelta, timezone
 
@@ -203,15 +204,17 @@ def _room_row(reader: _RoomReader, room, ts: int, spikes, key: str) -> tuple | N
             plausibility.in_range("humidity", hum))
 
 
-async def backfill_rooms(ha: HAClient, eng: Engine, rooms: list, days: int, key_of: dict | None = None) -> int:
+async def backfill_rooms(ha: HAClient, eng: Engine, rooms: list, days: int, key_of: dict | None = None,
+                         span: dict | None = None) -> int:
     """Raumwechsel (seit 0.42.1): nur die HA-Historie der Geräte dieser Räume nachholen – Temperatur, Soll, Ventil
     und Feuchte im Raster der Messpunkte. Ein schon gespeicherter Messpunkt des Raums bleibt, wie er ist; Kessel-,
     Personen- und Stundenwerte, Langzeitstatistik und andere Räume bleiben unberührt, es wird nichts gelöscht.
     ``key_of``: Werte unter einem anderen Schlüssel speichern („Hausdaten wiederherstellen“: alte Entität → Raum).
-    Gibt die Zahl der neu gespeicherten Messpunkte zurück."""
+    ``span`` (0.44): je Gerät (climate) nur Zeitpunkte in [von, bis) – ein neues Thermostat erst ab dem Wechsel, ein
+    altes nach „anderes Thermostat“ nur bis zum Wechsel. Gibt die Zahl der neu gespeicherten Messpunkte zurück."""
     if days <= 0 or not rooms:
         return 0
-    key_of = key_of or {}
+    key_of, span = key_of or {}, span or {}
     step = eng.cfg.sample_interval_s
     end_ts = int(time.time())
     end_ts -= end_ts % step
@@ -230,7 +233,8 @@ async def backfill_rooms(ha: HAClient, eng: Engine, rooms: list, days: int, key_
         reader.valve_subst = set()
         for r in rooms:
             row = _room_row(reader, r, ts, spikes, key_of.get(r.climate, r.climate)) if reader.states else None
-            if row is None:
+            lo, hi = span.get(r.climate, (0, end_ts))
+            if row is None or not lo <= ts < hi:
                 continue
             if (row[1], ts) in have:
                 kept += 1
@@ -244,18 +248,6 @@ async def backfill_rooms(ha: HAClient, eng: Engine, rooms: list, days: int, key_
     log.info("Historie der Räume %s nachgeholt: %d neue Messpunkte (%d schon gespeichert, bleiben)",
              ", ".join(keys), len(rows), kept)
     return len(rows)
-
-
-def room_starts(series: dict[str, list], rooms, start_ts: int) -> dict[str, int]:
-    """Je Raum der erste Zeitpunkt der HA-Historie seines Schlüsselgeräts (nicht vor ``start_ts``) – erst ab dort
-    schreibt das Neueinlesen Raumwerte (``room_reading`` braucht den Schlüssel), also werden auch erst ab dort die
-    gespeicherten ersetzt (0.42.1). Räume ohne HA-Historie fehlen: ihre Werte bleiben."""
-    out = {}
-    for r in rooms:
-        ser = series.get(r.climate)
-        if ser:
-            out[r.climate] = max(int(min(t for t, _, _ in ser)), start_ts)
-    return out
 
 
 def observe_stored_persons(eng: Engine, until: int | None = None) -> int:
@@ -284,37 +276,37 @@ def observe_stored_persons(eng: Engine, until: int | None = None) -> int:
 
 
 def merge_stored(sample: dict, row) -> None:
-    """Neueinlesen (seit 0.42.1): Werte, zu denen die HA-Historie nichts hat – etwa Kesselwerte direkt von EMS-ESP –,
-    aus dem gespeicherten Messpunkt übernehmen, bevor Ladeerkennung und Warmwasser ihn sehen. Ein gespeicherter Wert
-    wird so nie durch „unbekannt“ ersetzt."""
+    """Lesen aus HA: Der gespeicherte Messpunkt gewinnt (seit 0.44) – jeder seiner Werte ersetzt den aus HA, bevor
+    Ladeerkennung und Warmwasser ihn sehen; HA füllt nur seine leeren Spalten (z. B. vor 0.42.1 verlorene)."""
     if row is None:
         return
     for col in SAMPLE_COLS:
-        if sample.get(col) is None and row[col] is not None:
+        if row[col] is not None:
             sample[col] = row[col]
 
 
-def _prepare_reload(eng: Engine, series: dict, start_ts: int, end_ts: int) -> tuple[int | None, dict]:
-    """Vor dem Neueinlesen: Was HA liefert, ersetzt die gespeicherten Werte desselben Zeitraums. Seit 0.42.1
-    zusammenführend – Messpunkte und Personen behalten, wozu HA nichts hat (``merge_stored``); Raumwerte werden je Raum
-    erst ab seiner HA-Historie ersetzt (``room_starts`` – übernommene ältere Werte und Schlüssel ohne Raum bleiben),
-    Brennerereignisse nur mit Brenner-Entität in HA (sonst doppelt bzw. – kamen sie von EMS-ESP – verloren).
-    Gibt (Beginn der HA-Daten, gespeicherte Messpunkte des Zeitraums je Zeitpunkt) zurück."""
-    firsts = [ser[0][0] for ser in series.values() if ser]
-    data_start = None
-    if firsts:
-        data_start = max(int(min(firsts)), start_ts)
-        burner = eng.found.boiler.get("burner_on")
-        burner_ser = series.get(burner) if burner else None
-        burner_from = max(int(min(t for t, _, _ in burner_ser)), start_ts) if burner_ser else None
-        eng.store.clear_reload(end_ts, room_starts(series, eng.found.rooms, data_start), burner_from)
-    stored = {r["ts"]: r for r in eng.store.query("SELECT * FROM samples WHERE ts >= ? AND ts < ?", (start_ts, end_ts))}
-    return data_start, stored
+def own_burner(stored: dict) -> list[int]:
+    """Zeitpunkte gespeicherter Messpunkte mit Brennerzustand (sortiert): Dort hat HeatPilot den Brenner selbst
+    verfolgt (bzw. ein früheres Einlesen die Ereignisse schon geschrieben) – HA ergänzt dort keine Ereignisse."""
+    return sorted(ts for ts, row in stored.items() if row["burner_on"] is not None)
+
+
+def _covered(own: list[int], ts: int, step: int) -> bool:
+    """Liegt ``ts`` in einem Zeitraum mit eigenen Brennerwerten (höchstens zwei Messabstände bis zum nächsten)?"""
+    i = bisect_left(own, ts)
+    near = [own[j] for j in (i - 1, i) if 0 <= j < len(own)]
+    return any(abs(t - ts) <= 2 * step for t in near)
+
+
+def _stored(eng: Engine, start_ts: int, end_ts: int) -> dict:
+    """Vor dem Lesen aus HA: gespeicherte Messpunkte des Zeitraums je Zeitpunkt (sie gewinnen, ``merge_stored``).
+    Seit 0.44 wird dabei nichts gelöscht (vorher ``_prepare_reload``/``Store.clear_reload``)."""
+    return {r["ts"]: r for r in eng.store.query("SELECT * FROM samples WHERE ts >= ? AND ts < ?", (start_ts, end_ts))}
 
 
 async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     """Recorder-Historie in Messpunkte, Raum- und Personenwerte – Zustände je Zeitpunkt in die Engine gespiegelt und
-    wie live abgetastet; Gespeichertes wird zusammengeführt (siehe oben)."""
+    wie live abgetastet; Gespeichertes gewinnt, HA füllt nur Lücken (siehe oben)."""
     if days <= 0:
         return 0
     f = eng.found
@@ -333,16 +325,19 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
     series = await _fetch(ha, plain, with_attrs, start_ts, end_ts)
     log.info("Historie geladen: %d Entitäten", len(series))
 
-    data_start, stored = _prepare_reload(eng, series, start_ts, end_ts)
+    firsts = [ser[0][0] for ser in series.values() if ser]
+    data_start = max(int(min(firsts)), start_ts) if firsts else None
+    stored = _stored(eng, start_ts, end_ts)
     observe_stored_persons(eng, data_start)  # ältere eigene Werte zuerst, wie live der Reihe nach
 
-    # Brennerereignisse exakt aus der Historie
-    burner = f.boiler.get("burner_on")
+    # Brennerereignisse exakt aus der Historie – nur, wo keine eigenen sind (0.44)
+    burner, own = f.boiler.get("burner_on"), own_burner(stored)
     prev = None
     for ts, st, _ in series.get(burner, []) if burner else []:
         on = flag(st)
         if on is not None and on != prev:
-            eng.store.add_burner_event(int(ts), on)
+            if not _covered(own, int(ts), step):
+                eng.store.add_burner_event(int(ts), on)
             prev = on
 
     cur = {ent: _Cursor(sorted(ser, key=lambda x: x[0])) for ent, ser in series.items()}
@@ -368,8 +363,8 @@ async def backfill_history(ha: HAClient, eng: Engine, days: int) -> int:
         eng.track_vacation_return(ts, persons)
         sample["vacation"] = int(eng.on_vacation(ts))
         sample["away_long"] = int(eng.observe_persons(ts, persons, bool(sample["vacation"])))  # wie live
-        eng.store.add_sample(ts, sample)
-        eng.store.add_room_samples((ts, *r) for r in rooms)
+        eng.store.add_sample(ts, sample, fill=True)  # eigene Werte gewinnen (0.44)
+        eng.store.add_room_samples(((ts, *r) for r in rooms), fill=True)
         eng.store.add_person_samples(((ts, *p) for p in persons), merge=True)
         eng.dhw_step(ts, sample)
         count += 1

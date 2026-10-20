@@ -25,6 +25,7 @@ from aiohttp import web
 
 from . import __version__
 from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
+from . import room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel
 from .app_jobs import JobsMixin
 from .backfill import run_backfill
 from .boiler_control import BoilerControl
@@ -137,6 +138,7 @@ class App(JobsMixin):
         self.cfg = Config.load()
         states = await self.ha.get_states()
         found = discover(states, await self.registry(), self.cfg)
+        renames = room_switch.prepare(self, found, await self.registry())  # 0.44: feste Kennung, Wechsel erkennen
         old = self.eng
         backfill, relearn, since, kept = self._learning_plan(found, backfill, relearn, old)
         eng = Engine(self.cfg, self.store, found)
@@ -163,6 +165,8 @@ class App(JobsMixin):
             await self._release_valves(old, found)
             await self._boiler_back(old, eng)
         self.eng = eng
+        await room_switch.follow(eng, renames)  # HA hat nur umbenannt: Daten ziehen ohne Rückfrage um
+        await room_switch.resume(eng)  # Neulernen nach einem Wechsel, das ein Neustart unterbrach
         self._build_control(eng, found, old)
         self._restart_emsesp()
         self.status = "läuft"
@@ -270,6 +274,8 @@ class App(JobsMixin):
             errors = [p for p in (same_entity(cfg, self.eng.found, self.eng.states),) if p]
         if errors:
             return errors
+        if "rooms" in clean:  # 0.44: feste Raumkennung, bisheriges Schlüsselgerät bleibt vorn
+            clean["rooms"] = room_ids.assign(clean["rooms"], self.eng.found.rooms if self.eng else None)
         save_settings(clean)
         log.info("Einstellungen gespeichert: %s", sorted(clean))
         before = list(self.eng.found.persons) if self.eng else None
@@ -280,8 +286,9 @@ class App(JobsMixin):
         reload = False
         if power_before is not None and power_before != self._power_inputs():
             # Leistungssensoren (0.36) geändert: Hausleistung der Vergangenheit neu holen, Nächte neu rechnen
-            log.info("Leistungssensoren geändert – Historie wird neu eingelesen")
-            self.store.clear_power()  # Werte der alten Sensoren nicht als Nächte zählen
+            log.info("Leistungssensoren geändert – Lücken werden aus Home Assistant gefüllt")
+            # Werte der alten Sensoren nicht als Nächte zählen – gelöscht nur, was HA neu füllt, ältere bleiben
+            self.store.clear_power(int(time.time()) - self.cfg.backfill_days * 86400)
             reload = True
         if reload:
             asyncio.create_task(self.reload_history())
@@ -309,8 +316,9 @@ class App(JobsMixin):
         return tuple(self.eng.found.power), tuple(self.eng.found.power_exclude)
 
     async def reload_history(self) -> None:
-        """Historie neu einlesen und alles neu lernen (z. B. nach Wahl eines anderen Gaszählers) – seit 0.42.1
-        zusammenführend (``backfill``), Warmwasser- und Personenmodelle bleiben (``house_restore.keep_models``)."""
+        """Lücken aus Home Assistant füllen (bis 0.43 „Historie neu einlesen“) und alles neu lernen (z. B. nach Wahl
+        eines anderen Gaszählers) – seit 0.44 gewinnen eigene Werte, HA ergänzt nur (``backfill``); Warmwasser- und
+        Personenmodelle bleiben (``house_restore.keep_models``)."""
         self._reset = "keep"
         await self.build(backfill=True)
 

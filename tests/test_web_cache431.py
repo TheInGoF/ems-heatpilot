@@ -28,7 +28,8 @@ def test_index_must_be_revalidated_and_answers_304_when_unchanged():
 
 
 def test_version_and_changelog():
-    assert __version__ == "0.43.1"
-    assert 'version: "0.43.1"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
+    assert __version__ >= "0.43.1"  # seit 0.44 prüft test_ui_v44 die aktuelle Version
+    assert f'version: "{__version__}"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    assert log.startswith("# Changelog\n\n## 0.43.1\n") and "tests/test_web_cache431.py" in log.split("\n## 0.43.0")[0]
+    head = log.split("\n## 0.43.1\n")[1].split("\n## 0.43.0")[0]
+    assert log.startswith("# Changelog\n\n## ") and "tests/test_web_cache431.py" in head

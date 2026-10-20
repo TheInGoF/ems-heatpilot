@@ -428,9 +428,9 @@ def test_reload_history_keeps_adopted_rows_and_keys_without_room(tmp_path, monke
     found = Discovered(rooms=[Room("Wohnzimmer", NEW)], boiler={"flow_temp": "sensor.flow"})
     eng = Engine(Config(), st, found)
     adopted = fill(st, NEW, 10, 28, temp=19.0, step=300)      # übernommen (vor der HA-Historie der neuen Entität)
-    fill(st, NEW, 28, 30, temp=19.5, step=300)                # eigene – ersetzt HA
+    own = fill(st, NEW, 28, 29, temp=19.5, step=300)          # eigene – bleiben seit 0.44 (HA füllt nur Lücken)
     orphan = fill(st, OLD, 10, 25, temp=18.0, step=300)       # Schlüssel ohne Raum
-    for ts in range(START + 20 * DAY, end, 300):
+    for ts in range(START + 20 * DAY, end - DAY, 300):
         st.add_sample(ts, {"flow": 99.0})
     st.commit()
     born = START + 28 * DAY  # HomeKit-Entität erst seit zwei Tagen in Home Assistant
@@ -439,15 +439,12 @@ def test_reload_history_keeps_adopted_rows_and_keys_without_room(tmp_path, monke
     asyncio.run(backfill.backfill_history(ha, eng, 10))
     rows = {r["ts"]: r["temp"] for r in st.query("SELECT ts, temp FROM room_samples WHERE room = ?", (NEW,))}
     assert all(rows[t] == 19.0 for t in adopted)                       # übernommene Werte bleiben
-    assert {v for t, v in rows.items() if t >= born} == {21.0}         # ab der HA-Historie aus HA
+    assert all(rows[t] == 19.5 for t in own)                           # eigene Werte bleiben (0.44)
+    assert {v for t, v in rows.items() if t >= START + 29 * DAY} == {21.0}  # Lücke aus HA gefüllt
     assert count(st, "SELECT COUNT(*) FROM room_samples WHERE room = ?", OLD) == len(orphan)
-    assert {r["flow"] for r in st.query("SELECT flow FROM samples WHERE ts >= ?", (START + 20 * DAY,))} == {45.0}
-    assert backfill.room_starts({NEW: [(born + 5, "heat", {}), (born, "heat", {})]}, found.rooms, end - 10 * DAY) \
-        == {NEW: born}
-    assert backfill.room_starts({}, found.rooms, 0) == {}  # ohne HA-Historie bleiben die Werte
-    # ohne Räume wie bisher: alle Raumwerte des Zeitraums
-    st.delete_range(START, end)
-    assert count(st, "SELECT COUNT(*) FROM room_samples") == 0
+    flows = {r["ts"]: r["flow"] for r in st.query("SELECT ts, flow FROM samples WHERE ts >= ?", (START + 20 * DAY,))}
+    assert {v for t, v in flows.items() if t < end - DAY} == {99.0}   # eigene Messpunkte gewinnen (0.44)
+    assert {v for t, v in flows.items() if t >= end - DAY} == {45.0}  # Lücke aus HA gefüllt
 
 
 # ------------------------------------------------------------------ Abfragen

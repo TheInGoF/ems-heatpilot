@@ -8,9 +8,12 @@ steht in ``t_in_src`` („rooms“: Raumwerte aller Räume, „rooms~“: unvoll
 „rooms-“: unvollständige ohne Bezug zum Berichtigen, „stat:…“: Langzeitstatistik dieser Sensoren) – ``revert_t_in`` nimmt zurück, was ein falscher alter Sensor gefüllt hat.
 ``reset_models`` verwirft für „aus gespeicherten Daten neu lernen“ nur, was sich aus den gespeicherten Daten neu
 lernen lässt – Messwerte, Warmwasser- und Personenmodelle, die Tageszähler aus der Abtastung und die Modelle von
-Schlüsseln ohne aktuellen Raum bleiben. ``clear_reload`` löscht beim Neueinlesen nur Raumwerte (je Raum ab seiner
-HA-Historie) und Brennerereignisse (nur mit Brenner-Entität in HA) – Messpunkte führt das Neueinlesen zusammen.
-Die Namen der Räume merkt sich ``save_room_names`` (kv ``rooms.names``), bevor Modelle verworfen werden.
+Schlüsseln ohne aktuellen Raum bleiben. Die Namen der Räume merkt sich ``save_room_names`` (kv ``rooms.names``), bevor
+Modelle verworfen werden.
+
+Seit 0.44 ist die eigene Datenbank die Wahrheit: Lesen aus Home Assistant (Lücken füllen, erster Start) löscht und
+überschreibt nichts Eigenes – ``add_sample(fill=True)``, ``add_room_samples(fill=True)`` und
+``add_person_samples(merge=True)`` ergänzen nur fehlende Zeitpunkte und Spalten, ein gespeicherter Wert bleibt.
 """
 
 from __future__ import annotations
@@ -69,7 +72,7 @@ CREATE INDEX IF NOT EXISTS idx_snap ON snapshots(kind, ts);
 CONTROL_LOG_KEEP_DAYS = 90  # Schreibprotokoll (0.34) so lange aufheben
 PREVIEW_LOG_KEEP_DAYS = 90  # Trockenlauf-Protokoll (0.37) so lange aufheben
 VALVE_DRY_KEEP_DAYS = 90    # Ventil-Trockenlauf (0.39) so lange aufheben
-VALVE_SUBST_KEEP_DAYS = 90  # Ventil-Ersatzwerte (0.39): Sensor still, Ventil aus hvac_action – so lange merken
+POWER_SINCE_KEY = "power.since"  # 0.44: ab hier gehört die Hausleistung zu den heutigen Leistungssensoren
 # Ventil-Trockenlauf (0.39) je Eintrag: Regel (drosseln/gemeinsam), Aktion (senken/anheben/zurück), was HeatPilot
 # geschrieben hätte und warum, die Schätzung (nur mit belastbaren Modellen; pred_over_k: vorhergesagtes Überschwingen
 # ohne Eingriff, zum Nachprüfen) und später, was wirklich geschah. Seit 0.40 ``written`` = 1: wirklich geschrieben
@@ -154,32 +157,6 @@ class Store:
         )
         self.db.commit()
 
-    def delete_range(self, start: int, end: int, rooms: dict[str, int] | None = None) -> None:
-        """Messwerte eines Zeitraums löschen (wird danach aus der HA-Historie neu geschrieben).
-
-        ``rooms`` (seit 0.42.1, Neueinlesen): Raumwerte nur dieser Raumschlüssel und je Raum erst ab seinem Zeitpunkt
-        (dem ersten seiner HA-Historie) – ältere Raumwerte, z. B. übernommene (``room_adopt``), und die anderer
-        Schlüssel bleiben. Ohne ``rooms`` alle Raumwerte des Zeitraums wie bisher. Kessel und Personen immer ab ``start``.
-        """
-        tables = ("samples", "person_samples", "burner_events") + (("room_samples",) if rooms is None else ())
-        for table in tables:
-            self.db.execute(f"DELETE FROM {table} WHERE ts >= ? AND ts <= ?", (start, end))
-        for room, since in (rooms or {}).items():
-            self.db.execute("DELETE FROM room_samples WHERE room = ? AND ts >= ? AND ts <= ?",
-                            (room, max(int(since), start), end))
-        self.db.commit()
-
-    def clear_reload(self, end: int, rooms: dict[str, int], burner_from: int | None) -> None:
-        """Neueinlesen der Historie (seit 0.42.1): nur löschen, was gleich aus Home Assistant neu geschrieben wird –
-        Raumwerte je Raum ab seinem Zeitpunkt (dem ersten seiner HA-Historie), Brennerereignisse ab ``burner_from``
-        (nur, wenn HA die Brenner-Entität hat). Messpunkte und Personen bleiben: das Neueinlesen führt sie zusammen
-        (``backfill.merge_stored``), Werte, zu denen HA nichts hat – etwa direkt von EMS-ESP –, gehen nicht verloren."""
-        for room, since in rooms.items():
-            self.db.execute("DELETE FROM room_samples WHERE room = ? AND ts >= ? AND ts <= ?", (room, int(since), end))
-        if burner_from is not None:
-            self.db.execute("DELETE FROM burner_events WHERE ts >= ? AND ts <= ?", (int(burner_from), end))
-        self.db.commit()
-
     def save_room_names(self) -> None:
         """Namen aus den Raummodellen in kv ``rooms.names`` merken (vor dem Verwerfen der Modelle) – für eine alte
         Entität mit nichtssagender ID ist das der einzige Name (``room_adopt.name_of``)."""
@@ -231,24 +208,40 @@ class Store:
         self.db.execute("DELETE FROM room_events")
         self.db.commit()
 
-    def clear_power(self) -> None:
-        """Hausleistung aller Messpunkte verwerfen (0.36: andere Leistungssensoren gewählt – die alten Werte
-        gehören zu anderen Sensoren; das Neueinlesen holt, was HA noch hat)."""
-        self.db.execute("UPDATE samples SET power_w = NULL, power_ex_w = NULL")
+    def clear_power(self, since: int | None = None) -> None:
+        """Andere Leistungssensoren gewählt (0.36): Die Hausleistung gehört zu den alten Sensoren. Seit 0.44 nur ab
+        ``since`` verwerfen (das Fenster, das „Lücken füllen“ aus HA neu holt); ältere Werte bleiben gespeichert und
+        zählen ab kv ``power.since`` nicht mehr als Nächte (``sleep.learn``). Ohne ``since``: alle verwerfen."""
+        if since is None:
+            self.db.execute("UPDATE samples SET power_w = NULL, power_ex_w = NULL")
+        else:
+            self.db.execute("UPDATE samples SET power_w = NULL, power_ex_w = NULL WHERE ts >= ?", (int(since),))
+            self.put(POWER_SINCE_KEY, int(since))
         self.db.commit()
 
     # --- Messwerte ---
-    def add_sample(self, ts: int, values: dict) -> None:
+    def add_sample(self, ts: int, values: dict, fill: bool = False) -> None:
+        """Messpunkt speichern. ``fill`` (seit 0.44, Lesen aus Home Assistant): ein gespeicherter Messpunkt bleibt –
+        nur seine leeren Spalten bekommen den neuen Wert."""
         cols = ", ".join(("ts",) + SAMPLE_COLS)
         marks = ", ".join("?" * (len(SAMPLE_COLS) + 1))
-        self.db.execute(
-            f"INSERT OR REPLACE INTO samples({cols}) VALUES({marks})",
-            (ts, *(values.get(c) for c in SAMPLE_COLS)),
-        )
+        if fill:
+            sets = ", ".join(f"{c} = COALESCE(samples.{c}, excluded.{c})" for c in SAMPLE_COLS)
+            sql = f"INSERT INTO samples({cols}) VALUES({marks}) ON CONFLICT(ts) DO UPDATE SET {sets}"
+        else:
+            sql = f"INSERT OR REPLACE INTO samples({cols}) VALUES({marks})"
+        self.db.execute(sql, (ts, *(values.get(c) for c in SAMPLE_COLS)))
 
-    def add_room_samples(self, rows: Iterable[tuple], replace: bool = True) -> None:
+    def add_room_samples(self, rows: Iterable[tuple], replace: bool = True, fill: bool = False) -> None:
         """Raumwerte (ts, Raum, Temperatur, Soll, Ventil, Feuchte). ``replace=False`` (seit 0.42.1, Nachholen der
-        Historie eines neuen Raums): ein schon gespeicherter Messpunkt bleibt, wie er ist."""
+        Historie eines neuen Raums): ein schon gespeicherter Messpunkt bleibt, wie er ist. ``fill`` (seit 0.44, Lesen
+        aus Home Assistant): ein gespeicherter Messpunkt bleibt, nur seine leeren Spalten werden ergänzt."""
+        if fill:
+            sets = ", ".join(f"{c} = COALESCE(room_samples.{c}, excluded.{c})"
+                             for c in ("temp", "target", "valve", "humidity"))
+            self.db.executemany("INSERT INTO room_samples VALUES(?, ?, ?, ?, ?, ?) "
+                                f"ON CONFLICT(ts, room) DO UPDATE SET {sets}", rows)
+            return
         verb = "INSERT OR REPLACE" if replace else "INSERT OR IGNORE"
         self.db.executemany(f"{verb} INTO room_samples VALUES(?, ?, ?, ?, ?, ?)", rows)
 
@@ -257,8 +250,8 @@ class Store:
         ``hvac_action``) – das Ventilmodell lernt ihn nicht (seit 0.39)."""
         rooms = list(rooms)
         if rooms:
+            # seit 0.44 ohne eigenes Löschen nach 90 Tagen – die Aufbewahrung (``keep_data``, keep_days) räumt auf
             self.db.executemany("INSERT OR REPLACE INTO valve_subst VALUES(?, ?)", ((int(ts), r) for r in rooms))
-            self.db.execute("DELETE FROM valve_subst WHERE ts < ?", (int(ts) - VALVE_SUBST_KEEP_DAYS * 86400,))
 
     def home_by_ts(self, since: int, persons: list[str] | None) -> dict[int, bool]:
         """Ist jemand zu Hause? Nur die gewählten Personen (None = alle gespeicherten)."""
@@ -289,15 +282,15 @@ class Store:
         self.db.commit()
 
     def add_person_samples(self, rows: Iterable[tuple], merge: bool = False) -> None:
-        """(ts, Person, zu Hause, Entfernung). ``merge`` (Neueinlesen, seit 0.42.1): ein gespeicherter Wert bleibt,
-        wo der neue unbekannt ist."""
+        """(ts, Person, zu Hause, Entfernung). ``merge`` (Lesen aus Home Assistant): ein gespeicherter Wert bleibt –
+        seit 0.44 auch gegen einen neuen, nur Lücken werden gefüllt."""
         if not merge:
             self.db.executemany("INSERT OR REPLACE INTO person_samples VALUES(?, ?, ?, ?)", rows)
             return
         self.db.executemany(
             "INSERT INTO person_samples VALUES(?, ?, ?, ?) ON CONFLICT(ts, person) DO UPDATE SET "
-            "home = COALESCE(excluded.home, person_samples.home), "
-            "dist_km = COALESCE(excluded.dist_km, person_samples.dist_km)", rows)
+            "home = COALESCE(person_samples.home, excluded.home), "
+            "dist_km = COALESCE(person_samples.dist_km, excluded.dist_km)", rows)
 
     def add_hourly(self, rows: Iterable[tuple], replace: Iterable[str] = (), keep: Iterable[str] = ()) -> None:
         """Zeilen in der Reihenfolge von HOURLY_COLS; fehlende Werte am Ende = NULL.

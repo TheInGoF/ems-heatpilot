@@ -622,6 +622,8 @@ details.ready-blk .ready-boiler { border-top: 0; margin-top: 6px; padding-top: 0
 .st-box > p { margin: 6px 0 0; font-size: 13px; }
 .st-box .warn { color: var(--err-text); display: block; margin-top: 3px; }
 .callout[hidden] { display: none; }
+.sw-item p { margin: 0 0 4px; } .sw-acts { flex-wrap: wrap; gap: 6px; margin-top: 6px; } .sw-log { margin: 4px 0; padding-left: 18px; font-size: 13px; }
+.r-relearn-row { margin-top: 8px; flex-wrap: wrap; gap: 6px; }
 .callout details.more { margin: 0; color: var(--text-primary); }
 .callout details.more > summary { color: var(--text-primary); }
 ul.rules { margin: 6px 0 0; padding-left: 18px; color: var(--text-secondary); }
@@ -759,7 +761,7 @@ ul.rules li { margin: 3px 0; }
   <div id="ov-start">
   <div class="card ov-status" id="ov-status">
     <h2>Status</h2>
-    <h3 class="st-h">Räume</h3><div id="ov-rooms-state"><p class="muted">Lade …</p></div>
+    <h3 class="st-h">Räume</h3><div id="ov-rooms-state"><p class="muted">Lade …</p></div><div id="ov-switch"></div>
     <h3 class="st-h">Warmwasser</h3><p class="sub dhw-line" id="ov-dhw" hidden></p><div class="st-fallback" id="ov-dhw-off"></div>
     <h3 class="st-h">Kessel</h3><p class="sub dhw-line" id="ov-boiler" hidden></p><div class="st-fallback" id="ov-boiler-off"></div>
     <h3 class="st-h">Zuletzt geschrieben</h3><div id="ov-last"><p class="muted">Lade …</p></div>
@@ -1858,6 +1860,7 @@ async function load() {
     setTimeout(load, 5000); return;
   }
   $("setup-banner").hidden = !!s.configured;
+  loadSwitch();  // 0.44: Übersicht → Status nennt einen Thermostatwechsel, der auf die Wahl wartet
   OV_STALE = $("view-overview").hidden;  // im Hintergrund gezeichnet: Grafen beim Öffnen in voller Breite neu
   const hist = await getJSON("api/history?days=60");
   const h = s.house, c = s.cycling, sv = s.savings;
@@ -3196,6 +3199,7 @@ function showTab(name) {
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("set-body").textContent = "Fehler: " + e; });
   else if (name === "settings") loadReadiness();  // schon gezeichnet: nur die Zustandsbox frisch (0.36.1)
   if (name === "settings" && SET) loadAdopt(ADOPT_MSG);  // 0.42.1: gespeicherte Daten ohne Raum frisch
+  if (name === "settings" && SET) loadSwitch();  // 0.44: offener Thermostatwechsel frisch
   if (name === "settings" && SET_PAGE === "diagnose") loadDiagPage();
   if (name === "live") loadLive().catch(liveError);
   if (name === "heat" || name === "overview") loadHeat().catch(heatError);  // 0.43: Status der Übersicht aus api/heat
@@ -3406,7 +3410,7 @@ function roomRows() {
       ${field("Ventil / Heizleistung", `<input class="r-valve" list="dl-sensor" value="${esc(r.heating_power || g.heating_power || sibling(c, "heating_power"))}" placeholder="Ventil % (optional)">`)}
       ${field("Temperatur-Sensor", `<input class="r-temp" list="dl-temp" value="${esc(r.temperature || g.temp_sensor || sibling(c, "temperature"))}" placeholder="Temperatur (optional)">`)}
       ${field("Feuchte", `<input class="r-hum" list="dl-sensor" value="${esc(r.humidity || g.humidity || sibling(c, "humidity"))}" placeholder="Feuchte (optional)">`)}
-      </div>${roomStates(c.id)}</details></div>`;
+      </div>${roomStates(c.id)}<div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
   }).join("");
 }
 // „macht mit“ gesperrt (0.36.3): die Entität ist der Heizkreis von EMS-ESP (api/entities: ems), oder sie steht in
@@ -3751,7 +3755,7 @@ async function loadAdopt(msg = "") {
   ADOPT_MSG = msg; renderAdopt();
 }
 // Raum-Tabelle geändert (Eingabe, „Bereiche übernehmen“, „Vorschläge übernehmen“): sperren bis „Speichern“
-function roomsDirty() { setDirty(); if (!ROOMS_DIRTY) { ROOMS_DIRTY = true; ADOPT_MSG = ""; ALIAS_MSG = ""; renderAdopt(); renderAliases(); } }
+function roomsDirty() { setDirty(); if (!ROOMS_DIRTY) { ROOMS_DIRTY = true; ADOPT_MSG = ""; ALIAS_MSG = ""; SWITCH_MSG = ""; renderAdopt(); renderAliases(); renderSwitch(); } }
 const adoptGo = (btn) => adoptRun(btn.dataset.from, btn.dataset.to);
 function adoptPick(btn) {
   const row = btn.closest(".adopt-row"), to = row.querySelector(".adopt-to").value;
@@ -3782,6 +3786,117 @@ function adoptDone(j) {
   const restore = j.restore_suggested ? `<br>Vielen Stunden fehlt noch die Innentemperatur – das Hausmodell lernt sie nicht. ${jobButton("restore")} liest sie mit den alten Sensoren neu ein.` : "";
   return `<span class="msg-ok">Übernommen: ${esc(dayWord(j.from_days))} Messwerte von ${esc(j.from_name)} in ${esc(j.to_name)}${kept}.</span> ` +
     "Raum- und Ventilmodell werden daraus neu berechnet – „Bereit für die Steuerung?“ bewertet den Raum neu." + alias + restore;
+}
+
+// ---------------------------------------------------------------- Thermostat gewechselt (0.44)
+// Einstellungen → Räume, über „Gespeicherte Daten ohne Raum“ (GET api/rooms/switch, room_switch.overview): hat ein Raum
+// (feste Kennung) ein anderes Schlüsselgerät als zuletzt, steht dort ein Hinweis mit den drei Wahlen – erst nach
+// Rückfrage (POST api/rooms/switch). Bis zur Wahl misst der Raum normal weiter. Je Raum unter „Einzelheiten“ „Ventil neu
+// lernen“ (POST api/rooms/valve_relearn, Rückfrage). Übersicht → Status: eine Zeile, solange ein Wechsel wartet. Gesperrt
+// wie „Gelerntes übernehmen“, solange Einstellungen ungespeichert sind. Nichts davon schreibt an Home Assistant.
+let SWITCH = null, SWITCH_MSG = "", SWITCH_BUSY = false;
+const SWITCH_LABEL = { same: "Gleiches Thermostat, neue Anbindung", other: "Anderes Thermostat – Ventil lernt neu", new: "Alles neu lernen" };
+const SWITCH_WHAT = { same: "gleiches Thermostat, alles übernommen", other: "anderes Thermostat, Ventil lernt neu",
+  new: "alles neu gelernt", umbenannt: "von Home Assistant umbenannt, übernommen", "ohne Daten": "neues Thermostat, keine alten Daten",
+  "ventil neu": "Ventil neu gelernt" };
+const isoWhen = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}. ${iso.slice(11, 16)}` : "–";
+const swRoom = (key) => ((SWITCH || {}).rooms || []).find((r) => r.key === key || r.room_id === key);
+// Rückfrage je Wahl (confirm, reiner Text): was umzieht, was neu lernt, was bleibt
+function switchAsk(s, c) {
+  const old = s.old_name || s.old_key, n = s.name, data = s.old_rows ? ` (${dayWord(s.old_days)} Messwerte)` : "";
+  if (c === "same") return `${n}: gleiches Thermostat, nur neu angebunden?\n\nAlle Messwerte und Gelerntes von ${old}${data} ziehen zu ${n} um; Raum- und Ventilmodell werden daraus neu berechnet. Das dauert etwas. Nicht rückgängig zu machen.`;
+  if (c === "other") return `${n}: anderes Thermostat?\n\nDie Raumwerte von ${old}${data} – Temperaturen, Soll, Fremdwärme – ziehen um, das Raummodell bleibt. Das Ventil lernt ab dem Wechsel neu. Nicht rückgängig zu machen.`;
+  return `${n}: alles neu lernen?\n\nNichts zieht um. Die alten Werte von ${old} bleiben unter „Gespeicherte Daten ohne Raum“ und lassen sich später noch übernehmen.`;
+}
+// Ein offener Wechsel: Raum, bisher/jetzt, seit wann, alte Daten – darunter die drei Wahlen
+function switchItem(s, off) {
+  const old = `${esc(s.old_name || s.old_key)}${s.old_source ? ` (${esc(s.old_source)})` : ""}`;
+  const data = s.old_rows ? `${esc(dayWord(s.old_days))} Messwerte${s.old_first ? ` (${isoSpan(s.old_first, s.old_last)})` : ""}` : "keine Messwerte";
+  const ch = (SWITCH || {}).choices || {};
+  const btn = (c) => `<button class="btn small" data-room="${esc(s.room_id)}" data-choice="${c}" onclick="switchGo(this)"${off}>${SWITCH_LABEL[c]}</button>`;
+  return `<div class="callout warn sw-item" data-room="${esc(s.room_id)}"><p><b>${esc(s.name)}: anderes Thermostat erkannt</b> seit ${esc(isoWhen(s.since))} – bisher ${old}${s.new_source ? `, jetzt ${esc(s.new_source)}` : ""}.</p>` +
+    more("Bis zu deiner Wahl misst der Raum normal weiter.", `Alt: ${eid(s.old_key)} mit ${data}. Neu: ${eid(s.new_key)}.<br>` +
+      ["same", "other", "new"].map((c) => `<b>${SWITCH_LABEL[c]}:</b> ${esc(ch[c] || "")}`).join("<br>")) +
+    `<div class="row sw-acts">${btn("same")}${btn("other")}${btn("new")}</div></div>`;
+}
+function switchHtml(sw, lock = "", msg = "") {
+  const note = msg ? `<p class="adopt-msg" id="switch-msg">${msg}</p>` : "";
+  if (sw && sw.error) return `<div class="callout" id="switch-box">Thermostatwechsel nicht lesbar: ${esc(sw.error)}${note}</div>`;
+  const list = (sw || {}).switches || [];
+  if (!list.length) return note ? `<div id="switch-box">${note}</div>` : "";
+  const off = lock || SWITCH_BUSY ? " disabled" : "";
+  return '<div id="switch-box">' + (lock ? `<p class="adopt-lock">${esc(lock)}</p>` : "") + list.map((s) => switchItem(s, off)).join("") + note + "</div>";
+}
+// Protokoll (kv rooms.identity_log, neueste zuerst): wann, welcher Raum, was – beim Verlernen, wie viel
+const forgotText = (f) => f ? ` · verlernt: Ventilmodell aus ${fmt(f.valve_n || 0, 0)} Werten${f.steady_h ? `, ${fmt(f.steady_h, 0)} h ruhig` : ""}` : "";
+function switchLogHtml(log) {
+  if (!(log || []).length) return "";
+  const rows = log.slice(0, 10).map((e) => `<li>${esc(isoWhen(e.ts))} · ${esc(e.name || e.room_id)} · ${esc(SWITCH_WHAT[e.what] || e.what)}` +
+    `${e.rows ? ` · ${fmt(e.rows, 0)} Messpunkte` : ""}${esc(forgotText(e.forgot))}</li>`).join("");
+  return `<details class="adopt-more" id="switch-log"><summary>Thermostatwechsel – Protokoll (${log.length})</summary><ul class="sw-log">${rows}</ul></details>`;
+}
+// Je Raum unter „Einzelheiten“: „Ventil neu lernen“ (nur mit Ventilmodell; nicht beim Heizkreis von EMS-ESP)
+function relearnHtml(key) {
+  const r = swRoom(key);
+  if (!r || !r.valve || !r.room_id) return "";
+  const off = adoptLock() || SWITCH_BUSY ? " disabled" : "";
+  return `<div class="row r-relearn-row"><button class="btn small" data-room="${esc(r.room_id)}" onclick="valveRelearn(this)"${off}>Ventil neu lernen</button>` +
+    `<span class="muted">${r.valve_since ? `lernt seit ${isoDay(r.valve_since)} · ` : ""}nur das Ventil verlernen, etwa nach Tausch des Ventils – Messwerte bleiben</span></div>`;
+}
+// Übersicht → Status: eine Zeile, solange ein Wechsel auf die Wahl wartet
+function ovSwitchHtml(sw) {
+  const list = (sw || {}).switches || [];
+  if (!list.length) return "";
+  return statusLine("warn", `Thermostat gewechselt: ${list.map((s) => esc(s.name)).join(", ")} – wartet auf deine Wahl`,
+    `<a href="#" onclick="openSettings('raeume', 'room-switch');return false">Einstellungen → Räume ›</a>`);
+}
+function renderSwitch() {
+  const box = $("room-switch");
+  if (box) box.innerHTML = switchHtml(SWITCH, adoptLock(), SWITCH_MSG) + switchLogHtml((SWITCH || {}).log);
+  for (const el of document.querySelectorAll(".r-relearn")) el.innerHTML = relearnHtml(el.dataset.climate);
+  const ov = $("ov-switch"); if (ov) ov.innerHTML = ovSwitchHtml(SWITCH);
+}
+async function loadSwitch(msg = SWITCH_MSG) {
+  try { SWITCH = await getJSON("api/rooms/switch"); if (SWITCH.starting) SWITCH = null; }
+  catch (e) { SWITCH = { error: e.message || String(e) }; }
+  SWITCH_MSG = msg; renderSwitch();
+}
+async function swPost(url, body) {
+  try { return await readJSON(await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })); }
+  catch (e) { return { ok: false, error: e.message || String(e) }; }
+}
+async function switchGo(btn) {
+  const s = ((SWITCH || {}).switches || []).find((x) => x.room_id === btn.dataset.room), c = btn.dataset.choice;
+  if (!s || adoptLock() || SWITCH_BUSY) return renderSwitch();
+  if (!confirm(switchAsk(s, c))) return;
+  SWITCH_BUSY = true;
+  SWITCH_MSG = c === "new" ? `Speichere die Wahl für ${esc(s.name)} …` : `Läuft: Daten von ${esc(s.old_name || s.old_key)} ziehen zu ${esc(s.name)} um, danach lernt der Raum neu – das dauert etwas …`;
+  renderSwitch();
+  const j = await swPost("api/rooms/switch", { room_id: s.room_id, choice: c });
+  SWITCH_BUSY = false;
+  await loadSwitch(j.ok ? switchDone(j, s) : `<span class="msg-err">Nicht übernommen: ${esc(j.error || "unbekannter Fehler")}</span>`);
+  if (j.ok) { loadAdopt(ADOPT_MSG); loadReadiness(); load().catch(() => {}); }
+}
+// Ergebnis der Wahl: was umgezogen ist, was neu lernt
+function switchDone(j, s) {
+  const name = esc(j.name || s.name), old = esc(s.old_name || j.old_key);
+  if (j.choice === "new") return `<span class="msg-ok">${name} lernt neu.</span> Die alten Werte von ${old} stehen unter „Gespeicherte Daten ohne Raum“ und lassen sich später noch übernehmen.`;
+  const kept = j.skipped ? ` (an ${fmt(j.skipped, 0)} Zeitpunkten hatte der Raum schon eigene Messwerte – seine bleiben)` : "";
+  const moved = `${esc(dayWord(j.from_days))} Messwerte von ${old} in ${name}${kept}`;
+  return j.choice === "same" ? `<span class="msg-ok">Übernommen: ${moved}.</span> Raum- und Ventilmodell sind daraus neu berechnet.`
+    : `<span class="msg-ok">Raumwerte übernommen: ${moved}.</span> Das Raummodell bleibt, das Ventil lernt ${j.valve_since ? `ab ${esc(isoWhen(j.valve_since))}` : ""} neu.`;
+}
+// „Ventil neu lernen“: Rückfrage, dann nur das Ventilmodell frisch (Messwerte bleiben, das Verlernte steht im Protokoll)
+async function valveRelearn(btn) {
+  const r = swRoom(btn.dataset.room);
+  if (!r || adoptLock() || SWITCH_BUSY) return renderSwitch();
+  if (!confirm(`Nur das Ventil von ${r.name} verlernen?\n\nMesswerte bleiben, das Raummodell auch. Das Ventilmodell beginnt neu und lernt ab jetzt.`)) return;
+  SWITCH_BUSY = true; SWITCH_MSG = `Verlerne das Ventil von ${esc(r.name)} …`; renderSwitch();
+  const j = await swPost("api/rooms/valve_relearn", { room_id: r.room_id });
+  SWITCH_BUSY = false;
+  await loadSwitch(j.ok ? `<span class="msg-ok">Ventil von ${esc(j.name || r.name)} verlernt – es lernt ab ${esc(isoWhen(j.valve_since))} neu.</span> Messwerte bleiben.`
+    : `<span class="msg-err">Nicht verlernt: ${esc(j.error || "unbekannter Fehler")}</span>`);
+  const box = $("room-switch"); if (box && box.scrollIntoView) box.scrollIntoView({ block: "nearest" });
 }
 
 // ---------------------------------------------------------------- Karte „Modelle“ (0.42.1)
@@ -4032,14 +4147,15 @@ function jobFrom(m) {
 }
 function jobFinished() {
   load().catch(() => {});  // Karte „Modelle“, Grafen, Zertifikat
-  if (SET) { loadAdopt(ADOPT_MSG); if (ALIAS_OPEN) loadAliases(ALIAS_MSG); }
+  if (SET) { loadAdopt(ADOPT_MSG); loadSwitch(); if (ALIAS_OPEN) loadAliases(ALIAS_MSG); }
   if (!$("view-diag").hidden) loadModels();
 }
-// Einstellungen → Erweitert: die zwei Knöpfe mit Zweck, „Historie neu einlesen“ wie bisher, darunter der Stand
+// Einstellungen → Erweitert: die zwei Knöpfe mit Zweck, „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu
+// einlesen“; Endpunkt und Ablauf gleich), darunter der Stand
 const advHouseHtml = () => '<h3 class="sec-h" id="adv-house">Hausdaten und Lernen</h3><div class="adv-acts">' +
   `<div class="row">${jobButton("restore")}<span class="muted">nach einem Wechsel der Thermostate (z. B. Tado-Cloud → HomeKit): liest die Langzeitstatistik mit den alten Temperatursensoren neu ein (je Raum unter Räume) und holt die Historie alter Thermostate nach – nur ergänzend, löscht nichts; danach lernt HeatPilot neu</span></div>` +
   `<div class="row">${jobButton("relearn")}<span class="muted">rechnet Haus-, Raum- und Ventilmodelle aus den gespeicherten Daten neu – holt nichts aus Home Assistant, löscht keine Messwerte; läuft nach einem Raumwechsel und dem Wiederherstellen von selbst</span></div>` +
-  '<div class="row"><button class="btn small" onclick="reloadHistory()">Historie neu einlesen</button><span class="muted">z. B. nach Wechsel des Gaszählers – dauert je nach Umfang einige Minuten.</span></div></div>' +
+  '<div class="row"><button class="btn small" onclick="reloadHistory()">Lücken aus Home Assistant füllen</button><span class="muted">holt nur, was HeatPilot nicht selbst gespeichert hat – eigene Werte bleiben. Dauert je nach Umfang einige Minuten.</span></div></div>' +
   `<p class="job-msg" id="adv-job">${jobHtml(JOB)}</p>`;
 // Links „Einstellungen → Erweitert“: die Karte aufklappen und hinscrollen – auch, wenn die Einstellungen erst laden
 function openAdvanced() { ADV_OPEN = true; openSettings("erweitert"); advReveal(); }
@@ -5147,7 +5263,7 @@ function renderSettings() {
       <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). <b>Fußboden</b>: Fußbodenheizung im Raum und wie sie angeschlossen ist – <b>mit Mischer</b> (er regelt die Temperatur selbst, keine Grenze), <b>mit RTL-Ventil</b> (am Anfang fließt der volle Vorlauf hinein: der <b>höchste Vorlauf</b> gilt, solange der Raum Wärme anfordert) oder <b>direkt am Kessel</b> (der höchste Vorlauf gilt immer; leer = ${FLOOR_MAX.def} °C). HeatPilot plant nie einen Vorlauf darüber; der Heizkörper im Raum gilt als Boost.
       Unter jeder Entität stehen <b>Bereich</b> und <b>Gerät</b> aus Home Assistant; ein leeres Feld „Raum“ zeigt den Bereich als Platzhalter, „Bereiche übernehmen“ trägt ihn ein – Gespeichertes bleibt. Sensoren des Geräts (Temperatur, Feuchte, Heizleistung) sind vorbelegt.
       <b>Voreinstellung</b> und <b>Stufen</b>: die Zahl am Ventilunterteil (Durchflussbegrenzer), z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil. Damit nennt der hydraulische Abgleich konkrete Stufen und rechnet die Wirkung auf die anderen Räume; bei mehreren Geräten in einem Raum gilt der Wert des <b>Schlüsselgeräts</b> (Raumregler, sonst das erste), weitere Ventile dürfen eigene Werte haben.`)}
-      <div id="room-restore"></div><div id="room-adopt"></div>
+      <div id="room-switch"></div><div id="room-restore"></div><div id="room-adopt"></div>
       <details class="adopt alias" id="alias-box" ontoggle="aliasToggle(this)"${ALIAS_OPEN ? " open" : ""}><summary>Alter Temperatursensor je Raum <span class="muted">– Innentemperatur vor einem Wechsel der Thermostate</span></summary><div id="alias-body"></div></details>
       <p class="job-msg" id="rooms-job">${jobHtml(JOB)}</p>
       ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
@@ -5177,8 +5293,9 @@ function renderSettings() {
       ${field("Abtastintervall (s)", num("f-sample_interval_s", s.sample_interval_s, "1"))}
       ${field("Historie beim ersten Start (Tage)", num("f-backfill_days", s.backfill_days, "1"), "Einzelwerte aus dem Recorder")}
       ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
+      ${field("Daten aufbewahren (Tage)", num("f-keep_days", s.keep_days, "1"), "365–3650, Standard 720. Ältere Messwerte löscht HeatPilot einmal am Tag; Tageswerte und Gelerntes bleiben.")}
       ${field("Ausführliches Log", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-debug_logging" ${s.debug_logging ? "checked" : ""}> jeden Takt protokollieren</label>`, "Für die Fehlersuche – das Log wird dann deutlich größer")}
-    </div>${advHouseHtml()}`, false)) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen, Historie neu einlesen
+    </div>${advHouseHtml()}`, false)) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen; 0.44: Lücken füllen
     `<div class="savebar sb-clean" id="savebar"${SET_PAGE === "diagnose" || SET_PAGE === "menu" ? " hidden" : ""}><span class="sb-t" id="sb-t"></span>` +
     '<button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="loadSettings()">Verwerfen</button><span id="save-msg"></span></div>';
   $("set-body").oninput = $("set-body").onchange = () => setDirty();  // Speicherleiste erst bei Änderungen (0.43)
@@ -5190,6 +5307,7 @@ function renderSettings() {
   emSum();  // 0.39.1: Zähler der Seite „Entitäten“ und am Umschalter
   renderReadyBox(HEAT && HEAT.readiness); loadReadiness();  // Zustandsbox (0.36.1): sofort der letzte Stand, dann frisch
   loadAdopt();  // 0.42.1: gespeicherte Daten ohne Raum über der Raum-Tabelle (dazu der Hinweis „Hausdaten wiederherstellen“)
+  loadSwitch();  // 0.44: offener Thermostatwechsel und „Ventil neu lernen“
   renderRoomRestore(); if (ALIAS_OPEN) loadAliases();  // 0.42.1: letzter Stand sofort, alter Sensor je Raum aufgeklappt
   aliasReveal(); advReveal();  // Links aus Übersicht und Diagnose: hinscrollen
   setPage(SET_PAGE);  // Startliste bzw. Seitenleiste, Titel, Speicherleiste
@@ -5206,7 +5324,7 @@ function collect() {
   if (!out.dhw_disinfect_day && !out.dhw_disinfect_time) delete out.dhw_disinfect_time;
   for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
                    "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp", "preheat_max_h",
-                   "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days",
+                   "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days", "keep_days",
                    "boiler_fallback_flow"]) out[k] = v("f-" + k);  // Rückfall-Vorlauf (0.41)
   out.debug_logging = $("f-debug_logging").checked;
   out.learn_schedule = $("f-learn_schedule").checked;
@@ -5223,7 +5341,8 @@ function collect() {
   for (const tr of document.querySelectorAll(".room")) {
     if (!tr.querySelector(".r-on").checked) continue;
     const c = tr.dataset.climate, fl = floorOf(tr);
-    out.rooms.push({ climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
+    const rid = ((SET.rooms || []).find((r) => r.climate === c) || {}).id;  // 0.44: feste Raumkennung, unverändert
+    out.rooms.push({ ...(rid ? { id: rid } : {}), climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
                      temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim(),
                      group: tr.querySelector(".r-group").value.trim(), controller: tr.querySelector(".r-controller").checked,
                      managed: managedOf(tr, c), comfort: tr.querySelector(".r-comfort").value.trim(),
@@ -5264,11 +5383,14 @@ async function saveSettings() {
   if (!j.ok) { msg.className = "msg-err"; msg.innerHTML = "Nicht gespeichert: " + j.errors.map(esc).join(" · "); return; }
   msg.className = "msg-ok"; msg.textContent = "Gespeichert und übernommen.";
   const note = saveNote(j);
-  const hist = reload ? ' <span class="muted">Historie wird neu eingelesen – die gelernten Nachtzeiten erscheinen danach.</span>' : "";
+  const hist = reload ? ' <span class="muted">Lücken aus Home Assistant werden gefüllt – die gelernten Nachtzeiten erscheinen danach.</span>' : "";
   SET = null; await loadSettings(); load().catch(() => {});
   loadHeat().catch(() => {});  // Statuszeilen Warmwasser (0.38) und Kessel (0.41) im Heizen-Reiter mit dem neuen Schalter
   jobPoll();  // 0.42.1: ein Raumwechsel holt die Historie der neuen Räume im Hintergrund – Stand unter Räume
   $("save-msg").className = "msg-ok"; $("save-msg").innerHTML = "Gespeichert und übernommen." + note + hist;
+  const sw = j.switches || [];  // 0.44: anderes Thermostat erkannt – die Wahl steht unter Räume
+  if (sw.length) { $("save-msg").innerHTML += ` <span class="msg-err">Thermostat gewechselt: ${sw.map((x) => esc(x.name)).join(", ")} – bitte unter Räume wählen.</span>`;
+    await loadSwitch(); openSettings("raeume", "room-switch"); }
 }
 // Nach dem Speichern (0.35): bei mehreren Geräten in einem Raum, welches das Schlüsselgerät ist (Raumregler, sonst
 // das erste – es liefert Temperatur und Voreinstellung des Raums); gemerkte Änderungen der Voreinstellung
@@ -5288,8 +5410,12 @@ function applySuggestions() {
   if ((SUG.outdoor || []).length) emAuto("outdoor_sensors");
   const sug = Object.fromEntries((SUG.rooms || []).map((r) => [r.climate, r]));
   const pre = new Set(SUG.auto_rooms || []);  // angehakt nur die Betriebsauswahl (kein Ventil doppelt), Felder für alle
+  // 0.44: gespeicherte Räume bleiben, wie sie sind – nur leere Sensor-Felder werden gefüllt. Bis 0.43 hakte der Knopf
+  // (auch unter „Entitäten“) die Auto-Auswahl an und setzte Raum und Raumregler: das Schlüsselgerät der Räume wechselte
+  const keep = (SET.rooms || []).length > 0;
   for (const tr of document.querySelectorAll(".room")) {
     const g = sug[tr.dataset.climate];
+    if (keep) { if (g) for (const [k, cls] of [["heating_power", ".r-valve"], ["temp_sensor", ".r-temp"], ["humidity", ".r-hum"]]) { const inp = tr.querySelector(cls); if (!inp.value.trim() && g[k]) inp.value = g[k]; } continue; }
     tr.querySelector(".r-on").checked = pre.has(tr.dataset.climate);
     if (g) { tr.querySelector(".r-valve").value = g.heating_power || ""; tr.querySelector(".r-temp").value = g.temp_sensor || ""; tr.querySelector(".r-hum").value = g.humidity || "";
       if (g.group) tr.querySelector(".r-group").value = g.group;
@@ -5308,12 +5434,12 @@ async function testEms() {
   $("ems-msg").textContent = (j.ok ? "Verbunden – " : "Fehler: ") + j.message;
 }
 
-// Rückfrage „Historie neu einlesen“ (seit 0.42.1 zusammenführend; Haus-, Raum- und Ventilmodelle lernen neu)
-const RELOAD_ASK = "Historie aus Home Assistant neu einlesen?\n\nHeatPilot liest Langzeitstatistik und Recorder-Historie neu ein – zusammenführend: Gespeicherte Werte, zu denen Home Assistant nichts hat (etwa Kesselwerte direkt von EMS-ESP), bleiben, und keine gespeicherte Innentemperatur wird ersetzt. Danach lernt es Haus-, Raum- und Ventilmodelle, Lernkurve und gelernte Zeiten neu; Warmwasser- und Personenmodelle bleiben. Das dauert je nach Umfang einige Minuten.";
+// Rückfrage „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu einlesen“; seit 0.44 gewinnen eigene Werte immer)
+const RELOAD_ASK = "Lücken aus Home Assistant füllen?\n\nHeatPilot liest Langzeitstatistik und Recorder-Historie und ergänzt nur fehlende Zeitpunkte und leere Werte. Eigene gespeicherte Werte gewinnen immer (etwa Kesselwerte direkt von EMS-ESP), nichts wird gelöscht. Danach lernt es Haus-, Raum- und Ventilmodelle, Lernkurve und gelernte Zeiten neu; Warmwasser- und Personenmodelle bleiben. Das dauert je nach Umfang einige Minuten.";
 async function reloadHistory() {
   if (!confirm(RELOAD_ASK)) return;
   await fetch("api/reload_history", { method: "POST" });
-  $("save-msg").className = ""; $("save-msg").textContent = "Historie wird neu eingelesen – die Übersicht aktualisiert sich danach.";
+  $("save-msg").className = ""; $("save-msg").textContent = "Lücken aus Home Assistant werden gefüllt – die Übersicht aktualisiert sich danach.";
 }
 
 const LEVEL_ICON = { ok: "✓", info: "ℹ", warn: "!", error: "✕" };

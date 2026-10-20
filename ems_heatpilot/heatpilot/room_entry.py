@@ -13,6 +13,7 @@ import re
 from . import floor_limit
 
 ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
+ID = re.compile(r"^[a-z0-9][a-z0-9_:.-]{0,63}$")  # feste Raumkennung (0.44, room_ids)
 COMFORT_MIN, COMFORT_MAX, COMFORT_DEFAULT = 5.0, 25.0, 21.0
 # Hydraulik (0.35): Voreinstellung am Ventilunterteil – höchstens so viele Stufen
 PRESET_MAX = 12
@@ -60,6 +61,9 @@ def clean_room(r: dict) -> dict:
     if not ENTITY.match(climate):
         raise ValueError(f"Raum ohne gültige climate-Entität: {climate or '(leer)'}")
     room = {"name": str(r.get("name") or "").strip(), "climate": climate}
+    rid = str(r.get("id") or "").strip()
+    if rid and ID.match(rid):  # feste Raumkennung (0.44); fehlt sie, vergibt das Speichern sie (room_ids.assign)
+        room["id"] = rid
     for opt in ("temperature", "heating_power", "humidity"):
         v = str(r.get(opt) or "").strip()
         if v:
