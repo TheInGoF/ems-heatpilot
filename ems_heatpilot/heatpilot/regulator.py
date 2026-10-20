@@ -8,7 +8,9 @@ wird. Seit der Prüfung von 0.41 gilt dabei: **Eine fehlende Antwort ist nicht �
 * ``note`` (von ``Engine.set_ems`` bei jeder Antwort von EMS-ESP) führt Buch in ``eng.regulator_watch``: wann der
   Regler zuletzt gesehen wurde (EMS-ESP liefert Werte des Geräts ``thermostat`` oder es gibt frische Regler-Werte in
   Home Assistant) und seit wann EMS-ESP in Folge ausdrücklich „kein Gerät thermostat“ meldet. Eine Lücke zwischen den
-  Antworten oder ein Fehler beginnt die Folge neu. Der Stand überlebt Neustarts (kv ``regulator.watch``).
+  Antworten oder ein Fehler beginnt die Folge neu. Seit 0.46.5 zählt eine gescheiterte Abfrage des Reglers, wenn der
+  Kessel in derselben Abfrage antwortet, wie „kein Gerät“ (``quiet``: EMS-ESP erreichbar, der Regler antwortet nicht –
+  so meldet EMS-ESP einen abgebauten Regler oft). Der Stand überlebt Neustarts (kv ``regulator.watch``).
 * ``regulator`` – vorhanden (sperrt), unbekannt (sperrt) oder nicht vorhanden. „Nicht vorhanden“ gilt nur, wenn
   EMS-ESP gerade antwortet, mindestens ``ABSENT_N`` Abfragen in Folge über mindestens ``ABSENT_S`` ausdrücklich kein
   Gerät ``thermostat`` meldet und der Regler seit ``HOLD_S`` nicht mehr gesehen wurde – ein Neustart von EMS-ESP
@@ -66,6 +68,10 @@ def note(eng, status: dict | None, ts: float) -> None:
     got = (status or {}).get("thermostat")
     if got is None:
         got = OK if (eng.ems or {}).get("thermostat") else FAILED
+    quiet = got == FAILED and (status or {}).get("boiler") == OK  # 0.46.5: Kessel antwortet, nur der Regler nicht
+    if quiet:
+        got = ABSENT
+    w["quiet"] = quiet
     if got == OK or _fresh_ha(eng, ts):
         w["seen"] = ts
     if got == ABSENT:
@@ -75,7 +81,8 @@ def note(eng, status: dict | None, ts: float) -> None:
         w.pop("absent_since", None)
         w.pop("absent_n", None)
     w["last"], w["ts"] = got, ts
-    if old.get("last") != got or (w.get("seen") or 0) - (old.get("seen") or 0) >= SAVE_EVERY_S:
+    if (old.get("last") != got or old.get("quiet") != quiet
+            or (w.get("seen") or 0) - (old.get("seen") or 0) >= SAVE_EVERY_S):
         eng.store.put(KV, w)
 
 
@@ -114,10 +121,12 @@ def regulator(eng, now: float | None = None) -> dict:
         return _unknown("EMS-ESP beantwortet die Abfrage des Reglers (Gerät thermostat) gerade nicht – ob ein Regler am "
                         "Bus ist, ist unbekannt; HeatPilot schreibt nicht")
     n, since = int(w.get("absent_n") or 0), w.get("absent_since")
+    what = ("der Regler (Gerät thermostat) antwortet EMS-ESP nicht, der Kessel schon" if w.get("quiet")
+            else "EMS-ESP meldet kein Gerät thermostat")
     if n < ABSENT_N or since is None or now - since < ABSENT_S:
-        return _unknown(f"EMS-ESP meldet kein Gerät thermostat – HeatPilot prüft noch ({min(n, ABSENT_N)} von {ABSENT_N} "
+        return _unknown(f"{what[0].upper()}{what[1:]} – HeatPilot prüft noch ({min(n, ABSENT_N)} von {ABSENT_N} "
                         f"Abfragen, mindestens {ABSENT_S // 60} min), bevor es schreibt")
-    return {"present": False, "source": "ems", "text": "Kein Regler am Bus (EMS-ESP meldet kein Gerät thermostat)"}
+    return {"present": False, "source": "ems", "text": f"Kein Regler am Bus ({what})"}
 
 
 def regulator_block(eng, now: float | None = None) -> str | None:

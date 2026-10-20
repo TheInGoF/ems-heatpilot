@@ -18,18 +18,18 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
   Thermostat am Soll, solange der Heizbetrieb nicht sicher aus ist; ohne Raummodell bleibt der Messwert.
 * **Vorlauf-Soll** = höchster nötiger Vorlauf der Räume mit plausiblem Modell ohne Fußbodenheizung
   (``RoomModel.required_flow``), 25 °C bis ``max_flow_temp``, auf 1 K gerundet. Heizt ein Raum vor, gilt der
-  niedrigste Vorlauf, mit dem er ab dem Beginn laut Steuerung rechtzeitig warm wird (``_preheat_flow``; den
-  Beginn rechnet ``desired`` mit der Aufheizzeit bei maximalem Vorlauf – meist ist es deshalb der maximale),
-  heizt er sonst auf, +5 K. Heizbetrieb aus nur, wenn kein Raum Wärme braucht – auch keiner, der nicht für den
-  Vorlauf zählt (``_other_need``).
+  niedrigste Vorlauf, mit dem er ab dem Beginn laut Steuerung rechtzeitig warm wird (``_preheat_flow``; seit 0.46.5
+  beginnt ``desired`` sanft so früh, dass genau dieser niedrigste reicht; ein begonnenes Vorheizen bleibt bis zum
+  Ziel, ``held`` – jetzt aus dem Zustand der Steuerung), heizt er sonst auf, +5 K. Heizbetrieb aus nur, wenn kein
+  Raum Wärme braucht – auch keiner, der nicht für den Vorlauf zählt (``_other_need``).
 * **Fußboden-Grenze** (0.39.1, ``floor_limit``): Das Vorlauf-Soll liegt nie über dem höchsten Vorlauf der
-  Fußbodenheizungen, für die er gerade gilt – direkt am Kessel (bzw. Anschluss unbekannt) immer, Mischer nie,
-  RTL-Ventil, solange der Raum Wärme anfordert (``_floor_want``): jetzt nach den Messwerten wie „Bereit für die
-  Steuerung?“ (``floor_limit.demand``), danach in den Schritten, in denen er laut Vorschau Wärme braucht; ohne
-  Raummodell bleibt die Anforderung von jetzt, solange das Soll wie jetzt ist; hat ein Gerät des Raums keinen Zustand
-  (nicht verfügbar), bleibt sie offen und die Grenze gilt (sicher). Auch beim Vorheizen und Aufheizen (``_capped``,
-  nach allen anderen Regeln). Liegt die Grenze unter 35 °C, gilt sie, sobald ein Raum Wärme braucht. Der Grund sagt
-  dann „… – begrenzt durch Fußboden …“.
+  Fußbodenheizungen – direkt am Kessel (bzw. Anschluss unbekannt) und seit 0.46.5 auch mit RTL-Ventil immer (es
+  öffnet, sobald der Rücklauf kalt ist), Mischer nie. Ob ein RTL-Raum Wärme anfordert (``_floor_want``), sagt nur
+  noch der Grund: jetzt nach den Messwerten wie „Bereit für die Steuerung?“ (``floor_limit.demand``), danach in den
+  Schritten, in denen er laut Vorschau Wärme braucht; ohne Raummodell die von jetzt, solange das Soll wie jetzt ist;
+  hat ein Gerät des Raums keinen Zustand (nicht verfügbar), bleibt sie offen – die Grenze gilt (sicher) ohnehin.
+  Auch beim Vorheizen und Aufheizen (``_capped``, nach allen anderen Regeln). Liegt die Grenze unter 35 °C, gilt sie,
+  sobald ein Raum Wärme braucht. Der Grund sagt dann „… – begrenzt durch Fußboden …“.
 * **Warmwasser-Soll** aus ``DhwModel.recommend`` mit derselben Anwesenheit, dem Desinfektionstermin und (seit 0.46) der
   Einschalthysterese des Kessels (Soll = gehaltene Speichertemperatur + Hysterese, ``dhw_target``), auf ganze
   Grad wie Weg W (``dhw_control.wish``: halbe Grad aufwärts, Minimum…Maximum).
@@ -55,7 +55,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from . import dhw_control, dhw_disinfect, floor_limit, guards
+from . import boiler_rule, dhw_control, dhw_disinfect, floor_limit, guards
 from .config import Config
 from .controlloop import Presence, desired
 from .engine_summary import FORECAST_MAX_GAP_MIN
@@ -64,7 +64,7 @@ from .values import flag, local, num
 
 STEP_MIN = 5           # Rechenschritt
 HOURS = 24             # so viele volle Stunden ab der laufenden
-FLOW_MIN = 35.0        # Vorlauf-Soll nie darunter; braucht kein Raum so viel, ist der Heizbetrieb aus (Ingo, 0.39)
+FLOW_MIN = 35.0        # Vorlauf-Soll nie darunter; nur Halten darunter: Heizbetrieb aus (Ingo, 0.39; 0.46.5 s. _flow)
 FLOW_STEP_K = 1.0      # Schreibschwelle Vorlauf (Planungspapier: ab 1 K)
 DHW_STEP_K = dhw_control.STEP_K        # Schreibschwelle Warmwasser – dieselbe wie Weg W (0.38)
 HOLD_MIN = dhw_control.HOLD_S // 60    # Haltezeit nach jedem Schreiben (5 min) – dieselbe wie Weg W
@@ -181,6 +181,8 @@ class _Run:
         self.skipped: list[dict] = []
         self.rooms = self._rooms(readings)
         self.preheat: dict = {}
+        st = getattr(getattr(eng, "control_loop", None), "state", None)  # 0.46.5: laufendes Vorheizen (Ziel) je Raum
+        self.held = {c: local(x["preheat"]) for c, x in st.items() if x.get("preheat")} if isinstance(st, dict) else {}
         # Fußboden-Grenze (0.39.1): Räume, Anforderung jetzt aus den Messwerten, Räume mit einem Gerät ohne Zustand
         self.floors = floor_limit.floor_rooms(self.cfg, eng.found.rooms)
         seen = floor_limit.read(self.floors, eng.states)
@@ -252,7 +254,9 @@ class _Run:
     def _setpoint(self, r: _Room, t: datetime, pres: Presence, t_out: float) -> tuple[float | None, str, datetime | None]:
         """(Soll, Phase, Ziel des Vorheizens) eines Raums zum Zeitpunkt ``t``."""
         if r.managed:
-            d = desired(r.room, t, self.cfg, pres, r.model, r.temp, t_out, self.t_out_at)
+            c = r.room.climate
+            d = desired(r.room, t, self.cfg, pres, r.model, r.temp, t_out, self.t_out_at, self.held.get(c))
+            self.held[c] = d.until if d.phase == "vorheizen" else None
             return d.setpoint, d.phase, d.until if d.phase == "vorheizen" else None
         sp, eff = r.day_sp, self.eng.eff
         if sp is None:
@@ -304,9 +308,9 @@ class _Run:
 
     def _preheat_flow(self, r: _Room, sp: float, until: datetime, t: datetime) -> float:
         """Vorlauf fürs Vorheizen: der niedrigste (1 K genau), mit dem der Raum ab ``t`` bis ``until`` sein Soll
-        erreicht – reicht auch der maximale nicht, der maximale. Den Beginn ``t`` bestimmt die Steuerung
-        (``desired``: Aufheizzeit bei maximalem Vorlauf, gedeckelt mit „Vorheizen höchstens“), deshalb ist es
-        meist der maximale Vorlauf. Einmal je Vorheizen gerechnet, dann fest. Die Fußboden-Grenze (0.39.1) gilt danach
+        erreicht – reicht auch der maximale nicht, der maximale. Den Beginn ``t`` bestimmt die Steuerung (``desired``,
+        seit 0.46.5 sanft: so früh, dass der niedrigste Vorlauf ab 35 °C reicht, der innerhalb von „Vorheizen höchstens“
+        ans Ziel kommt – es ist derselbe). Einmal je Vorheizen gerechnet, dann fest. Die Fußboden-Grenze (0.39.1) gilt danach
         in ``_capped`` – dieselbe Zahl, als suchte es nur bis zur Grenze, und die Stunde sagt „begrenzt durch …“."""
         key = (r.room.climate, until)
         if key not in self.preheat:
@@ -335,16 +339,18 @@ class _Run:
                 needs.append((need[0], r.name, need[1]))
         cap, cap_why = floor_limit.cap_of(self.floors, wants)
         flow, heating, why, limited = self._capped(needs, self._flow(needs, t_out), cap, cap_why)
+        idle = heating is False and self.cfg.boiler_idle == "pumpe"  # 0.46.5: kein Bedarf – nur Pumpe (Weg B)
+        why = why.replace("Heizbetrieb aus", boiler_rule.IDLE_TEXT) if idle else why
         dhw, dhw_why, dhw_exact, dhw_hold = self._dhw(t, pres)
         night = self.cfg.is_night_at(t) if self.cfg.is_managing() else self.eng.eff.is_night(t.time())
         return {"ts": int(t.timestamp()), "t": t, "t_out": t_out, "src": src, "flow": flow, "heating": heating,
                 "why": why, "dhw": dhw, "dhw_why": dhw_why, "sps": sps, "phases": phases, "night": night,
                 "home": pres.home_count, "vacation": pres.vacation,
-                "dhw_exact": dhw_exact, "dhw_hold": dhw_hold, "cap": cap, "limited": limited}
+                "dhw_exact": dhw_exact, "dhw_hold": dhw_hold, "cap": cap, "limited": limited, "idle": idle}
 
     def _floor_want(self, r: _Room, needs_heat: bool, sp: float | None, first: bool) -> bool | None:
-        """Fordert ein Fußboden-Raum in diesem Schritt Wärme an (für die RTL-Grenze, ``floor_limit.cap_of``)? None =
-        offen, die Grenze gilt. Jetzt (erster Schritt) wie „Bereit für die Steuerung?“ aus den Messwerten (0,1 K unter
+        """Fordert ein Fußboden-Raum in diesem Schritt Wärme an (seit 0.46.5 nur für den Grund, ``floor_limit.why`` – die
+        RTL-Grenze gilt immer)? None = offen. Jetzt (erster Schritt) wie „Bereit für die Steuerung?“ aus den Messwerten (0,1 K unter
         dem Soll, Ventil, hvac_action). Danach: braucht er laut Vorschau Wärme, ja; hat ein Gerät keinen Zustand, offen;
         ohne Raummodell (die Temperatur läuft nicht mit) die Anforderung von jetzt, solange das Soll wie jetzt ist."""
         c = r.room.climate
@@ -370,13 +376,14 @@ class _Run:
             return None, False, "kein Raum braucht Wärme – Heizbetrieb aus"
         flows = [n for n in needs if n[0] is not None]
         others = [n for n in needs if n[0] is None]    # Räume ohne eigenen Vorlauf (ohne Modell, Fußboden)
-        if flows and max(flows)[0] < FLOW_MIN and not others:
-            # unter der Untergrenze lohnt Heizen nicht: aus, bis ein Raum mindestens FLOW_MIN braucht
+        warming = [n for n in flows if n[2].startswith("heizt")]  # 0.46.5: heizt auf/vor (unter Soll − 0,3 K)
+        if flows and max(flows)[0] < FLOW_MIN and not others and not warming:
+            # nur Halten unter der Untergrenze lohnt nicht: aus, bis ein Raum mindestens FLOW_MIN braucht oder aufheizt
             return None, False, f"nötiger Vorlauf unter {FLOW_MIN:.0f} °C ({max(flows)[1]}) – Heizbetrieb aus"
         if flows and max(flows)[0] >= FLOW_MIN:
             value, name, why = max(flows)
-        else:
-            value, name, why = (FLOW_MIN, *others[0][1:])
+        else:  # 35 °C ist die Untergrenze, wenn geheizt wird (aufheizen, vorheizen, Raum ohne eigenen Vorlauf)
+            value, name, why = (FLOW_MIN, *(max(warming) if warming else others[0])[1:])
         return round(min(max(value, FLOW_MIN), self.cfg.max_flow_temp)), True, f"{name} {why}"
 
     @staticmethod
@@ -471,7 +478,7 @@ def _hour(h_ts: int, rows: list[dict], writes: list[dict], dis: list[datetime], 
         "t_out": round(sum(t_outs) / len(t_outs), 1) if t_outs else None,
         "t_out_src": _dominant([r["src"] for r in sel]),
         "flow": flow, "flow_max": max((r["flow"] for r in sel if r["heating"]), default=None),
-        "heating": heating, "flow_reason": lead["why"],
+        "heating": heating, "flow_reason": lead["why"], "idle": bool(heating is False and lead.get("idle")),
         # Fußboden-Grenze (0.39.1): die der Stunde und ob sie den Vorlauf gesenkt hat
         "flow_cap": _dominant([r["cap"] for r in sel]), "flow_limited": bool(heating and lead["limited"]),
         "dhw": dhw, "dhw_reason": next(r["dhw_why"] for r in sel if r["dhw"] == dhw),
@@ -489,10 +496,10 @@ def _steps(rows: list[dict]) -> list[dict]:
     """Jede Änderung von Vorlauf, Heizbetrieb oder Warmwasser genau (für einen Stufengrafen)."""
     out, prev = [], None
     for r in rows:
-        key = (r["flow"] if r["heating"] else None, r["heating"], r["dhw"])
+        key = (r["flow"] if r["heating"] else None, r["heating"], r["dhw"], r["idle"])
         if key != prev:
             # 0.46.1, nur Anzeige (Übersicht, nächste 12 h): Gründe und gehaltene Speichertemperatur beim Wechsel
-            out.append({"t": r["t"].isoformat(), "flow": key[0], "heating": key[1], "dhw": key[2],
+            out.append({"t": r["t"].isoformat(), "flow": key[0], "heating": key[1], "dhw": key[2], "idle": r["idle"],
                         "flow_why": r["why"], "dhw_why": r["dhw_why"], "dhw_hold": r["dhw_hold"]})
             prev = key
     return out
@@ -521,9 +528,9 @@ def preview(eng, now_ts: float | None = None, written: dict | None = None) -> di
     if dhw["ref"] is not None:  # Weg W (0.38): Startwert und Haltezeit wie im Takt
         start["dhw"] = dhw["ref"][0]
     raw = {
-        "flow": count_writes([(r["t"], r["flow"] if r["heating"] else None) for r in rows], start["flow"],
-                             FLOW_STEP_K),
-        "heating": count_writes([(r["t"], r["heating"]) for r in rows], start["heating"], None),
+        "flow": count_writes([(r["t"], r["flow"] if r["heating"] else boiler_rule.PUMP_FLOW if r["idle"] else None)
+                              for r in rows], start["flow"], FLOW_STEP_K),  # 0.46.5: nur Pumpe – an, 20 °C
+        "heating": count_writes([(r["t"], True if r["idle"] else r["heating"]) for r in rows], start["heating"], None),
         "dhw": count_writes([(r["t"], r["dhw"], r["dhw_exact"]) for r in rows], start["dhw"], DHW_STEP_K,
                             since=dhw["since"]),
     }

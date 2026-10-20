@@ -267,10 +267,11 @@ Der Reiter **Live** zeigt, was Heizung und Haus gerade tun und in den letzten
 3, 6, 12 oder 24 Stunden getan haben; er aktualisiert sich alle 30 Sekunden.
 
 - **Anzeigen:** Brenner (an/aus, Leistung, heizt oder lädt Warmwasser, Taktsperre
-  mit Restzeit), Vorlauf mit Soll von Kessel und Regler, Rücklauf mit Spreizung,
+  mit Restzeit), seit 0.46.5 eine eigene Kachel **Pumpe** (an/aus, Modulation in %, Nachlauf, falls der Kessel ihn
+  meldet), Vorlauf mit Soll von Kessel und Regler, Rücklauf mit Spreizung,
   Kessel und Pumpe, Warmwasser, außen, innen Ø, Luftfeuchte Ø, Wärmebedarf laut Tado, wer zu Hause ist
 - **Grafen:** Kesseltemperaturen (hinterlegt, wann der Brenner heizt bzw.
-  Warmwasser lädt), Brennerleistung und Pumpe, außen/innen, Warmwasser
+  Warmwasser lädt und – seit 0.46.5, hellgrün – wann die Pumpe lief), Brennerleistung und Pumpe, außen/innen, Warmwasser
 - **Räume gemeinsam:** Raumtemperatur, Luftfeuchte und Heizbedarf aller Räume in je
   einem Grafen (Raum antippen = aus-/einblenden), dazu Gas je Stunde und
   Außentemperatur; aufklappbar je Raum einzeln mit Tado-Soll und Ventil
@@ -644,8 +645,12 @@ Für jeden Raum mit „macht mit“ bestimmt HeatPilot eine Phase und das dazuge
 2. **Nacht** laut Wochenplan → Nachttemperatur (Standard 18 °C). Je Wochentag gilt ein Beginn am
    Abend dieses Tages und ein Ende am Morgen dieses Tages; Standard: Beginn So–Do 21:00, Fr und
    Sa 22:00; Ende Mo–Fr 04:30, Sa und So 06:30. Vor dem Nachtende wird so früh **vorgeheizt**,
-   wie der Raum laut Raummodell braucht (Aufheizzeit bei maximalem Vorlauf), mindestens 15 min,
-   höchstens der **Vorheizdeckel** (Standard 3 h). Ohne plausibles Raummodell pauschal 1 h. Folgt nach
+   wie der Raum laut Raummodell braucht, mindestens 15 min, höchstens der **Vorheizdeckel** (Standard 3 h). Seit
+   0.46.5 **sanft**: so früh, dass der **niedrigste Vorlauf ab 35 °C** reicht, der innerhalb des Deckels ans Ziel
+   kommt – statt kurz mit dem höchsten Vorlauf (morgens 60 °C, danach wieder 35 °C). Schafft es auch der höchste
+   Vorlauf nicht im Deckel, beginnt es mit dem Deckel. Ein begonnenes Vorheizen **bleibt bis zum Ziel**, auch wenn
+   der Raum schneller warm wird als geplant – sonst sprängen Soll und Heizbetrieb zwischen Vorheizen und Nacht hin
+   und her. Ohne plausibles Raummodell pauschal 1 h. Folgt nach
    der Nacht Abwesenheit, wird nicht vorgeheizt. Seit 0.37 rechnet die Aufheizzeit mit der
    Außentemperatur **zum Zielzeitpunkt** (Nachtende, Ankunft, Rückkehr aus dem Urlaub) laut
    Vorhersage – höchstens 90 min daneben –, sonst wie bisher mit der aktuellen: Wird es bis zum Morgen
@@ -774,7 +779,7 @@ du. Zu finden in der Übersicht, Abschnitt „Vorschau (Trockenlauf)“.
 (unter den Kacheln) und Übersicht → Kessel (oben) – ab jetzt 12 h in Abschnitten mit Uhrzeit von–bis, Art und Wert.
 Warmwasser: Nacht, zu Hause, niemand zu Hause, Urlaub, heizt auf, Zapfung erwartet, Desinfektion mit „Soll 50 °C“ und
 klein „Speicher 45–50 °C“ bzw. „darf bis 40 °C fallen“. Kessel: Vorlauf, Vorheizen, Heizung aus, zeitweise aus
-(„Vorlauf 38–42 °C“ bzw. „aus“). Gleiche Art und Wert (±1 K) ist ein Abschnitt; kürzere als 30 min zählen zum Nachbarn,
+(„Vorlauf 38–42 °C“ bzw. „aus“), seit 0.46.5 ohne Bedarf meist „nur Pumpe“ („Pumpe“: Heizbetrieb an, 20 °C). Gleiche Art und Wert (±1 K) ist ein Abschnitt; kürzere als 30 min zählen zum Nachbarn,
 An/Aus im Minutentakt wird „zeitweise aus“. Der erste Abschnitt beginnt jetzt, alle Uhrzeiten in Ortszeit von Home
 Assistant (auch wenn der Browser in einer anderen Zeitzone läuft) – dieselben wie in Tooltip und 24-h-Vorschau.
 Überfahren, Antippen oder Tab zeigt die Einzelheiten mit den Gründen. Breit (ab 600 px) waagrecht mit Stundenmarken,
@@ -805,23 +810,25 @@ Gerechnet wird in 5-min-Schritten von jetzt bis zum Ende der 24. vollen Stunde:
 - **Vorlauf-Soll:** der höchste nötige Vorlauf über die Räume mit plausiblem Raummodell (ohne
   Fußbodenheizung): zum Halten der Vorlauf, mit dem der Raum sein Soll dauerhaft hält; beim **Vorheizen**
   der niedrigste Vorlauf (1 K genau), mit dem der Raum ab dem Beginn des Vorheizens rechtzeitig warm wird.
-  Den Beginn bestimmt die Steuerung mit der Aufheizzeit bei maximalem Vorlauf (Nachtende bzw. Ankunft,
-  gedeckelt mit „Vorheizen höchstens“) – meist ist es deshalb der maximale Vorlauf. Sonst beim Aufheizen 5 K
-  mehr. Immer zwischen 35 °C und dem maximalen Vorlauf, auf 1 K gerundet. **Braucht kein Raum mindestens 35 °C
-  Vorlauf**, steht dort „Heizbetrieb aus“ – darunter lohnt Heizen nicht. **Braucht kein Raum Wärme** (alle
-  am oder über dem Soll, oder Fremdwärme reicht), steht dort „Heizbetrieb aus“ statt eines Vorlaufs – typisch
-  zu Beginn der Nacht. Das gilt auch für Räume, die den Vorlauf nicht bestimmen: Fußbodenräume mit
+  Den Beginn bestimmt die Steuerung (seit 0.46.5 sanft: so früh, dass genau dieser niedrigste Vorlauf ab 35 °C im
+  Deckel „Vorheizen höchstens“ reicht – vorher die Aufheizzeit bei maximalem Vorlauf, meist also der maximale).
+  Sonst beim Aufheizen 5 K mehr. Immer zwischen 35 °C und dem maximalen Vorlauf, auf 1 K gerundet. **35 °C ist
+  die Untergrenze, wenn geheizt wird:** Halten alle Räume nur ihr Soll und braucht keiner mindestens 35 °C, lohnt
+  Heizen nicht („nötiger Vorlauf unter 35 °C“); **heizt ein Raum auf oder vor** (mehr als 0,3 K unter dem Soll,
+  z. B. nach einem Boost), gilt seit 0.46.5 mindestens 35 °C statt „aus“. **Braucht kein Raum Wärme** (alle
+  am oder über dem Soll, oder Fremdwärme reicht) – typisch zu Beginn der Nacht –, steht dort seit 0.46.5
+  „… – Pumpe läuft, Vorlauf-Soll 20 °C“ (der Heizbetrieb bleibt an, siehe [Kessel über
+  HeatPilot](#kessel-über-heatpilot-weg-b)), bei der Einstellung „Heizbetrieb ganz aus“ wie bisher „Heizbetrieb aus“. Das gilt auch für Räume, die den Vorlauf nicht bestimmen: Fußbodenräume mit
   plausiblem Modell zählen wie die übrigen, Räume ohne plausibles Modell nach dem Messwert – mehr als 0,3 K
   unter dem Soll oder ohne Temperatur hält der Heizbetrieb an („Bad unter Soll (ohne Raummodell) –
   Heizbetrieb bleibt an“, mindestens 35 °C). Ohne plausibles Raummodell gibt es kein Vorlauf-Soll, mit Grund.
 - **Fußboden-Grenze (seit 0.39.1):** Das Vorlauf-Soll liegt nie über dem höchsten Vorlauf der Fußbodenheizungen,
-  für die er gerade gilt – direkt am Kessel (und Anschluss unbekannt) in jeder Stunde, mit Mischer nie, mit
-  RTL-Ventil, solange der Raum Wärme anfordert: jetzt nach den Messwerten, genau wie „Bereit für die Steuerung?“
-  (0,1 K unter dem Soll, Ventil über 5 %, „heizt“), danach in den Stunden, in denen der Raum laut Vorschau Wärme
-  braucht. Ohne plausibles Raummodell bleibt die Anforderung von jetzt, solange sein Soll wie jetzt ist (die
-  Raumtemperatur läuft dann nicht mit); ist ein Thermostat des Raums nicht verfügbar, gilt die Grenze in jeder
-  Stunde. Das gilt auch beim Vorheizen und beim Aufheizen. Die
-  Stunde sagt dann „… – begrenzt durch Fußboden Bad (RTL-Ventil, fordert an): höchstens 50 °C“; „Womit gerechnet
+  – direkt am Kessel (und Anschluss unbekannt) und seit 0.46.5 auch mit RTL-Ventil in jeder Stunde, mit Mischer
+  nie. Ob ein RTL-Raum Wärme anfordert, sagt nur noch der Grund: jetzt nach den Messwerten, genau wie „Bereit für
+  die Steuerung?“ (0,1 K unter dem Soll, Ventil über 5 %, „heizt“), danach in den Stunden, in denen der Raum laut
+  Vorschau Wärme braucht (ohne plausibles Raummodell die von jetzt, solange sein Soll wie jetzt ist). Das gilt
+  auch beim Vorheizen und beim Aufheizen. Die
+  Stunde sagt dann „… – begrenzt durch Fußboden Bad (RTL-Ventil, fordert nicht an): höchstens 50 °C“; „Womit gerechnet
   wurde“ nennt die Fußboden-Räume mit ihrer Regel. Liegt die Grenze unter 35 °C, gilt sie, sobald ein Raum Wärme
   braucht – sonst käme der Vorlauf nie auf die Untergrenze. Siehe [Fußbodenheizung je Raum](#fußbodenheizung-je-raum).
 - **Warmwasser-Soll:** die Warmwasser-Empfehlung für jeden Zeitpunkt (Komfort plus Reserve vor erwarteten
@@ -1163,9 +1170,11 @@ getrennt von Raumsteuerung und Warmwasser, drei Stellungen:
   gesperrt: „Regler am Bus – er überschreibt alle 60 s. Erst Trockenlauf prüfen, dann Regler abbauen“. Ohne
   EMS-ESP-Adresse bzw. wenn EMS-ESP gerade nicht antwortet, ist es unbekannt – dann schreibt HeatPilot ebenfalls nicht.
   Eine gescheiterte Abfrage des Reglers (Zeitüberlauf, Fehler, leere Antwort) heißt nicht „kein Regler“, sondern
-  „unbekannt“. Als **nicht vorhanden** gilt der Regler erst, wenn EMS-ESP mindestens 3 Abfragen in Folge über
-  mindestens 5 min ausdrücklich meldet, dass es kein Gerät `thermostat` gibt, **und** der Regler seit 30 min nicht mehr
-  gemeldet wurde – nach einem Neustart von EMS-ESP wird der Kessel oft vor dem Regler erkannt. Die Werte des Reglers
+  „unbekannt“ – außer der Kessel antwortet in derselben Abfrage (seit 0.46.5): Dann ist EMS-ESP erreichbar und nur der
+  Regler antwortet nicht; das zählt wie „kein Gerät `thermostat`“ (so meldet EMS-ESP einen abgebauten Regler oft). Als
+  **nicht vorhanden** gilt der Regler erst, wenn EMS-ESP mindestens 3 Abfragen in Folge über mindestens 5 min
+  ausdrücklich meldet, dass es kein Gerät `thermostat` gibt (bzw. nur der Regler nicht antwortet), **und** der Regler
+  seit 30 min nicht mehr gemeldet wurde – nach einem Neustart von EMS-ESP wird der Kessel oft vor dem Regler erkannt. Die Werte des Reglers
   in EMS-ESP deshalb nicht unter „Customizations“ für die API ausschließen.
 
 **Entitäten** (Einstellungen → Entitäten → Kessel über HeatPilot; leer = Vorschlag aus der Erkennung):
@@ -1199,13 +1208,20 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
 - **Schutz über der Grenze:** Zeigt der Kessel ein Vorlauf-Soll über der Grenze, die gerade gilt (Fußboden-Grenze, die
   z. B. mit einem RTL-Raum neu greift, höchster Vorlauf, Höchstwert der Entität – auch wenn nur Home Assistant oder nur
   EMS-ESP es zeigt), schreibt HeatPilot sofort die Grenze bzw. das Ziel – ohne 60-s-Abstand und ohne auf eine offene
-  Prüfung zu warten (sie wird ersetzt). Braucht gerade kein Raum Wärme, geht stattdessen der Heizbetrieb sofort aus,
-  ebenso, wenn die Fußboden-Grenze unter 35 °C liegt. Nur eine Warmwasser-Ladung hält das auf.
+  Prüfung zu warten (sie wird ersetzt). Braucht gerade kein Raum Wärme, gilt sofort das Vorlauf-Soll „nur Pumpe“
+  (20 °C) bzw. bei „Heizbetrieb ganz aus“ geht der Heizbetrieb sofort aus – ebenso, wenn die Fußboden-Grenze unter
+  35 °C liegt. Nur eine Warmwasser-Ladung hält das auf.
 - **Vorlauf-Soll** – in dieser Reihenfolge:
   1. **Bedarf:** dieselbe Rechnung wie die Vorschau – der nötige Vorlauf des anspruchsvollsten Raums aus den
-     Raummodellen, Vorheizen, Aufheizzuschlag. **Untergrenze 35 °C**; braucht kein Raum so viel, ist der Heizbetrieb
-     aus. Nacht und Abwesenheit folgen aus den Raum-Sollwerten der Steuerung: Braucht kein Raum Wärme, ist der
-     Heizbetrieb aus.
+     Raummodellen, Vorheizen, Aufheizzuschlag. **Untergrenze 35 °C, wenn geheizt wird**: Halten alle Räume nur und
+     braucht keiner so viel, ist kein Bedarf; heizt ein Raum auf oder vor (z. B. nach einem Boost), gilt seit 0.46.5
+     mindestens 35 °C. Nacht und Abwesenheit folgen aus den Raum-Sollwerten der Steuerung.
+     **Kein Bedarf** (seit 0.46.5, Einstellung **„Wenn kein Raum Wärme braucht“**): Standard **„Pumpe läuft weiter“** –
+     der Heizbetrieb bleibt an, das Vorlauf-Soll geht auf **20 °C** (mindestens der Mindestwert der Entität; der Brenner
+     springt nicht an, die Heizungspumpe läuft weiter; „kein Bedarf – Pumpe läuft, Vorlauf-Soll 20 °C“). Gesenkt wird
+     wie immer erst, wenn das Ziel 10 min niedriger bleibt. **„Heizbetrieb ganz aus“** schaltet wie bis 0.46.4 den
+     Heizbetrieb aus (nach 15 min ohne Bedarf) – z. B. für den Sommer. Gespeicherte Einstellungen älterer Versionen
+     gelten als „Pumpe läuft weiter“. Der Takt-Boost wirkt nur bei laufendem Heizbetrieb.
   2. **Mindest-Vorlauf aus der Abnahme:** Der Kessel kann nicht unter seine kleinste Leistung (kleinste Brennerleistung
      in % × Nennleistung, aus EMS-ESP bzw. Einstellungen → Kessel). HeatPilot rechnet, ab welchem Vorlauf die
      Räume mit offenem Ventil diese Leistung abnehmen (je Raum Heizwirkung × (Vorlauf − Raumtemperatur) aus dem
@@ -1296,7 +1312,8 @@ HeatPilot anhalten und nach einer Stunde nachsehen, ob die Automation lief.
    Kessels) höchstens auf die strengste Fußboden-Grenze stellen.
 
 **Anzeige:** Die Karte in den Einstellungen zeigt unter dem Schalter, welche zwei Entitäten gelten (gewählt unter
-Einstellungen → Entitäten → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die
+Einstellungen → Entitäten → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die Wahl
+**„Wenn kein Raum Wärme braucht“** (Pumpe läuft weiter | Heizbetrieb ganz aus, seit 0.46.5), die
 Warnhinweise und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Takt-Boost,
 Fußboden-Grenze), die letzte Entscheidung, zuletzt geschrieben und geprüft, fremde Änderungen, Regler am Bus, den
 Wächter mit dem Knopf „Anleitung Wächter“ und – bei einer Pause – „wieder einschalten“. Heizen und Übersicht zeigen eine
@@ -1574,8 +1591,8 @@ Hausmodell lernt solche Stunden nicht; auch die Grafik „Wärmebedarf des Hause
 fehlen. Darunter: was zuletzt neu gelernt bzw. übernommen wurde. Ein Klick auf die Karte führt zu „Modelle –
 Einzelheiten“ (Einstellungen → Diagnose). Die Kacheln mit Wärmeverlust, Heizlast und Trägheit erscheinen wie bisher erst mit
 plausiblem Hausmodell – die Karte steht immer da. Plausibel ist ein Raummodell u. a. nur, wenn Heizwirkung/Auskühlen bei
-Heizkörpern zwischen 0,3 und 3 liegt, bei Räumen mit Fußbodenheizung (seit 0.45) zwischen 0,3 und 6 – große
-Heizfläche, niedriger Vorlauf.
+Heizkörpern zwischen 0,3 und 6 liegt (seit 0.46.5, vorher 3 – große Heizkörper bei kleiner Heizlast), bei Räumen mit
+Fußbodenheizung (seit 0.45) ebenfalls zwischen 0,3 und 6 – große Heizfläche, niedriger Vorlauf.
 
 **Heizleistung vom alten Thermostat** (seit 0.45): Hat ein Raum an keinem Gerät einen Ventil-/Heizleistungssensor
 (z. B. HomeKit), sucht HeatPilot die Heizleistung in % am alten Gerät des Raums – am alten Thermostat aus „Gelerntes
@@ -1797,11 +1814,12 @@ wie sie angeschlossen ist. Davon hängt ab, wie heiß der Vorlauf werden darf:
 - **mit Mischer** – ein Mischer regelt die Temperatur der Fußbodenheizung selbst nach. Der Vorlauf darf höher sein,
   wie es gerade passt; aus diesem Raum kommt keine Grenze.
 - **mit RTL-Ventil** (Rücklauftemperaturbegrenzer) – ist der Boden kalt, fließt am Anfang der volle Vorlauf hinein.
-  Der **höchste Vorlauf** gilt, solange der Raum Wärme anfordert: ein Thermostat des Raums mehr als 0,1 K unter
-  seinem Soll, sein Ventil über 5 % offen oder es meldet „heizt“ bzw. „heizt vor“ (`hvac_action: heating` oder
-  `preheating`); bei mehreren Thermostaten in einem Raum genügt eines. Fordert der Heizkörper Wärme an, ist auch der
-  Boden zu kalt. Weiß HeatPilot es nicht (Thermostat nicht verfügbar, ausgeschaltet ohne `hvac_action`), gilt die
-  Grenze ebenfalls – auch in der Vorschau: Ist das Thermostat jetzt nicht verfügbar, gilt sie dort in jeder Stunde.
+  Der **höchste Vorlauf** gilt seit 0.46.5 **immer**: Das RTL-Ventil öffnet, sobald der Rücklauf kalt ist – auch
+  wenn der Heizkörper im Raum gerade nichts anfordert (bis 0.46.4 galt die Grenze nur, solange der Raum Wärme
+  anforderte). Ob er anfordert – ein Thermostat des Raums mehr als 0,1 K unter seinem Soll, sein Ventil über 5 %
+  offen oder es meldet „heizt“ bzw. „heizt vor“ (`hvac_action: heating` oder `preheating`); bei mehreren Thermostaten
+  in einem Raum genügt eines –, steht nur noch im Grund („fordert an“, „fordert nicht an“, „Anforderung
+  unbekannt“) – auch in der Vorschau: Ist das Thermostat jetzt nicht verfügbar, gilt sie dort in jeder Stunde.
 - **direkt am Kessel** – ohne Mischer und ohne RTL: Der höchste Vorlauf gilt **immer**, auch ohne Raummodell und
   ohne Messwert.
 

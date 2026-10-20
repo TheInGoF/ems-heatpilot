@@ -5,8 +5,11 @@ Bei jedem Schritt (30 s) neu gerechnet, ohne eigenen Zustand – nur der Takt-Bo
 
 1. **Bedarf** – dieselbe Rechnung wie die Vorschau (``preview._Run``, ein Schritt genau jetzt): nötiger Vorlauf des
    anspruchsvollsten Raums aus den Raummodellen, Vorheizen, Aufheizzuschlag, Fußboden-Grenze; Untergrenze 35 °C –
-   braucht kein Raum so viel, ist der Heizbetrieb aus. Nacht und Abwesenheit folgen aus den Raum-Sollwerten der
-   Steuerung (braucht kein Raum Wärme, ist der Heizbetrieb aus).
+   halten alle Räume nur und braucht keiner so viel, ist der Heizbetrieb aus (heizt einer auf oder vor: an mit 35 °C,
+   seit 0.46.5). Nacht und Abwesenheit folgen aus den Raum-Sollwerten der
+   Steuerung (braucht kein Raum Wärme, ist der Heizbetrieb aus). Seit 0.46.5 bleibt er dann standardmäßig an und das
+   Vorlauf-Soll geht auf ``boiler_rule.PUMP_FLOW`` (``idle``: nur Pumpe, ``boiler_rule.idle_flow``); bei der Einstellung
+   „Heizbetrieb ganz aus“ wie bisher.
 2. **Mindest-Vorlauf aus der Abnahme** (``_load``) – Kessel-Mindestleistung (Einstellung bzw. EMS-ESP, Prozent ×
    Nennleistung) gegen die Abgabe der gerade anfordernden Räume (Ventil offen): je Raum Heizwirkung × (Vorlauf −
    Raumtemperatur) aus dem Raummodell, in kW umgerechnet mit dem Hausmodell (Wärmebedarf des Hauses jetzt verteilt auf
@@ -58,6 +61,7 @@ class Target:
     t_out: float | None = None
     hi: int | None = None            # höchstes Vorlauf-Soll jetzt (Fußboden-Grenze, max_flow_temp, Entität)
     cap_off: bool = False            # Heizbetrieb aus, weil die Grenze unter 35 °C liegt (Schutz: sofort)
+    idle: bool = False               # kein Wärmebedarf: Heizbetrieb an, Vorlauf-Soll „nur Pumpe“ (0.46.5)
 
 
 def _readings(eng) -> dict[str, tuple]:
@@ -127,7 +131,10 @@ def compute(eng, now_ts: int, boost: dict | None = None, bounds: tuple | None = 
     if row["heating"] is None:
         return _off(None, row["why"], **common), reset
     if row["heating"] is False:
-        return _off(False, row["why"], **common), reset
+        pump = br.idle_flow(eng.cfg, bounds) if row.get("idle") else None
+        if pump is not None:  # 0.46.5: kein Bedarf – Heizbetrieb bleibt an, nur die Pumpe läuft
+            return Target(True, pump, row["why"], base=pump, idle=True, **common), reset
+        return _off(False, row["why"].replace(br.IDLE_TEXT, "Heizbetrieb aus"), **common), reset
     if lo > hi:
         what = f"Fußboden-Grenze {br._c(cap)} °C" if cap is not None and cap < br.FLOW_MIN else "Obergrenze"
         return _off(False, f"{row['why']} – {what} liegt unter {lo} °C: HeatPilot schreibt keinen Vorlauf "

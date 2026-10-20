@@ -100,9 +100,12 @@ def test_failed_thermostat_query_keeps_the_lock(tmp_path):
     assert step(bc, T0 + 30) == 0 and calls(ha) == [] and bc.view["blocked"]
     with pytest.raises(PermissionError, match="Regler"):  # auch die letzte Sperre in Control
         run(bc.control.set_flow(46, "Test"))
-    # ohne den gesehenen Regler (z. B. nach 30 min): ein Fehler ist „unbekannt“ – ebenfalls gesperrt
+    # ohne den gesehenen Regler (z. B. nach 30 min): ebenfalls gesperrt – seit 0.46.5 zählt der stumme Regler bei
+    # antwortendem Kessel wie „kein Gerät“, aber eine Abfrage ist noch keine Folge
     eng.regulator_watch.pop("seen")
-    assert be.regulator(eng)["present"] is None and "unbekannt" in be.regulator(eng)["text"]
+    r = be.regulator(eng)
+    assert r["present"] is None and r["text"].startswith("Der Regler (Gerät thermostat) antwortet EMS-ESP nicht, der "
+                                                          "Kessel schon – HeatPilot prüft noch (1 von 3")
 
 
 def test_answers_of_emsesp_are_told_apart(tmp_path):
@@ -115,10 +118,10 @@ def test_answers_of_emsesp_are_told_apart(tmp_path):
         assert ems.status["thermostat"] == outcome, answer
 
 
-def _note(eng, outcome, ts):
+def _note(eng, outcome, ts, boiler=OK):
     eng.ems = {"boiler": {"selflowtemp": 30}, **({"thermostat": {"hc1_seltemp": 21}} if outcome == OK else {})}
     eng.ems_ts = ts
-    regulator.note(eng, {"boiler": OK, "thermostat": outcome}, ts)
+    regulator.note(eng, {"boiler": boiler, "thermostat": outcome}, ts)
 
 
 def test_no_regulator_only_after_a_streak_and_the_hold(tmp_path):
@@ -138,7 +141,7 @@ def test_no_regulator_only_after_a_streak_and_the_hold(tmp_path):
     assert regulator.regulator(eng, later + 270)["present"] is None  # 3 Abfragen, aber noch keine 5 min
     _note(eng, ABSENT, later + 300)
     assert regulator.regulator(eng, later + 300)["present"] is False
-    _note(eng, FAILED, later + 330)  # ein Fehler: unbekannt, die Folge beginnt neu
+    _note(eng, FAILED, later + 330, boiler=FAILED)  # ein Fehler (auch der Kessel): unbekannt, die Folge beginnt neu
     assert regulator.regulator(eng, later + 330)["present"] is None
     _note(eng, ABSENT, later + 360)
     assert regulator.regulator(eng, later + 360)["present"] is None
@@ -212,12 +215,20 @@ def _bath(tmp_path, kind="rtl", **kw):
     return eng, ha, bc
 
 
+def _kind(eng, bc, kind):
+    """Anschluss des Bads umstellen (Einstellungen), wie nach dem Speichern."""
+    eng.cfg.rooms[0]["floor_type"] = kind
+    bc.control.floors = floor_limit.floor_rooms(eng.cfg, eng.found.rooms)
+
+
 def test_rtl_cap_applies_between_two_steps_at_once(tmp_path):
-    eng, ha, bc = _bath(tmp_path)
-    climate(eng, "climate.bad", 22.0, 21.0, hvac_action="idle")  # Bad fordert nicht an: Grenze gilt nicht
+    # seit 0.46.5 gilt die RTL-Grenze immer (auch ohne Anforderung) – neu greifen kann sie zwischen zwei Schritten nur
+    # noch mit einem anderen Anschluss (hier Mischer → RTL-Ventil); der Schutz wirkt dann sofort wie bisher
+    eng, ha, bc = _bath(tmp_path, kind="mischer")
+    climate(eng, "climate.bad", 22.0, 21.0, hvac_action="idle")  # Mischer: keine Grenze
     assert step(bc, T0) == 1 and calls(ha)[-1][3] == {"value": 46}
     shows(eng, flow=46)
-    climate(eng, "climate.bad", 20.0, 21.0, hvac_action="heating")  # Bad fordert an: höchstens 40 °C
+    _kind(eng, bc, "rtl")  # Bad mit RTL-Ventil: höchstens 40 °C
     assert step(bc, T0 + 30) == 1 and calls(ha)[-1][3] == {"value": 40}  # sofort – die offene Prüfung ist ersetzt
     assert bc.state["flow"]["check"]["value"] == 40 and "Schutz" in bc.view["decision"]["flow"]
     assert "Schutz" in eng.store.query("SELECT reason FROM control_log WHERE action = 'flow_set' "
@@ -228,12 +239,12 @@ def test_rtl_cap_applies_between_two_steps_at_once(tmp_path):
 
 
 def test_unclear_value_above_cap_is_lowered(tmp_path):
-    eng, ha, bc = _bath(tmp_path)
+    eng, ha, bc = _bath(tmp_path, kind="mischer")  # seit 0.46.5 gilt RTL immer: die Grenze kommt über den Anschluss
     climate(eng, "climate.bad", 22.0, 21.0, hvac_action="idle")
     assert step(bc, T0) == 1
     shows(eng, flow=46)
     step(bc, T0 + 60)  # Prüfung ok
-    climate(eng, "climate.bad", 20.0, 21.0, hvac_action="heating")  # Grenze 40 gilt jetzt
+    _kind(eng, bc, "rtl")  # Grenze 40 gilt jetzt
     eng.ems["boiler"]["selflowtemp"] = 44.0  # EMS-ESP direkt zeigt anderes als Home Assistant (46): unklar
     eng.ems_ts = time.time()
     assert bc.current("flow") is None
@@ -305,16 +316,25 @@ def test_control_refuses_heating_on_above_the_cap(tmp_path):
 
 def test_heating_off_at_once_when_flow_above_cap_without_demand(tmp_path):
     eng, ha, bc = _bath(tmp_path, kind="direkt")
+    eng.cfg.boiler_idle = "aus"  # „Heizbetrieb ganz aus“ (bis 0.46.4 immer)
     climate(eng, "climate.wz", 21.6, 21.0, hvac_action="idle")  # niemand braucht Wärme
     climate(eng, "climate.bad", 22.0, 21.0, hvac_action="idle")
     shows(eng, flow=55, heating=True)  # z. B. vom Regler übrig: über der Grenze des direkt angeschlossenen Bodens
     assert step(bc, T0) == 1 and calls(ha) == [("switch", "turn_off", HEAT, {})]  # Schutz: nicht erst nach 15 min
     assert "Schutz" in bc.view["decision"]["heating"]
+    # seit 0.46.5 Standard „Pumpe läuft weiter“: der Schutz senkt sofort auf 20 °C, der Heizbetrieb bleibt an
+    eng, ha, bc = _bath(tmp_path / "pumpe", kind="direkt")
+    climate(eng, "climate.wz", 21.6, 21.0, hvac_action="idle")
+    climate(eng, "climate.bad", 22.0, 21.0, hvac_action="idle")
+    shows(eng, flow=55, heating=True)
+    assert step(bc, T0) == 1 and calls(ha) == [("number", "set_value", FLOW, {"value": 20})]
+    assert "Schutz" in bc.view["decision"]["flow"] and bc.view["target"].idle
 
 
 # ------------------------------------------------------------------ 5. Eingriff des Wächters
 def _off_after_15_min(tmp_path):
     eng, ha, bc = house(tmp_path)
+    eng.cfg.boiler_idle = "aus"  # seit 0.46.5: Heizbetrieb aus nur bei „Heizbetrieb ganz aus“
     climate(eng, "climate.wz", 21.6, 21.0, hvac_action="idle")  # warm: Heizbetrieb aus (nach 15 min)
     for i in range(31):
         step(bc, T0 + i * 30)

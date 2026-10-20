@@ -113,7 +113,7 @@ def test_floor_cell_per_connection(tmp_path):
     assert '<label class="r-floor-box" hidden>' in none and '<div class="hint muted r-floor-hint"></div>' in none
     assert ("rtl", True) in options(rtl) and '<label class="r-floor-box">höchster Vorlauf (°C) <input type="number" ' \
            'class="r-floor-max" min="25" max="70" step="0.5" value="52.5" placeholder="45"' in rtl
-    assert "gilt, solange der Raum Wärme anfordert" in rtl
+    assert "gilt immer – das RTL öffnet, sobald der Rücklauf kalt ist" in rtl  # seit 0.46.5 (vorher: solange angefordert)
     assert ("mischer", True) in options(mix) and '<label class="r-floor-box" hidden>' in mix
     assert "Mischer regelt selbst – keine Grenze" in mix
     assert ("direkt", True) in options(direct) and 'value=""' in direct and ">gilt immer<" in direct
@@ -131,7 +131,8 @@ def test_floor_sync_toggles_field_and_hint(tmp_path):
       const res = [];
       for (const v of ["rtl", "mischer", "", "direkt"]) { floorSync({ parentNode: td, value: v }); res.push([v, box.hidden, hint.textContent]); }
       out(res);""")
-    assert r == [["rtl", False, "gilt, solange der Raum Wärme anfordert"], ["mischer", True, "Mischer regelt selbst – keine Grenze"],
+    # seit 0.46.5 gilt die RTL-Grenze immer
+    assert r == [["rtl", False, "gilt immer – das RTL öffnet, sobald der Rücklauf kalt ist"], ["mischer", True, "Mischer regelt selbst – keine Grenze"],
                  ["", True, ""], ["direkt", False, "gilt immer"]]
 
 
@@ -168,8 +169,8 @@ def test_preview_basis_names_floor_rule(tmp_path):
     eng, _ = preview_house(tmp_path, cfg_with("rtl", 50), bad_temp=20.0)
     p = as_json(pv.preview(eng, ts_of(MON, 12)))
     r = run_js(tmp_path, f"const P = {json.dumps(p)}; out({{ b: pvBasis(P), old: pvBasis({{ ...P, floor: undefined }}) }});")
-    assert plain(r["b"]).endswith("Fußboden-Grenze für den Vorlauf: Bad höchstens 50 °C, solange er Wärme anfordert "
-                                  "(RTL-Ventil).")
+    # seit 0.46.5 gilt die RTL-Grenze immer
+    assert plain(r["b"]).endswith("Fußboden-Grenze für den Vorlauf: Bad höchstens 50 °C, immer (RTL-Ventil).")
     assert "Fußboden-Grenze" not in r["old"]  # ältere Antwort ohne das Feld: nichts
     assert any("begrenzt durch Fußboden Bad" in h["flow_reason"] for h in p["hours"])  # Stunde und Tooltip zeigen es
 

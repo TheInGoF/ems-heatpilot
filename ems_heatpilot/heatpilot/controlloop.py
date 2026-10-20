@@ -6,7 +6,8 @@ Der Wunschzustand ist eine reine Funktion ``desired(...)`` (testbar) mit den Pha
 
 1. Urlaub → Abwesenheitstemperatur; rechtzeitig vor der Rückkehr vorheizen auf Komfort.
 2. Nacht laut Wochenplan → Nachttemperatur; vor dem Nachtende so früh vorheizen, wie der Raum
-   laut Modell braucht (gedeckelt auf ``preheat_max_h``, mindestens 15 min). Seit 0.37 mit der
+   laut Modell braucht (gedeckelt auf ``preheat_max_h``, mindestens 15 min; seit 0.46.5 sanft, ``preheat_hours``,
+   und ein begonnenes Vorheizen bleibt bis zum Ziel, ``preheating``). Seit 0.37 mit der
    Außentemperatur zum Zielzeitpunkt (Nachtende, Ankunft, Rückkehr) laut Vorhersage, sonst der aktuellen.
 3. Niemand zu Hause (sicher) → Abwesenheitstemperatur; erwartete Ankunft innerhalb der Aufheizzeit →
    vorheizen. Tracker unbekannt oder Ankunft offen (Gewohnheit lernt noch) → Komfort.
@@ -104,15 +105,22 @@ class Desired(NamedTuple):
 def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_out: float, cap: float) -> float:
     """Vorlauf fürs Vorheizen in Stunden: aus dem Raummodell, gedeckelt; unerreichbar → Deckel.
 
-    ``model`` None (nicht plausibel) oder Raumtemperatur unbekannt → ``PREHEAT_DEFAULT_H``.
+    Seit 0.46.5 sanft: so früh, dass der niedrigste Vorlauf ab ``PREHEAT_FLOW_FROM`` reicht, der innerhalb des
+    Deckels ans Ziel kommt – statt kurz mit dem höchsten Vorlauf (morgens 60 °C, danach wieder 35 °C). Die Vorschau
+    findet denselben Vorlauf (``preview._preheat_flow``). ``model`` None (nicht plausibel) oder Raumtemperatur
+    unbekannt → ``PREHEAT_DEFAULT_H``.
     """
     cap = max(cap, PREHEAT_MIN_H)
     if model is None or temp is None:
         return min(PREHEAT_DEFAULT_H, cap)
-    hours = model.time_to_reach(temp, target, max_flow, t_out)
-    if hours is None:
-        return cap  # Ziel mit maximalem Vorlauf nicht erreichbar: akzeptieren, nur bis zum Deckel vorheizen
-    return min(max(hours, PREHEAT_MIN_H), cap)
+    for flow in range(int(PREHEAT_FLOW_FROM), int(max_flow) + 1):
+        hours = model.time_to_reach(temp, target, float(flow), t_out)
+        if hours is not None and hours <= cap:
+            return max(hours, PREHEAT_MIN_H)
+    return cap  # Ziel auch mit maximalem Vorlauf nicht im Deckel erreichbar: bis zum Deckel vorheizen
+
+
+PREHEAT_FLOW_FROM = 35.0  # kleinster Vorlauf beim Vorheizen (wie ``preview.FLOW_MIN``)
 
 
 def reach_c(model, target: float, max_flow: float, t_out: float) -> float | None:
@@ -131,16 +139,21 @@ def _clamp(value: float, comfort: float, cfg) -> float:
 
 
 def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: float | None = None,
-            t_out: float | None = None, t_out_at: Callable[[datetime], float | None] | None = None) -> Desired:
+            t_out: float | None = None, t_out_at: Callable[[datetime], float | None] | None = None,
+            preheating: datetime | None = None) -> Desired:
     """Wunschzustand eines Raums (``discovery.Room``) – reine Funktion, siehe Modulbeschreibung.
 
     ``t_out_at(Zeitpunkt)`` (seit 0.37, z. B. ``Engine.outdoor_forecast_at``): Außentemperatur zum Ziel des
     Vorheizens (Nachtende, Ankunft, Rückkehr) laut Vorhersage; liefert sie None oder fehlt sie, gilt ``t_out``.
+    ``preheating`` (seit 0.46.5): Ziel eines schon begonnenen Vorheizens – für dieses Ziel bleibt es dabei, auch wenn
+    der Raum schneller warm wird als geplant (sonst pendelte die Phase zwischen Vorheizen und Nacht bzw. Abwesenheit).
     """
     comfort, away, night = float(room.comfort), cfg.away_temp, cfg.night_temp
     t_out = 5.0 if t_out is None else t_out
 
     def lead(target: float, at: datetime) -> timedelta:
+        if preheating is not None and abs(at.timestamp() - preheating.timestamp()) < 1:
+            return max(at - now, timedelta(0))  # läuft schon: bleibt bis zum Ziel
         t_at = t_out_at(at) if t_out_at is not None else None
         return timedelta(hours=preheat_hours(model, temp, target, cfg.max_flow_temp,
                                              t_out if t_at is None else t_at, cfg.preheat_max_h))
@@ -296,7 +309,9 @@ class ControlLoop:
             temp = reading[1] if reading else None
             model = eng.rooms.get(room.climate)
             ok = model is not None and guards.check_room(model)["ok"]
-            d = desired(room, now, cfg, presence, model if ok else None, temp, t_out, t_out_at)
+            held = self.state.get(room.climate, {}).get("preheat")  # 0.46.5: begonnenes Vorheizen bleibt
+            d = desired(room, now, cfg, presence, model if ok else None, temp, t_out, t_out_at,
+                        local(held) if held else None)
             desireds[room.climate] = d
             self.rooms[room.climate] = {
                 "managed": bool(room.managed), "phase": d.phase if managing else None,
@@ -383,6 +398,10 @@ class ControlLoop:
         if manual and phase_changed:
             manual = False
         st["phase"] = d.phase
+        if d.phase == "vorheizen" and d.until is not None:
+            st["preheat"] = round(d.until.timestamp())  # Ziel des laufenden Vorheizens (0.46.5, ``desired``)
+        else:
+            st.pop("preheat", None)
         retry_at = st.get("retry_at")
         back = prop is not None and prop["action"] == "zurück"  # Zurück der Ventilführung: auch in der Pause (0.40)
         if write and ((retry_at and ts < retry_at) or (paused and not back)):

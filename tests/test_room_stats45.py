@@ -301,12 +301,15 @@ def test_keep_days_bound_the_import_and_retention_prunes(tmp_path):
 
 # ------------------------------------------------------------------ D: Fußbodenräume
 def test_floor_rooms_have_their_own_upper_limit():
-    assert guards.LIMITS["room_static_gain"] == (0.3, 3.0) and guards.LIMITS["room_static_gain_floor"] == (0.3, 6.0)
+    # seit 0.46.5 auch Heizkörper bis 6 (große Heizkörper bei kleiner Heizlast) – vorher 3, Fußboden schon seit 0.45
+    assert guards.LIMITS["room_static_gain"] == (0.3, 6.0) and guards.LIMITS["room_static_gain_floor"] == (0.3, 6.0)
     floor, radiator = RoomModel("Bad", floor=True), RoomModel("Bad")
     floor.rls.theta[:3] = [0.02, 0.07, 0.02]                          # (a + f) / b = 4,5
     radiator.rls.theta[:2] = [0.09, 0.02]
     say = lambda m: [x for x in guards.check_room(m)["reasons"] if x.startswith("Heizwirkung/Auskühlen")]
-    assert say(floor) == [] and say(radiator) == ["Heizwirkung/Auskühlen 4.5 außerhalb 0.3–3"]
+    assert say(floor) == [] and say(radiator) == []
+    radiator.rls.theta[:2] = [0.14, 0.02]                             # 7: für Heizkörper zu viel
+    assert say(radiator) == ["Heizwirkung/Auskühlen 7 außerhalb 0.3–6"]
     floor.rls.theta[1] = 0.2                                          # 11: auch für Fußboden zu viel
     assert say(floor) == ["Heizwirkung/Auskühlen 11 außerhalb 0.3–6"]
 

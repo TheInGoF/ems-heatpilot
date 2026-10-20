@@ -17,7 +17,10 @@ Wunsch. Die Regeln (Planungspapier, „Regeln für den Vorlauf“, festgelegt vo
 * ``load_flow`` – Mindest-Vorlauf aus der Abnahme: kleinster Vorlauf, bei dem die anfordernden Räume die
   Mindestleistung des Kessels abnehmen; reicht auch der höchste nicht, gilt nichts (lange Pausen, keine Sonderlogik),
 * ``flow_limits``/``fallback_value`` – 35 °C bis ``max_flow_temp`` bzw. Fußboden-Grenze und die Grenzen der Entität,
-  ganze Grad; der Rückfallwert beim Zurückschalten, wenn kein Vorlauf-Soll rechenbar ist, und für den Wächter.
+  ganze Grad; der Rückfallwert beim Zurückschalten, wenn kein Vorlauf-Soll rechenbar ist, und für den Wächter,
+* ``idle_flow`` (seit 0.46.5) – braucht kein Raum Wärme, bleibt der Heizbetrieb an und das Vorlauf-Soll geht auf
+  ``PUMP_FLOW`` (der Brenner springt nicht an, die Heizungspumpe läuft weiter); Einstellung „Bei keinem Wärmebedarf“
+  (``boiler_idle``): „Pumpe läuft weiter“ (Standard) bzw. „Heizbetrieb ganz aus“ (wie bis 0.46.4, z. B. im Sommer).
 
 Dazu die Einstellungen von Weg B (``FIELDS``, ``clean_config`` – ``config`` bindet sie ein) und die Texthelfer. Die
 Grenzwerte für Prüfung, Fehlschläge und fremde Schreiber sind dieselben wie in Weg W (``dhw_rule``).
@@ -32,7 +35,10 @@ from .dhw_rule import (CHECK_MAX_S, CHECK_S, CHECK_TOL_K, EMS_FRESH_S, FOREIGN_M
                        HINT_S, MAX_FAILS, Decision, _ago, _c, _hm, _iso)
 
 BOILER_MODES = ("aus", "trocken", "heatpilot")
-FLOW_MIN = 35             # Vorlauf-Soll nie darunter (Ingo); braucht kein Raum so viel, ist der Heizbetrieb aus
+IDLE_MODES = ("pumpe", "aus")  # Bei keinem Wärmebedarf (0.46.5): Pumpe läuft weiter (Standard) | Heizbetrieb ganz aus
+FLOW_MIN = 35             # Vorlauf-Soll nie darunter, wenn geheizt wird (Ingo); sonst „nur Pumpe“ bzw. Heizbetrieb aus
+PUMP_FLOW = 20            # kein Bedarf, Pumpe läuft: so tief, dass der Brenner nicht anspringt (0.46.5)
+IDLE_TEXT = f"Pumpe läuft, Vorlauf-Soll {PUMP_FLOW} °C"  # statt „Heizbetrieb aus“ (Vorschau, Status)
 STEP_K = 1.0              # Vorlauf-Soll nur bei Änderung ab so viel
 FLOW_GAP_S = 60           # höchstens ein Vorlauf-Schreiben je so viele Sekunden
 HEAT_HOLD_S = 300         # Heizbetrieb an/aus: Haltezeit nach jedem Schalten
@@ -54,6 +60,7 @@ FIELDS: dict[str, tuple] = {
     "flow_set_entity": ("entity", "number"),
     "heating_switch_entity": ("entity", "switch"),
     "boiler_fallback_flow": ("int", FALLBACK_MIN, FALLBACK_MAX),
+    "boiler_idle": ("choice", IDLE_MODES),
 }
 SWITCH_ENTITY = re.compile(r"^switch\.[a-z0-9_]+$")
 NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")
@@ -76,6 +83,8 @@ def clean_config(cfg) -> None:
     v = cfg.boiler_fallback_flow
     ok = isinstance(v, int) and not isinstance(v, bool) and FALLBACK_MIN <= v <= FALLBACK_MAX
     cfg.boiler_fallback_flow = v if ok else FALLBACK_DEFAULT
+    if getattr(cfg, "boiler_idle", None) not in IDLE_MODES:  # alte Einstellungen ohne die Wahl: Standard
+        cfg.boiler_idle = IDLE_MODES[0]
 
 
 # ------------------------------------------------------------------ Texthelfer
@@ -111,6 +120,16 @@ def fallback_value(cfg, worst_cap: float | None, bounds: tuple | None = None) ->
     lo, hi = flow_limits(cfg, worst_cap, bounds)
     value = min(int(cfg.boiler_fallback_flow), hi)
     return value if value >= lo else None
+
+
+def idle_flow(cfg, bounds: tuple | None = None) -> int | None:
+    """Vorlauf-Soll „nur Pumpe“ ohne Wärmebedarf (0.46.5): ``PUMP_FLOW``, mindestens der Mindestwert der Entität –
+    None bei „Heizbetrieb ganz aus“ oder wenn das 35 °C erreichte (dann heizte der Kessel: Heizbetrieb aus wie bisher)."""
+    if getattr(cfg, "boiler_idle", IDLE_MODES[0]) != "pumpe":
+        return None
+    e_lo, e_hi = bounds or (None, None)
+    value = max(PUMP_FLOW, math.ceil(e_lo - 1e-9)) if e_lo is not None else PUMP_FLOW
+    return value if value < FLOW_MIN and (e_hi is None or value <= e_hi) else None
 
 
 # ------------------------------------------------------------------ Entscheidungen

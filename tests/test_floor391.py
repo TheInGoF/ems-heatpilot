@@ -1,9 +1,9 @@
 """0.39.1: Fußbodenheizung je Raum – Anschluss (Mischer, RTL-Ventil, direkt am Kessel) und höchster Vorlauf.
 
 Ingo: „Wir bauen eine Auswahl, wie die Fußbodenheizung bestückt ist, und eine Temperaturgrenze, die der Nutzer
-festlegt.“ Geprüft: die Grenze aus ``floor_limit`` (Mischer nie, RTL nur bei Anforderung – Temperatur, Ventil,
-``hvac_action``, bei Gruppen ein Gerät –, direkt immer, auch ohne Messwert, unbekannt wie direkt, Minimum mehrerer
-Räume), die Vorschau (Vorlauf und Vorheizen höchstens die Grenze, Grund in der Stunde, Grenze unter 35 °C), die
+festlegt.“ Geprüft: die Grenze aus ``floor_limit`` (Mischer nie, RTL seit 0.46.5 immer – die Anforderung aus
+Temperatur, Ventil, ``hvac_action``, bei Gruppen ein Gerät, nur noch im Grund –, direkt immer, auch ohne Messwert,
+unbekannt wie direkt, Minimum mehrerer Räume), die Vorschau (Vorlauf und Vorheizen höchstens die Grenze, Grund in der Stunde, Grenze unter 35 °C), die
 Einstellungen (Prüfung, Speichern und Laden, alte Einstellungen nur mit ``floor_heating_rooms``), „Bereit für die
 Steuerung?“ (Grenze und „Anschluss wählen“), dass die Ventil-Regeln den Vorlauf nicht anheben und dass nichts
 geschrieben wird. Alle Häuser und Werte sind erfunden.
@@ -76,12 +76,12 @@ def test_rtl_limits_while_room_demands(r, expected):
     f = floors("rtl", 55)
     assert fl.demand(f[0], {"climate.bad": r}) is expected
     cap, why = fl.flow_cap(f, {"climate.bad": r})
-    if expected is False:
-        assert (cap, why) == (None, None)
-    else:  # fordert an oder unbekannt (sicher): Grenze gilt
-        assert cap == 55.0
-        assert why == ("Fußboden Bad (RTL-Ventil, fordert an): höchstens 55 °C" if expected
-                       else "Fußboden Bad (RTL-Ventil, Anforderung unbekannt): höchstens 55 °C")
+    # seit 0.46.5 gilt die Grenze beim RTL-Ventil immer (es öffnet, sobald der Rücklauf kalt ist) – die Anforderung
+    # steht nur noch im Grund
+    assert cap == 55.0
+    assert why == {True: "Fußboden Bad (RTL-Ventil, fordert an): höchstens 55 °C",
+                   False: "Fußboden Bad (RTL-Ventil, fordert nicht an): höchstens 55 °C",
+                   None: "Fußboden Bad (RTL-Ventil, Anforderung unbekannt): höchstens 55 °C"}[expected]
 
 
 def test_rtl_group_one_device_is_enough():
@@ -127,10 +127,12 @@ def test_minimum_of_several_rooms():
     f = fl.floor_rooms(cfg, [wz(), bad(), kind, flur])
     assert [r.name for r in f] == ["Bad", "Kind", "Flur"]
     assert fl.cap_of(f, {"climate.bad": True})[0] == 40.0
-    assert fl.cap_of(f, {"climate.bad": False}) == (50.0, "Fußboden Kind (direkt am Kessel): höchstens 50 °C")
+    # seit 0.46.5 gilt RTL auch ohne Anforderung – das Minimum bleibt Bad; ohne Bad gilt Kind
+    assert fl.cap_of(f, {"climate.bad": False}) == (40.0, "Fußboden Bad (RTL-Ventil, fordert nicht an): höchstens 40 °C")
+    assert fl.cap_of(f[1:], {}) == (50.0, "Fußboden Kind (direkt am Kessel): höchstens 50 °C")
     d = fl.describe(f)
-    assert d["text"] == ("Fußboden-Grenze für den Vorlauf: Bad höchstens 40 °C, solange er Wärme anfordert "
-                         "(RTL-Ventil); Kind höchstens 50 °C, immer (direkt am Kessel); Flur ohne Grenze (Mischer).")
+    assert d["text"] == ("Fußboden-Grenze für den Vorlauf: Bad höchstens 40 °C, immer (RTL-Ventil); "
+                         "Kind höchstens 50 °C, immer (direkt am Kessel); Flur ohne Grenze (Mischer).")
     assert fl.describe([]) is None
 
 
@@ -214,24 +216,25 @@ def by_hour(p):
 
 
 def test_preview_rtl_limits_only_while_room_needs_heat(tmp_path):
+    # seit 0.46.5 gilt die RTL-Grenze immer – auch wenn das Bad am Soll ist und nicht anfordert (der Grund sagt es)
     free = by_hour(pv.preview(preview_house(tmp_path / "a", cfg_with("rtl", 50), bad_temp=22.0)[0], ts_of(MON, 12)))
-    assert free["14:00"]["flow"] == 61 and free["14:00"]["flow_limited"] is False  # Bad am Soll: keine Grenze
-    assert free["14:00"]["flow_cap"] is None
+    assert free["14:00"]["flow"] == 50 and free["14:00"]["flow_limited"] is True and free["14:00"]["flow_cap"] == 50.0
+    assert free["14:00"]["flow_reason"] == ("Wz hält 21,0 °C – begrenzt durch Fußboden Bad (RTL-Ventil, fordert nicht "
+                                            "an): höchstens 50 °C")
     eng, ha = preview_house(tmp_path / "b", cfg_with("rtl", 50), bad_temp=20.0)
     p = pv.preview(eng, ts_of(MON, 12))
     h = by_hour(p)
     assert h["14:00"]["flow"] == 50 and h["14:00"]["flow_limited"] is True and h["14:00"]["flow_cap"] == 50.0
     assert h["14:00"]["flow_reason"] == ("Wz hält 21,0 °C – begrenzt durch Fußboden Bad (RTL-Ventil, fordert an): "
                                          "höchstens 50 °C")
-    # nachts will das Bad 18 °C, es ist 20 °C warm: fordert nicht an, die Grenze gilt dann nicht (Vorheizen mit 75 °C)
-    assert h["23:00"]["flow_cap"] is None and h["03:00"]["flow_cap"] is None
+    # nachts will das Bad 18 °C, es ist 20 °C warm: fordert nicht an – seit 0.46.5 gilt die Grenze trotzdem, auch beim
+    # Vorheizen (vorher dort 75 °C)
+    assert h["23:00"]["flow_cap"] == 50.0 and h["03:00"]["flow_cap"] == 50.0
     rows = pv._Run(eng, ts_of(MON, 12)).run()
-    capped = [r for r in rows if r["cap"] is not None and r["heating"]]
-    assert capped and all(r["flow"] <= 50 for r in capped)
-    assert max(r["flow"] for r in rows if r["heating"] and r["cap"] is None) == 75
-    caps = {r["ts"]: r["cap"] for r in rows}
-    assert all(w["value"] <= 50 for x in p["hours"] for w in x["writes"] if w["what"] == "flow" and caps[w["ts"]])
-    assert p["floor"]["text"] == "Fußboden-Grenze für den Vorlauf: Bad höchstens 50 °C, solange er Wärme anfordert (RTL-Ventil)."
+    assert all(r["cap"] == 50.0 for r in rows)
+    assert any(r["heating"] for r in rows) and all(r["flow"] <= 50 for r in rows if r["heating"])
+    assert all(w["value"] <= 50 for x in p["hours"] for w in x["writes"] if w["what"] == "flow")
+    assert p["floor"]["text"] == "Fußboden-Grenze für den Vorlauf: Bad höchstens 50 °C, immer (RTL-Ventil)."
     assert ha.calls == []  # nichts geschrieben
 
 
@@ -298,16 +301,18 @@ def test_readiness_shows_cap_and_asks_for_connection(tmp_path):
            "höchstens 45 °C" in res["notes"]
     assert ("Fußboden Bad: Anschluss wählen (Einstellungen → Räume: Mischer, RTL-Ventil oder direkt am Kessel) – bis "
             "dahin gilt höchstens 45 °C immer, wie direkt am Kessel") in res["notes"]
-    # RTL, Bad am Soll und Ventil zu: gerade keine Grenze; kein „Anschluss wählen“ mehr
+    # RTL, Bad am Soll und Ventil zu: fordert nicht an – seit 0.46.5 gilt die Grenze trotzdem; kein „Anschluss wählen“
     eng.cfg = cfg_with("rtl", 55)
     eng.states["sensor.bad_heizleistung"] = {"state": "0"}
     res = readiness.assess(eng, ts_of(MON, 12))
-    assert res["floor"]["cap"] is None and res["floor"]["rooms"][0]["demand"] is False
-    assert "Fußbodenheizung: gerade keine Vorlauf-Grenze (Fußboden Bad (RTL-Ventil, fordert nicht an): Grenze 55 °C " \
-           "gilt gerade nicht)" in res["notes"]
+    assert res["floor"]["cap"] == 55.0 and res["floor"]["rooms"][0]["demand"] is False
+    assert res["floor"]["rooms"][0]["applies"] is True
+    assert "Vorlauf-Grenze der Fußbodenheizung jetzt: Fußboden Bad (RTL-Ventil, fordert nicht an): höchstens 55 °C" \
+           in res["notes"]
     assert not any("Anschluss wählen" in n for n in res["notes"])
     eng.states["sensor.bad_heizleistung"] = {"state": "30"}  # Ventil offen: fordert an
-    assert readiness.assess(eng, ts_of(MON, 12))["floor"]["cap"] == 55.0
+    res = readiness.assess(eng, ts_of(MON, 12))["floor"]
+    assert res["cap"] == 55.0 and res["why"] == "Fußboden Bad (RTL-Ventil, fordert an): höchstens 55 °C"
     # ohne Fußboden: nichts
     eng.cfg = cfg_with(None)
     res = readiness.assess(eng, ts_of(MON, 12))

@@ -214,9 +214,14 @@ def test_target_from_demand_floor_35_and_off(tmp_path):
     assert (t.heating, t.flow, t.base) == (True, 46, 46) and t.reason == "Wz heizt auf 21,0 °C (+5 K)"
     climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")
     assert compute(eng, T0)[0].flow == 41  # hält 21 °C
-    eng.rooms["climate.wz"] = slow_room(a=0.02, b=0.01)  # braucht nur 29 °C: unter 35 → Heizbetrieb aus
+    eng.rooms["climate.wz"] = slow_room(a=0.02, b=0.01)  # braucht nur 29 °C: unter 35 → kein Bedarf
+    # seit 0.46.5 (Standard „Pumpe läuft weiter“): Heizbetrieb bleibt an, Vorlauf-Soll 20 °C – nur die Pumpe läuft
     t, _ = compute(eng, T0)
-    assert t.heating is False and t.flow is None and "unter 35 °C" in t.reason
+    assert (t.heating, t.flow, t.idle) == (True, br.PUMP_FLOW, True) and "unter 35 °C" in t.reason
+    assert t.reason.endswith("Pumpe läuft, Vorlauf-Soll 20 °C")
+    eng.cfg.boiler_idle = "aus"  # „Heizbetrieb ganz aus“: wie bis 0.46.4
+    t, _ = compute(eng, T0)
+    assert t.heating is False and t.flow is None and "unter 35 °C" in t.reason and t.reason.endswith("Heizbetrieb aus")
     climate(eng, "climate.wz", 21.0, 18.0, hvac_action="idle")  # Nacht: Raum über Soll – braucht keine Wärme
     eng.rooms["climate.wz"] = slow_room(a=0.008, b=0.01)
     assert compute(eng, ts_of(MON, 23))[0].heating is False
@@ -325,6 +330,7 @@ def test_writes_checks_after_60_s_and_accepts(tmp_path):
 
 def test_heating_off_and_on_with_hold(tmp_path):
     eng, ha, bc = house(tmp_path)
+    eng.cfg.boiler_idle = "aus"  # seit 0.46.5 nur bei „Heizbetrieb ganz aus“ (Standard: Pumpe läuft weiter)
     climate(eng, "climate.wz", 21.6, 21.0, hvac_action="idle")  # über Soll: braucht keine Wärme
     assert step(bc, T0) == 0 and "erst nach 15 min ohne Bedarf" in bc.view["decision"]["heating"]  # aus erst nach 15 min
     assert step(bc, T0 + 870) == 0 and step(bc, T0 + 900) == 1 and calls(ha) == [("switch", "turn_off", HEAT, {})]
