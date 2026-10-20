@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.47.3
+- Einstellungen → Diagnose: das Protokoll der Schreibvorgänge aktualisiert sich alle 30 s selbst (wie Kessel, Warmwasser und Steuerung seit 0.47.1)
+
 ## 0.47.2
 **Offenes Ventil bekommt Wärme**
 - Fordert ein Thermostat jetzt Wärme an (Ventil offen bzw. „heizt“), liefert der Kessel mindestens 35 °C (bzw. was die Abnahme verlangt) – auch wenn die Modelle gerade keinen Bedarf sehen, z. B. weil HeatPilot die Räume nur beobachtet und laut Plan Nacht ist, Tado aber weiterheizt. Vorher ging der Kessel dann auf „nur Pumpe“ (20 °C)

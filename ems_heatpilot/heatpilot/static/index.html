@@ -1528,7 +1528,7 @@ async function loadHeat() {
 }
 // Einstellungen → Kessel/Warmwasser/Steuerung offen? Dann holt loadHeat alle 30 s den Status (0.47.1)
 const statusPage = () => typeof SET_PAGE !== "undefined" && !$("view-settings").hidden
-  && ["kessel", "warmwasser", "steuerung"].includes(SET_PAGE);
+  && ["kessel", "warmwasser", "steuerung", "diagnose"].includes(SET_PAGE);  // Diagnose: Protokoll
 function heatError(e) { heatMsg(`<span class="msg-err">${esc(e.message || e)}</span>`); }
 // Meldung nach einer Aktion (0.43): im offenen Dialog unter den Knöpfen (#dlg-msg), sonst als Einblendung unten im
 // Reiter Heizen – 3 s, Fehler 6 s. Kein freigehaltener Platz mehr über den Raumkacheln.
