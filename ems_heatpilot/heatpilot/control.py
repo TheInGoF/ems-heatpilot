@@ -563,8 +563,10 @@ class Control:
         now = now or time.time()
         return [(r, b) for r, b in self.boosts.items() if b.get("local") and b["end"] <= now]
 
-    async def end_boost(self, room: str, setpoint: float | None, reason: str = "Boost zu Ende") -> bool:
-        """Lokalen Boost beenden: Wunschzustand ``setpoint`` schreiben, ohne ihn das Soll von vorher.
+    async def end_boost(self, room: str, setpoint: float | None, reason: str = "Boost zu Ende",
+                        fallback: float | None = None) -> bool:
+        """Lokalen Boost beenden: Wunschzustand ``setpoint`` schreiben, ohne ihn das Soll von vorher, ohne beides
+        (0.46.8) ``fallback`` (Soll laut Zeitplan) – nie „auto“; „aus“ nur, wenn es weder Soll noch Zeitplan gibt.
         Nur, wenn das eigene Boost-Soll noch steht – hat jemand inzwischen anders gedreht, nichts tun.
         Gibt True zurück, wenn geschrieben wurde."""
         b = self.boosts.pop(room, None)
@@ -575,8 +577,7 @@ class Control:
         if current is None or abs(current - b["temp"]) >= 0.1:
             log.info("Boost %s: Soll wurde inzwischen geändert – nichts wiederhergestellt", room)
             return False
-        if setpoint is None:
-            setpoint = b.get("before")
+        setpoint = next((v for v in (setpoint, b.get("before"), fallback) if v is not None), None)  # 0.46.8
         wrote = False
         for e in self.groups[room].write_targets:
             if setpoint is not None:

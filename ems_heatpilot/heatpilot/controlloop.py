@@ -218,7 +218,7 @@ class ControlLoop:
         self.pending: list[tuple[str, float, str]] = []
         self.props: dict[str, dict] = {}    # 0.40: Vorschläge der Ventilführung zu den vorgemerkten Schreibvorgängen
         self.guide = valve_control.Guide(eng)  # Ventile führen (0.40, eigener Schalter)
-        self.restores: list[tuple[str, float | None]] = []
+        self.restores: list[tuple[str, float | None, float | None]] = []
         self.planned_ts: int | None = None
         self.stopped = False  # durch eine neue Schleife ersetzt (main.build): nichts mehr schreiben
 
@@ -329,13 +329,15 @@ class ControlLoop:
 
     def _restores(self, ts: int, desireds: dict, managing: bool, paused: bool) -> set[str]:
         """Abgelaufene lokale Boosts: Wunschzustand zurück (heatpilot, Raum macht mit, keine Pause), sonst Soll von
-        vorher. Gibt die Räume zurück."""
+        vorher; gab es keins (seit 0.46.8, z. B. HomeKit meldet ein ruhendes Tado als „aus“), das Soll laut Zeitplan
+        (``fallback``) – nie „aus“ oder „auto“. Gibt die Räume zurück."""
         expired = {c for c, _ in self.control.expired_boosts(ts)}
         for climate in expired:
             room = self.eng.found.room_of(climate)
-            back = (desireds[climate].setpoint if managing and not paused and room is not None and room.managed
+            want = desireds.get(climate)
+            back = (want.setpoint if want is not None and managing and not paused and room is not None and room.managed
                     else None)
-            self.restores.append((climate, back))
+            self.restores.append((climate, back, want.setpoint if want is not None else None))
         return expired
 
     def _observe(self, c: str, current: float | None) -> bool:
@@ -481,11 +483,11 @@ class ControlLoop:
                 log.warning("HeatPilot: %s nicht auf %.1f °C gesetzt (%s) – Versuch %d, erneut in %d min",
                             climate, setpoint, err, st["fails"], RETRY_MIN)
                 self._report(climate, st["fails"])
-        for climate, setpoint in restores:
+        for climate, setpoint, fallback in restores:
             if self.stopped:
                 break  # die neue Schleife übernimmt den abgelaufenen Boost (steht noch in kv)
             try:
-                wrote = await self.control.end_boost(climate, setpoint)
+                wrote = await self.control.end_boost(climate, setpoint, fallback=fallback)
                 if wrote and setpoint is not None and climate in self.state:
                     self.state[climate]["last_written"] = setpoint
                     self.rooms.get(climate, {})["last_written"] = setpoint

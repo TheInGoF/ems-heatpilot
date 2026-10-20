@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.46.8
+**Boost-Ende schaltet nie aus oder auf Auto**
+- Ein abgelaufener Boost (Thermostate ohne Tado-Cloud-Timer, z. B. über HomeKit) schreibt wie bisher das Soll von HeatPilot bzw. das Soll von vorher. Gab es vorher kein Soll – HomeKit meldet ein ruhendes Tado im Automatikbetrieb als „aus“ –, schreibt HeatPilot jetzt das Soll laut Zeitplan, statt das Thermostat auszuschalten. Auf „Auto“ schaltet das Boost-Ende nie
+- **Tests:** `tests/test_boiler467.py` ergänzt, `tests/test_control34.py` angepasst
+
 ## 0.46.7
 **Heizbetrieb nur als Rückmeldung**
 - Bei manchen Kesseln ist „Heizbetrieb aktiviert“ (EMS-ESP `heatingactivated`) nur eine Rückmeldung und lässt sich nicht schreiben. Bei „Wenn kein Raum Wärme braucht: Pumpe läuft weiter“ (Standard) sperrt das nicht mehr: HeatPilot führt den Kessel allein über das Vorlauf-Soll und schaltet den Heizbetrieb nie; wo er sonst „Heizbetrieb aus“ setzen würde, gilt „nur Pumpe“ (Vorlauf-Soll 20 °C). Einstellungen → Kessel zeigt beim Heizbetrieb „nur Rückmeldung“ statt eines Hindernisses. Bei „Heizbetrieb ganz aus“ wird der Schalter weiter gebraucht

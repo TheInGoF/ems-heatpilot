@@ -5,7 +5,7 @@ import time
 
 from heatpilot import boiler_entity as be
 from heatpilot import boiler_rule as br
-from test_boiler41 import T0, house, step
+from test_boiler41 import T0, calls, house, step
 
 
 def _feedback_only(eng):
@@ -19,8 +19,8 @@ def test_feedback_only_heating_does_not_block_in_pump_mode(tmp_path):
     assert not be.heat_usable(eng, bc.entities["heating"])
     assert be.write_problems(eng, bc.entities["flow"], bc.entities["heating"]) == []
     step(bc, T0)
-    services = [c for c in ha.calls if isinstance(c, tuple)] if hasattr(ha, "calls") else []
-    assert not any("switch" in str(c) for c in services)  # Heizbetrieb nie geschaltet
+    done = calls(ha)
+    assert done and all(c[0] == "number" for c in done)  # Vorlauf-Soll geschrieben, Heizbetrieb nie geschaltet
 
 
 def test_without_need_target_becomes_pump_not_off(tmp_path):
@@ -37,3 +37,19 @@ def test_full_off_mode_still_needs_the_switch(tmp_path):
     _feedback_only(eng)
     problems = be.write_problems(eng, bc.entities["flow"], bc.entities["heating"])
     assert any("heatingactivated" in p for p in problems)
+
+
+def test_boost_end_without_setpoint_uses_schedule_and_off_only_without_any(tmp_path):
+    """0.46.8: Ende eines Boosts ohne Soll von vorher (HomeKit meldet ein ruhendes Tado als „aus“) → Soll laut Zeitplan,
+    nie „auto“; „aus“ nur, wenn es weder Soll noch Zeitplan gibt."""
+    import asyncio
+    eng, ha, bc = house(tmp_path)
+    ctl = bc.control if hasattr(bc, "control") else bc.ctl
+    room = next(iter(ctl.groups))
+    ctl.boosts[room] = {"temp": 23.0, "end": 0, "local": True, "before": None, "before_mode": "off",
+                        "targets": ctl.groups[room].write_targets}
+    ctl.target = lambda r: 23.0
+    assert asyncio.run(ctl.end_boost(room, None, fallback=20.5))
+    done = [(p["service"], p.get("service_data")) for p in ha.payloads if p["domain"] == "climate"]
+    assert done[-1] == ("set_temperature", {"temperature": 20.5})
+    assert not any(srv == "set_hvac_mode" and data.get("hvac_mode") in ("auto", "off") for srv, data in done)
