@@ -872,11 +872,9 @@ Ventilsensor gerade nichts (Cloud-Ausfall), nimmt der Messpunkt zwar `hvac_actio
 diesen Ersatzwert aber nicht (gemerkt in der Tabelle `valve_subst`). Seit 0.45 gilt dasselbe für einen veralteten
 Sensor: seit 6 Stunden kein neuer Wert, und das Thermostat widerspricht ihm (heizt bei 0 %, ruht bei mehr als 0 %).
 Hat ein Raum mindestens einen echten Ventilwert in %, zählen nur die echten – 0/100 % aus `hvac_action` anderer
-Geräte verwässern das Raumventil nicht. Seit 0.45.1 nimmt ein Raum, der echte %-Werte kannte und jetzt nur noch
-an/aus meldet, beim Heizen seine **typische Öffnung** statt 100 % (Mittel der echten Ventilwerte über 5 %, ab 144
-Messpunkten, sonst aus der Stundenstatistik) – als Ersatzwert, damit die Wärmezufuhr im Raummodell zum Gelernten passt;
-das gelernte %-Ventilmodell bleibt dann erhalten und **ruht** (nicht belastbar, vergisst nichts), bis wieder %-Werte
-kommen. Nur „Ventil neu lernen“ bzw. „Anderes Thermostat“ beginnen es neu. Räume ohne je %-Werte: wie bisher 0/100 %.
+Geräte verwässern das Raumventil nicht. Meldet ein Raum, der echte %-Werte kannte, nur noch an/aus, bleibt das
+gelernte %-Ventilmodell erhalten und **ruht** (nicht belastbar, vergisst nichts), bis wieder %-Werte kommen (seit
+0.45.1). Nur „Ventil neu lernen“ bzw. „Anderes Thermostat“ beginnen es neu. Räume ohne je %-Werte: wie bisher 0/100 %.
 Der Heizkreis von EMS-ESP bekommt kein Ventilmodell – er ist kein Thermostat mit Ventil.
 
 - **Kennlinie:** Ventil (Median) je Abstand Soll − Raumtemperatur in 0,1-K-Stufen von 1 K über bis 2 K unter dem
@@ -1606,12 +1604,12 @@ Seit 0.45.1 braucht HeatPilot eine alte Integration (z. B. Tado-Cloud nach dem W
 Thermostate nicht auf Dauer – was es einmal gelesen hat, gehört HeatPilot:
 
 1. **Hausdaten wiederherstellen** (Einstellungen → Erweitert): liest Temperatur und Heizleistung der alten Sensoren
-   ein (Langzeitstatistik, Historie) und merkt sich je Raum die typische Ventilöffnung beim Heizen.
+   ein (Langzeitstatistik, Historie).
 2. **Integration löschen** – nichts weiter nötig. Eingelesene Raum- und Stundenwerte, alte Sensoren (Aliasse) und
    Protokolle bleiben; ein späteres Wiederherstellen ohne die alten Quellen ergänzt nur und löscht nichts.
 
-Live gibt es danach nur, was die neuen Geräte liefern (HomeKit: heizt/heizt nicht, kein Ventil in %). Das fehlende
-Ventil-% ersetzt die typische Öffnung; das %-Ventilmodell ruht. Ein eingetragener Ventil-, Feuchte- oder
+Live gibt es danach nur, was die neuen Geräte liefern (HomeKit: heizt/heizt nicht, kein Ventil in %); das
+%-Ventilmodell ruht dann. Ein eingetragener Ventil-, Feuchte- oder
 Temperatur-Sensor, den es in Home Assistant nicht mehr gibt, zählt als nicht vorhanden – kein Fehler, unter
 Einstellungen → Räume steht beim Feld „gibt es in Home Assistant nicht mehr – kann leer bleiben“.
 

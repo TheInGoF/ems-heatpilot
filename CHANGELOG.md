@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.45.2
+**Typische Ventilöffnung wieder entfernt**
+- Ohne echten Ventilwert gilt beim Heizen wieder 0/100 % aus `hvac_action` (wie vor 0.45.1); die Ventile zeigen in der Karte „Modelle“ wieder nur ihren Lernstand. `valve_typical.py` entfällt, der gemerkte Wert in kv `rooms.valve_typical` wird nicht mehr gelesen
+- Bleibt aus 0.45.1: Eingelesenes geht beim Löschen alter Integrationen nicht verloren, ein %-Ventilmodell ruht statt zu verfallen, fehlende Sensoren zählen als nicht vorhanden
+- **Tests:** `tests/test_v451_independent.py` angepasst
+
 ## 0.45.1
 **Alte Integration und alte Thermostate löschen, ohne dass HeatPilot etwas verliert** (an Home Assistant und den Kessel wird nichts Neues geschrieben; von Home Assistant nur gelesen, EMS-ESP nur abgefragt)
 - **Eingelesenes bleibt:** „Hausdaten wiederherstellen“ ergänzt die Raumwerte aus der Stundenstatistik (`room_stats`) nur noch – fehlt die Quelle später (alter Sensor, Statistik, Gerät oder Integration gelöscht, Alias entfernt, Prüfung passt nicht mehr), fallen frühere Stunden nicht mehr weg; in gespeicherten Stunden kommen nur fehlende Heizleistung bzw. Vorlauf dazu. Das Ergebnis nennt je Raum die gespeicherten Stunden (`kept`, „… h von früher bleiben“). Die Prüfung eines alten Sensors (Alias) bleibt, wenn die Quelle nichts mehr liefert, statt auf „passt nicht“ zu fallen (`room_alias.note_checks`)

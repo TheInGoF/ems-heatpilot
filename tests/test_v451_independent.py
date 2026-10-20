@@ -29,7 +29,6 @@ from heatpilot import (
     room_switch,
     sensor_gone,
     valve_learn,
-    valve_typical,
 )
 from heatpilot.config import Config
 from heatpilot.discovery import Discovered, Registry, Room
@@ -136,44 +135,10 @@ def test_alias_check_stays_when_source_delivers_nothing(tmp_path):
 
 
 # ------------------------------------------------------------------ 2: typische Ventilöffnung
-def test_typical_opening_learned_and_replaces_100_percent_in_room_model(tmp_path):
-    st = pct_store(tmp_path / "d.db")
-    eng = homekit(st)
-    assert valve_typical.pct(st, KEY) == 40.0 and eng.valve_typical == {KEY: 40.0}
-    assert reading(eng, HEATING) == (40.0, True)                         # statt 100 %, als Ersatzwert
-    assert reading(eng, IDLE) == (0.0, True)
-    t0 = NOW + 7200
-    for ts in range(t0, t0 + 2100, 300):
-        st.add_sample(ts, {"flow": 45.0, "t_out": 5.0, "pump_mod": 50.0, "dhw": 0, "vacation": 0, "away_long": 0})
-        st.add_room_samples([(ts, KEY, 20.0, 21.0, reading(eng, HEATING)[0], None)])
-    got = []
-    eng.rooms[KEY].learn = lambda t0_, t1, heat, *a, **k: got.append(heat)
-    eng.learn_rooms(t0, t0 + 1800)
-    assert got == [pytest.approx(25.0 * 0.4)]                            # Wärmezufuhr = (45 − 20) K × 40 %
 
 
-def test_without_pct_history_rooms_stay_at_100_percent(tmp_path):
-    st = pct_store(tmp_path / "e.db", real=False)                       # nur 0/100 % – kennt nur an/aus
-    eng = homekit(st)
-    assert valve_typical.pct(st, KEY) is None and eng.valve_typical == {}
-    assert reading(eng, HEATING) == (100.0, False)                       # wie bisher, echter An/aus-Wert
-    empty = homekit(Store(tmp_path / "f.db"))
-    assert reading(empty, HEATING) == (100.0, False)
 
 
-def test_typical_opening_needs_enough_values_falls_back_to_hour_stats_and_stays(tmp_path):
-    st = Store(tmp_path / "g.db")
-    st.add_room_samples([(OWN + i * 300, KEY, 20.0, 21.0, 40.0, None) for i in range(10)])  # zu wenige
-    st.db.executemany("INSERT INTO room_stats VALUES(?, ?, 20, ?, 45)", [(R.START + h * 3600, KEY, 25.0)
-                                                                         for h in range(30)])
-    assert valve_typical.learn(st, [KEY], NOW)[KEY]["pct"] == 25.0       # Stundenstatistik als Ersatz
-    st.db.execute("DELETE FROM room_stats")
-    st.db.execute("DELETE FROM room_samples")                            # Aufbewahrung, Quelle weg …
-    assert valve_typical.learn(st, [KEY], NOW + 86400)[KEY]["pct"] == 25.0  # … der gemerkte Wert bleibt
-    subst = Store(tmp_path / "h.db")
-    subst.add_room_samples([(OWN + i * 300, KEY, 20.0, 21.0, 40.0, None) for i in range(200)])
-    subst.db.execute("INSERT INTO valve_subst SELECT ts, room FROM room_samples")
-    assert valve_typical.learn(subst, [KEY], NOW)[KEY]["pct"] is None    # Ersatzwerte zählen nicht
 
 
 def test_substitutes_are_not_learned_by_pct_model_but_by_on_off_model(tmp_path):
@@ -312,7 +277,7 @@ const gone = roomRows();
 SET = {{ rooms: [{{ climate: "{KEY}", name: "Wohnen" }}] }}; SGONE = {{}}; VFOUND = {json.dumps(found)};
 const vf = roomRows();
 const v = {{ text: "0 von 1 belastbar", reliable: 0, total: 1, items: [{{ name: "Wohnen", state: "ruht", reliable: false,
-  reason: "nur an/aus gemeldet", typical: 40 }}] }};
+  reason: "nur an/aus gemeldet" }}] }};
 out({{ gone, vf, mc: mcValves(v), dm: dmValves(v),
        notes: restoreNotes({{ room_stats: [{{ name: "Wohnen", hours: 0, kept: 648, why: "keine Werte des alten Sensors" }}] }}) }});
 """)
@@ -320,7 +285,7 @@ out({{ gone, vf, mc: mcValves(v), dm: dmValves(v),
     assert text.count("gibt es in Home Assistant nicht mehr – kann leer bleiben") == 1  # nur beim gelöschten Feld
     assert "nur solange es die alte Integration gibt; ihre Werte bleiben nach dem Löschen in HeatPilot" in plain(got["vf"])
     assert "ruhen (nur an/aus, Gelerntes bleibt): Wohnen" in plain(got["mc"])
-    assert "typisch 40 % offen beim Heizen" in plain(got["dm"]) and "„ruht“" in got["dm"]
+    assert "typisch" not in plain(got["dm"]) and "„ruht“" in got["dm"]  # 0.45.2: keine typische Öffnung mehr
     assert "Wohnen (keine Werte des alten Sensors – 648 h von früher bleiben)" in plain(got["notes"])
 
 
@@ -330,14 +295,14 @@ def test_version_changelog_docs_and_new_files():
     assert f'version: "{__version__}"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     head = log.split("\n## 0.45.1\n")[1].split("\n## ")[0]
-    for word in ("valve_typical.py", "sensor_gone.py", "sensors_gone", "no_pct", "tests/test_v451_independent.py"):
+    for word in ("sensor_gone.py", "sensors_gone", "no_pct", "tests/test_v451_independent.py"):
         assert word in head, word
     docs = (ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8")
     sec = docs.split("### Alte Thermostate bzw. Integration entfernen")[1].split("\n### ")[0]
-    assert "Hausdaten wiederherstellen" in sec and "Integration löschen" in sec and "typische Öffnung" in sec
-    for name in ("valve_typical.py", "sensor_gone.py", "room_stats.py", "valve_model.py", "engine_sample.py"):
+    assert "Hausdaten wiederherstellen" in sec and "Integration löschen" in sec and "typische Öffnung" not in sec
+    for name in ("sensor_gone.py", "room_stats.py", "valve_model.py", "engine_sample.py"):
         src = (PKG / name).read_text(encoding="utf-8")
         assert len(src.splitlines()) <= 600 and src.startswith('"""'), name
-    for name in ("valve_typical.py", "sensor_gone.py"):
+    for name in ("sensor_gone.py",):
         src = (PKG / name).read_text(encoding="utf-8")
         assert not re.search(r"call_service|set_temperature|\.post\(|\.put\(.*http", src), name

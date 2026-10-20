@@ -24,7 +24,6 @@ import logging
 import time
 
 from . import keep_data, plausibility, preview_log, regulator, schedule, sensor_gone, sleep, valve_dry, valve_learn
-from . import valve_typical
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -95,11 +94,8 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.valves: dict[str, ValveModel] = {
             r.climate: ValveModel.from_dict(store.get(f"model.valve.{r.climate}"), valve_learn.binary_device(r))
             for r in found.rooms if not r.ems}
-        # 0.45.1: beim Aufbau entfernte Sensoren (``sensor_gone``); typische Ventilöffnung beim Heizen – Ersatz in
-        # Räumen, die %-Werte kannten (``valve_typical``)
+        # 0.45.1: beim Aufbau entfernte Sensoren (``sensor_gone``)
         self._dropped = {e for f in getattr(found, "sensors_gone", {}).values() for e in f.values()}
-        valve_typical.refresh(store, [r.climate for r in found.rooms])
-        self.valve_typical = valve_typical.table(store, found.rooms, self.valves)
         self.vacation = Vacation(cfg.vacations, cfg.vacation_entity, cfg.vacation_arrival_time)
         self.vacation.returned = set(store.get("vacation_returned", []))
         self.persons: dict[str, PersonLearner] = {}
@@ -254,9 +250,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
             self.control_loop.plan(ts, sample, rooms)
         self.store.commit()
-        if keep_data.daily(self.store, self.cfg.keep_days, now_ts) is not None:  # 0.44: Aufbewahrung, einmal am Tag
-            valve_typical.refresh(self.store, list(self.rooms), now_ts)  # 0.45.1: typische Öffnung, auch im Betrieb
-            self.valve_typical = valve_typical.table(self.store, self.found.rooms, self.valves)
+        keep_data.daily(self.store, self.cfg.keep_days, now_ts)  # 0.44: Aufbewahrung, einmal am Tag
 
         step = ts - ts % int(ROOM_STEP_H * 3600)
         if self._last_room_step is None:

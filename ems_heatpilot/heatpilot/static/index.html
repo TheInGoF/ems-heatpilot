@@ -4067,12 +4067,11 @@ function dmRooms(r) {
 }
 function dmValves(v) {
   if (!v.total) return "";
-  const mcTypical = (i) => i.typical != null ? ` · typisch ${fmt(i.typical, 0)} % offen beim Heizen` : "";  // 0.45.1: Ersatz ohne %-Werte
   return `<h3 class="sec-h">${mcDot(v.reliable === v.total)}Ventile: ${esc(v.text)}</h3><div class="scroll"><table class="dm-t" id="dm-valves">` +
     "<tr><th>Raum</th><th>Zustand</th><th>Grund</th></tr>" + v.items.map((i) =>
-      `<tr><td>${esc(i.name)}</td><td>${mcDot(i.reliable)}${esc(i.state)}</td><td>${esc(i.reason || "–")}${mcTypical(i)}</td></tr>`).join("") + "</table></div>" +
+      `<tr><td>${esc(i.name)}</td><td>${mcDot(i.reliable)}${esc(i.state)}</td><td>${esc(i.reason || "–")}</td></tr>`).join("") + "</table></div>" +
     '<p class="muted">„lernt nach“: arbeitet die gespeicherten Messwerte noch ab · „lernt“: braucht noch mehr Messungen (Grund daneben) · ' +
-    '„ruht“: das Thermostat meldet nur an/aus – das gelernte %-Modell bleibt und lernt mit %-Werten weiter; beim Heizen gilt die typische Öffnung.</p>';
+    '„ruht“: das Thermostat meldet nur an/aus – das gelernte %-Modell bleibt und lernt mit %-Werten weiter.</p>';
 }
 const dmDhw = (w) => `<h3 class="sec-h">${mcDot(w.ok)}Warmwasser: ${esc(w.state)}</h3>` +
   `<p>${fmt(w.charges, 0)} Ladungen gemessen${(w.reasons || []).length ? " · " + w.reasons.map(esc).join("; ") : ""}</p>`;
