@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.43.1
+**Neue Oberfläche nach dem Update sofort sichtbar**
+- Die Seite wird ohne Zwischenspeicher-Freigabe ausgeliefert (`Cache-Control: no-cache`): Browser und Home-Assistant-App fragen bei jedem Öffnen nach, ob es eine neue Fassung gibt, statt nach einem Update weiter die alte Oberfläche zu zeigen. Unverändert antwortet HeatPilot mit „nicht geändert“, es wird nichts neu geladen
+- **Tests:** neu `tests/test_web_cache431.py`
+
 ## 0.43.0
 **Oberfläche aufgeräumt** („Roundup“ – nichts entfernt, nur umgezogen; Abfragen, gespeicherte Einstellungen und Rechenwege bleiben, wie sie sind; an Home Assistant und den Kessel wird nichts Neues geschrieben)
 - **Vier Reiter:** Heizen, Übersicht, Live, Einstellungen. Der frühere Reiter „Diagnose“ ist die letzte Unterseite der Einstellungen (Selbsttest, „Bereit für die Steuerung?“, Modelle, Protokoll, Sensoren, Log, Dateien, Gefundene Entitäten)
