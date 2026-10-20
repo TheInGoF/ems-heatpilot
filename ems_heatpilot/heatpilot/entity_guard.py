@@ -105,8 +105,10 @@ def ems_control(eng, key: str) -> dict:
 
 
 def ems_write_blocked(eng, key: str, what: str) -> str | None:
-    """Hindernis, wenn EMS-ESP ``what`` („das Vorlauf-Soll“) nicht schreiben lässt (nicht schreibbar bzw. gefunden)."""
+    """Hindernis, wenn EMS-ESP ``what`` („das Vorlauf-Soll“) ausdrücklich nicht schreiben lässt. Seit 0.46.10 sperrt
+    „nicht gefunden“ nicht mehr: Manche EMS-ESP-Stände beantworten die Abfrage einzelner Werte nicht, obwohl es sie
+    gibt – geschrieben wird ohnehin über Home Assistant, und die Prüfung nach dem Schreiben bemerkt einen Fehlschlag."""
     c = ems_control(eng, key)
-    if c["writeable"] is not False:
+    if not c["found"] or c["writeable"] is not False:
         return None
-    return f"EMS-ESP lässt {what} nicht schreiben ({key} " + ("nicht schreibbar)" if c["found"] else "nicht gefunden)")
+    return f"EMS-ESP lässt {what} nicht schreiben ({key} nicht schreibbar)"
