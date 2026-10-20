@@ -194,6 +194,8 @@ def make_app(app) -> web.Application:
                                "status": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))},
             # 0.42: Mindestleistung – wirksamer Wert, Herkunft, Vorschlag (nie automatisch übernommen)
             "boiler_power": boiler_power.info(app.eng),
+            # 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (genutzt, zum Speichern angeboten)
+            "valve_found": getattr(app.eng.found, "valve_found", None) or {},
         })
 
     async def entities(_req):

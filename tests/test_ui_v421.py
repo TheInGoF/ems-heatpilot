@@ -253,7 +253,8 @@ out({{
     r, rl = real["restore"], real["relearn"]
     assert r["no_t_in_after"] == 0 and r["usable_after"] > r["usable_before"]
     sec = f"{r['seconds'] + rl['seconds']:.1f}".replace(".", ",").replace(",0", "")
-    assert plain(got["restore"]) == (
+    # seit 0.45 folgt die Zeile „Räume aus der Stundenstatistik …“ (geprüft in test_ui_v45)
+    assert plain(got["restore"]).split(" Räume aus der Stundenstatistik")[0] == (
         f"Hausdaten wiederhergestellt: Stunden mit Innentemperatur {n(r['usable_before'])} → {n(r['usable_after'])}, "
         f"ohne {n(r['no_t_in_before'])} → 0 · alter Sensor gemerkt für Küche · {n(r['room_rows'])} Raumwerte alter "
         f"Thermostate nachgeholt (climate.wohnzimmer) · danach neu gelernt (zusammen {sec} s).")

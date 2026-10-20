@@ -26,6 +26,7 @@ from aiohttp import web
 from . import __version__
 from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
 from . import room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel
+from . import room_heating  # 0.45: Heizleistung vom alten Thermostat
 from .app_jobs import JobsMixin
 from .backfill import run_backfill
 from .boiler_control import BoilerControl
@@ -137,8 +138,11 @@ class App(JobsMixin):
         """``build`` unter der schon gehaltenen Sperre."""
         self.cfg = Config.load()
         states = await self.ha.get_states()
-        found = discover(states, await self.registry(), self.cfg)
-        renames = room_switch.prepare(self, found, await self.registry())  # 0.44: feste Kennung, Wechsel erkennen
+        reg = await self.registry()
+        found = discover(states, reg, self.cfg)
+        renames = room_switch.prepare(self, found, reg)  # 0.44: feste Kennung, Wechsel erkennen
+        # 0.45: Räume ohne Ventilsensor nutzen die Heizleistung ihres alten Thermostats (Einstellungen bleiben)
+        room_heating.attach(self.store, found, Registry.of(reg).lookup(), {s["entity_id"]: s for s in states})
         old = self.eng
         backfill, relearn, since, kept = self._learning_plan(found, backfill, relearn, old)
         eng = Engine(self.cfg, self.store, found)

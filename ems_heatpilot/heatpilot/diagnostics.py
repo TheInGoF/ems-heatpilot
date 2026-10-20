@@ -336,7 +336,7 @@ def bundle(app, hours: int = 48) -> dict:
     }
     data["db"] = {
         t: _rows(eng, f"SELECT COUNT(*) AS n, MIN(ts) AS first, MAX(ts) AS last FROM {t}")[0]
-        for t in ("samples", "room_samples", "person_samples", "hourly", "burner_events")
+        for t in ("samples", "room_samples", "person_samples", "hourly", "burner_events", "room_stats")  # 0.45
     }
     data["samples"] = _rows(eng, "SELECT * FROM samples WHERE ts >= ? ORDER BY ts", (since,))
     data["room_samples"] = _rows(eng, "SELECT * FROM room_samples WHERE ts >= ? ORDER BY ts", (since,))

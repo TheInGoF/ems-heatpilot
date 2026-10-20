@@ -317,7 +317,9 @@ def test_without_controller_all_valves_written_and_temperature_averaged(tmp_path
     climate(eng, "climate.v2", 22.0, 19.5, hvac_action="idle")
     eng.states["sensor.v2_heat"] = {"state": "40", "attributes": {}}
     _, rooms, _ = eng.snapshot()
-    assert rooms == [("climate.v1", 21.0, 19.0, 70.0, None)]
+    # Temperatur gemittelt; Ventil seit 0.45 nur aus den echten Werten (40 %), nicht (100 + 40) / 2 – das 0/100 aus
+    # hvac_action eines Geräts ohne Sensor verwässert es nicht
+    assert rooms == [("climate.v1", 21.0, 19.0, 40.0, None)]
     step(eng, loop, ts_of(MON, 12))
     assert [a[2] for a in ha.calls] == ["climate.v1", "climate.v2"]
     assert all(a[3] == {"temperature": 21.0} for a in ha.calls)

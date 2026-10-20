@@ -35,7 +35,7 @@ from bisect import bisect_left
 from itertools import groupby
 from datetime import datetime, timedelta, timezone
 
-from . import indoor_mean, plausibility, room_alias
+from . import indoor_mean, plausibility, room_alias, room_stats_learn
 from .engine import Engine, flag, local
 from .engine_sample import SampleMixin
 from .ha_client import HAClient
@@ -397,7 +397,9 @@ def replay_steps(eng: Engine, since: int | None = None):
 
     Vor ``since`` (Standard: Beginn der Recorder-Historie ``history_start``) gibt es nur Stundenwerte – aus der
     Langzeitstatistik bzw. gespeichert (nur Hausmodell); ab ``since`` werden die Stunden aus den gespeicherten
-    Messwerten neu gebildet (zusammenführend) und auch die Raummodelle gelernt.
+    Messwerten neu gebildet (zusammenführend) und auch die Raummodelle gelernt. Seit 0.45 lernen die Raummodelle
+    in zeitlicher Reihenfolge auch die Stunden aus der Stundenstatistik (``room_stats_learn``), wo der Raum keine
+    eigenen Raumwerte hat.
     """
     eng.house = HouseModel()
     eng.__dict__.pop("_dhw_base", None)  # Warmwasser-Profil aus der frisch geladenen Langzeitstatistik
@@ -414,7 +416,9 @@ def replay_steps(eng: Engine, since: int | None = None):
         h0 = hist_start - hist_start % 3600 + 3600
         hours = sorted({h for h in hours if h < h0} | set(range(h0, eng._last_hour, 3600)))
     seeded = False
+    stats = room_stats_learn.StatLearner(eng)  # 0.45: Räume aus der Stundenstatistik, wo eigene Raumwerte fehlen
     for h in hours:
+        stats.until(h)
         if hist_start is not None and h >= hist_start:
             if not seeded:  # Hausmodell aus der Langzeitstatistik steht: Raum-Startwerte daraus
                 eng.seed_room_priors()
@@ -427,6 +431,7 @@ def replay_steps(eng: Engine, since: int | None = None):
         if local(h).hour == 0:
             eng.take_snapshot(h)
             yield h
+    stats.until(float("inf"))
     eng.store.commit()
 
 

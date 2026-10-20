@@ -28,6 +28,7 @@ def stocked(folder) -> Store:
         st.db.execute("INSERT INTO valve_subst VALUES(?, ?)", (ts, "climate.a"))  # add_valve_subst kürzt selbst
         st.add_room_event(ts, ts + 3600, "climate.a", 1.0)
         st.add_hourly([(ts - ts % 3600, 5.0, 20.0, 1.0)])
+        st.db.execute("INSERT INTO room_stats VALUES(?, ?, ?, ?, ?)", (ts - ts % 3600, "climate.a", 20.0, 10.0, 40.0))
         st.add_daily("2020-01-01" if ts < NOW - DAY * 400 else "2026-01-01", "burner_h", 1.0)
     st.put("model.room.climate.a", {"room": "A"})
     st.commit()
@@ -37,15 +38,15 @@ def stocked(folder) -> Store:
 def counts(st) -> dict[str, int]:
     return {t: st.query(f"SELECT COUNT(*) AS n FROM {t}")[0]["n"]
             for t in ("samples", "room_samples", "person_samples", "burner_events", "valve_subst", "room_events",
-                      "hourly", "daily")}
+                      "hourly", "room_stats", "daily")}
 
 
 def test_prune_deletes_only_old_raw_data_and_logs(tmp_path):
     st = stocked(tmp_path)
     deleted = keep_data.prune(st, 720, NOW)
-    assert set(deleted.values()) == {1} and len(deleted) == 7
+    assert set(deleted.values()) == {1} and len(deleted) == 8                  # 0.45: auch room_stats
     assert counts(st) == {"samples": 1, "room_samples": 1, "person_samples": 1, "burner_events": 1, "valve_subst": 1,
-                          "room_events": 1, "hourly": 1, "daily": 2}             # Tageszähler bleiben
+                          "room_events": 1, "hourly": 1, "room_stats": 1, "daily": 2}  # Tageszähler bleiben
     assert st.get("model.room.climate.a") == {"room": "A"}
     (entry,) = st.get(keep_data.LOG_KEY)
     assert entry["days"] == 720 and entry["before"] == NOW - 10 * DAY - 720 * DAY and entry["deleted"]["samples"] == 1

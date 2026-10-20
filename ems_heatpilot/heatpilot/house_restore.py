@@ -12,7 +12,10 @@
   noch in Home Assistant – aus dem Protokoll der Übernahmen (``rooms.adopted``) oder als ``from`` eines Alias –, holt
   es ihre Recorder-Historie als Raumwerte des neuen Raums nach – nur zu Zeitpunkten, an denen der Raum keinen
   Messpunkt hat. Das Ergebnis sagt je alter Entität, ob und wie viel nachgeholt wurde (und warum nicht), und je Alias,
-  ob er passt. Danach lernt ``App`` neu.
+  ob er passt. Seit 0.45 holt es je Raum auch die Stundenmittel des alten Temperatursensors und der alten
+  Heizleistung aus der Langzeitstatistik nach (``room_stats``: nur Stunden ohne eigene Raumwerte, eigene Tabelle – das
+  Raummodell lernt sie in Stundenschritten, das Ventilmodell nicht); das Ergebnis nennt je Raum Stunden, Zeitraum,
+  ob es eine Heizleistung gab und warum nicht. Danach lernt ``App`` neu.
 * Seit der Prüfung von 0.42.1: ``prepare`` verwirft nur die Raum- und Ventilmodelle der aktuellen Räume (die alter
   Schlüssel bleiben – mit ihnen der Name) und merkt sich in kv ``relearn_pending``, dass neu gelernt wird – bricht
   ein Neustart das Nachlernen ab, setzt ``main.App`` es beim Start fort (``pending``). ``keep_models`` und
@@ -27,7 +30,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import backfill, house_data, room_adopt, room_alias, valve_since
+from . import backfill, house_data, room_adopt, room_alias, room_stats, valve_since
 from .dhw import DhwModel
 from .discovery import Room, device_sensors
 from .models import ROOM_STEP_H
@@ -183,15 +186,27 @@ async def restore(ha, eng, idx, stat_list) -> dict:
     assigned = room_alias.auto_assign(eng.store, eng.found, eng.states, idx, stat_list) if stat_list else []
     hours = await backfill.backfill_statistics(ha, eng, eng.cfg.statistics_backfill_days)
     room_rows, old = await _fetch_old(ha, eng, idx)
+    stats = await _room_stats(ha, eng, idx, stat_list)
     after = house_data.coverage(eng.store)
     entry = {"ts": int(time.time()), "kind": "restore", "assigned": assigned,
              "aliases": len(room_alias.get(eng.store)), "statistics_hours": hours, "room_rows": room_rows,
              "old": old, "checks": alias_report(eng.store, eng.found),
+             "room_stats": stats["rooms"], "room_stat_hours": stats["hours"], "flow_stat": stats["flow_stat"],
+             "room_stats_error": stats.get("error"),
              "usable_before": before["usable"], "usable_after": after["usable"],
              "no_t_in_before": before["no_t_in"], "no_t_in_after": after["no_t_in"],
              "seconds": round(time.monotonic() - t0, 1)}
     _log(eng.store, entry)
     log.info("Hausdaten wiederhergestellt: Stunden mit Innentemperatur %d → %d, ohne %d → %d, %d Raumwerte alter "
-             "Entitäten nachgeholt, %d Aliasse neu gesetzt", before["usable"], after["usable"], before["no_t_in"],
-             after["no_t_in"], room_rows, len(assigned))
+             "Entitäten nachgeholt, %d Aliasse neu gesetzt, %d Raum-Stunden aus der Stundenstatistik", before["usable"],
+             after["usable"], before["no_t_in"], after["no_t_in"], room_rows, len(assigned), stats["hours"])
     return entry
+
+
+async def _room_stats(ha, eng, idx, stat_list) -> dict:
+    """Räume aus der Stundenstatistik (``room_stats.restore``); ein Fehler hält das Wiederherstellen nicht auf."""
+    try:
+        return await room_stats.restore(ha, eng, idx, stat_list)
+    except Exception as err:  # noqa: BLE001
+        log.warning("Räume aus der Stundenstatistik nicht nachgeholt: %s", err)
+        return {"hours": 0, "flow_stat": None, "rooms": [], "error": f"{type(err).__name__}: {err}"}

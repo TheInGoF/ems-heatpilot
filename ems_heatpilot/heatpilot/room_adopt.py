@@ -375,6 +375,8 @@ def _move_rows(db, p: dict, binary: bool = False) -> dict:
         db.execute("DELETE FROM valve_dry_log WHERE room = :old", p)
     moved = db.execute("UPDATE OR IGNORE room_samples SET room = :new WHERE room = :old", p).rowcount
     skipped = db.execute("DELETE FROM room_samples WHERE room = :old", p).rowcount
+    db.execute("UPDATE OR IGNORE room_stats SET room = :new WHERE room = :old", p)  # Stundenstatistik (0.45)
+    db.execute("DELETE FROM room_stats WHERE room = :old", p)
     db.execute("UPDATE OR IGNORE room_events SET room = :new WHERE room = :old", p)
     db.execute("DELETE FROM room_events WHERE room = :old", p)
     db.execute("UPDATE snapshots SET key = :new WHERE kind = 'room' AND key = :old AND ts NOT IN "

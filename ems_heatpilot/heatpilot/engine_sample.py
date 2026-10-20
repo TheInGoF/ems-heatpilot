@@ -10,8 +10,9 @@ nichts – das macht der Takt (``Engine.tick``) mit dem Ergebnis.
 from __future__ import annotations
 
 import logging
+import time
 
-from . import plausibility, solar
+from . import plausibility, room_heating, solar
 from .presence import haversine_km
 from .values import flag, local, num
 
@@ -134,30 +135,36 @@ class SampleMixin:
 
     # ------------------------------------------------------------------ Räume
     def _device_reading(self, dev: dict) -> tuple | None:
-        """(Temperatur, Soll, Ventil, Feuchte, Ersatzwert) eines Thermostats; None, wenn es keinen Zustand hat.
-        Ersatzwert: Das Gerät hat einen Ventilsensor, der gerade nichts meldet – das Ventil kommt dann aus
-        ``hvac_action``."""
+        """(Temperatur, Soll, Ventil, Feuchte, Ersatzwert, echt) eines Thermostats; None, wenn es keinen Zustand hat.
+        Ersatzwert: Das Gerät hat einen Ventilsensor, der gerade nichts meldet oder veraltet ist (seit 0.45,
+        ``room_heating.stale``) – das Ventil kommt dann aus ``hvac_action``. Echt: das Ventil kommt vom Sensor (%)."""
         st = self.states.get(dev["climate"])
         if not st:
             return None
         a = st.get("attributes", {})
-        valve = num(self._val(dev.get("heating_power")))
-        subst = valve is None and bool(dev.get("heating_power"))
+        sensor = dev.get("heating_power")
+        valve = num(self._val(sensor))
+        if valve is not None and room_heating.stale((self.states or {}).get(sensor), valve, a.get("hvac_action"),
+                                                    time.time()):
+            valve = None
+        subst = valve is None and bool(sensor)
+        real = valve is not None
         if valve is None:
             valve = 100.0 if a.get("hvac_action") == "heating" else 0.0
         hum = num(self._val(dev.get("humidity")))
         if hum is None:
             hum = num(a.get("current_humidity"))
         target = num(a.get("temperature")) if st.get("state") != "off" else None
-        return num(a.get("current_temperature")), target, valve, hum, subst
+        return num(a.get("current_temperature")), target, valve, hum, subst, real
 
     def room_reading(self, r) -> tuple | None:
         """(climate, Temperatur, Soll, Ventil, Feuchte) eines logischen Raums.
 
         Mit Raumregler zählen dessen Temperatur und Soll; sonst ist die Raumtemperatur das Mittel
-        aller Geräte der Gruppe, das Soll das des Schlüssels. Das Ventil ist immer das Mittel aller
-        Geräte (Fehlt der Schlüssel, fehlt der Raum – wie bisher.) Ist ein Ventilwert ein Ersatzwert, merkt sich der
-        Raum das in ``valve_subst`` (das Ventilmodell lernt ihn nicht, seit 0.39).
+        aller Geräte der Gruppe, das Soll das des Schlüssels. Das Ventil ist das Mittel aller
+        Geräte – seit 0.45 nur der echten (Sensor in %), sobald es mindestens einen gibt: 0/100 % aus ``hvac_action``
+        anderer Geräte verwässern es nicht. (Fehlt der Schlüssel, fehlt der Raum – wie bisher.) Ist ein Ventilwert ein
+        Ersatzwert, merkt sich der Raum das in ``valve_subst`` (das Ventilmodell lernt ihn nicht, seit 0.39).
         """
         head = self._device_reading(r.devices[0])
         if head is None:
@@ -166,7 +173,8 @@ class SampleMixin:
         if any(x[4] for x in (head, *others)):
             self.__dict__.setdefault("valve_subst", set()).add(r.climate)
         temps = [head[0]] if r.controller else [x[0] for x in (head, *others) if x[0] is not None]
-        valves = [x[2] for x in (head, *others) if x[2] is not None]
+        real = [x[2] for x in (head, *others) if x[5]]
+        valves = real or [x[2] for x in (head, *others) if x[2] is not None]
         hums = [x[3] for x in (head, *others) if x[3] is not None]
         return (r.climate, sum(temps) / len(temps) if temps else None, head[1],
                 sum(valves) / len(valves) if valves else None, hums[0] if hums else None)

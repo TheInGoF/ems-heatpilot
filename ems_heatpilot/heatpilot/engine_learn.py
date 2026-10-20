@@ -21,7 +21,7 @@ import time
 from collections import deque
 from datetime import datetime, timedelta
 
-from . import indoor_mean, plausibility, schedule, sleep, valve_learn
+from . import indoor_mean, plausibility, room_stats_learn, schedule, sleep, valve_learn
 from .models import DAILY_MIN_HOURS, ROOM_STEP_H, RoomModel
 from .valve_model import ValveModel
 from .values import local, midnight
@@ -84,17 +84,20 @@ class LearnMixin:
     def relearn_steps(self, climates: set[str]):
         """Raumschritte der Räume ``climates`` von den ältesten Raumwerten bis zum letzten Raumschritt des Takts lernen;
         nach jedem Tag ein ``yield``. Das Ende wird jedes Mal neu gelesen – was der Takt inzwischen weiterzählt, lernt
-        die Schleife noch mit (der Takt lässt Räume in ``_room_busy`` aus)."""
+        die Schleife noch mit (der Takt lässt Räume in ``_room_busy`` aus). Seit 0.45 in zeitlicher Reihenfolge davor
+        bzw. dazwischen die Stunden aus der Stundenstatistik (``room_stats_learn``)."""
+        stats = room_stats_learn.StatLearner(self, climates)
         first = self.store.query("SELECT MIN(ts) AS t FROM room_samples")[0]["t"]
-        if first is None:
-            return
         step = int(ROOM_STEP_H * 3600)
-        st, n = first - first % step + step, 0
+        st, n = (first - first % step + step if first is not None else float("inf")), 0
+        yield from stats.days(st)  # Stunden der Statistik vor dem ersten Raumwert
         while self._last_room_step is not None and st < self._last_room_step:
+            stats.until(st)
             self.learn_rooms(st, st + step, only=climates)
             st, n = st + step, n + 1
             if n % max(int(24 / ROOM_STEP_H), 1) == 0:
                 yield st
+        stats.until(self._last_room_step or float("inf"))
 
     def _reset_adopted(self, climate: str) -> bool:
         """Raum- und Ventilmodell des Raums von vorn (siehe ``relearn_adopted``); True, wenn jetzt nachzulernen ist."""
