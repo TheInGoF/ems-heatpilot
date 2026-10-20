@@ -1,4 +1,17 @@
-"""Kompakte lokale Datenbank (SQLite in /data)."""
+"""Kompakte lokale Datenbank (SQLite in /data).
+
+Seit 0.42.1 ersetzt nichts mehr vorhandene Stundenwerte durch „unbekannt“: ``add_hourly`` führt zusammen (eine Spalte
+ohne neuen Wert behält den gespeicherten; nur ausdrücklich genannte Spalten werden auch geleert – der Gaswert einer
+Stunde, deren Zählerstände bekannt sind; ``keep``: eine gespeicherte Innentemperatur bleibt auch gegen einen neuen
+Wert), ``fill_hourly`` ergänzt nur fehlende Innen- und Außentemperaturen. Woher die Innentemperatur einer Stunde kommt,
+steht in ``t_in_src`` („rooms“: Raumwerte aller Räume, „rooms~“: unvollständige, je Raum um seinen Versatz berichtigt,
+„rooms-“: unvollständige ohne Bezug zum Berichtigen, „stat:…“: Langzeitstatistik dieser Sensoren) – ``revert_t_in`` nimmt zurück, was ein falscher alter Sensor gefüllt hat.
+``reset_models`` verwirft für „aus gespeicherten Daten neu lernen“ nur, was sich aus den gespeicherten Daten neu
+lernen lässt – Messwerte, Warmwasser- und Personenmodelle, die Tageszähler aus der Abtastung und die Modelle von
+Schlüsseln ohne aktuellen Raum bleiben. ``clear_reload`` löscht beim Neueinlesen nur Raumwerte (je Raum ab seiner
+HA-Historie) und Brennerereignisse (nur mit Brenner-Entität in HA) – Messpunkte führt das Neueinlesen zusammen.
+Die Namen der Räume merkt sich ``save_room_names`` (kv ``rooms.names``), bevor Modelle verworfen werden.
+"""
 
 from __future__ import annotations
 
@@ -96,11 +109,20 @@ HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacat
                # seit 0.26: Anteil des Gases fürs Warmwasser (nach Brennerleistung, nicht nach Zeit)
                "dhw_energy_frac",
                # seit 0.33: Anteil der Stunde, in dem ein Raum Fremdwärme hatte (Kamin, Ofen) – nicht gelernt
-               "ext_frac")
+               "ext_frac",
+               # seit 0.42.1: Herkunft der Innentemperatur (Text, siehe oben)
+               "t_in_src")
+TEXT_COLS = {"t_in_src"}
+ROOM_NAMES_KEY = "rooms.names"   # {Schlüssel: Raumname} – Namen alter Schlüssel, auch wenn ihr Modell verworfen ist
+
+
+# Herkunft „stat:a,b,c“ enthält genau diese Statistik
+_SRC_HAS = "t_in_src LIKE 'stat:%' AND instr(',' || substr(t_in_src, 6) || ',', ',' || ? || ',') > 0"
 
 
 class Store:
     def __init__(self, path: Path) -> None:
+        self.path = Path(path)
         self.db = sqlite3.connect(path)
         self.db.row_factory = sqlite3.Row
         self.db.executescript(SCHEMA)
@@ -111,7 +133,7 @@ class Store:
         have = {r["name"] for r in self.db.execute("PRAGMA table_info(hourly)")}
         for col in HOURLY_COLS:
             if col not in have:
-                self.db.execute(f"ALTER TABLE hourly ADD COLUMN {col} REAL")
+                self.db.execute(f"ALTER TABLE hourly ADD COLUMN {col} {'TEXT' if col in TEXT_COLS else 'REAL'}")
         have = {r["name"] for r in self.db.execute("PRAGMA table_info(preview_log)")}
         for col in PREVIEW_COLS:
             if col not in have:
@@ -132,11 +154,42 @@ class Store:
         )
         self.db.commit()
 
-    def delete_range(self, start: int, end: int) -> None:
-        """Messwerte eines Zeitraums löschen (wird danach aus der HA-Historie neu geschrieben)."""
-        for table in ("samples", "room_samples", "person_samples", "burner_events"):
+    def delete_range(self, start: int, end: int, rooms: dict[str, int] | None = None) -> None:
+        """Messwerte eines Zeitraums löschen (wird danach aus der HA-Historie neu geschrieben).
+
+        ``rooms`` (seit 0.42.1, Neueinlesen): Raumwerte nur dieser Raumschlüssel und je Raum erst ab seinem Zeitpunkt
+        (dem ersten seiner HA-Historie) – ältere Raumwerte, z. B. übernommene (``room_adopt``), und die anderer
+        Schlüssel bleiben. Ohne ``rooms`` alle Raumwerte des Zeitraums wie bisher. Kessel und Personen immer ab ``start``.
+        """
+        tables = ("samples", "person_samples", "burner_events") + (("room_samples",) if rooms is None else ())
+        for table in tables:
             self.db.execute(f"DELETE FROM {table} WHERE ts >= ? AND ts <= ?", (start, end))
+        for room, since in (rooms or {}).items():
+            self.db.execute("DELETE FROM room_samples WHERE room = ? AND ts >= ? AND ts <= ?",
+                            (room, max(int(since), start), end))
         self.db.commit()
+
+    def clear_reload(self, end: int, rooms: dict[str, int], burner_from: int | None) -> None:
+        """Neueinlesen der Historie (seit 0.42.1): nur löschen, was gleich aus Home Assistant neu geschrieben wird –
+        Raumwerte je Raum ab seinem Zeitpunkt (dem ersten seiner HA-Historie), Brennerereignisse ab ``burner_from``
+        (nur, wenn HA die Brenner-Entität hat). Messpunkte und Personen bleiben: das Neueinlesen führt sie zusammen
+        (``backfill.merge_stored``), Werte, zu denen HA nichts hat – etwa direkt von EMS-ESP –, gehen nicht verloren."""
+        for room, since in rooms.items():
+            self.db.execute("DELETE FROM room_samples WHERE room = ? AND ts >= ? AND ts <= ?", (room, int(since), end))
+        if burner_from is not None:
+            self.db.execute("DELETE FROM burner_events WHERE ts >= ? AND ts <= ?", (int(burner_from), end))
+        self.db.commit()
+
+    def save_room_names(self) -> None:
+        """Namen aus den Raummodellen in kv ``rooms.names`` merken (vor dem Verwerfen der Modelle) – für eine alte
+        Entität mit nichtssagender ID ist das der einzige Name (``room_adopt.name_of``)."""
+        names = self.get(ROOM_NAMES_KEY) or {}
+        for r in self.db.execute("SELECT key, value FROM kv WHERE key LIKE 'model.room.%'"):
+            model = json.loads(r["value"])
+            name = model.get("room") if isinstance(model, dict) else None
+            if name:
+                names[r["key"][len("model.room."):]] = name
+        self.db.execute("INSERT OR REPLACE INTO kv(key, value) VALUES(?, ?)", (ROOM_NAMES_KEY, json.dumps(names)))
 
     def reset_learning(self, since_day: str) -> None:
         """Gelerntes verwerfen, damit es aus den Rohdaten neu berechnet werden kann.
@@ -144,13 +197,38 @@ class Store:
         Bleibt: Messwerte, Einstellungen, Empfehlungs-Verlauf, Schreib- und Trockenlauf-Protokolle (auch das der
         Ventile, 0.39 – Messung, nichts Gelerntes). Ventilmodelle (``model.valve.*``) fallen mit weg und lernen danach
         aus den Messwerten nach. Tageszähler ab ``since_day``
-        werden beim Neueinlesen der Historie neu gebildet und hier gelöscht (sonst doppelt).
+        werden beim Neueinlesen der Historie neu gebildet und hier gelöscht (sonst doppelt). Seit 0.42.1 merkt es vorher
+        die Raumnamen (``save_room_names``).
         """
+        self.save_room_names()
         self.db.execute("DELETE FROM kv WHERE key LIKE 'model.%' OR key IN "
                         "('last_room_step', 'last_hour', 'schedule.learned', 'sleep.nights', 'backfill_done')")
         self.db.execute("DELETE FROM daily WHERE day >= ?", (since_day,))
         self.db.execute("DELETE FROM snapshots")
         self.db.execute("DELETE FROM room_events")  # Fremdwärme-Ereignisse werden beim Nachlernen neu erkannt
+        self.db.commit()
+
+    def reset_models(self, since_day: str | None = None, rooms: Iterable[str] | None = None) -> None:
+        """„Aus gespeicherten Daten neu lernen“ (seit 0.42.1): Haus-, Raum- und Ventilmodelle, laufende Fremdwärme,
+        Lernkurve, Fremdwärme-Ereignisse und gelernte Zeiten verwerfen – die Neuberechnung bildet sie aus den
+        gespeicherten Messwerten und Stundenwerten neu. Bleiben: alle Messwerte und Stundenwerte, Warmwasser- und
+        Personenmodelle (ein Raumwechsel ändert sie nicht, und ohne die HA-Historie ließen sie sich nicht neu lernen),
+        Nächte aus dem Stromverbrauch, Einstellungen, Protokolle und die Tageszähler aus der Abtastung. Die Zähler
+        verworfener Gaswerte ab ``since_day`` bildet die Neuberechnung neu (sonst doppelt). ``rooms``: nur die Raum- und
+        Ventilmodelle dieser Schlüssel (der aktuellen Räume) – die alter Schlüssel ohne Raum bleiben mit ihrem Namen."""
+        self.save_room_names()
+        if rooms is None:
+            self.db.execute("DELETE FROM kv WHERE key LIKE 'model.room.%' OR key LIKE 'model.valve.%'")
+        else:
+            self.db.executemany("DELETE FROM kv WHERE key = ?",
+                                [(f"model.{kind}.{k}",) for k in rooms for kind in ("room", "valve")])
+        self.db.execute("DELETE FROM kv WHERE key IN "
+                        "('model.house', 'model.room_ext', 'last_room_step', 'last_hour', 'schedule.learned')")
+        if since_day is not None:
+            self.db.execute("DELETE FROM daily WHERE day >= ? AND key IN ('ignored_gas_negative', "
+                            "'ignored_gas_spike', 'ignored_gas_missed', 'gas_spike_kwh')", (since_day,))
+        self.db.execute("DELETE FROM snapshots")
+        self.db.execute("DELETE FROM room_events")
         self.db.commit()
 
     def clear_power(self) -> None:
@@ -168,10 +246,11 @@ class Store:
             (ts, *(values.get(c) for c in SAMPLE_COLS)),
         )
 
-    def add_room_samples(self, rows: Iterable[tuple]) -> None:
-        self.db.executemany(
-            "INSERT OR REPLACE INTO room_samples VALUES(?, ?, ?, ?, ?, ?)", rows
-        )
+    def add_room_samples(self, rows: Iterable[tuple], replace: bool = True) -> None:
+        """Raumwerte (ts, Raum, Temperatur, Soll, Ventil, Feuchte). ``replace=False`` (seit 0.42.1, Nachholen der
+        Historie eines neuen Raums): ein schon gespeicherter Messpunkt bleibt, wie er ist."""
+        verb = "INSERT OR REPLACE" if replace else "INSERT OR IGNORE"
+        self.db.executemany(f"{verb} INTO room_samples VALUES(?, ?, ?, ?, ?, ?)", rows)
 
     def add_valve_subst(self, ts: int, rooms: Iterable[str]) -> None:
         """Messpunkt, in dem der Ventilwert dieser Räume ein Ersatzwert ist (Sensor ohne Wert, Ventil aus
@@ -209,19 +288,69 @@ class Store:
             "AND s.home_count IS NOT NULL)")
         self.db.commit()
 
-    def add_person_samples(self, rows: Iterable[tuple]) -> None:
+    def add_person_samples(self, rows: Iterable[tuple], merge: bool = False) -> None:
+        """(ts, Person, zu Hause, Entfernung). ``merge`` (Neueinlesen, seit 0.42.1): ein gespeicherter Wert bleibt,
+        wo der neue unbekannt ist."""
+        if not merge:
+            self.db.executemany("INSERT OR REPLACE INTO person_samples VALUES(?, ?, ?, ?)", rows)
+            return
         self.db.executemany(
-            "INSERT OR REPLACE INTO person_samples VALUES(?, ?, ?, ?)", rows
-        )
+            "INSERT INTO person_samples VALUES(?, ?, ?, ?) ON CONFLICT(ts, person) DO UPDATE SET "
+            "home = COALESCE(excluded.home, person_samples.home), "
+            "dist_km = COALESCE(excluded.dist_km, person_samples.dist_km)", rows)
 
-    def add_hourly(self, rows: Iterable[tuple]) -> None:
-        """Zeilen in der Reihenfolge von HOURLY_COLS; fehlende Werte am Ende = NULL."""
+    def add_hourly(self, rows: Iterable[tuple], replace: Iterable[str] = (), keep: Iterable[str] = ()) -> None:
+        """Zeilen in der Reihenfolge von HOURLY_COLS; fehlende Werte am Ende = NULL.
+
+        Seit 0.42.1 zusammenführen statt ersetzen: Gibt es die Stunde schon, behält jede Spalte ohne neuen Wert (NULL)
+        den gespeicherten – ein Neuaufbau mit anderen Sensoren löscht keine Innentemperatur mehr. Nur die Spalten in
+        ``replace`` übernehmen den neuen Wert auch, wenn er NULL ist (``aggregate_hour``: Gaswert einer Stunde mit
+        bekannten Zählerständen, die als Sprung bzw. unplausibel nicht gelernt wird). Die Spalten in ``keep`` behalten
+        einen gespeicherten Wert auch gegen einen neuen (Innentemperatur aus der Langzeitstatistik bzw. aus
+        unvollständigen Räumen: nur Lücken füllen). ``t_in_src`` folgt der Innentemperatur."""
+        forced, kept = set(replace), set(keep)
         cols = ", ".join(HOURLY_COLS)
         marks = ", ".join("?" * len(HOURLY_COLS))
+
+        def assign(c: str) -> str:
+            if c == "t_in_src":  # Herkunft gehört zum Wert, der stehen bleibt
+                won = "hourly.t_in IS NULL" if "t_in" in kept else "excluded.t_in IS NOT NULL"
+                return f"t_in_src = CASE WHEN {won} THEN excluded.t_in_src ELSE hourly.t_in_src END"
+            if c in forced:
+                return f"{c} = excluded.{c}"
+            if c in kept:
+                return f"{c} = COALESCE(hourly.{c}, excluded.{c})"
+            return f"{c} = COALESCE(excluded.{c}, hourly.{c})"
+        sets = ", ".join(assign(c) for c in HOURLY_COLS[1:])
         self.db.executemany(
-            f"INSERT OR REPLACE INTO hourly({cols}) VALUES({marks})",
+            f"INSERT INTO hourly({cols}) VALUES({marks}) ON CONFLICT(ts) DO UPDATE SET {sets}",
             (tuple(r) + (None,) * (len(HOURLY_COLS) - len(r)) for r in rows),
         )
+
+    def fill_hourly(self, rows: Iterable[tuple]) -> int:
+        """(ts, t_out, t_in[, Herkunft]) in vorhandene Stunden eintragen, nur wo der Wert fehlt (seit 0.42.1: Stunden mit
+        eigenen Messwerten bekommen aus der Langzeitstatistik nur die fehlende Innen- bzw. Außentemperatur). Gibt die
+        Zahl der Stunden zurück, in denen etwas ergänzt wurde."""
+        n = 0
+        for ts, t_out, t_in, *src in rows:
+            n += self.db.execute(
+                "UPDATE hourly SET t_in_src = CASE WHEN t_in IS NULL AND ? IS NOT NULL THEN ? ELSE t_in_src END, "
+                "t_out = COALESCE(t_out, ?), t_in = COALESCE(t_in, ?) WHERE ts = ? "
+                "AND ((t_out IS NULL AND ? IS NOT NULL) OR (t_in IS NULL AND ? IS NOT NULL))",
+                (t_in, src[0] if src else None, t_out, t_in, int(ts), t_out, t_in)).rowcount
+        return n
+
+    def t_in_hours(self, stat: str) -> int:
+        """Stunden, deren Innentemperatur (auch) aus der Langzeitstatistik von ``stat`` kommt."""
+        return self.db.execute(f"SELECT COUNT(*) FROM hourly WHERE {_SRC_HAS}", (stat,)).fetchone()[0]
+
+    def revert_t_in(self, stat: str) -> int:
+        """Innentemperatur der Stunden zurücknehmen, die (auch) aus ``stat`` gefüllt wurden – gefüllt wurde nur, wo
+        sie fehlte, der vorige Wert ist also „unbekannt“ (ein falscher alter Sensor, seit 0.42.1). Gibt die Zahl der
+        Stunden zurück."""
+        n = self.db.execute(f"UPDATE hourly SET t_in = NULL, t_in_src = NULL WHERE {_SRC_HAS}", (stat,)).rowcount
+        self.db.commit()
+        return n
 
     def add_room_event(self, start_ts: int, end_ts: int, room: str, rise_k: float) -> None:
         """Abgeschlossenes Fremdwärme-Ereignis eines Raums (nur Zeiten und Kelvin)."""

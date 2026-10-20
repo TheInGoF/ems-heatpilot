@@ -92,7 +92,8 @@ def test_overview_cards_after_tiles_with_own_request(tmp_path):
     page = html()
     ov = between(page, '<section id="view-overview" hidden>', "</section>")
     ids = re.findall(r'^  <div class="(?:tiles|card)" id="([\w-]+)"', ov, re.M)
-    assert ids[:4] == ["tiles", "pv", "cmp", "advice"]  # schnell zu finden: gleich unter den Kacheln
+    # schnell zu finden: gleich unter den Kacheln (seit 0.42.1 steht die Karte „Modelle“ darüber – test_ui_v421)
+    assert ids[:5] == ["models", "tiles", "pv", "cmp", "advice"]
     assert '<h2>Vorschau (Trockenlauf)</h2>' in ov and "Trockenlauf gegen Regler/Automation (7 Tage)" in ov
     js = script()
     # eigene Abfrage beim Laden der Übersicht (nicht im summary, nicht im 30-s-Takt); ältere Version: Karten weg

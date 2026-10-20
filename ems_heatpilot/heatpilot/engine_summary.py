@@ -2,7 +2,8 @@
 
 ``SummaryMixin`` rechnet aus Messwerten und Modellen, was die Weboberfläche zeigt: die große
 Zusammenfassung (``summary``) mit Vorheizplan, Ersparnis und Prüfungen, dazu Woche, Anwesenheit,
-Vorlauf-Studie, Empfehlungen, Historie und die Kachel „Vorhersage“. Es lernt nichts. In die Datenbank
+Vorlauf-Studie, Empfehlungen, Historie und die Kachel „Vorhersage“, seit 0.42.1 die Karte „Modelle“
+(``model_card``). Es lernt nichts. In die Datenbank
 schreibt es nur den Stand der Tado-Empfehlungen (``advice.track``: neu oder erledigt); sonst merkt es
 sich Zwischenergebnisse im Speicher (Cache) und den letzten Vorheizplan (``last_plan``).
 """
@@ -15,7 +16,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from . import advice, analysis, flowstudy, guards, readiness, weekly
+from . import advice, analysis, flowstudy, guards, model_card, readiness, weekly
 from .presence import arrival_unknown, short_trip
 from .values import aware, flag, local, midnight, num, parse_time
 
@@ -189,6 +190,7 @@ class SummaryMixin:
                 "dhw_min_temp": self.cfg.dhw_min_temp,
                 "max_flow_temp": self.cfg.max_flow_temp,
             },
+            "models": model_card.collect(self, now_ts),  # 0.42.1: Karte „Modelle“ – Güte, Lernzeitraum, Warnung
             "guards": {
                 "house": house_check,
                 "dhw": guards.check_dhw(self.dhw),

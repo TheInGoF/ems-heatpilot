@@ -23,6 +23,12 @@ Seit 0.42 (Desinfektion auslösen, Mindestleistung): ``disinfect.trigger`` in ``
 der maximalen Brennerleistung – nur Anzeige, gespeichert wird über ``api/settings``), in ``api/entities`` je ``switch``
 ``disinfect`` (taugt als Schalter der Desinfektion – ``disinfect_entity``).
 
+Seit 0.42.1 „Gelerntes übernehmen“ (``web_adopt``): ``GET api/rooms/adopt`` (verwaiste Raumdaten, Vorschläge) und
+``POST api/rooms/adopt`` (Messwerte einer alten Entität einem Raum zuordnen, Modelle neu lernen – nichts an HA),
+``GET``/``POST api/rooms/aliases`` (alter Temperatursensor je Raum für die Langzeitstatistik); Hausdaten und Modelle
+(``web_restore``): ``GET api/models``, ``POST api/house/restore``, ``POST api/house/relearn``, ``GET api/house/job``;
+``summary.models`` (Karte „Modelle“).
+
 Seit 0.39.1 ``GET api/entity_map`` (nur lesen): alle Rollen in Gruppen mit Zweck, nötig/optional, Filter und dem, was
 gilt (``entity_map``) – für die Seite „Entitäten“ in den Einstellungen. Gespeichert wird weiter über ``api/settings``.
 """
@@ -43,7 +49,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
-from . import boiler_power, disinfect_entity
+from . import boiler_power, disinfect_entity, web_adopt, web_restore
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -567,4 +573,7 @@ def make_app(app) -> web.Application:
     web_app.router.add_post("/api/notify/test", notify_test)
     web_app.router.add_get("/api/certificate", cert_json)
     web_app.router.add_get("/api/certificate.pdf", cert_pdf)
+    # 0.42.1: Gelerntes übernehmen und Aliasse (web_adopt), Hausdaten wiederherstellen, neu lernen, Modelle
+    for method, path, handler in web_adopt.routes(app, json_response) + web_restore.routes(app, json_response):
+        web_app.router.add_route(method, path, handler)
     return web_app

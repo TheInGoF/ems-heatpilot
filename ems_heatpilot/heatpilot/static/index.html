@@ -380,6 +380,52 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
 .minpow b { color: var(--text-primary); }
 .minpow .btn { margin-left: 4px; }
 .minpow-off { color: var(--warn); }
+/* Gelerntes übernehmen (0.42.1): Kasten über der Raum-Tabelle – Daten ohne Raum, Vorschläge mit Knopf, Auswahl je alter
+   Entität („Selbst zuordnen“); gesperrt mit Hinweis, solange Raumänderungen nicht gespeichert sind */
+.adopt { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 6px; padding: 8px 10px;
+  margin: 0 0 10px; font-size: 13px; color: var(--text-primary); background: var(--bg); }
+.card .adopt p { margin: 4px 0 0; font-size: 13px; }
+.card .adopt p.adopt-head { margin: 0; color: var(--text-primary); }
+.card .adopt p.adopt-lock { color: var(--warn); font-weight: 600; }
+.card .adopt p.adopt-msg { color: var(--text-primary); }
+ul.adopt-list { margin: 6px 0 0; padding-left: 18px; }
+ul.adopt-list li { margin: 6px 0; }
+ul.adopt-list .btn { margin-left: 4px; }
+details.adopt-more { margin-top: 6px; }
+details.adopt-more > summary { padding: 2px 0 4px; }
+.adopt-row { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; justify-content: space-between;
+  padding: 6px 0; border-top: 1px solid var(--border); }
+.adopt-row > span { min-width: 0; overflow-wrap: anywhere; }
+.adopt-row .row { flex-wrap: nowrap; max-width: 100%; }
+.adopt-row select.sel { min-width: 0; max-width: min(260px, 60vw); }
+.adopt .btn:disabled, .adopt select:disabled { opacity: .5; cursor: default; }
+/* Karte „Modelle“ (0.42.1): oben in der Übersicht – Haus, Räume, Ventile, Warmwasser mit Zustand; Klick → Diagnose.
+   Hinweis mit „Hausdaten wiederherstellen“, Stand der Abläufe (.job-msg) auch in Erweitert, Räume und Diagnose */
+.mc-head { justify-content: space-between; margin-bottom: 6px; }
+.mc-head h2 { margin: 0; }
+.mc-head a, .mc-warn a { font-size: 12px; }
+.mc-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: 13px; cursor: pointer; }
+.mc-k { display: flex; gap: 6px; align-items: center; align-self: start; color: var(--text-secondary); white-space: nowrap; line-height: 19px; }
+.mc-v { color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
+.mc-v .muted { font-size: 12px; }
+.mc-warn { border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 6px; background: var(--bg);
+  padding: 8px 10px; margin: 10px 0 0; }
+.card .mc-warn p { margin: 0 0 6px; color: var(--text-primary); }
+.card p.job-msg { margin: 8px 0 0; color: var(--text-primary); }
+.card p.job-msg:empty { display: none; }
+.job-msg .dot { margin-right: 6px; vertical-align: 0; }
+.card p.mc-last { margin: 8px 0 0; }
+.btn.job-btn:disabled { opacity: .5; cursor: default; }
+table.dm-t td { vertical-align: top; } table.dm-t td:first-child { color: var(--text-secondary); }
+table.dm-t td .dot { margin-right: 4px; vertical-align: 0; }
+h3.sec-h .dot { margin-right: 4px; vertical-align: 0; }
+.adv-acts .row { margin: 6px 0; }
+.adv-acts .row .muted { flex: 1 1 220px; }
+details.alias { border-left-color: var(--series-4); }
+details.alias > summary { color: var(--text-primary); }
+.adopt-row.alias-row > .row { flex: 1 1 280px; justify-content: flex-end; }
+.alias-row select.sel { flex: 1 1 auto; min-width: 0; max-width: 340px; }
+.alias-row .row .btn { flex: none; white-space: nowrap; }
 </style>
 </head>
 <body>
@@ -446,6 +492,7 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
       <p>Das Add-on prüft sich laufend selbst: fehlende oder veraltete Sensoren, unmögliche Werte, Gaszähler, Aufzeichnungslücken, Programmfehler.</p>
       <ul id="diag-checks" style="margin:0;padding-left:0;list-style:none;font-size:13px"></ul>
     </div>
+    <div class="card" id="diag-models" style="margin-bottom:12px"><h2>Modelle – Einzelheiten</h2><p class="muted">Lade …</p></div>
     <div class="card" style="margin-bottom:12px">
       <h2>Diagnose-Datei</h2>
       <p>Enthält Log, Selbsttest, Einstellungen, erkannte Entitäten, gelernte Modelle und die Messwerte der letzten 48 Stunden – ohne GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten. Diese Datei kannst du zur Fehlersuche weitergeben.</p>
@@ -479,6 +526,7 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
   <p class="sub" id="status">Lade …</p>
   <p class="sub dhw-line" id="ov-dhw" hidden></p>
   <p class="sub dhw-line" id="ov-boiler" hidden></p>
+  <div class="card" id="models" style="margin-bottom:12px"><h2>Modelle</h2><p class="muted">Lade …</p></div>
 
   <div class="tiles" id="tiles"></div>
   <div class="card" id="pv" style="margin-bottom:12px" hidden>
@@ -532,6 +580,7 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
         <div class="row" id="demand-mode"><button class="btn small primary" data-m="days" onclick="setDemandMode('days')">Tage</button><button class="btn small" data-m="hours" onclick="setDemandMode('hours')">Stunden</button></div></div>
       <p>Gasleistung gegen Temperaturdifferenz innen–außen, die Linie ist das gelernte Modell. „Tage“: Tagesmittel der letzten 12 Monate (Energiesignatur) – daran sieht man, ob das Modell passt. Einzelne Stunden streuen stark, weil der Kessel taktet (mal 15 min an, mal gar nicht). Stunden mit Warmwasserladung zählen nicht.</p>
       <div class="legend"><span><i style="background:var(--series-1)"></i>Messung</span><span><i style="background:var(--series-2)"></i>Gelerntes Modell</span><span>x: Innen − Außen (K) · y: Gas (kW)</span></div>
+      <p class="muted" id="demand-note" hidden></p>
       <div id="chart-demand"></div>
     </div>
     <div class="card">
@@ -1434,6 +1483,7 @@ async function load() {
     $("status").textContent = s.status === "übernehme Historie"
       ? "Liest die Historie aus Home Assistant ein und lernt – einige Minuten. Einstellungen bleiben erhalten."
       : "Startet: " + (s.status || "…");
+    $("models").innerHTML = `<h2>Modelle</h2><p class="muted">HeatPilot startet (${esc(s.status || "…")}) – die Modelle erscheinen danach.</p>`;
     setTimeout(load, 5000); return;
   }
   $("setup-banner").hidden = !!s.configured;
@@ -1452,6 +1502,7 @@ async function load() {
     (s.vacation.active ? ` · <span class="badge">Urlaub${s.vacation.until ? " bis " + timeOf(s.vacation.until) : ""} – Gewohnheiten pausiert</span>` : "");
   renderDhwLine("ov-dhw", s.dhw_control);  // Warmwasser über HeatPilot (0.38): Statuszeile unter dem Status
   renderBoilerLine("ov-boiler", s.boiler_control);  // Kessel über HeatPilot (0.41)
+  renderModels(s.models);  // 0.42.1: Karte „Modelle“ – immer, auch während des Lernens
   const fc = forecastTile(s.forecast, (s.discovered || {}).weather);  // gemessen statt gelernt: auch ohne Hausmodell
   $("tiles").innerHTML = [
     // Hauswerte erst, wenn das Modell plausibel ist – vorher wären es Zahlen ohne Aussage
@@ -1513,6 +1564,7 @@ async function load() {
   dhwChart($("chart-dhw-loss"), w);
 
   demandChart($("chart-demand"), hist, { ...h, ok: s.guards.house.ok, why: s.guards.house.reasons });
+  demandNote((s.models || {}).house);  // 0.42.1: Stunden ohne Innentemperatur fehlen im Bild – sagen, statt still
   const hs = hist.snapshots.filter((x) => x.kind === "house");
   lineChart($("chart-h"), hs.map((x) => [x.ts, x.data.heat_loss_w_per_k]), "W/K", "Wärmeverlust über die Zeit");
   lineChart($("chart-err"), hs.filter((x) => x.data.rmse_kw !== null).map((x) => [x.ts, x.data.rmse_kw]), "kW", "Modellfehler über die Zeit");
@@ -2585,7 +2637,7 @@ async function certPrint() {
       <div style="display:flex;gap:14px;align-items:center"><img src="icon.svg" width="58" height="58" alt="">
         <div style="flex:1"><h1>Zertifikat</h1><div class="sub">Haus & Heizung – gemessen, nicht geschätzt</div></div>
         <div class="sub" style="text-align:right;font-size:11px">Ausgestellt am<br><b style="color:#0f1f33;font-size:14px">${date(c.created)}</b><br>EMS HeatPilot ${esc(c.version)}</div></div>
-      <p class="sub" style="font-size:11px;border-bottom:1.5px solid #eb6834;padding-bottom:6px">Grundlage: Messdaten vom ${date(bs.from)} bis ${date(bs.to)} · ${fmt(bs.heating_hours, 0)} Heizstunden, ${fmt(bs.cold_hours, 0)} davon unter 0 °C · kälteste Stunde ${fmt(bs.coldest)} °C</p>
+      <p class="sub" style="font-size:11px;border-bottom:1.5px solid #eb6834;padding-bottom:6px" id="cert-print-basis">Grundlage: Messdaten vom ${date(bs.from)} bis ${date(bs.to)} · ${fmt(bs.heating_hours, 0)} Heizstunden, ${fmt(bs.cold_hours, 0)} davon unter 0 °C · kälteste Stunde ${fmt(bs.coldest)} °C${bs.note ? `. ${esc(bs.note)}` : ""}</p>
       ${c.overall ? `<div style="display:flex;gap:12px;align-items:center;margin:8px 0 4px"><span style="min-width:54px;text-align:center;padding:8px;border-radius:6px;font-weight:800;font-size:26px;background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>
         <div><b style="color:#1f3a5f;font-size:15px">HeatPilot-Gesamtbewertung</b><div>${c.overall.score} von 100 Punkten</div><div class="sub" style="font-size:11px">${c.overall.parts.map((x) => `${esc(x.area)} ${x.points ?? "–"}`).join(" · ")} (gewichtet 40/25/20/15 %)</div></div></div>` : ""}
       <h3>Gebäude ${pill(v["Gebäude"])}</h3><table>
@@ -2638,6 +2690,27 @@ async function certPdf(inline) {
   setTimeout(() => URL.revokeObjectURL(url), 60000);
 }
 
+// Grundlage des Zertifikats (0.42.1, certificate.collect → basis): Zeitraum der Stundenwerte und der 12 Monate,
+// woraus und seit wann das Hausmodell lernte, und welche Stunden fehlen – mit Grund und, wo bekannt, Zeitraum – statt
+// still weniger zu nehmen. Fehlt vielen Stunden die Innentemperatur, der Knopf „Hausdaten wiederherstellen“.
+function certBasisHtml(bs) {
+  if (!bs || !bs.from) return "";
+  const year = bs.year_from && bs.year_from !== bs.from ? ` – Verbrauch und Kessel aus den letzten 12 Monaten (ab ${isoDay(bs.year_from)})` : "";
+  // gelernt (Lernschritte des Modells) getrennt von den Stunden mit allen Werten – wie die Karte „Modelle“
+  const have = `${fmt(bs.house_hours, 0)} Stunden mit Gas, Außen- und Innentemperatur seit ${isoDay(bs.house_from)}`;
+  const house = !bs.house_hours ? "Hausmodell: noch keine Stunden mit Gas, Außen- und Innentemperatur"
+    : bs.house_learned_hours ? `Hausmodell aus ${fmt(bs.house_learned_hours, 0)} Stunden und ${fmt(bs.house_learned_days, 0)} Tageswerten gelernt – von ${have}`
+    : `Hausmodell: noch nichts gelernt – ${have}`;
+  return `<p class="muted" id="cert-basis">Grundlage: Stundenwerte ${isoSpan(bs.from, bs.to)}${year} · ${house}</p>` + certMissingHtml(bs);
+}
+// Fehlende Stunden mit Grund als Liste (die Druckansicht nennt sie wie das PDF in einem Satz: basis.note)
+function certMissingHtml(bs) {
+  const miss = (bs.missing || []).map((x) => `<li${x.key === "no_t_in" ? ' class="limit"' : ""}>${fmt(x.hours, 0)} Stunden ${esc(x.reason)}${x.from ? ` (${isoSpan(x.from, x.to)})` : ""}</li>`).join("");
+  if (!miss) return "";
+  const fix = MODELS && MODELS.house && MODELS.house.restore && bs.missing.some((x) => x.key === "no_t_in");
+  return `<p class="muted" style="margin:0">Nicht berücksichtigt:</p><ul class="ready-list" id="cert-missing">${miss}</ul>` +
+    (fix ? `<div class="row" style="margin:0 0 8px">${jobButton("restore")}<span class="muted">liest die fehlende Innentemperatur mit den alten Sensoren neu ein</span></div>` : "");
+}
 async function loadCert() {
   const c = await getJSON("api/certificate");
   if (c.starting) return;
@@ -2647,6 +2720,7 @@ async function loadCert() {
     `<button class="btn primary" onclick="certPdf(false)">PDF herunterladen</button></div></div>` +
     `<p class="muted" id="cert-msg"></p>` +
     `<p>Gemessen statt geschätzt, bezogen auf die letzten 12 Monate – z. B. für den Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
+    certBasisHtml(c.basis) +  // 0.42.1: über welchen Zeitraum es rechnet, woraus das Hausmodell lernte, was fehlt
     (c.overall ? `<div class="row" style="margin:4px 0 8px"><span style="display:inline-block;min-width:44px;text-align:center;padding:4px 8px;border-radius:6px;font-weight:700;font-size:20px;background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>` +
       `<div><b>Gesamtbewertung ${c.overall.score} von 100 Punkten</b><div class="muted">${c.overall.parts.map((x) => `${esc(x.area)} ${x.points ?? "–"}`).join(" · ")} – gewichtet 40/25/20/15 %</div></div></div>`
       : `<p class="muted">${!c.house.area_m2 ? "Für die Gesamtbewertung die Wohnfläche in den Einstellungen eintragen. " : ""}Gesamtbewertung, sobald das Gebäude und mindestens zwei weitere Bereiche (Kessel, Takten, Warmwasser) bewertet sind.</p>`) +
@@ -2683,10 +2757,11 @@ function showTab(name) {
   }
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("view-settings").textContent = "Fehler: " + e; });
   else if (name === "settings") loadReadiness();  // schon gezeichnet: nur die Zustandsbox frisch (0.36.1)
+  if (name === "settings" && SET) loadAdopt(ADOPT_MSG);  // 0.42.1: gespeicherte Daten ohne Raum frisch
   if (name === "live") loadLive().catch(liveError);
   if (name === "heat") loadHeat().catch(heatError);
   if (name === "overview") { if (OV_STALE) load().catch(() => {}); else { drawWeek(); drawDhwProfile(); } }  // Raster erst bei sichtbarer Breite richtig
-  if (name === "diag") { exportSize(); loadSensors(); }
+  if (name === "diag") { exportSize(); loadSensors(); loadModels(); }  // 0.42.1: Modelle – Einzelheiten
   if (name === "diag") loadDiag().catch((e) => { $("diag-checks").textContent = "Fehler: " + e; });
 }
 
@@ -2839,6 +2914,7 @@ function applyAreas() {
     if (inp.value.trim() || !tr.dataset.area) continue;
     inp.value = tr.dataset.area; n++;
   }
+  if (n) roomsDirty();  // 0.42.1: Gelerntes übernehmen erst nach dem Speichern
   $("save-msg").className = "";
   $("save-msg").textContent = n ? `${n} Raum-Feld${n > 1 ? "er" : ""} mit dem Bereich gefüllt – prüfen und speichern.`
     : "Nichts zu tun: alle Raum-Felder sind gefüllt, oder Home Assistant kennt für die Geräte keinen Bereich.";
@@ -3087,6 +3163,457 @@ function applyDisinfect() {
   disinfectSync();
   $("save-msg").className = ""; $("save-msg").textContent = `Desinfektion ${sg.day} ${sg.time} eingetragen – prüfen und speichern.`;
 }
+
+// ---------------------------------------------------------------- Gelerntes übernehmen (0.42.1)
+// Einstellungen → Räume, über der Tabelle (GET api/rooms/adopt, room_adopt.overview): gespeicherte Messwerte alter
+// Entitäten ohne Raum (z. B. Tado-Cloud nach dem Wechsel auf HomeKit, ein neu gekoppeltes Zigbee-Thermostat), je Raum mit
+// sicherem Treffer ein Vorschlag mit Knopf, je alter Entität eine Auswahl „übernehmen in …“. Übernommen wird erst nach
+// Rückfrage (POST api/rooms/adopt) und nur bei gespeicherten Raum-Einstellungen – eine Änderung in der Tabelle sperrt bis
+// „Speichern“. Die Oberfläche schreibt nichts an Home Assistant; das Backend ordnet nur Messwerte zu und lernt neu.
+let ADOPT = null, ADOPT_MSG = "", ROOMS_DIRTY = false, SET_SAVED = true;
+const dayWord = (n) => `${fmt(n || 0, 0)} ${n === 1 ? "Tag" : "Tage"}`;
+const adoptDate = (ts) => new Date(ts * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "2-digit" });
+const adoptSrc = (o) => [o.source, dayWord(o.days)].filter(Boolean).join(", ");
+// Rückfrage vor dem Übernehmen (confirm, reiner Text) – mit der Überschneidung (Zeitpunkte, an denen der Raum schon
+// eigene Messwerte hat: seine bleiben, nur Fehlendes kommt aus der alten Entität)
+const adoptAsk = (from, to, ov) => `Die Messwerte von ${from} werden Raum ${to} zugeordnet, Raum- und Ventilmodell neu berechnet.` +
+  (ov && ov.rows ? ` An ${fmt(ov.rows, 0)} Zeitpunkten (${dayWord(ov.days)}) hat ${to} schon eigene Messwerte: Dort bleiben seine Werte, nur was ihm fehlt (etwa die gemessene Ventilöffnung), kommt von ${from}; die übrigen Werte von ${from} zu diesen Zeitpunkten fallen weg.` : "") +
+  " Nicht rückgängig zu machen.";
+// Überschneidung mit einem Raum als kurzer Hinweis
+const adoptOver = (ov) => ov && ov.rows ? ` · an ${fmt(ov.rows, 0)} Zeitpunkten (${dayWord(ov.days)}) hat der Raum schon eigene Messwerte – seine bleiben` : "";
+// Gesperrt, solange Einstellungen bzw. Raumänderungen nicht gespeichert sind – sonst ""
+const adoptLock = () => !SET_SAVED ? "Erst speichern – die Einstellungen sind noch nicht gespeichert."
+  : ROOMS_DIRTY ? "Erst speichern – in der Tabelle sind Raumänderungen noch nicht gespeichert." : "";
+// Eine alte Entität: Name, Herkunft, Tage, Zeitraum, Schlüssel – und die Auswahl der aktuellen Räume (Vorschlag vorgewählt)
+function adoptRow(o, rooms, sugs, off) {
+  const pre = (sugs.find((s) => s.from === o.key) || {}).to || "";
+  const opts = `<option value="">übernehmen in …</option>` + rooms.map((r) =>
+    `<option value="${esc(r.key)}"${r.key === pre ? " selected" : ""}>${esc(r.name)} (${esc(dayWord(r.days))})</option>`).join("");
+  const span = o.first_ts ? `, ${adoptDate(o.first_ts)}–${adoptDate(o.last_ts)}` : "";
+  const member = o.member_of ? ` · Mitläufer im Raum ${esc((rooms.find((r) => r.key === o.member_of) || { name: o.member_of }).name)}` : "";
+  return `<div class="adopt-row" data-from="${esc(o.key)}"><span><b>${esc(o.name)}</b> <span class="muted">(${esc(adoptSrc(o))}${span}) · ${esc(o.key)}${member}</span></span>` +
+    `<span class="row"><select class="sel adopt-to"${off}>${opts}</select><button class="btn small" onclick="adoptPick(this)"${off}>übernehmen</button></span></div>`;
+}
+function adoptHtml(a, lock = "", msg = "") {
+  const note = msg ? `<p class="adopt-msg" id="adopt-msg">${msg}</p>` : "";
+  if (a && a.error) return `<div class="adopt" id="adopt-box"><p class="muted">Gespeicherte Raumdaten nicht lesbar: ${esc(a.error)}</p>${note}</div>`;
+  const orph = ((a || {}).orphans || []).filter((o) => o.rows > 0);
+  if (!orph.length) return note ? `<div class="adopt" id="adopt-box">${note}</div>` : "";
+  const sugs = a.suggestions || [], off = lock ? " disabled" : "";
+  const list = orph.slice(0, 4).map((o) => `${esc(o.name)} (${esc(dayWord(o.days))})`).join(", ") +
+    (orph.length > 4 ? ` und ${orph.length - 4} weitere` : "");
+  const items = sugs.map((s) => `<li class="adopt-sug"><span><b>${esc(s.to_name)}:</b> Gelerntes von ${esc(s.from_name)} (${esc(adoptSrc(s))}) übernehmen</span> ` +
+    `<button class="btn small" data-from="${esc(s.from)}" data-to="${esc(s.to)}" onclick="adoptGo(this)"${off}>übernehmen</button>` +
+    `<div class="hint">${esc(s.reason)} · der Raum hat bisher ${esc(dayWord(s.new_days))} Messwerte${adoptOver(s.overlap)}</div></li>`).join("");
+  return `<div class="adopt" id="adopt-box"><p class="adopt-head"><b>Gespeicherte Daten ohne Raum:</b> ${list}</p>` +
+    `<p class="muted">Messwerte von Thermostaten, die zu keinem Raum mehr gehören – etwa nach dem Wechsel von Tado-Cloud auf HomeKit oder nach neuem Koppeln. Übernimmt ein Raum sie, lernt er nicht von vorn: Raum- und Ventilmodell rechnet HeatPilot daraus neu.</p>` +
+    (lock ? `<p class="adopt-lock" id="adopt-lock">${esc(lock)}</p>` : "") +
+    (items ? `<ul class="adopt-list" id="adopt-sugs">${items}</ul>` : "") +
+    `<details class="adopt-more" id="adopt-more"${items ? "" : " open"}><summary>Selbst zuordnen (${orph.length})</summary>` +
+    orph.map((o) => adoptRow(o, a.rooms || [], sugs, off)).join("") + `</details>${note}</div>`;
+}
+function renderAdopt() { const box = $("room-adopt"); if (box) box.innerHTML = adoptHtml(ADOPT, adoptLock(), ADOPT_MSG); }
+async function loadAdopt(msg = "") {
+  if (!$("room-adopt")) return;
+  loadRoomRestore();  // 0.42.1 (Erweiterung): Hinweis „Hausdaten wiederherstellen“ darüber – eigene Abfrage
+  try { ADOPT = await getJSON("api/rooms/adopt"); if (ADOPT.starting) ADOPT = null; }
+  catch (e) { ADOPT = { error: e.message || String(e) }; }
+  ADOPT_MSG = msg; renderAdopt();
+}
+// Raum-Tabelle geändert (Eingabe, „Bereiche übernehmen“, „Vorschläge übernehmen“): sperren bis „Speichern“
+function roomsDirty() { if (!ROOMS_DIRTY) { ROOMS_DIRTY = true; ADOPT_MSG = ""; ALIAS_MSG = ""; renderAdopt(); renderAliases(); } }
+const adoptGo = (btn) => adoptRun(btn.dataset.from, btn.dataset.to);
+function adoptPick(btn) {
+  const row = btn.closest(".adopt-row"), to = row.querySelector(".adopt-to").value;
+  if (!to) { ADOPT_MSG = '<span class="msg-err">Erst einen Raum wählen.</span>'; return renderAdopt(); }
+  adoptRun(row.dataset.from, to);
+}
+async function adoptRun(from, to) {
+  if (adoptLock()) return renderAdopt();
+  const o = ((ADOPT || {}).orphans || []).find((x) => x.key === from) || { name: from };
+  const r = ((ADOPT || {}).rooms || []).find((x) => x.key === to) || { name: to };
+  if (!confirm(adoptAsk(o.name, r.name, (o.overlap || {})[to]))) return;
+  ADOPT_MSG = `Übernehme ${esc(o.name)} in ${esc(r.name)} …`; renderAdopt();
+  let j;
+  try {
+    j = await readJSON(await fetch("api/rooms/adopt", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ from, to }) }));
+  } catch (e) { j = { ok: false, error: e.message || String(e) }; }
+  if (!j.ok) { ADOPT_MSG = `<span class="msg-err">Nicht übernommen: ${esc(j.error || "unbekannter Fehler")}</span>`; return renderAdopt(); }
+  await loadAdopt(adoptDone(j));
+  loadReadiness(); load().catch(() => {});
+}
+// Erfolgsmeldung: Tage, wohin, und dass „Bereit für die Steuerung?“ den Raum neu bewertet; seit der Erweiterung der
+// gemerkte alte Temperatursensor (alias) und – fehlt vielen Stunden die Innentemperatur (restore_suggested) – der Knopf
+// „Hausdaten wiederherstellen“
+function adoptDone(j) {
+  const kept = j.skipped ? ` (an ${fmt(j.skipped, 0)} Zeitpunkten hatte der Raum schon eigene Messwerte – seine bleiben${j.filled ? `, an ${fmt(j.filled, 0)} davon fehlende Werte aus ${esc(j.from_name)} ergänzt` : ""})` : "";
+  const a = j.alias;
+  const alias = a ? ` Alter Temperatursensor gemerkt: <b>${esc(a.stat)}</b> (${esc(HOW_TEXT[a.how] || a.how)}) – er liefert die Innentemperatur vor dem Wechsel.` : "";
+  const restore = j.restore_suggested ? `<br>Vielen Stunden fehlt noch die Innentemperatur – das Hausmodell lernt sie nicht. ${jobButton("restore")} liest sie mit den alten Sensoren neu ein.` : "";
+  return `<span class="msg-ok">Übernommen: ${esc(dayWord(j.from_days))} Messwerte von ${esc(j.from_name)} in ${esc(j.to_name)}${kept}.</span> ` +
+    "Raum- und Ventilmodell werden daraus neu berechnet – „Bereit für die Steuerung?“ bewertet den Raum neu." + alias + restore;
+}
+
+// ---------------------------------------------------------------- Karte „Modelle“ (0.42.1)
+// Oben in der Übersicht (summary.models, model_card.collect): wie sicher Haus-, Raum-, Ventil- und Warmwassermodell
+// sind – immer sichtbar, auch während des Lernens (die Hauskacheln erscheinen erst mit plausiblem Hausmodell). Haus mit
+// Wärmeverlust ± Unsicherheit, Vorhersagefehler und woraus es gelernt hat (Stunden, Tage, seit wann); fehlt vielen
+// Stunden mit Gas und Außentemperatur die Innentemperatur, ein Hinweis mit „Hausdaten wiederherstellen“. Klick →
+// „Modelle – Einzelheiten“ unter Diagnose (GET api/models). Die Karte lernt und schreibt nichts.
+let MODELS = null;
+const isoDay = (iso) => iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(0, 4)}` : "–";
+const isoSpan = (a, b) => a ? `${isoDay(a)}–${isoDay(b)}` : "";
+const tsWhen = (ts) => new Date(ts * 1000).toLocaleString("de-DE", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+const mcDot = (ok, warn = true) => readyDot(ok ? "dot-ok" : warn ? "dot-warn" : "");
+const mcLoss = (h) => `${fmt(h.heat_loss_w_per_k, 0)}${h.heat_loss_sd_w_per_k != null ? "\u00a0±\u00a0" + fmt(h.heat_loss_sd_w_per_k, 0) : ""}\u00a0W/K`;
+const mcRoom = (m, key) => ((((m || {}).rooms || {}).items || []).find((i) => i.climate === key) || { name: key }).name;
+// Haus: Zustand (mit Grund), Wärmeverlust ± Unsicherheit, Vorhersagefehler – darunter, woraus und seit wann es lernt
+function mcHouse(h) {
+  const d = h.data || {};
+  const why = h.ok || !(h.reasons || []).length ? "" : ` – ${esc(h.reasons.join("; "))}`;
+  const loss = h.hours_learned ? ` · Wärmeverlust ${h.ok ? "" : "bisher "}${mcLoss(h)}` : "";
+  const err = h.error_kw != null ? ` · Vorhersagefehler ±${fmt(h.error_kw, 2)}\u00a0kW ${h.error_per === "tag" ? "im Tagesmittel" : "je Stunde"}` : "";
+  // woraus gelernt (learned_text aus dem Backend): wirklich gelernte Stunden und Tageswerte getrennt von den Stunden mit
+  // Gas, Außen- und Innentemperatur (gelernt wird nur in der Heizperiode, ohne Warmwasser und Fremdwärme)
+  const from = esc(h.learned_text);
+  const since = d.from && d.from !== d.usable_from ? ` · Stundenwerte seit ${isoDay(d.from)}` : "";
+  return `<b>${esc(h.state)}</b>${why}${loss}${err}<br><span class="muted" id="mc-learned">${from}${since}</span>`;
+}
+// Räume bzw. Ventile: n von m, dazu die Namen, die noch lernen (höchstens drei)
+function mcNames(items) {
+  const n = items.map((i) => esc(i.name));
+  return n.slice(0, 3).join(", ") + (n.length > 3 ? ` und ${n.length - 3} weitere` : "");
+}
+function mcRooms(r) {
+  if (!r.total) return '<span class="muted">keine Räume gewählt</span>';
+  const learn = r.items.filter((i) => !i.ok);
+  return `<b>${esc(r.text)}</b>` + (learn.length ? ` · lernen noch: ${mcNames(learn)}` : "");
+}
+function mcValves(v) {
+  const after = v.items.filter((i) => i.state === "lernt nach"), learn = v.items.filter((i) => i.state === "lernt");
+  return `<b>${esc(v.text)}</b>` + (after.length ? ` · lernen aus der Historie nach: ${mcNames(after)}` : "") +
+    (learn.length ? ` · lernen noch: ${mcNames(learn)}` : "");
+}
+const mcDhw = (w) => `<b>${esc(w.state)}</b>` + (w.ok ? ` · ${fmt(w.charges, 0)} Ladungen gemessen` : (w.reasons || []).length ? ` – ${esc(w.reasons[0])}` : "");
+// Zuletzt: wiederhergestellt bzw. neu gelernt (house.restored) und Gelerntes übernommen (rooms.adopted)
+function mcLast(m) {
+  const r = m.last_restore, a = m.last_adopt, parts = [];
+  if (r) parts.push(`${r.kind === "restore" ? "Hausdaten wiederhergestellt" : "aus gespeicherten Daten neu gelernt"} ${tsWhen(r.ts)}`);
+  if (a) parts.push(`Gelerntes von ${esc(a.from)} in ${esc(mcRoom(m, a.to))} übernommen ${tsWhen(a.ts)}`);
+  return parts.length ? `<p class="muted mc-last" id="mc-last">Zuletzt: ${parts.join(" · ")}</p>` : "";
+}
+// Hinweis „Innentemperatur fehlt“ mit Knopf (Karte, Diagnose, Einstellungen → Räume) – nur, wenn das Backend ihn gibt
+function restoreHint(h, id, inRooms = false) {
+  if (!h || !h.warning) return "";
+  const pick = inRooms ? '<a href="#" onclick="openAliases();return false">alten Temperatursensor je Raum unten wählen</a>'
+    : 'alten Temperatursensor je Raum: <a href="#" onclick="openAliases();return false">Einstellungen → Räume</a>';
+  return `<div class="mc-warn" id="${id}"><p>${esc(h.warning)}</p><div class="row">${h.restore ? jobButton("restore") : ""}` +
+    `<span class="muted">${pick}</span></div></div>`;
+}
+function modelsHtml(m) {
+  const h = m.house, r = m.rooms, v = m.valves, w = m.dhw;
+  const row = (id, ok, warn, label, val) => `<span class="mc-k">${mcDot(ok, warn)}${label}</span><span class="mc-v" id="${id}">${val}</span>`;
+  return '<div class="row mc-head"><h2>Modelle</h2><a href="#" id="mc-more" onclick="openModels();return false">Einzelheiten unter Diagnose</a></div>' +
+    '<div class="mc-grid" id="mc-grid" onclick="openModels()" title="Einzelheiten unter Diagnose">' +
+    row("mc-house", h.ok, true, "Haus", mcHouse(h)) +
+    row("mc-rooms", r.total > 0 && r.ok === r.total, r.total > 0, "Räume", mcRooms(r)) +
+    (v.total ? row("mc-valves", v.reliable === v.total, true, "Ventile", mcValves(v)) : "") +
+    row("mc-dhw", w.ok, true, "Warmwasser", mcDhw(w)) + "</div>" +
+    restoreHint(h, "mc-warn") + `<p class="job-msg" id="models-job">${jobHtml(JOB)}</p>` + mcLast(m);
+}
+function renderModels(m) {
+  if (!m) return;
+  MODELS = m;
+  $("models").innerHTML = modelsHtml(m);
+}
+function openModels() {
+  showTab("diag");
+  $("diag-models").scrollIntoView({ block: "start" });
+}
+// Wärmebedarf (Grafik): Stunden ohne Innentemperatur fehlen dort – sagen, statt still weniger zu zeigen
+function demandNote(h) {
+  const el = $("demand-note"), d = (h || {}).data || {};
+  el.hidden = !(h && h.restore);
+  el.textContent = el.hidden ? "" : `${fmt(d.no_t_in, 0)} Stunden ohne Innentemperatur (${isoSpan(d.no_t_in_from, d.no_t_in_to)}) fehlen in diesem Bild – siehe Karte „Modelle“ oben.`;
+}
+
+// ---------------------------------------------------------------- Modelle – Einzelheiten (Diagnose, 0.42.1)
+// Reiter Diagnose (GET api/models), Ziel des Klicks auf die Karte „Modelle“: Hausmodell mit Gründen, Wärmeverlust ±
+// Unsicherheit, Vorhersagefehler, Lernschritten und der Datenlage der Stundenwerte (gespeichert, nutzbar, ohne Innen-
+// bzw. Außentemperatur, ohne Gas, Lücken – mit Zeitraum); je Raum und Ventil Zustand und Grund; Warmwasser; was zuletzt
+// wiederhergestellt, neu gelernt oder übernommen wurde. Nur lesen.
+async function loadModels() {
+  const box = $("diag-models");
+  let m;
+  try { m = await getJSON("api/models"); }
+  catch (e) { box.innerHTML = `<h2>Modelle – Einzelheiten</h2><p class="msg-err">Nicht lesbar: ${esc(e.message || e)}</p>`; return; }
+  if (m.starting) { box.innerHTML = `<h2>Modelle – Einzelheiten</h2><p class="muted">HeatPilot startet noch (${esc(m.status || "…")}) – die Modelle erscheinen danach.</p>`; return; }
+  MODELS = m; jobFrom(m);
+  box.innerHTML = modelsDetailHtml(m);
+}
+const dmRow = (k, v, note = "") => `<tr><td>${k}</td><td><b>${v}</b>${note ? ` <span class="muted">${note}</span>` : ""}</td></tr>`;
+function dmHouse(h) {
+  const d = h.data || {}, sd = h.heat_loss_sd_w_per_k != null;
+  const reasons = h.ok ? "" : `<ul class="ready-list" id="dm-reasons">${(h.reasons || []).map((x) => `<li class="limit">${esc(x)}</li>`).join("")}</ul>`;
+  const err = h.error_kw == null ? "noch nicht gemessen" : h.error_per === "tag" ? "im Tagesmittel – rechnet mit Tageswerten" : "je Stunde – rechnet noch mit Stundenwerten";
+  return `<h3 class="sec-h">${mcDot(h.ok)}Hausmodell: ${esc(h.state)}</h3>${reasons}<div class="scroll"><table class="dm-t" id="dm-house">` +
+    dmRow("Wärmeverlust", mcLoss(h), sd ? "± eine Standardabweichung" : "Unsicherheit noch unbekannt") +
+    dmRow("Vorhersagefehler", h.error_kw != null ? `±${fmt(h.error_kw, 2)} kW` : "–", err) +
+    dmRow("Lernschritte", `${fmt(h.hours_learned, 0)} Stunden · ${fmt(h.days_learned, 0)} Tage`) +
+    dmRow("Stundenwerte gespeichert", fmt(d.hours, 0), isoSpan(d.from, d.to) + (d.gaps ? ` · ${fmt(d.gaps, 0)} Stunden fehlen dazwischen` : "")) +
+    dmRow("mit Gas, Außen- und Innentemperatur", fmt(d.usable, 0), `davon gelernt ${fmt(h.hours_learned, 0)} (nur Heizperiode, ohne Warmwasser und Fremdwärme)` + (d.usable
+      ? ` · ${fmt(d.usable_days, 0)} Tage, ${isoSpan(d.usable_from, d.usable_to)} · ${fmt(d.usable_heat, 0)} davon bis 15 °C außen` : "")) +
+    dmRow("ohne Innentemperatur", fmt(d.no_t_in, 0), d.no_t_in ? `mit Gas und Außentemperatur, ${isoSpan(d.no_t_in_from, d.no_t_in_to)} – lernt das Hausmodell nicht` : "") +
+    dmRow("ohne verwertbaren Gaswert", fmt(d.no_gas, 0)) + dmRow("ohne Außentemperatur", fmt(d.no_t_out, 0)) +
+    `</table></div>${restoreHint(h, "dm-warn")}`;
+}
+function dmRooms(r) {
+  if (!r.total) return '<h3 class="sec-h">Räume</h3><p class="muted">Keine Räume gewählt – Einstellungen → Räume.</p>';
+  return `<h3 class="sec-h">${mcDot(r.ok === r.total)}Räume: ${esc(r.text)}</h3><div class="scroll"><table class="dm-t" id="dm-rooms">` +
+    "<tr><th>Raum</th><th>Zustand</th><th>gelernt</th><th>Grund</th></tr>" + r.items.map((i) =>
+      `<tr><td>${esc(i.name)}${i.floor ? ' <span class="badge">Fußboden</span>' : ""}</td><td>${mcDot(i.ok)}${esc(i.state)}</td>` +
+      `<td>${fmt(i.hours, 0)} h <span class="muted">(${fmt(i.updates, 0)} Schritte)</span></td><td>${esc(i.reason || "–")}</td></tr>`).join("") + "</table></div>";
+}
+function dmValves(v) {
+  if (!v.total) return "";
+  return `<h3 class="sec-h">${mcDot(v.reliable === v.total)}Ventile: ${esc(v.text)}</h3><div class="scroll"><table class="dm-t" id="dm-valves">` +
+    "<tr><th>Raum</th><th>Zustand</th><th>Grund</th></tr>" + v.items.map((i) =>
+      `<tr><td>${esc(i.name)}</td><td>${mcDot(i.reliable)}${esc(i.state)}</td><td>${esc(i.reason || "–")}</td></tr>`).join("") + "</table></div>" +
+    '<p class="muted">„lernt nach“: arbeitet die gespeicherten Messwerte noch ab · „lernt“: braucht noch mehr Messungen (Grund daneben).</p>';
+}
+const dmDhw = (w) => `<h3 class="sec-h">${mcDot(w.ok)}Warmwasser: ${esc(w.state)}</h3>` +
+  `<p>${fmt(w.charges, 0)} Ladungen gemessen${(w.reasons || []).length ? " · " + w.reasons.map(esc).join("; ") : ""}</p>`;
+function dmLog(m) {
+  const r = m.last_restore, a = m.last_adopt, out = [];
+  if (r) out.push(`<li>${tsWhen(r.ts)}: ${jobResult(r.kind, r)}</li>`);
+  if (a) out.push(`<li>${tsWhen(a.ts)}: Gelerntes von ${esc(a.from)} in ${esc(mcRoom(m, a.to))} übernommen (${fmt(a.rows, 0)} Messwerte)</li>`);
+  return out.length ? `<h3 class="sec-h">Zuletzt</h3><ul class="ready-list" id="dm-log">${out.join("")}</ul>` : "";
+}
+function modelsDetailHtml(m) {
+  return "<h2>Modelle – Einzelheiten</h2><p>Wie sicher die gelernten Modelle sind und woraus sie gelernt haben. Gelernt wird nur aus gemessenen Werten: Fehlt einer Stunde Gas, Außen- oder Innentemperatur, lernt das Hausmodell sie nicht.</p>" +
+    dmHouse(m.house) + dmRooms(m.rooms) + dmValves(m.valves) + dmDhw(m.dhw) + dmLog(m) +
+    `<p class="job-msg" id="diag-models-job">${jobHtml(JOB)}</p>` +
+    '<p class="muted" style="margin-top:8px">Neu lernen und Hausdaten wiederherstellen: <a href="#" onclick="openAdvanced();return false">Einstellungen → Erweitert</a> · ' +
+    'alter Temperatursensor je Raum: <a href="#" onclick="openAliases();return false">Einstellungen → Räume</a></p>';
+}
+
+// ---------------------------------------------------------------- Hausdaten wiederherstellen, neu lernen (0.42.1)
+// Knöpfe in Einstellungen → Erweitert, im Hinweis der Karte „Modelle“, bei den Raum-Hinweisen und nach „Gelerntes
+// übernehmen“: nach Rückfrage POST api/house/restore bzw. api/house/relearn – das Backend arbeitet im Hintergrund (202).
+// Die Oberfläche fragt api/house/job ab, bis „running“ false ist, und zeigt Stand und Ergebnis in jeder Zeile .job-msg;
+// solange es läuft, sind die Knöpfe (.job-btn) gesperrt. Läuft schon etwas oder startet HeatPilot (409), steht der Grund
+// dort. Auch der Ablauf nach dem Speichern eines Raumwechsels („rooms“) erscheint so. Wiederherstellen liest von Home
+// Assistant nur und ergänzt nur; neu lernen holt nichts aus Home Assistant und löscht keine Messwerte.
+let JOB = null, JOB_TIMER = null, ADV_OPEN = false;
+const JOB_POLL_MS = 3000, JOB_SHOW_S = 900;  // alle 3 s fragen; ein fertiger Ablauf steht noch 15 min da
+const JOB_NAME = { restore: "Hausdaten wiederherstellen", relearn: "Aus gespeicherten Daten neu lernen", rooms: "Historie der neuen Räume nachholen" };
+const JOB_ASK = {
+  restore: "Hausdaten wiederherstellen?\n\nHeatPilot liest die Langzeitstatistik aus Home Assistant mit den alten Temperatursensoren der Räume neu ein und holt die Historie alter Thermostate nach, die es dort noch gibt – nur ergänzend: Es löscht nichts und ersetzt keinen gespeicherten Wert durch „unbekannt“. Jeden alten Sensor rechnet es um seinen Abstand zum gespeicherten Hausmittel um; einer, der nicht dazu passt, bleibt weg. Danach lernt es aus den gespeicherten Daten neu. Das dauert einige Minuten; an Home Assistant wird nichts geschrieben.",
+  relearn: "Aus gespeicherten Daten neu lernen?\n\nHaus-, Raum- und Ventilmodelle, Lernkurve und Fremdwärme-Ereignisse rechnet HeatPilot aus den gespeicherten Stunden- und Messwerten neu. Es holt nichts aus Home Assistant und löscht keine Messwerte; Warmwasser- und Personenmodelle bleiben. Das dauert je nach Datenmenge einige Minuten.",
+};
+const jobRunning = () => !!(JOB && JOB.job && JOB.job.running);
+const jobButton = (kind) => `<button class="btn small job-btn" data-kind="${kind}" onclick="houseJob('${kind}')"${jobRunning() ? " disabled" : ""}>${JOB_NAME[kind]}</button>`;
+const jobAge = (ts) => { const s = Math.max(0, Math.round(Date.now() / 1000 - ts)); return s < 120 ? `${s} s` : `${Math.round(s / 60)} min`; };
+const tsDay = (ts) => new Date(ts * 1000).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit", year: "numeric" });
+// Ergebnis eines Ablaufs – auch eines Eintrags im Protokoll house.restored – in einem Satz
+function jobResult(kind, r) {
+  const n = (v) => fmt(v || 0, 0), sec = (v) => `${fmt(v || 0, 1)} s`;
+  if (kind === "restore") {
+    const who = (r.assigned || []).map((a) => esc(a.name)).join(", "), rl = r.relearn || {};
+    return `<span class="msg-ok">Hausdaten wiederhergestellt:</span> Stunden mit Innentemperatur ${n(r.usable_before)} → ${n(r.usable_after)}, ohne ${n(r.no_t_in_before)} → ${n(r.no_t_in_after)}` +
+      (who ? ` · alter Sensor gemerkt für ${who}` : "") + (r.room_rows ? ` · ${n(r.room_rows)} Raumwerte alter Thermostate nachgeholt${restoreOld(r)}` : "") +
+      (r.relearn ? ` · danach neu gelernt (zusammen ${sec((r.seconds || 0) + (rl.seconds || 0))})` : "") + "." + restoreNotes(r) +
+      (r.no_t_in_after && !r.aliases ? " Kein alter Temperatursensor bekannt – je Raum unter Einstellungen → Räume wählen, dann noch einmal wiederherstellen." : "");
+  }
+  if (kind === "rooms") return `<span class="msg-ok">Historie der neuen Räume nachgeholt:</span> ${n(r.room_rows)} Messwerte, danach aus den gespeicherten Daten neu gelernt.`;
+  const learned = r.house_updates != null ? `${n(r.house_updates)} von ${n(r.hours)} Stunden mit allen Werten gelernt` : `aus ${n(r.hours)} Stunden`;
+  return `<span class="msg-ok">Aus gespeicherten Daten neu gelernt:</span> Hausmodell ${learned}${r.since ? `, Räume ab ${tsDay(r.since)}` : ""} (${sec(r.seconds)}).`;
+}
+// Wiederherstellen: von welchen alten Thermostaten Raumwerte nachgeholt wurden
+const restoreOld = (r) => { const got = (r.old || []).filter((o) => o.rows).map((o) => esc(o.from)); return got.length ? ` (${got.join(", ")})` : ""; };
+// Wiederherstellen: alte Sensoren, die nicht passten (nicht verwendet), und alte Thermostate ohne nachgeholte Werte
+function restoreNotes(r) {
+  const bad = (r.checks || []).filter((c) => c.ok === false).map((c) => `${esc(c.name)} (${esc(c.stat)} – ${esc(c.why || "passt nicht")})`);
+  const gone = (r.old || []).filter((o) => !o.rows).map((o) => `${esc(o.from)} (${esc(o.why || "nichts")})`);
+  return (bad.length ? ` Alter Sensor nicht verwendet: ${bad.join("; ")}.` : "") +
+    (gone.length ? ` Keine Raumwerte nachgeholt für ${gone.join("; ")}.` : "");
+}
+// Stand des laufenden bzw. eben fertigen Ablaufs – "" ohne Ablauf oder wenn er länger als JOB_SHOW_S fertig ist
+function jobHtml(st) {
+  if (!st) return "";
+  const j = st.job, note = st.note ? `<span class="msg-err">${esc(st.note)}</span> ` : "";
+  if (!j) return note;
+  const name = esc(JOB_NAME[j.kind] || j.kind);
+  if (j.running && j.waiting) return note + `${readyDot("dot-warn")}<b>Wartet: ${name}</b> – erst läuft noch der vorige Ablauf. Die Übersicht aktualisiert sich danach.`;
+  if (j.running) return note + `${readyDot("dot-warn")}<b>Läuft: ${name}</b> – ${esc(st.status || "…")}${j.started ? ` (seit ${jobAge(j.started)})` : ""}. Die Übersicht aktualisiert sich danach.`;
+  if (!j.done || Date.now() / 1000 - j.done > JOB_SHOW_S) return note;
+  if (j.error) return note + `<span class="msg-err">${name} fehlgeschlagen: ${esc(j.error)}</span> – HeatPilot arbeitet mit dem bisherigen Stand weiter (Einzelheiten unter Diagnose → Log).`;
+  return note + jobResult(j.kind, j.result || {});
+}
+function renderJob() {
+  const html = jobHtml(JOB), busy = jobRunning();
+  for (const el of document.querySelectorAll(".job-msg")) el.innerHTML = html;
+  for (const b of document.querySelectorAll(".job-btn")) b.disabled = busy;
+}
+async function houseJob(kind) {
+  if (jobRunning() || !confirm(kind === "restore" ? await restoreAsk() : JOB_ASK[kind])) return;
+  let j;
+  try {
+    const r = await fetch(`api/house/${kind}`, { method: "POST" });
+    try { j = JSON.parse(await r.text()); } catch (e) { j = { ok: false, error: `unerwartete Antwort (HTTP ${r.status})` }; }
+  } catch (e) { j = { ok: false, error: "keine Verbindung zum Add-on – " + (e.message || e) }; }
+  JOB = { job: j.job || null, status: j.status, busy: j.busy, note: j.ok ? "" : `Nicht gestartet: ${j.error || "unbekannter Fehler"}` };
+  renderJob();
+  jobPoll();
+}
+// Rückfrage zum Wiederherstellen mit den alten Sensoren: gemerkte und die, die HeatPilot dabei selbst setzt (je Raum der
+// eindeutige Vorschlag, wie room_alias.auto_assign) – aus GET api/rooms/aliases; ohne Liste die Rückfrage allein
+async function restoreAsk() {
+  let a = null;
+  try { a = await getJSON("api/rooms/aliases"); } catch (e) { /* ohne Liste fragen */ }
+  return JOB_ASK.restore + restoreAliases((a || {}).rooms || []);
+}
+function restoreAliases(rooms) {
+  const have = rooms.filter((r) => r.alias).map((r) => `${r.name}: ${r.alias.stat}`);
+  const auto = rooms.filter((r) => !r.alias && r.suggested).map((r) => `${r.name}: ${r.suggested}`);
+  return (have.length ? `\n\nAlte Sensoren: ${have.join(", ")}.` : "") +
+    (auto.length ? `\n\nDabei merkt sich HeatPilot als alten Sensor (eindeutiger Vorschlag): ${auto.join(", ")}.` : "") +
+    (rooms.length && !have.length && !auto.length ? "\n\nNoch kein alter Sensor bekannt – je Raum unter Einstellungen → Räume wählbar." : "");
+}
+// api/house/job abfragen, solange etwas läuft; danach Übersicht, Raum-Hinweise und Diagnose frisch
+async function jobPoll() {
+  clearTimeout(JOB_TIMER);
+  const was = jobRunning();
+  let j;
+  try { j = await getJSON("api/house/job"); }
+  catch (e) { if (was) JOB_TIMER = setTimeout(jobPoll, 2 * JOB_POLL_MS); return; }  // Add-on beschäftigt: weiter fragen
+  const now = !!(j.job && j.job.running);
+  JOB = { job: j.job || null, status: j.status, busy: j.busy, note: was && !now ? "" : (JOB || {}).note || "" };
+  renderJob();
+  if (now) JOB_TIMER = setTimeout(jobPoll, JOB_POLL_MS);
+  else if (was) jobFinished();
+}
+// Stand aus GET api/models übernehmen – nur, wenn nicht schon abgefragt wird (das Ende meldet jobPoll)
+function jobFrom(m) {
+  if (jobRunning() || !("job" in m)) return;
+  JOB = { job: m.job || null, status: m.status, busy: m.busy, note: (JOB || {}).note || "" };
+  renderJob();
+  if (jobRunning()) jobPoll();
+}
+function jobFinished() {
+  load().catch(() => {});  // Karte „Modelle“, Grafen, Zertifikat
+  if (SET) { loadAdopt(ADOPT_MSG); if (ALIAS_OPEN) loadAliases(ALIAS_MSG); }
+  if (!$("view-diag").hidden) loadModels();
+}
+// Einstellungen → Erweitert: die zwei Knöpfe mit Zweck, „Historie neu einlesen“ wie bisher, darunter der Stand
+const advHouseHtml = () => '<h3 class="sec-h" id="adv-house">Hausdaten und Lernen</h3><div class="adv-acts">' +
+  `<div class="row">${jobButton("restore")}<span class="muted">nach einem Wechsel der Thermostate (z. B. Tado-Cloud → HomeKit): liest die Langzeitstatistik mit den alten Temperatursensoren neu ein (je Raum unter Räume) und holt die Historie alter Thermostate nach – nur ergänzend, löscht nichts; danach lernt HeatPilot neu</span></div>` +
+  `<div class="row">${jobButton("relearn")}<span class="muted">rechnet Haus-, Raum- und Ventilmodelle aus den gespeicherten Daten neu – holt nichts aus Home Assistant, löscht keine Messwerte; läuft nach einem Raumwechsel und dem Wiederherstellen von selbst</span></div>` +
+  '<div class="row"><button class="btn small" onclick="reloadHistory()">Historie neu einlesen</button><span class="muted">z. B. nach Wechsel des Gaszählers – dauert je nach Umfang einige Minuten.</span></div></div>' +
+  `<p class="job-msg" id="adv-job">${jobHtml(JOB)}</p>`;
+// Links „Einstellungen → Erweitert“: die Karte aufklappen und hinscrollen – auch, wenn die Einstellungen erst laden
+function openAdvanced() { ADV_OPEN = true; setPage("general"); showTab("settings"); advReveal(); }
+function advReveal() {
+  const h = $("adv-house");
+  if (!ADV_OPEN || !h) return;
+  ADV_OPEN = false; h.closest("details").open = true; h.scrollIntoView({ block: "center" });
+}
+
+// ---------------------------------------------------------------- Alter Temperatursensor je Raum (0.42.1)
+// Einstellungen → Räume, unter „Gespeicherte Daten ohne Raum“ (GET/POST api/rooms/aliases, room_alias): je Raum der
+// Sensor, dessen Langzeitstatistik die Innentemperatur vor einem Wechsel der Thermostate liefert (Alias). HeatPilot
+// merkt ihn sich beim Übernehmen selbst (am alten Gerät oder über den Namen in der Statistik-Liste); hier lässt er sich
+// wählen oder entfernen – auch für Räume ohne Übernahme. Ein Alias ändert keine Messwerte; erst „Hausdaten
+// wiederherstellen“ liest mit ihm neu ein (und prüft, ob er zum gespeicherten Hausmittel passt – das Ergebnis steht
+// danach in der Zeile). Ersetzen bzw. entfernen eines alten Sensors, der Stunden gefüllt hat, nimmt diese nach
+// Rückfrage zurück. Lädt erst beim Aufklappen (liest die Statistik-Liste von Home Assistant); gesperrt wie das
+// Übernehmen, solange Raumänderungen nicht gespeichert sind.
+let ALIAS = null, ALIAS_MSG = "", ALIAS_OPEN = false, ALIAS_GO = false, ALIAS_LOAD = null;
+const HOW_TEXT = { device: "Sensor am alten Gerät", statistics: "Langzeitstatistik mit passendem Namen", user: "selbst gewählt" };
+const statLabel = (c) => c.name && c.name !== c.stat ? `${c.name} (${c.stat})` : c.stat;
+// Auswahl: kein alter Sensor, die Vorschläge des Raums (gemerkt, am Gerät, passender Name), dann alle freien °C-Statistiken
+function aliasOptions(r, stats) {
+  const cur = r.alias ? r.alias.stat : r.suggested || "", seen = new Set([r.temp_sensor]);
+  const opt = (s, label) => {
+    if (!s || seen.has(s)) return "";
+    seen.add(s);
+    return `<option value="${esc(s)}"${s === cur ? " selected" : ""}>${esc(label)}</option>`;
+  };
+  const mine = (r.alias ? opt(r.alias.stat, `${statLabel(r.alias)} – gemerkt`) : "") +
+    (r.candidates || []).map((c) => opt(c.stat, `${statLabel(c)} – ${c.how_text || HOW_TEXT[c.how] || c.how}`)).join("");
+  const rest = (stats || []).map((s) => opt(s.stat, statLabel(s))).join("");
+  return `<option value=""${cur ? "" : " selected"}>– kein alter Sensor –</option>` +
+    (mine ? `<optgroup label="Für diesen Raum">${mine}</optgroup>` : "") + (rest ? `<optgroup label="Alle °C-Statistiken">${rest}</optgroup>` : "");
+}
+// Prüfung beim letzten Wiederherstellen (room_alias.note_checks): passt der alte Sensor zum gespeicherten Hausmittel?
+function aliasCheck(a) {
+  const c = a.check, hours = a.hours ? ` · füllt ${fmt(a.hours, 0)} Stunden` : "";
+  if (!c) return hours ? `<br><span class="muted">${hours.slice(3)}</span>` : "";
+  if (c.ok) return `<br><span class="muted">passt${c.offset != null ? ` (im Mittel ${c.offset >= 0 ? "+" : "−"}${fmt(Math.abs(c.offset), 1)} K zum Hausmittel, wird abgezogen)` : ""}${hours}</span>`;
+  return `<br><span class="msg-err">passt nicht – ${esc(c.why || "unbekannt")}; nicht verwendet</span>`;
+}
+function aliasRow(r, stats, off) {
+  const a = r.alias;
+  const now = a ? `alter Sensor: <b>${esc(statLabel(a))}</b> <span class="muted">(${esc(a.how_text || HOW_TEXT[a.how] || a.how)}${a.from ? `, von ${esc(a.from)}` : ""})</span>${aliasCheck(a)}`
+    : `<span class="muted">kein alter Sensor gemerkt${r.suggested ? " – Vorschlag vorgewählt" : ""}</span>`;
+  return `<div class="adopt-row alias-row" data-room="${esc(r.key)}"><span><b>${esc(r.name)}</b> <span class="muted">· jetzt ${esc(r.temp_sensor || "ohne eigenen Temperatursensor")}</span><br>${now}</span>` +
+    `<span class="row"><select class="sel alias-stat"${off}>${aliasOptions(r, stats)}</select><button class="btn small" onclick="aliasSave(this)"${off}>merken</button></span></div>`;
+}
+function aliasHtml(a, lock = "", msg = "") {
+  const note = msg ? `<p class="adopt-msg" id="alias-msg">${msg}</p>` : "";
+  if (!a) return `<p class="muted">Lade …</p>${note}`;
+  if (a.starting) return `<p class="muted">HeatPilot startet noch (${esc(a.status || "…")}).</p>`;
+  if (!a.rooms) return `<p class="msg-err">Nicht lesbar: ${esc(a.error || "unbekannter Fehler")}</p>${note}`;
+  const off = lock ? " disabled" : "";
+  return "<p class=\"muted\">Für die Stunden vor einem Wechsel der Thermostate (z. B. Tado-Cloud → HomeKit) hat der neue Sensor keine Langzeitstatistik – dann liefert der alte Sensor des Raums die Innentemperatur. Wirksam mit „Hausdaten wiederherstellen“; vorher ändert sich an den Messwerten nichts. Ersetzen oder entfernen nimmt nach Rückfrage die Stunden zurück, die er gefüllt hat.</p>" +
+    (a.error ? `<p class="muted">${esc(a.error)}</p>` : "") + (lock ? `<p class="adopt-lock">${esc(lock)}</p>` : "") +
+    (a.rooms.length ? a.rooms.map((r) => aliasRow(r, a.stats, off)).join("") : '<p class="muted">Keine Räume gewählt.</p>') + note;
+}
+function renderAliases() { const b = $("alias-body"); if (b) b.innerHTML = aliasHtml(ALIAS, adoptLock(), ALIAS_MSG); }
+function aliasToggle(d) { ALIAS_OPEN = d.open; if (d.open && !ALIAS) loadAliases(); }
+async function loadAliases(msg = "") {
+  ALIAS_LOAD = ALIAS_LOAD || getJSON("api/rooms/aliases").catch((e) => ({ error: e.message || String(e) }));
+  const a = await ALIAS_LOAD;
+  ALIAS_LOAD = null; ALIAS = a; ALIAS_MSG = msg; renderAliases();
+}
+// Links „alten Temperatursensor wählen“: Einstellungen → Räume, Kasten aufklappen (lädt) und hinscrollen
+function openAliases() { ALIAS_OPEN = true; ALIAS_GO = true; setPage("general"); showTab("settings"); aliasReveal(); }
+function aliasReveal() {
+  const d = $("alias-box");
+  if (!d) return;
+  if (ALIAS_OPEN && !d.open) d.open = true;  // „toggle“ lädt
+  if (ALIAS_GO) { ALIAS_GO = false; d.scrollIntoView({ block: "center" }); }
+}
+async function aliasSave(btn) {
+  if (adoptLock()) return renderAliases();
+  const row = btn.closest(".alias-row"), room = row.dataset.room, stat = row.querySelector(".alias-stat").value;
+  const cur = ((ALIAS || {}).rooms || []).find((x) => x.key === room) || { name: room }, name = cur.name;
+  // ersetzt bzw. entfernt einen alten Sensor, der Stunden gefüllt hat: die verlieren ihre Innentemperatur wieder
+  const was = cur.alias, drop = was && was.stat !== stat && was.hours;
+  if (drop && !confirm(aliasAsk(name, was, stat))) return;
+  let j;
+  try {
+    j = await readJSON(await fetch("api/rooms/aliases", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ room, stat }) }));
+  } catch (e) { j = { ok: false, error: e.message || String(e) }; }
+  if (!j.ok) { ALIAS_MSG = `<span class="msg-err">Nicht gemerkt: ${esc(j.error || "unbekannter Fehler")}</span>`; return renderAliases(); }
+  await loadAliases(aliasDone(name, j.alias, j.reverted));
+}
+// Rückfrage, bevor ein alter Sensor ersetzt bzw. entfernt wird, der schon Stunden gefüllt hat (confirm, reiner Text)
+const aliasAsk = (name, was, stat) => `${stat ? "Anderen" : "Keinen"} alten Sensor für ${name}?\n\n${was.stat} hat ${fmt(was.hours, 0)} Stunden Innentemperatur gefüllt. Sie bekommen wieder „unbekannt“ (gefüllt wurde nur, wo nichts war) – bis „Hausdaten wiederherstellen“ sie mit den übrigen Quellen neu füllt; das Hausmodell lernt sie bis dahin nicht.`;
+function aliasDone(name, a, reverted) {
+  const back = reverted ? ` ${fmt(reverted, 0)} Stunden, die der vorige alte Sensor gefüllt hatte, sind wieder ohne Innentemperatur.` : "";
+  if (a) return `<span class="msg-ok">Gemerkt: ${esc(name)} nimmt für die Stunden vor dem Wechsel ${esc(a.stat)}.</span>${back} Wirksam mit ${jobButton("restore")} – vorher ändert sich an den Messwerten nichts.`;
+  return `<span class="msg-ok">Kein alter Sensor mehr für ${esc(name)}.</span>` + (reverted ? `${back} ${jobButton("restore")} füllt sie mit den übrigen Quellen neu.` : " Er hatte keine Stunden gefüllt.");
+}
+// Hinweis über „Gespeicherte Daten ohne Raum“: fehlt vielen Stunden die Innentemperatur, „Hausdaten wiederherstellen“
+async function loadRoomRestore() {
+  try {
+    const m = await getJSON("api/models");
+    if (!m.starting) { MODELS = m; jobFrom(m); }
+  } catch (e) { /* Hinweis bleibt beim letzten Stand */ }
+  renderRoomRestore();
+}
+function renderRoomRestore() { const b = $("room-restore"); if (b) b.innerHTML = MODELS ? restoreHint(MODELS.house, "room-restore-hint", true) : ""; }
 
 // ---------------------------------------------------------------- Desinfektion auslösen (0.42)
 // Zeile „Auslösen“ in Einstellungen → Warmwasser (disinfect.trigger aus disinfect_status.info): wer die Desinfektion zum
@@ -4013,6 +4540,8 @@ function emCollect(out) {
 
 function renderSettings() {
   const s = SET;
+  ROOMS_DIRTY = false; ADOPT_MSG = "";  // Tabelle frisch aus dem Gespeicherten (0.42.1: Gelerntes übernehmen wieder frei)
+  ALIAS = null; ALIAS_MSG = "";  // Räume können sich geändert haben: Aliasse beim Aufklappen frisch
   emInit(EMAP);  // Seite „Entitäten“ (0.39.1): Einträge und Werte aus GET api/entity_map
   $("view-settings").innerHTML = datalists() + setNav() + `<div id="set-general"${SET_PAGE === "general" ? "" : " hidden"}>` +
     `<p class="sub">Alles, was das Add-on braucht. Felder mit Vorschlag sind aus der automatischen Erkennung vorausgefüllt – prüfen und speichern. Speichern wirkt sofort, ohne Neustart. Welche Entitäten HeatPilot liest (Kessel, Außenfühler, Gaszähler, Personen …), steht unter „Entitäten“.</p>` +
@@ -4022,8 +4551,11 @@ function renderSettings() {
       <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). <b>Fußboden</b>: Fußbodenheizung im Raum und wie sie angeschlossen ist – <b>mit Mischer</b> (er regelt die Temperatur selbst, keine Grenze), <b>mit RTL-Ventil</b> (am Anfang fließt der volle Vorlauf hinein: der <b>höchste Vorlauf</b> gilt, solange der Raum Wärme anfordert) oder <b>direkt am Kessel</b> (der höchste Vorlauf gilt immer; leer = ${FLOOR_MAX.def} °C). HeatPilot plant nie einen Vorlauf darüber; der Heizkörper im Raum gilt als Boost.
       Unter jeder Entität stehen <b>Bereich</b> und <b>Gerät</b> aus Home Assistant; ein leeres Feld „Raum“ zeigt den Bereich als Platzhalter, „Bereiche übernehmen“ trägt ihn ein – Gespeichertes bleibt. Sensoren des Geräts (Temperatur, Feuchte, Heizleistung) sind vorbelegt.
       <b>Voreinstellung</b> und <b>Stufen</b>: die Zahl am Ventilunterteil (Durchflussbegrenzer), z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil. Damit nennt der hydraulische Abgleich konkrete Stufen und rechnet die Wirkung auf die anderen Räume; bei mehreren Geräten in einem Raum gilt der Wert des <b>Schlüsselgeräts</b> (Raumregler, sonst das erste), weitere Ventile dürfen eigene Werte haben.</p>
+      <div id="room-restore"></div><div id="room-adopt"></div>
+      <details class="adopt alias" id="alias-box" ontoggle="aliasToggle(this)"${ALIAS_OPEN ? " open" : ""}><summary>Alter Temperatursensor je Raum <span class="muted">– Innentemperatur vor einem Wechsel der Thermostate</span></summary><div id="alias-body"></div></details>
+      <p class="job-msg" id="rooms-job">${jobHtml(JOB)}</p>
       ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
-      <div class="scroll"><table class="form"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden <span class="hint">(Anschluss, höchster Vorlauf)</span></th><th>Voreinstellung <span class="hint">(Stufe am Ventil)</span></th><th>Stufen <span class="hint">(Skala, 0 = ohne)</span></th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
+      <div class="scroll"><table class="form" id="room-table" oninput="roomsDirty()" onchange="roomsDirty()"><tr><th></th><th>Anzeigename <span class="hint">(frei wählbar)</span></th><th>macht mit</th><th>Komfort °C</th><th>Raum <span class="hint">(gleicher Name = ein Raum)</span></th><th>Raumregler</th><th>Quelle</th><th>Fußboden <span class="hint">(Anschluss, höchster Vorlauf)</span></th><th>Voreinstellung <span class="hint">(Stufe am Ventil)</span></th><th>Stufen <span class="hint">(Skala, 0 = ohne)</span></th><th>Ventil / Heizleistung</th><th>Temperatur-Sensor</th><th>Feuchte</th></tr>${roomRows()}</table></div>`) +
     card("Gas & Kosten", `${emRef("gas_sensor", "gas", "Gaszähler")}<div class="form-grid">
       ${field("Brennwert (kWh/m³)", num("f-gas_calorific_value", s.gas_calorific_value), "Laut Gasrechnung, typisch 10,5–11,5")}
       ${field("Zustandszahl", num("f-gas_z_number", s.gas_z_number), "Laut Gasrechnung, typisch 0,93–0,97")}
@@ -4058,7 +4590,7 @@ function renderSettings() {
       ${field("Historie beim ersten Start (Tage)", num("f-backfill_days", s.backfill_days, "1"), "Einzelwerte aus dem Recorder")}
       ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
       ${field("Ausführliches Log", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-debug_logging" ${s.debug_logging ? "checked" : ""}> jeden Takt protokollieren</label>`, "Für die Fehlersuche – das Log wird dann deutlich größer")}
-    </div><p style="margin-top:10px"><button class="btn small" onclick="reloadHistory()">Historie neu einlesen</button> <span class="muted">z. B. nach Wechsel des Gaszählers – dauert je nach Umfang einige Minuten.</span></p>`, false) +
+    </div>${advHouseHtml()}`, false) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen, Historie neu einlesen
     `</div><div id="set-entities"${SET_PAGE === "entities" ? "" : " hidden"}>${emPage(EMAP)}</div>` +
     `<div class="savebar"><button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="applySuggestions()">Vorschläge übernehmen</button><span id="save-msg"></span></div>`;
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
@@ -4068,6 +4600,9 @@ function renderSettings() {
   boilerModeHint(); boilerScroll();  // 0.41: Kessel über HeatPilot
   emSum();  // 0.39.1: Zähler der Seite „Entitäten“ und am Umschalter
   renderReadyBox(HEAT && HEAT.readiness); loadReadiness();  // Zustandsbox (0.36.1): sofort der letzte Stand, dann frisch
+  loadAdopt();  // 0.42.1: gespeicherte Daten ohne Raum über der Raum-Tabelle (dazu der Hinweis „Hausdaten wiederherstellen“)
+  renderRoomRestore(); if (ALIAS_OPEN) loadAliases();  // 0.42.1: letzter Stand sofort, alter Sensor je Raum aufgeklappt
+  aliasReveal(); advReveal();  // Links aus Übersicht und Diagnose: hinscrollen
 }
 
 function addVac() { $("vac-list").insertAdjacentHTML("beforeend", vacRow()); }
@@ -4141,6 +4676,7 @@ async function saveSettings() {
   const hist = reload ? ' <span class="muted">Historie wird neu eingelesen – die gelernten Nachtzeiten erscheinen danach.</span>' : "";
   SET = null; await loadSettings(); load().catch(() => {});
   loadHeat().catch(() => {});  // Statuszeilen Warmwasser (0.38) und Kessel (0.41) im Heizen-Reiter mit dem neuen Schalter
+  jobPoll();  // 0.42.1: ein Raumwechsel holt die Historie der neuen Räume im Hintergrund – Stand unter Räume
   $("save-msg").className = "msg-ok"; $("save-msg").innerHTML = "Gespeichert und übernommen." + note + hist;
 }
 // Nach dem Speichern (0.35): bei mehreren Geräten in einem Raum, welches das Schlüsselgerät ist (Raumregler, sonst
@@ -4168,7 +4704,7 @@ function applySuggestions() {
       if (g.group) tr.querySelector(".r-group").value = g.group;
       if (g.controller) tr.querySelector(".r-controller").checked = true; }  // „macht mit“ setzt nie ein Vorschlag – nur der Nutzer
   }
-  modeHint();
+  modeHint(); roomsDirty();  // 0.42.1: Gelerntes übernehmen erst nach dem Speichern
   $("save-msg").className = ""; $("save-msg").textContent = "Vorschläge eingetragen – prüfen und speichern.";
 }
 
@@ -4180,8 +4716,10 @@ async function testEms() {
   $("ems-msg").textContent = (j.ok ? "Verbunden – " : "Fehler: ") + j.message;
 }
 
+// Rückfrage „Historie neu einlesen“ (seit 0.42.1 zusammenführend; Haus-, Raum- und Ventilmodelle lernen neu)
+const RELOAD_ASK = "Historie aus Home Assistant neu einlesen?\n\nHeatPilot liest Langzeitstatistik und Recorder-Historie neu ein – zusammenführend: Gespeicherte Werte, zu denen Home Assistant nichts hat (etwa Kesselwerte direkt von EMS-ESP), bleiben, und keine gespeicherte Innentemperatur wird ersetzt. Danach lernt es Haus-, Raum- und Ventilmodelle, Lernkurve und gelernte Zeiten neu; Warmwasser- und Personenmodelle bleiben. Das dauert je nach Umfang einige Minuten.";
 async function reloadHistory() {
-  if (!confirm("Historie aus Home Assistant neu einlesen? Gelerntes bleibt erhalten, Auswertungen werden neu berechnet.")) return;
+  if (!confirm(RELOAD_ASK)) return;
   await fetch("api/reload_history", { method: "POST" });
   $("save-msg").className = ""; $("save-msg").textContent = "Historie wird neu eingelesen – die Übersicht aktualisiert sich danach.";
 }
@@ -4212,12 +4750,14 @@ async function loadSettings() {
   DHWC = j.dhw_control || null; NOTIFY = j.notify || null;  // 0.38: Weg W und Benachrichtigungen
   BOILC = j.boiler_control || null;  // 0.41: Weg B – Schalter, Vorschläge, Status, Bereitschaft
   BPOW = j.boiler_power || null;  // 0.42: Mindestleistung mit Herkunft und Vorschlag
+  SET_SAVED = j.configured !== false;  // 0.42.1: Gelerntes übernehmen erst mit gespeicherten Einstellungen
   renderSettings();
 }
 
 let OV_STALE = false;
 loadHeat().catch(heatError);
 load().then(() => { if (!$("setup-banner").hidden) showTab("settings"); }).catch((e) => { $("status").textContent = "Fehler: " + e; });
+jobPoll();  // 0.42.1: läuft gerade „Hausdaten wiederherstellen“ bzw. „neu lernen“? – dann Stand zeigen und abfragen
 setInterval(() => load().catch(() => {}), 300000);
 let resizeTimer; addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => load().catch(() => {}), 300); });
 </script>

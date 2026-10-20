@@ -3,6 +3,9 @@
 Rein sachlich: zeigt schwarz auf weiß, was das Haus braucht und was der Kessel
 liefert – bezogen auf die letzten 12 Monate Messung. Enthält keine
 Namen, Adressen oder Standortdaten. Kein Energieausweis nach GEG.
+
+Seit 0.42.1 sagt es, über welchen Zeitraum es rechnet, woraus das Hausmodell gelernt hat und welche Stunden fehlen
+(mit Grund, ``house_data``); fehlt vielen Stunden die Innentemperatur, ist es vorläufig.
 """
 
 from __future__ import annotations
@@ -11,7 +14,7 @@ import math
 import time
 from datetime import datetime
 
-from . import __version__, guards
+from . import __version__, guards, house_data
 from .analysis import heat_runs
 from .engine import local, num
 from .pdf import Page, document, text_width
@@ -152,6 +155,10 @@ def collect(eng, now_ts: int | None = None) -> dict:
         prelim.append(f"erst {len(heating)} von {MIN_HEATING_HOURS} Heizstunden gemessen")
     if len(cold) < MIN_COLD_HOURS:
         prelim.append("noch kein Frost gemessen")
+    cov = house_data.coverage(eng.store)
+    if house_data.missing_in(cov):  # 0.42.1: nicht still weniger nehmen
+        prelim.append(f"{fmt(cov['no_t_in'])} Stunden ohne Innentemperatur – das Hausmodell lernt sie nicht "
+                      "(„Hausdaten wiederherstellen“)")
 
     verdicts = []
     spec = design_kw * 1000 / area if design_kw and area else None
@@ -245,6 +252,12 @@ def collect(eng, now_ts: int | None = None) -> dict:
             "heating_hours": len(heating),
             "cold_hours": len(cold),
             "coldest": round(min(temps), 1) if temps else None,
+            # 0.42.1: Zeitraum der Rechnung, woraus das Hausmodell lernte, was fehlt (mit Grund)
+            "year_from": local(year[0]["ts"]).date().isoformat() if year else None,
+            "house_hours": cov["usable"], "house_days": cov["usable_days"], "house_from": cov["usable_from"],
+            "house_learned_hours": eng.house.rls.updates, "house_learned_days": eng.house.daily.updates,
+            "missing": house_data.missing(cov),
+            "note": house_data.basis_text(cov, eng.house.rls.updates, eng.house.daily.updates),
         },
         "house": {
             "ok": house_ok["ok"],
@@ -344,6 +357,8 @@ def render(data: dict, step: float = 15.0) -> bytes:
     b = data["basis"]
     basis = (f"Grundlage: Messdaten vom {_date(b['from'])} bis {_date(b['to'])} · {fmt(b['heating_hours'])} "
              f"Heizstunden, {fmt(b['cold_hours'])} davon unter 0 °C · kälteste Stunde {fmt(b['coldest'], 1)} °C")
+    if b.get("note"):  # 0.42.1: woraus das Hausmodell lernte, was fehlt
+        basis += f". {b['note']}"
     y = p.paragraph(L, 124, basis, R - L, 9, color=GREY)
     p.line(L, y - 4, R, y - 4, color=ORANGE, lw=1.2)
     y += 14

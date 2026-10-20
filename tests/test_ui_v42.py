@@ -286,5 +286,5 @@ def test_docs_and_changelog_name_the_places():
     for text in ("Einstellungen → Warmwasser", "**Auslösen**", "Einstellungen → Entitäten → Warmwasser über HeatPilot",
                  "„Desinfektion auslösen (Schalter)“", "Einstellungen → Haus & Kessel"):
         assert text in docs, text
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1].split("\n## ")[0]
+    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.0")[1].split("\n## ")[0]  # seit 0.42.1
     assert "**Oberfläche:**" in head and "tests/test_ui_v42.py" in head

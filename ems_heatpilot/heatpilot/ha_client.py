@@ -268,6 +268,15 @@ class HAClient:
             timeout=300,
         )
 
+    async def list_statistic_ids(self, statistic_type: str | None = "mean") -> list[dict]:
+        """Welche Langzeitstatistiken es gibt (seit 0.42.1, nur lesen): je Eintrag ``statistic_id``, Name, Einheit,
+        Quelle, Mittel/Summe – auch von Entitäten, die es nicht mehr gibt. Für die alten Temperatur-Quellen eines Raums
+        (``room_alias``)."""
+        payload = {"type": "recorder/list_statistic_ids"}
+        if statistic_type:
+            payload["statistic_type"] = statistic_type
+        return await self.call(payload, timeout=60) or []
+
     async def weather_forecast(self, entity_id: str) -> list[dict]:
         res = await self.call(
             {
