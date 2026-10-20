@@ -65,3 +65,17 @@ def test_not_found_controls_do_not_block(tmp_path):
     assert be.write_problems(eng, bc.entities["flow"], bc.entities["heating"]) == []
     eng.ems_controls = {"selflowtemp": {"found": True, "writeable": False}}
     assert any("selflowtemp nicht schreibbar" in p for p in be.write_problems(eng, bc.entities["flow"], None))
+
+
+def test_open_valve_gets_heat_even_if_models_say_no_need(tmp_path):
+    """0.47.2: Fordert ein Thermostat jetzt Wärme an (Ventil offen), liefert der Kessel mindestens 35 °C – auch wenn die
+    Modelle (z. B. Nacht laut Plan, Raum am Soll) keinen Bedarf sehen."""
+    from heatpilot.boiler_flow import compute
+    from test_boiler41 import climate, slow_room
+    eng, ha, bc = house(tmp_path)
+    eng.rooms["climate.wz"] = slow_room(a=0.02, b=0.01)                 # braucht nur 29 °C – rechnerisch kein Bedarf
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")
+    assert compute(eng, T0)[0].idle                                     # Ventil zu: nur Pumpe
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="heating")       # Thermostat öffnet
+    t = compute(eng, T0)[0]
+    assert t.heating is True and not t.idle and t.flow >= br.FLOW_MIN and "Ventil offen" in t.reason
