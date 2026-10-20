@@ -1519,8 +1519,16 @@ async function loadHeat() {
   const j = await getJSON("api/heat");
   if (j.starting) { heatMsg("Startet noch …"); heatTimer = setTimeout(() => loadHeat().catch(heatError), 5000); return; }
   HEAT = j; renderHeat();
-  if (!$("view-heat").hidden || !$("view-overview").hidden) heatTimer = setTimeout(() => loadHeat().catch(heatError), 30000);
+  const box = statusPage();  // 0.47.1: Kessel/Warmwasser in den Einstellungen ohne Neuladen aktuell halten
+  if (box) {
+    if (j.boiler) boilerUpdate(j.boiler, j.readiness && j.readiness.boiler_control, "");
+    if (j.dhw) dhwUpdate(j.dhw, j.readiness && j.readiness.dhw, "");
+  }
+  if (!$("view-heat").hidden || !$("view-overview").hidden || box) heatTimer = setTimeout(() => loadHeat().catch(heatError), 30000);
 }
+// Einstellungen → Kessel/Warmwasser/Steuerung offen? Dann holt loadHeat alle 30 s den Status (0.47.1)
+const statusPage = () => typeof SET_PAGE !== "undefined" && !$("view-settings").hidden
+  && ["kessel", "warmwasser", "steuerung"].includes(SET_PAGE);
 function heatError(e) { heatMsg(`<span class="msg-err">${esc(e.message || e)}</span>`); }
 // Meldung nach einer Aktion (0.43): im offenen Dialog unter den Knöpfen (#dlg-msg), sonst als Einblendung unten im
 // Reiter Heizen – 3 s, Fehler 6 s. Kein freigehaltener Platz mehr über den Raumkacheln.
@@ -5348,6 +5356,7 @@ function setPage(p) {
   const vis = !v.hidden;
   $("view-diag").hidden = !vis || SET_PAGE !== "diagnose";
   if (vis && SET_PAGE === "diagnose" && was !== "diagnose") loadDiagPage();
+  if (vis && statusPage() && was !== SET_PAGE) loadHeat().catch(() => {});  // 0.47.1: Status laufend aktuell
   if (vis && was !== SET_PAGE && typeof scrollTo === "function") scrollTo(0, 0);
 }
 // Ungespeicherte Änderungen (0.43): erst dann zeigt die Speicherleiste „Speichern“ und „Verwerfen“
