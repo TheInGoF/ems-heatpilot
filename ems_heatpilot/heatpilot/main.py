@@ -26,7 +26,7 @@ from aiohttp import web
 from . import __version__
 from . import boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
 from . import room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel
-from . import room_heating  # 0.45: Heizleistung vom alten Thermostat
+from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
 from .app_jobs import JobsMixin
 from .backfill import run_backfill
 from .boiler_control import BoilerControl
@@ -141,8 +141,11 @@ class App(JobsMixin):
         reg = await self.registry()
         found = discover(states, reg, self.cfg)
         renames = room_switch.prepare(self, found, reg)  # 0.44: feste Kennung, Wechsel erkennen
-        # 0.45: Räume ohne Ventilsensor nutzen die Heizleistung ihres alten Thermostats (Einstellungen bleiben)
-        room_heating.attach(self.store, found, Registry.of(reg).lookup(), {s["entity_id"]: s for s in states})
+        # 0.45.1: gelöschte Sensoren zählen nicht; 0.45: Räume ohne Ventilsensor nutzen die Heizleistung ihres alten
+        # Thermostats, solange es sie gibt (Einstellungen bleiben)
+        idx, by_id = Registry.of(reg).lookup(), {s["entity_id"]: s for s in states}
+        sensor_gone.drop(found, by_id, idx)
+        room_heating.attach(self.store, found, idx, by_id)
         old = self.eng
         backfill, relearn, since, kept = self._learning_plan(found, backfill, relearn, old)
         eng = Engine(self.cfg, self.store, found)
@@ -192,7 +195,9 @@ class App(JobsMixin):
             if not relearn:
                 log.info("Neu lernen wurde unterbrochen (Neustart) – HeatPilot lernt jetzt aus den gespeicherten "
                          "Daten neu")
-            return False, True, house_restore.prepare(self.store, [r.climate for r in found.rooms]), {}
+            # 0.45.1: ein %-Ventilmodell ohne %-Werte (ruht) bleibt – es ließe sich nicht neu lernen
+            return False, True, house_restore.prepare(self.store, [r.climate for r in found.rooms],
+                                                      valve_learn.resting(self.store, found.rooms)), {}
         if old is not None:
             old.save()  # Lernstand sichern, die neue Engine lädt ihn
         return backfill, False, None, {}

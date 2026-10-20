@@ -227,6 +227,7 @@ async def backfill_rooms(ha: HAClient, eng: Engine, rooms: list, days: int, key_
         f"SELECT room, ts FROM room_samples WHERE ts >= ? AND room IN ({','.join('?' * len(keys))})",
         (start_ts, *keys))}  # schon gespeichert: bleibt, wie es ist
     reader, spikes = _RoomReader(), plausibility.SpikeFilter()
+    reader.valve_typical = getattr(eng, "valve_typical", {})  # 0.45.1: typische Öffnung wie live
     rows, subst, kept = [], [], 0
     for ts in range(start_ts, end_ts, step):
         reader.states = {e: {"state": hit[0], "attributes": hit[1]} for e, c in cur.items() if (hit := c.at(ts))}

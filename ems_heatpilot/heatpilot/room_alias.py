@@ -17,8 +17,9 @@ Gefunden wird der alte Sensor (nur lesen, nichts an Home Assistant):
 Ein Alias ändert keine Messwerte; erst „Hausdaten wiederherstellen“ (``house_restore``) liest mit ihm die
 Langzeitstatistik neu ein – zusammenführend, ohne etwas zu überschreiben, und nur, wenn der alte Sensor zum
 gespeicherten Hausmittel passt (``indoor_mean``: Versatz, Streuung, Zusammenhang; das Ergebnis steht danach beim Alias
-unter ``check``). Ein Sensor, den ein anderer Raum schon nutzt (aktueller Sensor oder Alias), wird abgewiesen
-(``check``). Wird ein Alias entfernt oder ersetzt, nimmt ``put`` die Innentemperatur der Stunden zurück, die er
+unter ``check`` – liefert die Quelle später nichts mehr, etwa nach dem Löschen der alten Integration, bleibt es, seit
+0.45.1). Ein Alias ist eine Statistik-ID und braucht die alte Entität nicht. Ein Sensor, den ein anderer Raum schon
+nutzt (aktueller Sensor oder Alias), wird abgewiesen (``check``). Wird ein Alias entfernt oder ersetzt, nimmt ``put`` die Innentemperatur der Stunden zurück, die er
 gefüllt hat (``Store.revert_t_in`` – gefüllt wurde nur, wo sie fehlte); „Hausdaten wiederherstellen“ füllt sie danach
 mit den übrigen Quellen neu.
 """
@@ -93,12 +94,16 @@ def put(store, room: str, stat: str | None, frm: str | None = None, how: str = "
 
 def note_checks(store, fitted: dict[str, dict], now_ts: int | None = None) -> None:
     """Prüfung je alter Quelle (``indoor_mean.fit`` beim Einlesen der Langzeitstatistik) beim Alias merken – die
-    Oberfläche zeigt, ob er passt und warum nicht."""
+    Oberfläche zeigt, ob er passt und warum nicht. Seit 0.45.1 bleibt eine gemerkte Prüfung, wenn die Quelle diesmal
+    nichts zum Vergleichen lieferte (keine gemeinsamen Stunden – etwa weil Sensor bzw. Statistik gelöscht sind): Was
+    einmal geprüft eingelesen wurde, wird dadurch nicht „passt nicht“."""
     aliases = get(store)
     ts = int(time.time() if now_ts is None else now_ts)
     changed = False
     for a in aliases.values():
         f = fitted.get(a.get("stat"))
+        if f is not None and a.get("check") and not f.get("ok") and not f.get("hours"):
+            continue
         if f is not None:
             a["check"] = {**{k: f.get(k) for k in ("ok", "offset", "spread", "corr", "hours", "why")}, "ts": ts}
             changed = True

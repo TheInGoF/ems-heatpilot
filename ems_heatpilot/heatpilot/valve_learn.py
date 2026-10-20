@@ -7,8 +7,11 @@ Fremdwärme-Ereignisse (``room_events`` und das laufende aus ``Engine.room_ext``
 * **Fenster offen:** Die Raumtemperatur fällt in 15 min um mindestens 0,5 K – von 15 min davor bis 45 min danach.
 * **Fremdwärme** (Kamin, Ofen, Gäste) und **Heizbetrieb aus** (nur für Kennlinie und Gütemaß: ohne Heizwasser
   sagt die Ventilstellung nichts über die Wärme).
-* **Ersatzwerte:** Meldet der Ventilsensor eines Raums nichts, nimmt der Messpunkt ``hvac_action`` (0/100 %) – solche
-  Ventilwerte (Tabelle ``valve_subst``) lernt das Ventilmodell nicht.
+* **Ersatzwerte:** Meldet der Ventilsensor eines Raums nichts, nimmt der Messpunkt ``hvac_action`` (0/100 % bzw. seit
+  0.45.1 die typische Öffnung, ``valve_typical``) – solche Ventilwerte (Tabelle ``valve_subst``) lernt ein stetiges
+  Ventilmodell nicht. Ein Modell, das nur an/aus kennt (``binary_dev``), lernt aus ihnen an/aus (offen = an).
+* **Ruht** (``no_pct``, seit 0.45.1): ein %-Modell, dessen Raum nur noch an/aus meldet – es vergisst nichts
+  (``decay`` hält an), bis wieder %-Werte kommen.
 * **Beharrung** heißt: kein Soll-Wechsel in den letzten 30 min.
 
 Ob ein Ventil nur an/aus kennt, zählt nur aus Messpunkten, die etwas sagen: Heizbetrieb an, kein Fenster, keine
@@ -70,6 +73,17 @@ def binary_device(room) -> bool:
     return not any(d.get("heating_power") for d in room.devices)
 
 
+def resting(store, rooms) -> list[str]:
+    """Räume, deren gespeichertes %-Ventilmodell ruht (der Raum meldet nur an/aus, ``ValveModel.no_pct``) – es bleibt
+    beim Neulernen aus gespeicherten Daten (0.45.1: ohne %-Werte ließe es sich nicht neu lernen)."""
+    out = []
+    for r in rooms:
+        d = store.get(f"model.valve.{r.climate}")
+        if d and vm.ValveModel.from_dict(d, binary_device(r)).no_pct:
+            out.append(r.climate)
+    return out
+
+
 def group_of(room) -> dict | None:
     """Gruppe mit mehreren Geräten: wie viele Ventile gemittelt werden und ob stetige (mit Ventilsensor) und an/aus
     (ohne) gemischt sind – das Mittel beschreibt dann keines davon. Ein Raumregler als Schlüssel zählt nicht mit."""
@@ -104,13 +118,21 @@ def _heat(row) -> bool | None:
     return bool(day != 0 and off != 1)
 
 
-def fetch(store, climate: str, start: int, end: int, running_ext: int | None = None) -> list[Row]:
-    """Messpunkte ``start`` ≤ ts < ``end`` aufbereitet (Regelabweichung, Heizbetrieb, Fremdwärme, Fenster, Sprünge)."""
+def _subst(valve, binary: bool):
+    """Ersatzwert: für ein Modell, das nur an/aus kennt, an/aus (offen = 100 %), sonst nicht lernen (None)."""
+    return (100.0 if (valve or 0) > vm.OPEN_PCT else 0.0) if binary and valve is not None else None
+
+
+def fetch(store, climate: str, start: int, end: int, running_ext: int | None = None,
+          binary: bool = False) -> list[Row]:
+    """Messpunkte ``start`` ≤ ts < ``end`` aufbereitet (Regelabweichung, Heizbetrieb, Fremdwärme, Fenster, Sprünge);
+    Ersatzwerte siehe ``_subst``."""
     heat = {r["ts"]: _heat(r) for r in store.query(
         "SELECT ts, hc_day, heating_off FROM samples WHERE ts >= ? AND ts < ?", (start, end))}
     subst = {r["ts"] for r in store.query(
         "SELECT ts FROM valve_subst WHERE room = ? AND ts >= ? AND ts < ?", (climate, start, end))}
-    rows = [Row(r["ts"], r["temp"], r["target"], None if r["ts"] in subst else r["valve"], heat.get(r["ts"]))
+    rows = [Row(r["ts"], r["temp"], r["target"], _subst(r["valve"], binary) if r["ts"] in subst else r["valve"],
+                heat.get(r["ts"]))
             for r in store.query(
                 "SELECT ts, temp, target, valve FROM room_samples WHERE room = ? AND ts >= ? AND ts < ? ORDER BY ts",
                 (climate, start, end))]
@@ -191,6 +213,8 @@ def learn_span(model: vm.ValveModel, rows: list[Row], lo: int, hi: int) -> None:
     """Messpunkte des Abschnitts lernen: Anker a = lo − LAG_S ≤ ts < b = hi − LAG_S. Zuerst das Gütemaß mit dem
     bisherigen Modell (ehrlich: vorhergesagt, bevor gelernt), dann Kennlinie, Sprünge, Schaltpunkte und PI."""
     a, b = lo - LAG_S, hi - LAG_S
+    if model.no_pct and model.decay_ts is not None:  # ruht (0.45.1): nichts vergessen
+        model.decay_ts = max(model.decay_ts, hi)
     model.decay(hi)
     model.note_kind()
     _delay(rows, model.dead_s())
@@ -332,7 +356,7 @@ def learn_chunk(store, model: vm.ValveModel, climate: str, until: int, running_e
     if lo >= until:
         return False
     hi = min(lo + CHUNK_S, until)
-    rows = fetch(store, climate, lo - LAG_S - CTX_S, hi, running_ext)
+    rows = fetch(store, climate, lo - LAG_S - CTX_S, hi, running_ext, model.binary_dev)
     learn_span(model, rows, lo, hi)
     return hi < until
 

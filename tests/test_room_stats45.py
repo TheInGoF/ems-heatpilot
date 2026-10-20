@@ -223,11 +223,13 @@ def test_hour_statistics_fill_only_gaps_with_checked_offset(tmp_path):
     assert room["offset"] == pytest.approx(ALIAS_OFF) and room["offset_how"] == "room"
     assert room["first"] == START and room["last"] == OWN - 3600 and res["flow_stat"] == FLOW
     own = st.query("SELECT COUNT(*) AS n FROM room_samples")[0]["n"]
-    restore(eng)                                                     # noch einmal: ersetzt, nichts doppelt
+    restore(eng)                                                     # noch einmal: ergänzt nur, nichts doppelt
     assert st.query("SELECT COUNT(*) AS n FROM room_stats")[0]["n"] == len(rows)
     assert st.query("SELECT COUNT(*) AS n FROM room_samples")[0]["n"] == own  # eigene Raumwerte unberührt
-    room_alias.put(st, KEY, None)                                    # alter Sensor entfernt: Zeilen fallen weg
-    assert restore(eng)["hours"] == 0 and st.query("SELECT COUNT(*) AS n FROM room_stats")[0]["n"] == 0
+    room_alias.put(st, KEY, None)                                    # alter Sensor entfernt: Zeilen bleiben (0.45.1)
+    res = restore(eng)
+    assert res["hours"] == 0 and res["rooms"][0]["kept"] == len(rows)
+    assert st.query("SELECT COUNT(*) AS n FROM room_stats")[0]["n"] == len(rows)
 
 
 def test_room_model_learns_hour_steps_valve_model_does_not(tmp_path):

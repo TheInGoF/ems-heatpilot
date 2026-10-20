@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import backfill, house_data, room_adopt, room_alias, room_stats, valve_since
+from . import backfill, house_data, room_adopt, room_alias, room_stats, valve_since, valve_typical
 from .dhw import DhwModel
 from .discovery import Room, device_sensors
 from .models import ROOM_STEP_H
@@ -57,13 +57,14 @@ def relearn_since(store) -> int | None:
     return first if first is not None else store.get("history_start")
 
 
-def prepare(store, rooms: list[str] | None = None) -> int | None:
+def prepare(store, rooms: list[str] | None = None, keep_valves=()) -> int | None:
     """Vor dem Aufbau der neuen Engine: Modelle verwerfen, die neu gelernt werden – Raum- und Ventilmodelle nur der
-    aktuellen Räume ``rooms``. Merkt vorher ``relearn_pending`` (Neustart mittendrin: ``pending``). Gibt den Beginn
-    (``since``) zurück."""
+    aktuellen Räume ``rooms``; die Ventilmodelle in ``keep_valves`` bleiben (seit 0.45.1: ein %-Modell, dessen Raum nur
+    noch an/aus meldet – ``valve_learn.resting``). Merkt vorher ``relearn_pending`` (Neustart mittendrin: ``pending``).
+    Gibt den Beginn (``since``) zurück."""
     since = relearn_since(store)
     store.put(PENDING, {"ts": int(time.time()), "since": since})
-    store.reset_models(None if since is None else local(since).date().isoformat(), rooms)
+    store.reset_models(None if since is None else local(since).date().isoformat(), rooms, keep_valves)
     return since
 
 
@@ -187,6 +188,7 @@ async def restore(ha, eng, idx, stat_list) -> dict:
     hours = await backfill.backfill_statistics(ha, eng, eng.cfg.statistics_backfill_days)
     room_rows, old = await _fetch_old(ha, eng, idx)
     stats = await _room_stats(ha, eng, idx, stat_list)
+    valve_typical.learn(eng.store, [r.climate for r in eng.found.rooms])  # 0.45.1: aus allen eingelesenen %-Werten
     after = house_data.coverage(eng.store)
     entry = {"ts": int(time.time()), "kind": "restore", "assigned": assigned,
              "aliases": len(room_alias.get(eng.store)), "statistics_hours": hours, "room_rows": room_rows,

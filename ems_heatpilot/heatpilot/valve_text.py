@@ -95,5 +95,8 @@ def text(s: dict) -> str:
     step = s["step_k"]
     parts.append(f"Schritt {de_num(step, 2 if round(step, 1) != step else 1)} K"
                  + (" (angenommen)" if s["step_source"] == "angenommen" else ""))
-    parts.append("belastbar" if s["reliable"] else f"lernt ({'; '.join(s['reasons'])})")
+    if s.get("no_pct"):  # 0.45.1: %-Modell, der Raum meldet nur an/aus
+        parts.append(f"ruht ({'; '.join(s['reasons'])})")
+    else:
+        parts.append("belastbar" if s["reliable"] else f"lernt ({'; '.join(s['reasons'])})")
     return " · ".join(parts)

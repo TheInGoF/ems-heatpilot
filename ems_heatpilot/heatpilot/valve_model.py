@@ -20,6 +20,8 @@ es, sie schreibt nichts.
   letzten 14 Tage, in Prozentpunkten – und zum Vergleich der Fehler von „Ventil bleibt, wie es ist“.
 * **Nur an/aus** (kein Ventilsensor, Ventil aus ``hvac_action``; oder die Werte sind nur 0 und 100): statt der
   Kennlinie die Schaltschwellen – ein ab ``e_on``, aus ab ``e_off`` – und wie lange es nach einem Soll-Sprung dauert.
+* **Art gewechselt** (seit 0.45.1): Meldet ein Raum mit stetigem %-Modell nur noch an/aus (Ventilsensor gelöscht),
+  bleibt das Modell – es ruht (``no_pct``: nicht belastbar, vergisst nichts) und lernt mit %-Werten weiter.
 * **Belastbar**, wenn ≥ 8 Sprünge (≥ 4 je Richtung, Reaktionszeiten ohne große Streuung), ≥ 48 h Beharrung, der
   30-min-Fehler ≤ 20 Prozentpunkte und deutlich kleiner als bei „Ventil bleibt“; beim P-Regler wandert die Kennlinie
   nicht. Sonst „lernt“ mit Grund.
@@ -67,6 +69,7 @@ E50_DAYS, E50_MIN_N, E50_SPREAD_K = 14, 3, 0.3  # P-Regler: „halb offen“ wan
 SERIES = {"P": 5, "PI": 7}  # Stelle der Fehlersumme je Vorhersager in einer Gütemaß-Zelle (danach die Zahl)
 BINARY_SHARE = 0.02         # weniger Zwischenwerte (5…95 %) als dieser Anteil: Ventil kennt nur an/aus …
 BINARY_MIN_N = 500          # … nach so vielen Messwerten (nur solche, die etwas sagen: Heizbetrieb, Ventil im Spiel)
+NO_PCT_TEXT = "nur an/aus gemeldet – das %-Modell bleibt und lernt erst mit %-Werten weiter"  # 0.45.1
 
 
 def e_class(e: float) -> int:
@@ -160,6 +163,7 @@ class ValveModel:
     learned_until: int | None = None                     # bis hier sind die Messwerte gelernt
     decay_ts: int | None = None
     version: int = VERSION
+    no_pct: bool = field(default=False, compare=False)   # 0.45.1: %-Modell, der Raum meldet nur an/aus (ruht)
 
     # ------------------------------------------------------------------ Eigenschaften
     @property
@@ -483,6 +487,8 @@ class ValveModel:
         """Belastbar für diesen Raum (``reliable``), dazu: keine gemischte Gruppe, nicht beim Nachlernen aus der
         Historie – dasselbe Urteil für die Anzeige (``summary``) und die Ventilführung (``valve_control``, 0.40)."""
         ok, reasons = self.reliable(now_day)
+        if self.no_pct:  # 0.45.1: nichts zum Prüfen – nicht führen, das Modell bleibt
+            ok, reasons = False, [NO_PCT_TEXT, *reasons]
         if group and group.get("mixed"):
             ok, reasons = False, [*reasons, "Gruppe mit stetigen und an/aus-Ventilen – das Mittel beschreibt keines"]
         if catching_up:
@@ -503,7 +509,8 @@ class ValveModel:
         resp, reg = self.response(), self.regler(day)
         out = {
             "kind": self.kind, "regler": reg, "load_dependent": reg == "PI",
-            "state": "belastbar" if ok else "lernt", "reliable": ok, "reasons": reasons,
+            "state": "ruht" if self.no_pct else "belastbar" if ok else "lernt", "reliable": ok, "reasons": reasons,
+            "no_pct": self.no_pct,
             "curve": self.curve(), **self.points(), "response": resp,
             "jumps": resp["up"]["n"] + resp["down"]["n"], "steady_h": round(self.steady_h, 1),
             "pi": None if kp is None else {
@@ -534,11 +541,13 @@ class ValveModel:
 
     @classmethod
     def from_dict(cls, d: dict | None, binary_dev: bool = False) -> ValveModel:
-        """Gespeichertes Modell; fehlt es, passt der Stand (``VERSION``) nicht oder hat sich die Geräteart geändert,
-        ein neues – es lernt dann aus der gespeicherten Historie nach."""
-        if not d or d.get("version") != VERSION or bool(d.get("binary_dev")) != binary_dev:
+        """Gespeichertes Modell; fehlt es oder passt der Stand (``VERSION``) nicht, ein neues – es lernt dann aus der
+        gespeicherten Historie nach. Seit 0.45.1 bleibt es, wenn sich die Geräteart ändert (dasselbe Ventil): Ein
+        stetiges %-Modell bleibt stetig, solange der Raum nur an/aus meldet (``no_pct``: ruht, lernt erst mit
+        %-Werten weiter); an/aus → % lernt stetig weiter. Neu nur mit „Ventil neu lernen“ bzw. „anderes Thermostat“."""
+        if not d or d.get("version") != VERSION:
             return cls(binary_dev=binary_dev)
-        m = cls(binary_dev=binary_dev)
+        m = cls(binary_dev=bool(d.get("binary_dev")))
         hist = d.get("hist") or []
         if len(hist) == N_CLASSES and all(len(b) == N_BINS for b in hist):
             m.hist = [list(b) for b in hist]
@@ -554,4 +563,7 @@ class ValveModel:
         m.skipped_h.update(d.get("skipped_h") or {})
         m.valve_n, m.inter_n = float(d.get("valve_n", 0.0)), float(d.get("inter_n", 0.0))
         m.seen_kind, m.learned_until, m.decay_ts = d.get("seen_kind"), d.get("learned_until"), d.get("decay_ts")
+        if m.binary_dev != binary_dev:
+            m.binary_dev = binary_dev and m.kind == "binär"
+        m.no_pct = binary_dev and not m.binary_dev
         return m

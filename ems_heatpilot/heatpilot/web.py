@@ -50,7 +50,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
-from . import boiler_power, disinfect_entity, room_identity, web_adopt, web_restore, web_switch
+from . import boiler_power, disinfect_entity, room_identity, sensor_gone, web_adopt, web_restore, web_switch
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -194,8 +194,9 @@ def make_app(app) -> web.Application:
                                "status": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))},
             # 0.42: Mindestleistung – wirksamer Wert, Herkunft, Vorschlag (nie automatisch übernommen)
             "boiler_power": boiler_power.info(app.eng),
-            # 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (genutzt, zum Speichern angeboten)
-            "valve_found": getattr(app.eng.found, "valve_found", None) or {},
+            # 0.45: Heizleistung vom alten Thermostat je Raumschlüssel (genutzt, zum Speichern angeboten) – seit 0.45.1
+            # nur, solange es sie gibt; dazu je Thermostat die Felder mit gelöschtem Sensor (``sensors_gone``)
+            **await sensor_gone.for_settings(app),
         })
 
     async def entities(_req):

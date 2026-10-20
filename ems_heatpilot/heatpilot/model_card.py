@@ -8,7 +8,8 @@
   aber ohne Innentemperatur als Warnung – mit ``restore`` = Knopf „Hausdaten wiederherstellen“ anbieten
   (``house_data``);
 * **Räume** – n plausibel von m, je Raum Zustand und erster Grund;
-* **Ventile** – belastbar n von m, je Raum Zustand (lernt aus der Historie nach, lernt, belastbar);
+* **Ventile** – belastbar n von m, je Raum Zustand (lernt aus der Historie nach, lernt, belastbar, seit 0.45.1 „ruht“:
+  %-Modell, der Raum meldet nur an/aus) und die typische Öffnung beim Heizen (``valve_typical``, Ersatz ohne %-Werte);
 * **Warmwasser** – plausibel oder lernt;
 * das letzte Wiederherstellen bzw. Neulernen (``house_restore``, Protokoll ``house.restored``) und die letzte Übernahme (``room_adopt``).
 
@@ -20,7 +21,7 @@ from __future__ import annotations
 import math
 import time
 
-from . import guards, house_data, room_adopt, valve_learn
+from . import guards, house_data, room_adopt, valve_learn, valve_model, valve_typical
 from .models import ROOM_STEP_H
 from .values import local
 
@@ -95,8 +96,10 @@ def valves_part(eng, now_ts: int) -> dict:
         catching = valve_learn.behind(model, eng._last_room_step)
         ok, reasons = model.usable(day, catching, valve_learn.group_of(r))
         state = "belastbar" if ok else "lernt nach" if catching else "lernt"  # nach: aus der gespeicherten Historie
+        if model.no_pct:  # 0.45.1: %-Modell, der Raum meldet nur an/aus – bleibt, lernt mit %-Werten weiter
+            state, reasons = "ruht", [valve_model.NO_PCT_TEXT]
         items.append({"climate": r.climate, "name": r.name, "reliable": ok, "state": state, "catching_up": catching,
-                      "reason": reasons[0] if reasons else None})
+                      "reason": reasons[0] if reasons else None, "typical": valve_typical.pct(eng.store, r.climate)})
     n = sum(1 for i in items if i["reliable"])
     return {"reliable": n, "total": len(items), "catching_up": sum(1 for i in items if i["catching_up"]),
             "items": items, "text": f"{n} von {len(items)} belastbar"}

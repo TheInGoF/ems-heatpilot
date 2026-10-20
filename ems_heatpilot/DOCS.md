@@ -872,8 +872,12 @@ Ventilsensor gerade nichts (Cloud-Ausfall), nimmt der Messpunkt zwar `hvac_actio
 diesen Ersatzwert aber nicht (gemerkt in der Tabelle `valve_subst`). Seit 0.45 gilt dasselbe für einen veralteten
 Sensor: seit 6 Stunden kein neuer Wert, und das Thermostat widerspricht ihm (heizt bei 0 %, ruht bei mehr als 0 %).
 Hat ein Raum mindestens einen echten Ventilwert in %, zählen nur die echten – 0/100 % aus `hvac_action` anderer
-Geräte verwässern das Raumventil nicht. Der Heizkreis von EMS-ESP bekommt kein
-Ventilmodell – er ist kein Thermostat mit Ventil.
+Geräte verwässern das Raumventil nicht. Seit 0.45.1 nimmt ein Raum, der echte %-Werte kannte und jetzt nur noch
+an/aus meldet, beim Heizen seine **typische Öffnung** statt 100 % (Mittel der echten Ventilwerte über 5 %, ab 144
+Messpunkten, sonst aus der Stundenstatistik) – als Ersatzwert, damit die Wärmezufuhr im Raummodell zum Gelernten passt;
+das gelernte %-Ventilmodell bleibt dann erhalten und **ruht** (nicht belastbar, vergisst nichts), bis wieder %-Werte
+kommen. Nur „Ventil neu lernen“ bzw. „Anderes Thermostat“ beginnen es neu. Räume ohne je %-Werte: wie bisher 0/100 %.
+Der Heizkreis von EMS-ESP bekommt kein Ventilmodell – er ist kein Thermostat mit Ventil.
 
 - **Kennlinie:** Ventil (Median) je Abstand Soll − Raumtemperatur in 0,1-K-Stufen von 1 K über bis 2 K unter dem
   Soll. Nur Beharrung: kein Soll-Wechsel in den letzten 30 min, Heizbetrieb an, kein Fenster offen (die
@@ -1542,12 +1546,14 @@ verloren:
   in einer eigenen Tabelle (`room_stats`): Das Raummodell lernt aus ihnen Aufheizen und Auskühlen in Stundenschritten
   (ohne Heizleistung nur Stunden ohne Heizbetrieb), das Ventilmodell nicht (es braucht Soll-Sprünge in feiner
   Auflösung), Hausmittel und Raum-Verläufe auch nicht. Das Ergebnis nennt je Raum die nachgeholten Stunden (Zeitraum
-  im Tooltip), ob es eine Heizleistung gab, und warum ein Raum leer blieb.
+  im Tooltip), ob es eine Heizleistung gab, und warum ein Raum leer blieb. Seit 0.45.1 ergänzt ein neuer Lauf nur:
+  Fehlt die Quelle (alter Sensor, Statistik oder Integration gelöscht, Alias entfernt), bleiben die Stunden von früher
+  („… h von früher bleiben“).
 - **Aus gespeicherten Daten neu lernen** (Einstellungen → Erweitert): Haus-, Raum- und Ventilmodelle, Lernkurve und
   Fremdwärme-Ereignisse aus den gespeicherten Stunden- und Messwerten neu berechnen – ab dem ersten eigenen
   Messpunkt auch die Räume. Holt nichts aus Home Assistant und löscht keine Messwerte; Warmwasser- und
   Personenmodelle bleiben, ebenso die Modelle alter Entitäten ohne Raum (mit ihnen ihr Name für „Gelerntes
-  übernehmen“). Läuft nach dem Wiederherstellen und nach einem Raumwechsel von selbst; den Stand zeigt die Seite wie
+  übernehmen“) und seit 0.45.1 ein ruhendes %-Ventilmodell (ohne %-Werte ließe es sich nicht neu lernen). Läuft nach dem Wiederherstellen und nach einem Raumwechsel von selbst; den Stand zeigt die Seite wie
   beim Wiederherstellen. Abläufe laufen nacheinander – ein später gestarteter zeigt „Wartet: …“. Startet HeatPilot
   neu, während es neu lernt, lernt es beim Start fertig.
 
@@ -1570,6 +1576,8 @@ gleichen Bereich bzw. mit passendem Namen. Läuft die alte Integration weiter, n
 Sensor am eigenen Gerät; die Einstellungen bleiben unverändert, ein eingetragener Sensor hat immer Vorrang. Unter
 Einstellungen → Räume → Einzelheiten steht er im Feld „Ventil / Heizleistung“ mit Herkunft („gefunden vom alten
 Thermostat …“) – Speichern trägt ihn fest ein. Meldet er nichts oder ist er veraltet, gilt der Wert als Ersatzwert.
+Er hilft nur, solange es die alte Integration gibt; was HeatPilot von ihm gelesen hat, bleibt nach dem Löschen (seit
+0.45.1 bietet die Oberfläche ihn nur an, solange es ihn gibt – siehe „Alte Thermostate bzw. Integration entfernen“).
 
 ### Thermostat wechseln
 
@@ -1591,6 +1599,21 @@ Jede Wahl kommt erst nach einer Rückfrage; bis dahin misst der Raum normal weit
 Entität um (gleiches Gerät laut Registry), zieht alles ohne Rückfrage um. Unter „Einzelheiten“ jedes Raums verlernt
 **„Ventil neu lernen“** jederzeit nur das Ventil (z. B. nach Tausch des Ventilkopfs): Messwerte und Raummodell bleiben,
 das Ventil lernt ab jetzt. Alle Wechsel und was verlernt wurde stehen unter Räume im aufklappbaren Protokoll.
+
+### Alte Thermostate bzw. Integration entfernen
+
+Seit 0.45.1 braucht HeatPilot eine alte Integration (z. B. Tado-Cloud nach dem Wechsel auf HomeKit) bzw. alte
+Thermostate nicht auf Dauer – was es einmal gelesen hat, gehört HeatPilot:
+
+1. **Hausdaten wiederherstellen** (Einstellungen → Erweitert): liest Temperatur und Heizleistung der alten Sensoren
+   ein (Langzeitstatistik, Historie) und merkt sich je Raum die typische Ventilöffnung beim Heizen.
+2. **Integration löschen** – nichts weiter nötig. Eingelesene Raum- und Stundenwerte, alte Sensoren (Aliasse) und
+   Protokolle bleiben; ein späteres Wiederherstellen ohne die alten Quellen ergänzt nur und löscht nichts.
+
+Live gibt es danach nur, was die neuen Geräte liefern (HomeKit: heizt/heizt nicht, kein Ventil in %). Das fehlende
+Ventil-% ersetzt die typische Öffnung; das %-Ventilmodell ruht. Ein eingetragener Ventil-, Feuchte- oder
+Temperatur-Sensor, den es in Home Assistant nicht mehr gibt, zählt als nicht vorhanden – kein Fehler, unter
+Einstellungen → Räume steht beim Feld „gibt es in Home Assistant nicht mehr – kann leer bleiben“.
 
 ### Home Assistant füllt nur Lücken
 
