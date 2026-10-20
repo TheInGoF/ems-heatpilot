@@ -460,7 +460,7 @@ def test_summary_live_and_texts(tmp_path):
                                 "– 1 Schreibvorgänge")
     eng.store.add_valve_dry({"ts": T0 + 30, "room": BAD, "rule": "gemeinsam", "action": "anheben", "setpoint": 21.5,
                              "base": 21.0, "reliable": 0, "managed": 1, "written": 0})
-    assert "; im Trockenlauf dazu 0× früh drosseln und 1× gemeinsam anfordern – 1 Schreibvorgänge, nicht geschrieben" in (
+    assert "; beobachtet dazu 0× früh drosseln und 1× gemeinsam anfordern – 1 Schreibvorgänge, nicht geschrieben" in (
         vc.summary(eng, T0 + 60)["text"])
     eng2, _, _ = setup(tmp_path / "b")
     assert vc.summary(eng2, T0)["text"] == ("Noch kein Eingriff – in 7 Tagen hat HeatPilot an den Thermostaten nichts "

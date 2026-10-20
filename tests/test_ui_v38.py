@@ -115,19 +115,23 @@ def dhw_state(tmp_path, kind: str):
 # ------------------------------------------------------------------ Einbau
 def test_status_lines_log_and_settings_are_wired():
     page, js = html(), script()
-    assert '<p class="sub" id="heat-status"></p>\n    <p class="sub dhw-line" id="heat-dhw" hidden></p>' in page
-    assert '<p class="sub" id="status">Lade …</p>\n  <p class="sub dhw-line" id="ov-dhw" hidden></p>' in page
+    # 0.43: keine Warmwasser-Zeile mehr im Heizen – sie steht in Übersicht → Status (erster Abschnitt), aus api/heat
+    # (renderOvStatus aus renderHeat) und aus api/summary (load)
+    assert 'id="heat-dhw"' not in page and '<h3 class="st-h">Warmwasser</h3><p class="sub dhw-line" id="ov-dhw" hidden></p>' in page
+    assert page.index('id="ov-status"') < page.index('<p class="sub" id="status">Lade …</p>')
     render = between(js, "function renderHeat()", "function act(")
-    assert 'renderDhwLine("heat-dhw", j.dhw);' in render and "renderHeatLog(c, j.dhw);" in render
+    assert "renderOvStatus();" in render and "renderHeatLog(c, j.dhw);" in render
+    assert 'renderDhwLine("ov-dhw", j.dhw);' in between(js, "function renderOvStatus(lines = true) {", "\n}\n")
     assert "HEAT.dhw = j.dhw; renderHeat();" in between(js, "async function heatPost(", "function heatAction(")
     assert 'renderDhwLine("ov-dhw", s.dhw_control);' in between(js, "async function load() {", '$("tiles").innerHTML')
     rb = between(js, 'function renderReadyBox(r, err = "") {', "function readyBoxHtml(")
     assert 'box.insertAdjacentHTML("beforeend", dhwReadyHtml(r.dhw, READY_SHOW.dhw));' in rb
     assert "DHWC = j.dhw_control || null; NOTIFY = j.notify || null;" in between(js, "async function loadSettings()", "let OV_STALE")
     rs = between(js, "function renderSettings()", "function addVac()")
-    assert 'card("Warmwasser", dhwSectionHtml(s, DHWC) + `<h3 class="sec-h">Temperaturen</h3><div class="form-grid">' in rs
-    # Benachrichtigungen seit 0.39.1 auf der Seite „Entitäten“ (Zeile der Ziele zeigt dieselbe Karte)
-    assert '</div>${disinfectHtml(s, DIS)}`) +\n    card("Urlaub",' in rs and 'card("Benachrichtigungen"' not in rs
+    # 0.43: Unterseite Warmwasser – Schalter mit den Schreib-Entitäten (E3), dann Temperaturen und Desinfektion
+    assert 'page("warmwasser", card("Warmwasser steuern", dhwSectionHtml(s, DHWC) + emInline("warmwasser")) +\n    card("Temperaturen", `<div class="form-grid">' in rs
+    # Benachrichtigungen: eigene Unterseite mit der Zeile der Ziele (dieselbe Karte)
+    assert '</div>${disinfectHtml(s, DIS)}`)) +' in rs and 'page("benachrichtigungen", card("Benachrichtigungen", emInline("benachrichtigungen")))' in rs
     assert "notify_targets: () => notifyHtml(NOTIFY) };" in js
     assert "dhwModeHint(); notifySync(); dhwScroll();" in rs
     pickers = between(js, "const PICKERS = {", "};")
@@ -160,7 +164,7 @@ def test_ui_knows_no_other_write_path():
 def test_texts_match_backend(tmp_path):
     r = run_js(tmp_path, "out({ modes: Object.keys(DHW_LABEL), notes: DHW_NOTES, actions: Object.keys(DHW_ACTION),"
                          " labels: Object.values(DHW_LABEL) });")
-    assert r["modes"] == list(DHW_MODES) and r["labels"] == ["Aus", "Trockenlauf", "HeatPilot setzt"]
+    assert r["modes"] == list(DHW_MODES) and r["labels"] == ["Aus", "Beobachten", "HeatPilot steuert"]
     assert r["notes"] == [dc_mod.HINT_AUTOMATION, dc_mod.HINT_FAILSAFE]
     # seit 0.42 auch die Zeilen der Desinfektion (kind „dhw“, disinfect_status.ACTIONS)
     assert set(r["actions"]) == set(dc_mod.ACTIONS) | set(DISINFECT_ACTIONS)
@@ -191,7 +195,7 @@ def test_status_line_per_state(tmp_path, berlin):
     assert '<button class="btn small" onclick="dhwResume()">wieder einschalten</button>' in r["pausiert"]
     assert 'onclick="dhwOpenSettings();return false">Einstellungen → Warmwasser</a>' in r["pausiert"]
     assert '<span class="dot dot-warn"></span>' in r["pausiert"]
-    assert plain(r["trocken"]) == "Warmwasser-Soll: Trockenlauf · würde 50 °C seit 15:03"
+    assert plain(r["trocken"]) == "Warmwasser-Soll: Beobachten · würde 50 °C seit 15:03"
     assert '<span class="dot"></span>' in r["trocken"]
     # „Aus“: nur mit Hinweis (nach dem Zurückschalten), sonst keine Zeile
     assert plain(r["zurueck"]) == ("Warmwasser-Soll: aus – HeatPilot empfiehlt nur ⚠ HeatPilot schreibt das Warmwasser-Soll "
@@ -236,14 +240,14 @@ def test_settings_section_switch_entity_and_box(tmp_path, berlin):
             old: dhwSectionHtml({{ dhw_control: "kaputt" }}, null) }});""")
     sec = r["sec"]
     assert re.findall(r'value="(\w+)" (checked|)', sec) == [("aus", ""), ("trocken", ""), ("heatpilot", "checked")]
-    assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)] == ["Aus", "Trockenlauf", "HeatPilot setzt"]
+    assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)] == ["Aus", "Beobachten", "HeatPilot steuert"]
     # die Entität wird seit 0.39.1 unter „Entitäten“ gewählt – hier ein Verweis mit dem, was gilt
     assert 'id="f-dhw_set_entity"' not in sec
     ref = plain(re.search(r'<p class="em-ref" id="dhw-entity-ref">(.*?)</p>', sec).group(1))
     assert ref == (f"Entität des Warmwasser-Solls: {ENT} (automatisch erkannt). Boiler WW-Soll: jetzt 50 °C · in Home "
-                   "Assistant 30–70 °C – ändern unter Entitäten")
+                   "Assistant 30–70 °C")  # 0.43: die Zeile zum Ändern steht direkt darunter (emInline)
     warn = plain(re.search(r'<div class="warnbox" id="dhw-warn">(.*?)</div>', sec).group(1))
-    assert warn.startswith(f"{dc_mod.HINT_AUTOMATION}. {dc_mod.HINT_FAILSAFE}. Zurück auf „Aus“ oder „Trockenlauf“: "
+    assert warn.startswith(f"{dc_mod.HINT_AUTOMATION}. {dc_mod.HINT_FAILSAFE}. Zurück auf „Aus“ oder „Beobachten“: "
                            "HeatPilot schreibt nichts zurück")
     assert f'<b id="dhw-status">{d["status_text"]}</b>' in sec
     assert "zuletzt geschrieben 15:03: 45 → 50 °C · Prüfung 15:04: 50 °C übernommen" in plain(sec)
@@ -270,7 +274,7 @@ def test_status_box_pause_dry_run_and_mode_hints(tmp_path, berlin):
     assert "Entscheidung" not in box and r["p"].count('class="warn"') == 1  # Entscheidung von vor der Pause: weg
     assert "Prüfung 16:14: 50 °C nicht übernommen (Kessel zeigt 45 °C)" in box
     assert f"{rp['headline']} Einzelheiten" in box and '<span class="dot"></span>' in r["p"]  # nicht bereit: grau
-    assert "Trockenlauf zuletzt 15:03: würde 50 °C schreiben" in plain(r["t"]) and "Entscheidung: 45 → 50 °C" in plain(r["t"])
+    assert "Beobachten zuletzt 15:03: würde 50 °C schreiben" in plain(r["t"]) and "Entscheidung: 45 → 50 °C" in plain(r["t"])
     assert r["none"] == '<span class="muted">Status nicht verfügbar</span>'
     assert r["aus"] == "Wie bisher: HeatPilot empfiehlt das Warmwasser-Soll nur (Übersicht, Vorschau) und schreibt nichts."
     assert r["dry"].startswith("HeatPilot rechnet in jedem Takt nach denselben Regeln und schreibt ins Protokoll")
@@ -309,7 +313,7 @@ def test_ready_block_warmwasser(tmp_path, berlin):
     assert f'<div class="warnbox" id="ready-dhw-hint">{dc_mod.HINT_AUTOMATION}</div>' in p  # sichtbar, nicht in den Einzelheiten
     assert '<details id="ready-dhw-details" ontoggle="READY_SHOW.dhw = this.open">' in p
     rows = dict(tuple(plain(c) for c in re.findall(r"<td>(.*?)</td>", row)) for row in re.findall(r"<tr>(.*?)</tr>", p))
-    assert rows == {"Schalter": "HeatPilot setzt", "Entität": f"{ENT} erkannt", "Wert": "45 °C (30–70 °C)",
+    assert rows == {"Schalter": "HeatPilot steuert", "Entität": f"{ENT} erkannt", "Wert": "45 °C (30–70 °C)",
                     "schreibbar laut EMS-ESP": "unbekannt – die Prüfung nach 60 s zeigt es",
                     "letzte Prüfung": "16:14: 50 °C nicht übernommen",
                     "pausiert": "ja – 3 Fehlschläge in Folge · seit Mo., 16:14",
@@ -318,7 +322,7 @@ def test_ready_block_warmwasser(tmp_path, berlin):
     s = r["s"]
     assert '<span class="dot dot-ok"></span>' in s and "ready-dhw-hint" not in s and 'id="ready-dhw-details" open' in s
     assert "<td>pausiert</td><td>nein</td>" in s and "in den letzten 24 h keiner" in s
-    assert "Nur Anzeige – ändert die Stufe der Raumsteuerung nicht." in plain(s)
+    assert "Schalter und Entität unter Einstellungen → Warmwasser." in plain(s)  # „Nur Anzeige“ einmal oben (0.43)
     assert r["none"] == ""
 
 
@@ -390,7 +394,7 @@ def test_preview_says_writes_for_dhw_only(tmp_path, berlin):
             paused: pvNote({{ ...W, dhw_paused: true }}), quiet: pvSummary({{ ...P, writes_24h: {{ flow: 0, heating: 0, dhw: 0 }} }}),
             empty: pvTip({{ ...P, hours: P.hours.map((h) => ({{ ...h, writes: [] }})) }}, 0) }});""")
     w = p["writes_24h"]
-    assert plain(r["note"]).startswith("Trockenlauf – HeatPilot schreibt nichts an den Kessel – außer dem Warmwasser-Soll. "
+    assert plain(r["note"]).startswith("Beobachten – HeatPilot schreibt nichts an den Kessel – außer dem Warmwasser-Soll. "
                                        "Das Warmwasser-Soll setzt HeatPilot selbst (Einstellungen → Warmwasser: „HeatPilot setzt“)")
     dry = w["flow"] + w["heating"]
     parts = ", ".join(f"{k} {w[key]}×" for k, key in (("Vorlauf", "flow"), ("Heizbetrieb", "heating")) if w[key])
@@ -421,7 +425,7 @@ def test_preview_says_writes_for_dhw_only(tmp_path, berlin):
 # ------------------------------------------------------------------ Stil, Gültigkeit, Lesbarkeit
 def test_css_rules_and_theme_tokens():
     css = html().split("<style>")[1].split("</style>")[0]
-    for rule in ("#heat-dhw { margin: -4px 0 12px; } #ov-dhw { margin: -10px 0 16px; }",
+    for rule in ("#ov-dhw { margin: 0; }",  # 0.43: Zeile in Übersicht → Status
                  ".legend i.ring.own { background: var(--series-4); border-color: var(--series-4); }",
                  "@media (max-width: 440px) { .seg.seg3 label { padding: 8px 2px; font-size: 13px; } }",
                  "table.notify-t td { vertical-align: middle; overflow-wrap: anywhere; }"):

@@ -280,7 +280,7 @@ def test_dry_run_logs_even_with_regulator(tmp_path):
     assert step(bc, T0) == 0 and calls(ha) == []
     assert actions(eng) == [ACT_DRY] and "würde Vorlauf-Soll 46 °C schreiben" in eng.store.control_log(1)[0]["reason"]
     assert step(bc, T0 + 30) == 0 and actions(eng) == [ACT_DRY]  # nicht jeden Schritt dasselbe
-    assert bc.as_dict(T0)["status_text"].startswith("Kessel: Trockenlauf · würde Vorlauf 46 °C setzen (Wz")
+    assert bc.as_dict(T0)["status_text"].startswith("Kessel: Beobachten · würde Vorlauf 46 °C setzen (Wz")
     assert bc.reference() == {"flow": 46, "heating": True}
 
 

@@ -50,14 +50,14 @@ GROUPS: dict[str, tuple[str, str]] = {
                                    "HeatPilot sie selbst."),
     "regler": ("Regler (EMS-ESP)", "Werte des Reglers, Heizkreis 1 – alle optional: Vergleich, Heizkurve, Termine."),
     "warmwasser": ("Warmwasser über HeatPilot", "Die Entitäten, auf die HeatPilot fürs Warmwasser schreiben darf "
-                                                "(Weg W): das Warmwasser-Soll und – zum Desinfektionstermin – der "
+                                                ": das Warmwasser-Soll und – zum Desinfektionstermin – der "
                                                 "Schalter „Desinfizieren“."),
-    "kessel_hp": ("Kessel über HeatPilot", "Die zwei Entitäten, auf die HeatPilot am Kessel schreiben darf (Weg B): "
+    "kessel_hp": ("Kessel über HeatPilot", "Die zwei Entitäten, auf die HeatPilot am Kessel schreiben darf: "
                                            "Vorlauf-Soll und Heizbetrieb."),
     "aussen": ("Außen & Wetter", "Außentemperatur und Vorhersage."),
-    "gas": ("Gas & Bedarf", "Verbrauch und Anforderung."),
+    "gas": ("Gas & Anforderung", "Verbrauch und Anforderung."),
     "strom": ("Strom", "Hausleistung für die Nachtzeiten aus dem Stromverbrauch."),
-    "raeume": ("Räume", "Thermostate und Sensoren je Raum – geändert wird in der Räume-Tabelle (Allgemein)."),
+    "raeume": ("Räume", "Thermostate und Sensoren je Raum – geändert wird unter Einstellungen → Räume."),
     "personen": ("Personen & Urlaub", "Wer für die Anwesenheit zählt, und ein Urlaubs-Schalter."),
     "benachrichtigungen": ("Benachrichtigungen", "Ziele wählen, speichern, dann mit der Testnachricht prüfen."),
 }
@@ -105,12 +105,12 @@ ROLES: dict[str, tuple[str, str]] = {
     "return_temp": ("temp", "Nur für die Spreizung in der Vorlauf-Auswertung und die Live-Anzeige."),
     "burner_power": ("pct", "Wärmemenge je Takt; ersetzt „Brenner an“ (Leistung über 0)."),
     "burner_on": ("flag", "Laufzeiten, Starts und Taktsperre; ersetzbar durch die Brennerleistung."),
-    "burner_starts": ("count", "Takten zählen – Wochenbericht und Ventil-Trockenlauf."),
+    "burner_starts": ("count", "Takten zählen – Wochenbericht und Ventile (Beobachten)."),
     "heating_pump": ("flag", "Trennt Heizbetrieb und Warmwasser; ohne sie gilt „Brenner an ohne Warmwasser“."),
     "heating_active": ("flag", "Nur mitgelesen (Diagnose)."),
     "dhw_active": ("flag", "Ladungen erkennen und aus dem Heizmodell heraushalten; ersetzbar durch die "
                            "Speichertemperatur."),
-    "dhw_seltemp": ("temp", "Warmwasser-Soll des Kessels – Strategie, Vergleich mit der Empfehlung, Weg W."),
+    "dhw_seltemp": ("temp", "Warmwasser-Soll des Kessels – Strategie, Vergleich mit der Empfehlung, Warmwasser über HeatPilot."),
     "dhw_temp": ("temp", "Warmwasser-Modell und Empfehlung; erkennt auch Ladungen am Temperaturanstieg."),
     "boiler_outdoor": ("temp", "Außentemperatur, wenn kein eigener Außenfühler gewählt ist – nur als Entität in Home "
                                "Assistant."),

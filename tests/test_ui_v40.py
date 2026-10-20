@@ -29,7 +29,7 @@ NAMES = ("fmt", "esc", "clock", "timeOf", "shortName", "WEEKDAYS", "wday", "date
          "valveSwitchHtml")
 # DOM-Ersatz: $() liefert je id ein Objekt; #vd hat eine Überschrift (h3) – den Balkengrafen prüft Playwright
 STUBS = """
-const ELS = {}, HEAD = { textContent: "Ventile (Trockenlauf)" };
+const ELS = {}, HEAD = { textContent: "Ventile (Vorschau)" };
 const $ = (id) => ELS[id] || (ELS[id] = { id, hidden: false, textContent: "", innerHTML: "",
   querySelector: (q) => (id === "vd" && q === "h3" ? HEAD : null) });
 let CHART = null;
@@ -68,13 +68,14 @@ def live_house(tmp_path):
 def test_switch_ready_dialog_and_preview_are_wired():
     js = script()
     card = between(js, "function controlCard(s) {", "// Ventile führen (0.40)")
-    assert card.index("Es gibt keinen Zwischenmodus") < card.index("${valveSwitchHtml(s)}") < card.index("Nachtabsenkung – Wochenplan")
+    # 0.43: eigene Karten – Räume steuern, Temperaturen, Nachtzeiten, Ventile führen
+    assert card.index("Es gibt keinen Zwischenmodus") < card.index("Nachtabsenkung – Wochenplan") < card.index('card("Ventile führen", valveSwitchHtml(s))')
     sw = between(js, "function valveSwitchHtml(s) {", "// Leistungssensoren")
     assert '<input type="checkbox" id="f-valve_control" ${s.valve_control ? "checked" : ""} onchange="modeHint()">' in sw
     save = between(js, "out.night_plan_auto = $(\"f-night_plan_auto\").checked;", "out.rooms = [];")
     assert 'if ($("f-valve_control")) out.valve_control = $("f-valve_control").checked;' in save
     hint = between(js, "function modeHint() {", "// Bereit für die Steuerung?")
-    assert "An, wirkt aber erst mit „HeatPilot steuert“ – bis dahin nur Trockenlauf." in hint
+    assert "An, wirkt aber erst mit „HeatPilot steuert“ – bis dahin nur Beobachten." in hint
     box = between(js, "function renderReadyBox(r, err = \"\") {", "function readyBoxHtml(")
     assert box.index("valveReadyHtml(r.valves, READY_SHOW.valves)") < box.index("dhwReadyHtml(r.dhw, READY_SHOW.dhw)")
     assert "if (r && r.valves)" in box  # ältere Version ohne „valves“: kein Block
@@ -122,7 +123,7 @@ def test_ready_block_and_dialog_line(tmp_path):
     box = plain(r["box"])
     assert box.startswith("Ventile führen Läuft – führt 2 Räume (Wz und Bad); Kind lernt noch. Einzelheiten "
                           "(2 bereit, 1 lernen noch · Schalter an) Läuft: Wz – früh drosseln, Soll 20,5 statt 21 °C seit "
-                          f"{hm(rd['running'][0]['since'])} Höchstens ein Schritt vom Wunschsoll")
+                          f"{hm(rd['running'][0]['since'])} Höchstens ein Schritt vom Ziel")
     assert "Wz bereit Raum- und Ventilmodell belastbar, Schritt 0,5 K" in box and "Kind lernt Ventilmodell lernt noch (" in box
     assert 'id="ready-valves-details" open' in r["box"] and 'id="ready-valves-details" open' not in r["closed"]
     assert box.endswith("was HeatPilot dabei schreibt bzw. schreiben würde, steht in der Übersicht → Vorschau → Ventile.")
@@ -130,8 +131,9 @@ def test_ready_block_and_dialog_line(tmp_path):
     assert plain(r["line"]) == f"Ventil geführt: 20,5 statt 21 °C – früh drosseln, zurück ≈ {hm(v['back_at'])}"
     assert plain(r["join"]) == f"Ventil geführt: 21,5 statt 21 °C – gemeinsam anfordern, zurück spätestens {hm(v['back_at'])}"
     assert 'id="f-valve_control" checked' in r["sw"] and 'id="f-valve_control" ' in r["off"] and "checked" not in r["off"]
-    assert plain(r["sw"]).startswith("Ventile führen HeatPilot führt den Regler der Thermostate über das Soll – höchstens "
-                                     "einen Schritt des Thermostats (Tado 0,5 K) vom Wunschsoll")
+    assert plain(r["sw"]).startswith("HeatPilot verstellt das Soll um höchstens einen Schritt (0,5 K), damit Räume nicht "
+                                     "überschwingen und der Kessel seltener taktet. Regeln HeatPilot führt den Regler der Thermostate über das Soll – höchstens "
+                                     "einen Schritt des Thermostats (Tado 0,5 K) vom Ziel")
     assert "Früh drosseln:" in r["sw"] and "Gemeinsam anfordern:" in r["sw"] and "nie mehr als 0,3 K unter dem Soll" in r["sw"]
 
 
@@ -151,14 +153,14 @@ def test_preview_says_writes_with_switch_on(tmp_path):
         rules: $("vd-rules").innerHTML, active: $("vd-active").innerHTML }},
         eff: vdEffect({{ ...S.examples.find((x) => x.written), act_over_k: 0.08 }}) }});""")
     lv = r["live"]
-    assert lv["head"] == "Ventile – HeatPilot schreibt" and r["dry"]["head"] == "Ventile (Trockenlauf)"
+    assert lv["head"] == "Ventile – HeatPilot schreibt" and r["dry"]["head"] == "Ventile (Vorschau)"
     assert lv["vd-note"]["html"].startswith("<b>Ventile führen ist an – HeatPilot schreibt an die Thermostate der Räume, die "
-                                            "es führt; die übrigen nur im Trockenlauf.</b> Gezählt wird, was HeatPilot mit den "
+                                            "es führt; die übrigen nur beobachtet.</b> Gezählt wird, was HeatPilot mit den "
                                             "Thermostaten als Stellglied tut („geschrieben“) bzw. in den übrigen Räumen tun würde")
     assert lv["vd-text"]["text"] == s["text"] and s["text"].startswith("In 7 Tagen hat HeatPilot 1× früh gedrosselt")
     facts = [plain(x) for x in re.findall(r"<li>(.*?)</li>", lv["vd-facts"]["html"])]
     assert facts[2] == ("Schreibvorgänge: 2 – früh drosseln 1, gemeinsam 1, jeweils mit dem Zurücksetzen; davon 1 "
-                        "geschrieben, 1 nur im Trockenlauf. 2 der Eingriffe in Räumen mit „macht mit“.")
+                        "geschrieben, 1 nur beobachtet. 2 der Eingriffe in Räumen mit „macht mit“.")
     since = hm(s["active"][0]["since"])
     assert plain(lv["vd-active"]["html"]) == f"Läuft gerade (geschrieben): Wz – früh drosseln, Soll 21 → 20,5 °C seit {since}"
     ex = lv["vd-ex"]["html"]
@@ -166,13 +168,13 @@ def test_preview_says_writes_with_switch_on(tmp_path):
     assert "vorhergesagt mit Eingriff ≈ " in plain(ex)
     assert '<th>Schreib&shy;vorgänge <span class="muted">(davon ge&shy;schrie&shy;ben)</span></th>' in lv["vd-rooms"]["html"]
     assert re.search(r'<td>Wz</td><td>1</td><td>0</td><td>1 <span class="muted">\(1\)</span></td>', lv["vd-rooms"]["html"])
-    assert "<b>Ventile führen:</b> In Räumen mit „macht mit“ und belastbarem Raum- und Ventilmodell schreibt HeatPilot das " \
-           "wirklich – höchstens einen Schritt vom Wunschsoll (Schritt des Thermostats, höchstens 0,5 K); früh drosseln " \
+    assert "<b>Ventile führen:</b> In Räumen mit „macht mit“ und verlässlichem Raum- und Ventilmodell schreibt HeatPilot das " \
+           "wirklich – höchstens einen Schritt vom Ziel (Schritt des Thermostats, höchstens 0,5 K); früh drosseln " \
            "nur bei Komfort und Vorheizen und höchstens 0,3 K unter dem Soll" in lv["vd-rules"]["html"]
     assert r["eff"].endswith("mit Eingriff gemessen: bis 0,1 K über Soll")
     # Schalter aus: wie 0.39 – keine Kennzeichen, keine Spalte, keine Regel zum Schreiben
     d = r["dry"]
-    assert d["note"].startswith("<b>Trockenlauf – HeatPilot schreibt nichts an die Thermostate.</b>")
+    assert d["note"].startswith("<b>Beobachten – HeatPilot schreibt nichts an die Thermostate.</b>")
     assert "würde schreiben" not in d["ex"] and "vd-w" in d["ex"]  # geschriebener Eintrag bleibt gekennzeichnet
     assert "Ventile führen:" not in d["rules"] and "(davon" in d["rooms"]
     assert "(geschrieben)" in d["active"]  # der laufende Schritt steht noch am Thermostat, bis er zurückgeht
@@ -184,7 +186,7 @@ def test_old_answers_without_fields(tmp_path):
             table: vdTable("Raum", [["Wz", { drosseln: 1, gemeinsam: 0, writes: 2 }]]),
             ex: vdExamples([{ t: "2026-10-12T07:00:00+02:00", name: "Wz", rule: "drosseln", base: 21, setpoint: 20.5,
                              reason: "r", temp: 20.7, valve: 90, reliable: true, managed: true }]) });""")
-    assert r["head"] == "Ventile (Trockenlauf)" and r["note"].startswith("<b>Trockenlauf – HeatPilot schreibt nichts")
+    assert r["head"] == "Ventile (Vorschau)" and r["note"].startswith("<b>Beobachten – HeatPilot schreibt nichts")
     assert r["active"] == "" and "davon" not in r["table"] and "badge vd-w" not in r["ex"] and "würde schreiben" not in r["ex"]
 
 

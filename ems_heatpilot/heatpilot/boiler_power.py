@@ -19,7 +19,7 @@ from .values import num
 SOURCE_SET, SOURCE_BOILER = "eingestellt", "laut Kessel"
 MAX_KEY, MIN_KEY = "burnmaxpower", "burnminpower"   # Kesselsteuerungen von EMS-ESP (``emsesp.POWER_CONTROLS``)
 LOAD_OFF = "Abnahme-Regel aus: Mindestleistung unbekannt"
-WHERE = "unter Einstellungen → Haus & Kessel eintragen"
+WHERE = "unter Einstellungen → Kessel eintragen"
 
 
 def _pct(value) -> float | None:

@@ -553,9 +553,9 @@ def test_new_files_small_with_purpose_docstrings():
 def test_version_changelog_docs():
     from heatpilot import __version__
 
-    assert __version__ == "0.42.1"
-    assert 'version: "0.42.1"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
-    head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## ")[1].split("\n## ")[0]
+    assert __version__ >= "0.42.1"  # seit 0.43 prüft test_ui_v43 die genaue Version
+    assert "\n## 0.42.1\n" in (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    head = "0.42.1" + (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.1")[1].split("\n## ")[0]
     assert head.startswith("0.42.1") and "Gelerntes übernehmen" in head and "Hausdaten wiederherstellen" in head
     assert "tests/test_adopt421.py" in head and "tests/test_restore421.py" in head and "tests/test_ui_v421.py" in head
     for personal in ("Ingo", "BK15", "Sieger", "ES73", "VA0", "Hamburg"):

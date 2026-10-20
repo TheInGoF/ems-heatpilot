@@ -130,14 +130,16 @@ def settings_x(eng, bc, now):
 def test_card_status_lines_log_ready_and_save_are_wired():
     js, page = script(), html()
     rs = between(js, "function renderSettings()", "function addVac()")
-    assert re.findall(r'card\("([^"]+)"', rs).index("Kessel über HeatPilot") == 6  # nach „Haus & Kessel“
-    assert 'card("Kessel über HeatPilot", boilerSectionHtml(s, BOILC)) +' in rs
+    # 0.43: Unterseite „Kessel“ – erst Kesseldaten, dann der Schalter mit seinen zwei Entitäten (E3)
+    assert re.findall(r'card\("([^"]+)"', rs).index("Kessel steuern") == re.findall(r'card\("([^"]+)"', rs).index("Kesseldaten") + 1
+    assert 'card("Kessel steuern", boilerSectionHtml(s, BOILC) + emInline("kessel_hp"))) +' in rs
     assert "boilerModeHint(); boilerScroll();" in rs
     assert "BOILC = j.boiler_control || null;" in between(js, "async function loadSettings()", "let OV_STALE")
-    # Statuszeilen unter der des Warmwassers; heatPost behält den Kessel-Status
-    assert '<p class="sub dhw-line" id="heat-dhw" hidden></p>\n    <p class="sub dhw-line" id="heat-boiler" hidden></p>' in page
-    assert '<p class="sub dhw-line" id="ov-dhw" hidden></p>\n  <p class="sub dhw-line" id="ov-boiler" hidden></p>' in page
-    assert 'renderBoilerLine("heat-boiler", j.boiler);' in between(js, "function renderHeat()", "function act(")
+    # Statuszeile unter der des Warmwassers – seit 0.43 nur in Übersicht → Status; heatPost behält den Kessel-Status
+    assert 'id="heat-boiler"' not in page
+    assert '<h3 class="st-h">Kessel</h3><p class="sub dhw-line" id="ov-boiler" hidden></p>' in page
+    assert page.index('id="ov-dhw"') < page.index('id="ov-boiler"') < page.index('id="ov-last"')
+    assert 'renderBoilerLine("ov-boiler", j.boiler);' in between(js, "function renderOvStatus(lines = true) {", "\n}\n")
     assert 'renderBoilerLine("ov-boiler", s.boiler_control);' in between(js, "async function load() {", '$("tiles").innerHTML')
     assert "HEAT.boiler = j.boiler || null; HEAT.dhw = j.dhw; renderHeat();" in between(js, "async function heatPost(", "function heatAction(")
     log = between(js, "function renderHeatLog(c, d) {", "async function loadHeat()")
@@ -157,7 +159,7 @@ def test_card_status_lines_log_ready_and_save_are_wired():
     assert 'heating: { filter: (e) => !!(e.heating && e.heating.fits), label: "Heizbetrieb (switch)" }' in pickers
     assert 'if (key === "flow_set_entity" || key === "heating_switch_entity") boilerModeHint();' in source(js, "emRefresh")
     # Vorschau: Überschrift und gefüllte Ringe bei „schreibt“
-    assert '"Vorschau – Kessel über HeatPilot schreibt" : "Vorschau (Trockenlauf)"' in source(js, "renderPreview")
+    assert '"Vorschau – Kessel über HeatPilot schreibt" : "Vorschau (24 h)"' in source(js, "renderPreview")
     assert 'PV_C.flow, p.flow_writes === "schreibt");' in source(js, "pvFlowChart")
     assert '`<span><i class="ring own flow"></i>schreibt${ownD ? " (Kessel)" : ""}</span>`' in source(js, "pvLegend")
 
@@ -199,7 +201,7 @@ def test_new_functions_small_and_css_tokens():
     root = between(page, ":root {", "}")
     tokens = set(re.findall(r"var\((--[\w-]+)\)", css))
     assert tokens and all(t + ":" in root for t in tokens), tokens  # nur Farben, die es in beiden Themen gibt
-    assert "#heat-boiler { margin: -4px 0 12px; } #ov-boiler { margin: -10px 0 16px; }" in css
+    assert "#ov-boiler { margin: 0; }" in css  # 0.43: Übersicht → Status
     assert "#boiler-guide[hidden] { display: none; }" in css
 
 
@@ -210,8 +212,8 @@ def test_status_line_and_box_when_writing(tmp_path):
     x, s = settings_x(eng, bc, now)
     r = js_run(tmp_path, f"""const B = {json.dumps(b)}, R = {json.dumps(rd)}, X = {json.dumps(x)}, S = {json.dumps(s)};
       BOILC = X; SET = S;
-      renderBoilerLine("heat-boiler", B);
-      out({{ line: $("heat-boiler").innerHTML, hidden: $("heat-boiler").hidden, box: boilerBoxHtml(B, R),
+      renderBoilerLine("ov-boiler", B);  // 0.43: Zeile in Übersicht → Status
+      out({{ line: $("ov-boiler").innerHTML, hidden: $("ov-boiler").hidden, box: boilerBoxHtml(B, R),
             sec: boilerSectionHtml(S, X), guideOpen: (boilerGuide(), $("boiler-guide").hidden) }});""")
     assert b["status_text"] == "Kessel: HeatPilot · Vorlauf 48 °C (Wz heizt auf 21,0 °C (+5 K)) · Boost +2 K"
     assert plain(r["line"]) == b["status_text"] and r["hidden"] is False and "dot-ok" in r["line"]
@@ -245,12 +247,12 @@ def test_status_line_and_box_when_writing(tmp_path):
     # Karte: Schalter, Entitäten mit Wert und Grenzen, Rückfall-Vorlauf, Warnhinweise
     sec = r["sec"]
     assert re.findall(r'value="(\w+)" (checked|)', sec) == [("aus", ""), ("trocken", ""), ("heatpilot", "checked")]
-    assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)][:3] == ["Aus", "Trockenlauf", "HeatPilot setzt"]
+    assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)][:3] == ["Aus", "Beobachten", "HeatPilot steuert"]
     refs = [plain(x) for x in re.findall(r'<p class="em-ref" id="boiler-ref-\w+">(.*?)</p>', sec)]
     assert refs == [f"Vorlauf-Soll: {FLOW} (automatisch erkannt). Boiler Gewählte Vorlauftemperatur: jetzt 46 °C · in Home "
-                    "Assistant 0–90 °C – ändern unter Entitäten",
-                    f"Heizbetrieb: {HEAT} (automatisch erkannt). Boiler Heizbetrieb aktiviert: jetzt an – ändern unter Entitäten"]
-    assert "emGo('kessel_hp')" in sec
+                    "Assistant 0–90 °C",  # 0.43: die Zeilen zum Ändern stehen darunter (emInline)
+                    f"Heizbetrieb: {HEAT} (automatisch erkannt). Boiler Heizbetrieb aktiviert: jetzt an"]
+    assert "emGo('kessel_hp')" not in sec  # 0.43: die zwei Entitäten stehen darunter (emInline("kessel_hp"))
     assert '<input id="f-boiler_fallback_flow" type="number" step="1" min="35" max="75" value="45">' in sec
     intro = plain(re.search(r'id="boiler-intro"[^>]*>(.*?)</p>', sec).group(1))
     assert intro == ("HeatPilot kann den Kessel selbst führen – Vorlauf-Soll live und Heizbetrieb an/aus, unabhängig vom Schalter "
@@ -258,16 +260,17 @@ def test_status_line_and_box_when_writing(tmp_path):
                      "unten und nie, solange ein Regler am Bus ist.")
     assert '<details class="boiler-rules" id="boiler-rules"><summary>Nach welchen Regeln</summary>' in sec  # eingeklappt
     rules = plain(re.search(r'id="boiler-rules-text">(.*?)</p>', sec).group(1))
-    for text in ("number.set_value auf die eine Entität des Vorlauf-Solls (ganze Grad ab 35 °C", "ab 1 K und höchstens einmal je 60 s",
+    for text in ("HeatPilot schreibt nur das Vorlauf-Soll (ganze Grad ab 35 °C", "und den Heizbetrieb (an/aus)", "ab 1 K und höchstens einmal je 60 s",
                  "Ziel ist der Vorlauf, den der anspruchsvollste Raum braucht (gerechnet wie die Vorschau)",
                  "braucht kein Raum 35 °C, ist der Heizbetrieb aus",
                  "5 min Haltezeit", "60 s später prüft HeatPilot", "3 Fehlschläge in Folge oder 2 fremde Änderungen in 1 h: Pause",
-                 "2-K-Schritten bis +10 K (Takt-Boost)", "EMS-ESP bleibt nur lesend, die Antipendelzeit des Kessels bleibt, wie sie ist."):
+                 "2-K-Schritten bis +10 K (Takt-Boost)", "EMS-ESP bleibt nur lesend, die Taktsperre des Kessels bleibt, wie sie ist."):
         assert text in rules, text
     warn = plain(re.search(r'<div class="warnbox" id="boiler-warn">(.*?)</div>', sec).group(1))
-    assert warn.startswith("Regler am Bus: Ein Regler am EMS-Bus überschreibt alle 60 s, was am Kessel gesetzt wird")
+    assert warn.startswith("Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. "  # 0.43: Kurztext + mehr
+                        "Regler am Bus: Ein Regler am EMS-Bus überschreibt alle 60 s, was am Kessel gesetzt wird")
     assert "Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt der letzte Vorlauf stehen" in warn
-    assert "Zurück auf „Aus“ oder „Trockenlauf“: HeatPilot schreibt einmal den Rückfall-Vorlauf (jetzt 45 °C) und Heizbetrieb an" in warn
+    assert "Zurück auf „Aus“ oder „Beobachten“: HeatPilot schreibt einmal den Rückfall-Vorlauf (jetzt 45 °C) und Heizbetrieb an" in warn
 
 
 @pytest.mark.usefixtures("berlin")
@@ -289,12 +292,12 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
     gbox = plain(g["box"])  # die Sperre steht einmal im Status, nicht noch in Entscheidung und Regler-Zeile
     assert "Regler am Bus: ja – sperrt Wächter in Home Assistant" in gbox
     assert "Entscheidung: Vorlauf-Soll: gesperrt (siehe oben) · Heizbetrieb an passt" in gbox
-    assert gbox.count("Erst Trockenlauf prüfen, dann Regler abbauen") == 2  # Status und „Bereit für die Steuerung?“
+    assert gbox.count("Erst „Beobachten“ prüfen, dann Regler abbauen") == 2  # Status und „Bereit für die Steuerung?“
     assert "⚠ Wächter nicht erkannt" not in gbox and "Wächter in Home Assistant: Wächter nicht erkannt" in gbox
     ready_text = plain(g["ready"])
     assert ready_text.startswith("Kessel über HeatPilot Nicht bereit – EMS-ESP meldet einen Regler (Gerät thermostat)")
     rows = [plain(x) for x in re.findall(r"<tr>(.*?)</tr>", g["ready"])]
-    assert rows[0] == "Schalter HeatPilot setzt"
+    assert rows[0] == "Schalter HeatPilot steuert"
     assert rows[1] == f"Vorlauf-Soll {FLOW} erkannt · 30 °C (0–90 °C)" and rows[2] == f"Heizbetrieb {HEAT} erkannt · an"
     assert rows[3] == "schreibbar laut EMS-ESP selflowtemp unbekannt · heatingactivated unbekannt"
     assert rows[4].startswith("Regler am Bus ja – EMS-ESP meldet einen Regler") and rows[5] == "Heizen abschalten aus"
@@ -305,10 +308,10 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
                                       "Entitäten unter Einstellungen → Entitäten → Kessel über HeatPilot.")
     # Trockenlauf: „würde …“, ohne Knopf und Link
     t, tb = r["trocken"], out["trocken"][0]
-    assert tb["status_text"].startswith("Kessel: Trockenlauf · würde Vorlauf 46 °C setzen (Wz")
+    assert tb["status_text"].startswith("Kessel: Beobachten · würde Vorlauf 46 °C setzen (Wz")
     assert plain(t["line"]).startswith(tb["status_text"]) and "<a " not in t["line"]
     dry = tb["dry_last"]["flow"]
-    assert f"Trockenlauf zuletzt: würde schreiben Vorlauf-Soll 46 °C ({hm(dry['time'])})" in plain(t["box"])
+    assert f"Beobachten zuletzt: würde schreiben Vorlauf-Soll 46 °C ({hm(dry['time'])})" in plain(t["box"])
     assert "würde setzen: Vorlauf 46 °C , Heizbetrieb an" in plain(t["box"]) and "zuletzt geschrieben" not in plain(t["box"])
     # pausiert: seit …, Knopf „wieder einschalten“, der Hinweis zur Pause nicht doppelt
     p, pb = r["pausiert"], out["pausiert"][0]
@@ -355,7 +358,7 @@ def test_mode_hint_confirm_and_old_answers(tmp_path):
                                      status_text: "Kessel: aus – Regler bzw. Kessel regeln selbst" }}),
             old: boilerSectionHtml({{ boiler_control: "kaputt" }}, null) }});""")
     assert r["aus"] == "Wie bisher: Regler bzw. Kessel regeln selbst – HeatPilot rechnet den Kessel nicht und schreibt nichts."
-    assert r["trocken"].startswith("HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Reiter Heizen)")
+    assert r["trocken"].startswith("HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Einstellungen → Diagnose)")
     assert "Geht auch mit Regler am Bus" in r["trocken"]
     assert plain(r["hp"]) == f"HeatPilot schreibt das Vorlauf-Soll auf {FLOW} und schaltet den Heizbetrieb über {HEAT} – nur ohne Regler am Bus."
     assert r["back"].endswith("Beim Zurückschalten schreibt HeatPilot einmal 45 °C Vorlauf und Heizbetrieb an – danach den Regler "
@@ -452,7 +455,7 @@ def test_preview_says_writes_for_the_boiler(tmp_path):
     assert "würde schreiben: " in plain(r["dTip"]) and "schreibt: " not in plain(r["dTip"])
     assert "Kessel über HeatPilot ist gesperrt (Regler am Bus) – Vorlauf und Heizbetrieb sind hier nur Vorschau." in r["blocked"]
     assert "Kessel über HeatPilot ist pausiert – Vorlauf und Heizbetrieb sind hier nur Vorschau." in r["paused"]
-    assert "Kessel über HeatPilot läuft im Trockenlauf – was es live schreiben würde, steht im Protokoll (Reiter Heizen)." in r["dry"]
+    assert "Kessel steuern steht auf „Beobachten“ – was es live schreiben würde, steht im Protokoll (Einstellungen → Diagnose)." in r["dry"]
 
 
 def test_notify_recommends_the_phone_app(tmp_path):

@@ -183,7 +183,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             if d.write and mode == "trocken":
                 self._ch(what)["dry"] = {"ts": ts, "value": d.value, "from": self._reference(mode, what, cur[what])[0]}
                 self._log(ts, ACT_DRY, d.value if what == "flow" else int(d.value),
-                          f"Trockenlauf: würde {br.LABELS[what]} {shown(what, d.value)} schreiben ({target.reason})")
+                          f"Beobachten: würde {br.LABELS[what]} {shown(what, d.value)} schreiben ({target.reason})")
             elif d.write and mode == "heatpilot":
                 self.pending.append((what, d.value, f"{d.why} · {target.reason}" if "Schutz" in d.why
                                      else target.reason))

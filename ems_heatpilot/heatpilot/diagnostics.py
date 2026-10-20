@@ -147,13 +147,13 @@ def self_check(app) -> list[dict]:
         add("error", "Außentemperatur", "Weder Außenfühler noch Wetter gefunden")
     if app.cfg.emsesp_host and not eng.ems:
         add("warn", "EMS-ESP", f"Keine Daten von {app.cfg.emsesp_host} – Adresse prüfen "
-                               "(Einstellungen → Verbindung → Testen)")
+                               "(Einstellungen → Grundlagen → Testen)")
     elif eng.ems:
         add("ok", "EMS-ESP", "Direkt gelesen: " + ", ".join(f"{d} {len(v)} Werte" for d, v in eng.ems.items()))
         for role in ("nom_power", "min_power"):
             if not any(k in eng.ems.get("boiler", {}) for k in BOILER_ROLES.get(role, ())):
                 add("info", "EMS-ESP", f"{ROLE_LABELS.get(role, role)} liefert EMS-ESP nicht – fürs Zertifikat "
-                                       "unter Einstellungen → Haus & Kessel eintragen")
+                                       "unter Einstellungen → Kessel eintragen")
 
     plant_checks(eng, add)
     ctl = getattr(eng, "dhw_control", None)  # Weg W (0.38): Warmwasser-Soll über HeatPilot
