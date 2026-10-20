@@ -69,4 +69,5 @@ def test_comfort_margin_lifts_comfort_not_the_minimum():
     cfg = Config()
     m.comfort_margin = 4.0
     assert m.recommend(datetime(2026, 10, 14, 1, 0), True, None, cfg)["hold"] == cfg.dhw_min_temp
-    assert m.recommend(datetime(2026, 10, 14, 12, 0), True, None, cfg)["hold"] == cfg.dhw_comfort_temp + 4
+    # seit 0.46.2: Komfort + Reserve ist das Soll (nicht mehr die gehaltene Untergrenze)
+    assert m.recommend(datetime(2026, 10, 14, 12, 0), True, None, cfg)["target"] == cfg.dhw_comfort_temp + 4

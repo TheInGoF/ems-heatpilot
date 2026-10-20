@@ -475,7 +475,7 @@ def _hour(h_ts: int, rows: list[dict], writes: list[dict], dis: list[datetime], 
         # Fußboden-Grenze (0.39.1): die der Stunde und ob sie den Vorlauf gesenkt hat
         "flow_cap": _dominant([r["cap"] for r in sel]), "flow_limited": bool(heating and lead["limited"]),
         "dhw": dhw, "dhw_reason": next(r["dhw_why"] for r in sel if r["dhw"] == dhw),
-        "dhw_hold": next(r["dhw_hold"] for r in sel if r["dhw"] == dhw),  # 0.46.1: Speicher bleibt über …
+        "dhw_hold": next(r["dhw_hold"] for r in sel if r["dhw"] == dhw),  # 0.46.1: Untergrenze (Soll − Hysterese)
         "rooms": {n: _dominant([r["sps"][n] for r in sel]) for n in names},
         "phases": {n: _dominant([r["phases"][n] for r in sel]) for n in names},
         "night": _dominant([r["night"] for r in sel]), "home": _dominant([r["home"] for r in sel]),

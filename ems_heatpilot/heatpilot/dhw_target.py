@@ -1,9 +1,11 @@
 """Warmwasser-Ziel (seit 0.46): welche Speichertemperatur jetzt gehalten werden soll – und welches Soll dafür.
 
 Der Kessel lädt erst, wenn der Speicher um die Einschalthysterese unter das Soll fällt (EMS-ESP ``dhw_hyston``,
-Rolle ``dhw_hyst_on``, z. B. −10 K). Jedes Ziel ist deshalb die tiefste Speichertemperatur X, die gehalten werden
-soll („Speicher bleibt über X °C“); empfohlen wird das Soll X + |Hysterese|, auf 1 K aufgerundet, höchstens das
-Maximum. Meldet der Kessel keine Hysterese, gilt ``HYST_ASSUMED_K`` – im Grund so genannt.
+Rolle ``dhw_hyst_on``, z. B. −5 K). Seit 0.46.2: Die Komforttemperatur der Einstellungen IST das Soll (Speicher
+zwischen Komfort − Hysterese und Komfort, wie bei einer üblichen Automation); nur das Minimum bekommt die Hysterese
+dazu, damit der Speicher beim Fallenlassen nie darunter fällt (Soll = Minimum + |Hysterese|). Erwartete große
+Zapfung: Soll = max(Komfort, Minimum + Bedarf) – während des Zapfens lädt der Kessel ohnehin nach. Auf 1 K
+aufgerundet, höchstens das Maximum. Meldet der Kessel keine Hysterese, gilt ``HYST_ASSUMED_K`` – im Grund genannt.
 
 Zustände (wie eine übliche Automation: fallen lassen, wenn niemand Wasser braucht):
 
@@ -14,9 +16,11 @@ Zustände (wie eine übliche Automation: fallen lassen, wenn niemand Wasser brau
 * sonst (jemand zu Hause und wach, kurz vor Ankunft bzw. Aufstehen) → Komfort + gelernte Reserve; erwartete große
   Zapfung → max(Komfort, Minimum + Bedarf).
 
-Aufheizdauer = (Komfort-Soll − Minimum) / gelernte Laderate. Dasselbe Ergebnis nutzen Übersicht, Vorschau, Weg W
+Aufheizdauer = (Komfort-Soll − Minimum) / gelernte Laderate + ``BUFFER_H``; Zapfungen sieht die Strategie mindestens
+``DRAW_AHEAD_H`` voraus. Dasselbe Ergebnis nutzen Übersicht, Vorschau, Weg W
 (``dhw_control`` schreibt ``target``), der Schatten der Ersparnis (lädt unter ``hold`` bis ``target``) und die
-Selbstkorrektur (``margin_bound``) – die Hysterese wird nur hier addiert.
+Selbstkorrektur (``margin_bound``) – die Hysterese wird nur hier berücksichtigt (der Schatten nimmt sie als
+``target − hold`` für „zu kalt“: unter Komfort − Hysterese).
 """
 
 from __future__ import annotations
@@ -30,7 +34,8 @@ from .values import num
 
 HYST_ASSUMED_K = 5.0  # Einschalthysterese, wenn der Kessel keine meldet
 HYST_HINT_K = 5.0     # größer: Hinweis, dass eine kleinere Hysterese Bereitschaftsverlust spart
-BUFFER_H = 1.0        # Puffer zur Aufheizdauer vor Ankunft bzw. Aufstehen
+BUFFER_H = 0.5        # Puffer zur Aufheizdauer vor Ankunft bzw. Aufstehen (0.46.2: 1 h war zu früh)
+DRAW_AHEAD_H = 1.0    # Zapfungen mindestens so weit voraus sehen (0.46.2)
 AWAY, VACATION, NIGHT, OPEN = "niemand zu Hause", "Urlaub", "Nacht", "offen"
 HOME, UNKNOWN = "jemand zu Hause", "Anwesenheit unbekannt"
 
@@ -43,7 +48,12 @@ def hysteresis(value) -> tuple[float, bool]:
 
 def setpoint(hold: float, hyst: float, cfg) -> int:
     """Soll, damit der Speicher über ``hold`` bleibt: hold + Hysterese, auf 1 K aufgerundet, höchstens Maximum."""
-    return min(math.ceil(hold + hyst - 1e-6), math.floor(cfg.dhw_max_temp + 1e-9))
+    return capped(hold + hyst, cfg)
+
+
+def capped(value: float, cfg) -> int:
+    """Soll auf 1 K aufgerundet, höchstens das Maximum der Einstellungen."""
+    return min(math.ceil(value - 1e-6), math.floor(cfg.dhw_max_temp + 1e-9))
 
 
 def hyst_hint(hyst: float, assumed: bool) -> str | None:
@@ -106,9 +116,9 @@ def _draw_why(draw: float, chance: float, big: float | None) -> str:
 def _out(target: int, h: float, assumed: bool, why: str, drop: bool, *, expects: bool = False,
          bound: bool = False) -> dict:
     hold = round(target - h, 1)
-    temp = f"Speicher darf bis {_n(hold)} °C fallen" if drop else f"Speicher bleibt über {_n(hold)} °C"
+    temp = f"Speicher darf bis {_n(hold)} °C fallen" if drop else f"Speicher {_n(hold)}–{target} °C"
     note = f" (Hysterese {_n(h)} K angenommen)" if assumed else ""
-    return {"target": target, "hold": hold, "hyst": h, "hyst_assumed": assumed, "why": why,
+    return {"target": target, "hold": hold, "hyst": h, "hyst_assumed": assumed, "why": why, "drop": drop,
             "reason": f"{why} – {temp}{note}", "expects_draw": expects, "margin_bound": bound}
 
 
@@ -123,18 +133,20 @@ def recommend(model, now: datetime, someone_home: bool | None, next_arrival: dat
     """
     h, assumed = hysteresis(hyst)
     comfort = cfg.dhw_comfort_temp + model.comfort_margin
-    horizon = (setpoint(comfort, h, cfg) - cfg.dhw_min_temp) / max(model.charge_rate_kh, 5.0) + BUFFER_H
+    horizon = (capped(comfort, cfg) - cfg.dhw_min_temp) / max(model.charge_rate_kh, 5.0) + BUFFER_H
     drop = _drop(now, someone_home, next_arrival, cfg, horizon, unknown_from, vacation)
     if drop == OPEN:
-        keep = round(current_set) if current_set is not None else setpoint(cfg.dhw_comfort_temp, h, cfg)
+        keep = round(current_set) if current_set is not None else capped(cfg.dhw_comfort_temp, cfg)
         return _out(keep, h, assumed, "Ankunft unbekannt (Gewohnheit lernt noch), Soll bleibt", False)
     if drop:
         return _out(setpoint(cfg.dhw_min_temp, h, cfg), h, assumed, drop, True)
-    draw, chance, big = _draws(model, now, cfg, horizon, disinfect_h)
+    # Zapfungen mindestens die nächste Stunde voraus sehen (wie bis 0.46.1, als der Puffer 1 h war) – sonst kennt
+    # die Empfehlung um 6:55 die Dusche um 7:00 nicht, wenn der Speicher schnell lädt
+    draw, chance, big = _draws(model, now, cfg, max(horizon, DRAW_AHEAD_H), disinfect_h)
     expects = draw >= 1.0 or chance >= HIT_THRESHOLD or bool(big)
     # bei viel Verbrauch so hoch, dass der Speicher danach nicht unter das Minimum fällt
     need = max(draw, big or 0.0) if expects else 0.0
-    target = setpoint(max(comfort, cfg.dhw_min_temp + need), h, cfg)
+    target = capped(max(comfort, cfg.dhw_min_temp + need), cfg)  # Komfort ist das Soll (0.46.2)
     # margin_bound: mehr Reserve hebt dieses Ziel an – nicht, wenn Minimum + Bedarf es bestimmt oder am Maximum
     bound = comfort >= cfg.dhw_min_temp + need and target < math.floor(cfg.dhw_max_temp + 1e-9)
     base = _base_why(now, someone_home, cfg)  # vor Ankunft/Aufstehen sagt das Aufheizen mehr als die Zapfung

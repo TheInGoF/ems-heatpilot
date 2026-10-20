@@ -772,7 +772,7 @@ du. Zu finden in der Übersicht, Abschnitt „Vorschau (Trockenlauf)“.
 
 **Nächste 12 Stunden** (seit 0.46.1): Kurz steht derselbe Plan auch in Übersicht → Warmwasser (unter den Kacheln) und
 Übersicht → Kessel (oben) – ab jetzt 12 h als Stufenlinie: Warmwasser-Soll mit der gehaltenen Untergrenze gestrichelt
-(„Speicher bleibt über …“), Abschnitte beschriftet (Nacht, niemand zu Hause/Urlaub, Aufheizen, Zapfung erwartet,
+(seit 0.46.2 „Speicher darf bis hier fallen“ – Soll − Hysterese), Abschnitte beschriftet (Nacht, niemand zu Hause/Urlaub, Aufheizen, Zapfung erwartet,
 Desinfektion); beim Kessel das Vorlauf-Soll, Stunden mit „Heizbetrieb aus“ grau. Darunter nur die Wechsel als eine Zeile,
 etwa „Jetzt 55 °C · ab 22:00 45 °C (Nacht) · ab 05:30 55 °C (vor dem Aufstehen)“; gleicher Grund hintereinander wird
 eine Spanne („Jetzt 43–44 °C“), An/Aus im Minutentakt ein Abschnitt („zeitweise aus“). Tooltip je Stunde wie in der Vorschau. Die Karten nutzen dieselbe Abfrage wie die
@@ -1917,30 +1917,40 @@ Gelernt wird aus Speichertemperatur, Ladestatus und Brennerleistung:
   mehr steigt (mit Nachlauf, ohne die flachen Schritte danach)
 
 Strategie (läuft im Schatten mit; gesetzt wird sie nur mit dem Schalter aus
-[Weg W](#warmwasser-über-heatpilot-weg-w)). Seit 0.46 ist jedes Ziel die **tiefste
-Speichertemperatur, die gehalten werden soll** („Speicher bleibt über X °C“). Der Kessel lädt erst,
-wenn der Speicher um seine Einschalthysterese unter das Soll fällt (EMS-ESP `dhw_hyston`, z. B. −10 K);
-empfohlen wird deshalb das Soll X + Hysterese, auf 1 K aufgerundet, höchstens das Maximum. Meldet der
-Kessel keine Hysterese, rechnet HeatPilot mit 5 K und sagt das im Grund („Hysterese 5 K angenommen“).
+[Weg W](#warmwasser-über-heatpilot-weg-w)). Der Kessel lädt erst, wenn der Speicher um seine
+Einschalthysterese unter das Soll fällt (EMS-ESP `dhw_hyston`, z. B. −5 K). Seit 0.46.2 gilt dabei wie bei
+einer üblichen Automation: **Die Komforttemperatur der Einstellungen ist das Soll** – bei Komfort 50 °C und
+5 K Hysterese pendelt der Speicher zwischen 45 und 50 °C („Speicher 45–50 °C“), nicht mehr 50–55 °C. Nur das
+**Minimum** bekommt die Hysterese dazu (Soll = Minimum + Hysterese), damit der Speicher beim Fallenlassen nie
+darunter fällt. Jedes Soll wird auf 1 K aufgerundet, höchstens das Maximum. Meldet der Kessel keine Hysterese,
+rechnet HeatPilot mit 5 K und sagt das im Grund („Hysterese 5 K angenommen“).
 
-- **Urlaub** bzw. **niemand zu Hause** und die nächste Ankunft weiter weg als die Aufheizdauer + 1 h →
+- **Urlaub** bzw. **niemand zu Hause** und die nächste Ankunft weiter weg als die Aufheizdauer →
   Minimum („Urlaub – Speicher darf bis … °C fallen“). Ist die Ankunft unbekannt, weil die Gewohnheit noch
   lernt, bleibt das heutige Soll
 - **Nacht** laut Nachtplan (eingestellt bzw. gelernt), solange das Nachtende weiter weg ist als die
-  Aufheizdauer + 1 h → Minimum („Nacht – Speicher darf bis … °C fallen“)
+  Aufheizdauer → Minimum („Nacht – Speicher darf bis … °C fallen“)
 - **sonst** – jemand zu Hause und wach, bzw. innerhalb der Aufheizdauer vor Ankunft oder Aufstehen („vor dem
-  Aufstehen aufheizen“) → **Komfort** (+ gelernte Reserve). Ist eine große Zapfung üblich, so hoch, dass der
-  Speicher danach nicht unter das Minimum fällt (Minimum + Bedarf)
+  Aufstehen aufheizen“) → **Komfort** (+ gelernte Reserve) als Soll. Ist eine große Zapfung üblich, Soll =
+  Minimum + Bedarf, wenn das höher ist – ohne Hysterese, denn während des Zapfens lädt der Kessel nach.
+  Zapfungen sieht die Strategie mindestens eine Stunde voraus
 
-Die Aufheizdauer rechnet mit der gelernten Ladegeschwindigkeit vom Minimum bis Komfort + Hysterese. Den
-früheren Tagesboden „keine Zapfung erwartet → Minimum + Reserve“ gibt es nicht mehr. Übersicht → Warmwasser
-zeigt in „Empfehlung jetzt“ das Soll und darunter „Speicher bleibt über X °C (Hysterese Y K)“ mit dem Grund;
+Die **Aufheizdauer** ist (Komfort-Soll − Minimum) / gelernte Ladegeschwindigkeit + 0,5 h Puffer (bis 0.46.1:
+bis Komfort + Hysterese und 1 h Puffer). Beispiel: Minimum 40 °C, Komfort 50 °C, 20 K/h → 1 h vor dem Nachtende
+wird geheizt. Den früheren Tagesboden „keine Zapfung erwartet → Minimum + Reserve“ gibt es nicht mehr. Die
+gelernte Reserve wurde mit 0.46.2 einmal auf 0 gesetzt – sie stammte aus der früheren Strategie. Übersicht → Warmwasser
+zeigt in „Empfehlung jetzt“ das Soll und darunter wie der Grund „Speicher 45–50 °C“ bzw. beim Fallenlassen „Speicher
+darf bis 40 °C fallen“ („Hysterese 5 K angenommen“ nur, wenn der Kessel keine meldet) und den Grund;
 ist die Hysterese am Kessel größer als 5 K, steht darunter ein Hinweis: Eine kleinere Hysterese hält den
 Speicher näher am Ziel und spart Bereitschaftsverlust (am Kessel einstellen – HeatPilot ändert sie nicht).
 Vorschau, Weg W, Ersparnis-Schätzung und Reserve rechnen mit demselben Ziel; der Vergleichsspeicher lädt wie
 der Kessel erst unter Soll − Hysterese und dann bis zum Soll. Die Ersparnis ist der eingesparte
 Bereitschaftsverlust bei denselben Zapfungen; Zapfungen, bei denen der
-Speicher unter der Komforttemperatur gewesen wäre, werden als „zu kalt“ gezählt –
+Speicher unter Komfort − Hysterese (seit 0.46.2 die Untergrenze im Komfort; bis 0.46.1 die
+Komforttemperatur) gewesen wäre oder die ihn unter das Minimum ziehen, werden als „zu kalt“ gezählt. Fürs Minimum
+zählt seit 0.46.2 der tiefste Stand mit dem Nachladen: Fällt der Vergleichsspeicher während der Zapfung unter
+Soll − Hysterese, lädt er mit der gelernten Ladegeschwindigkeit für die restliche Zapfdauer nach (die Zapfung eines
+Messschritts gilt als gleichmäßig über den Schritt verteilt, höchstens 5 Minuten – länger misst HeatPilot nicht) –
 nicht aber solche, die er nur dank der Legionellenschaltung bedient (deren Wärme
 bekommt die Strategie genauso): die Wanne danach, die warm beginnt und erst durch
 ihre Größe unter das Minimum zieht, höchstens 12 Stunden nach der Sonderladung.

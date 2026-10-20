@@ -62,17 +62,19 @@ def test_dhw_recommendation_follows_usage_and_presence():
     assert m.recommend(early, True, None, cfg)["hold"] == cfg.dhw_min_temp
     morning = datetime(2026, 11, 2, 6, 30)  # Montag kurz vor der Dusche (−15 K)
     rec = m.recommend(morning, True, None, cfg)
-    assert rec["hold"] == cfg.dhw_min_temp + 15 or rec["hold"] >= cfg.dhw_comfort_temp
+    # seit 0.46.2: Komfort bzw. Minimum + Bedarf ist das Soll (ohne Hysterese) – vor der Dusche gilt der Bedarf
+    # (≈13 K gelernt), und sie ist auch bei schnell ladendem Speicher schon eine halbe Stunde vorher bekannt
+    assert rec["expects_draw"] and rec["target"] >= max(cfg.dhw_comfort_temp, cfg.dhw_min_temp + 12)
     # seit 0.46: jemand zu Hause und wach – Komfort, nicht mehr Minimum („keine Zapfung erwartet“)
     midday = datetime(2026, 11, 2, 12, 0)
-    assert m.recommend(midday, True, None, cfg)["hold"] >= cfg.dhw_comfort_temp
+    assert m.recommend(midday, True, None, cfg)["target"] >= cfg.dhw_comfort_temp
     away = m.recommend(morning, False, morning + timedelta(hours=9), cfg)
     assert away["hold"] == cfg.dhw_min_temp and away["reason"].startswith("niemand zu Hause")
 
 
 def test_dhw_strategy_saves_standby_loss_without_cold_showers():
-    # seit 0.46 hält die Strategie wach und zu Hause Komfort (Speicher über 50 °C): Sie spart gegenüber einem
-    # immer heißen Speicher (60 °C, Hysterese 5 K) nachts – ohne kalte Dusche
+    # seit 0.46 hält die Strategie wach und zu Hause Komfort, seit 0.46.2 als Soll (Speicher 45–50 °C; zu kalt
+    # heißt unter 45 °C): Sie spart gegenüber einem immer heißen Speicher (60 °C, Hysterese 5 K) – ohne kalte Dusche
     _, loss_real, loss_strat, cold = simulate(set_t=60.0, hyst=5.0)
     assert loss_strat < loss_real
     assert cold == 0

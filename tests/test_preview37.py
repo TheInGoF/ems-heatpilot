@@ -260,15 +260,16 @@ def test_dhw_higher_before_big_draw_and_disinfection_marked(tmp_path):
     eng.dhw = dhw_model()
     p = pv.preview(eng, ts_of(SUN, 10))
     h = by_hour(p)
-    # seit 0.46: tagsüber Komfort 50 °C + 5 K Hysterese (angenommen), nachts Minimum 40 + 5 K
-    assert h["12:00"]["dhw"] == 55 and "Speicher bleibt über 50 °C" in h["12:00"]["dhw_reason"]
-    assert h["17:00"]["dhw"] == 59 and "große Zapfung" in h["17:00"]["dhw_reason"]  # Minimum 40 + 14 K + 5 K
+    # seit 0.46.2: tagsüber Komfort 50 °C als Soll (Speicher 45–50 °C, Hysterese 5 K angenommen), nachts
+    # Minimum 40 + 5 K, vor der Wanne Minimum 40 + 14 K ohne Hysterese
+    assert h["12:00"]["dhw"] == 50 and "Speicher 45–50 °C" in h["12:00"]["dhw_reason"]
+    assert h["17:00"]["dhw"] == 54 and "große Zapfung" in h["17:00"]["dhw_reason"]
     assert h["21:00"]["dhw"] == 45 and h["21:00"]["dhw_reason"].startswith("Nacht")
     assert h["16:00"]["disinfect"] == {"temp": 70.0, "counts": False, "at": at(SUN, 16, 30).isoformat()}
     assert h["15:00"]["disinfect"] is None
     dhw_writes = [w for x in p["hours"] for w in x["writes"] if w["what"] == "dhw"]
     # zurück auf Komfort, Nacht, vor dem Aufstehen (Nachtende 04:30) wieder Komfort
-    assert [w["value"] for w in dhw_writes] == [55, 59, 55, 45, 55] and p["writes_24h"]["dhw"] == 5
+    assert [w["value"] for w in dhw_writes] == [50, 54, 50, 45, 50] and p["writes_24h"]["dhw"] == 5
     # Modell lernt noch: kein Warmwasser-Soll, Grund steht da
     eng.dhw = DhwModel()
     p = pv.preview(eng, ts_of(SUN, 10))

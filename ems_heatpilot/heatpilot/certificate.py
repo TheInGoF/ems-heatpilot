@@ -391,10 +391,13 @@ def render(data: dict, step: float = 15.0) -> bytes:
         return y + 18
 
     def row(label: str, value: str, y: float, note: str = "") -> float:
-        p.text(L + 4, y, label, 10, color="#222222")
-        p.text(L + 250, y, value, 10, bold=True, color=NAVY_DARK)
-        if note:
-            p.text(L + 250 + text_width(value, 10, True) + 6, y, note, 8, color=GREY)
+        size = min(10.0, 10.0 * 240 / max(text_width(label, 10), 1))  # lange Bezeichnung: kleiner statt über den Wert
+        p.text(L + 4, y, label, size, color="#222222")
+        x = L + 250 + p.text(L + 250, y, value, 10, bold=True, color=NAVY_DARK) + 6
+        if note and x + text_width(note, 8) <= R:
+            p.text(x, y, note, 8, color=GREY)
+        elif note:  # 0.46.2: passt nicht in die Zeile – unter dem Wert umbrechen statt über den Rand
+            y = p.paragraph(L + 250, y + 10, note, R - L - 250, 8, color=GREY, leading=10) - 10
         return y + step
 
     h, bo = data["house"], data["boiler"]

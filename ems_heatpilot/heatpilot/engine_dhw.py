@@ -391,9 +391,9 @@ class DhwMixin:
         t_now = num(self._boiler("dhw_temp"))
         if t_now is None:
             return None
-        # seit 0.46: lädt (wie die Empfehlung) bis Komfort + Hysterese, sobald der Speicher unter Komfort fällt
+        # seit 0.46.2: lädt (wie die Empfehlung) bis Komfort, sobald der Speicher unter Komfort − Hysterese fällt
         hyst = dhw_target.hysteresis(self._boiler("dhw_hyst_on"))[0]
-        target = dhw_target.setpoint(self.cfg.dhw_comfort_temp + self.dhw.comfort_margin, hyst, self.cfg)
+        target = dhw_target.capped(self.cfg.dhw_comfort_temp + self.dhw.comfort_margin, self.cfg)
         hours_to = max((arrival - now).total_seconds() / 3600, 0.0)
         # bis kurz vor Ankunft kühlt er weiter aus (Ladung ist erst gegen Ende geplant)
         t_start = self.dhw.cool(t_now, max(hours_to - 2.0, 0.0))

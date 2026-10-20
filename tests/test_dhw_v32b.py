@@ -113,7 +113,9 @@ def test_reserve_state_is_taken_from_before_the_event():
     sh = DhwShadow(t_sim=50.0)
     first = sh.step(m, 50.0, 50.0, 0.5, STEP, 50.0, dhw_min=30.0, margin_bound=False,
                     dhw_max=60.0)
-    second = sh.step(m, 50.0, 50.0, 21.0, STEP, 50.0, dhw_min=30.0, margin_bound=True,
+    # seit 0.46.2 rechnet der Schatten das Nachladen während des Zapfens an (20 K/h × 5 min ≈ 1,7 K je Schritt):
+    # 23 K statt 21 K, damit die Wanne weiter unter das Minimum zieht
+    second = sh.step(m, 50.0, 50.0, 23.0, STEP, 50.0, dhw_min=30.0, margin_bound=True,
                      dhw_max=60.0)
     assert first["cold_draw"] == 0 and second["cold_draw"] == 1 and second["raise_margin"] == 0
 
