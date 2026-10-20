@@ -61,6 +61,7 @@ FIELDS: dict[str, tuple] = {
     "heating_switch_entity": ("entity", "switch"),
     "boiler_fallback_flow": ("int", FALLBACK_MIN, FALLBACK_MAX),
     "boiler_idle": ("choice", IDLE_MODES),
+    "regulator_removed": ("bool",),  # 0.46.9: „Regler ist abgebaut“ – vom Nutzer bestätigt, Prüfung entfällt
 }
 SWITCH_ENTITY = re.compile(r"^switch\.[a-z0-9_]+$")
 NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")

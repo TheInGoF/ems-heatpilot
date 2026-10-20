@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.46.9
+**„Regler ist abgebaut“ – der Nutzer gibt das Go**
+- Neuer Haken unter Einstellungen → Kessel: „Regler ist abgebaut“. Angehakt wartet HeatPilot nicht mehr auf die automatische Regler-Prüfung (manche EMS-ESP-Stände melden einen abgebauten Regler nie eindeutig). Nur wenn EMS-ESP trotzdem echte Werte eines Reglers liefert, bleibt es gesperrt; die Prüfung nach jedem Schreibvorgang (fremde Änderungen pausieren) bleibt wie bisher. Standard: aus – alte Einstellungen gelten unverändert
+- **Tests:** `tests/test_regulator464.py` ergänzt
+
 ## 0.46.8
 **Boost-Ende schaltet nie aus oder auf Auto**
 - Ein abgelaufener Boost (Thermostate ohne Tado-Cloud-Timer, z. B. über HomeKit) schreibt wie bisher das Soll von HeatPilot bzw. das Soll von vorher. Gab es vorher kein Soll – HomeKit meldet ein ruhendes Tado im Automatikbetrieb als „aus“ –, schreibt HeatPilot jetzt das Soll laut Zeitplan, statt das Thermostat auszuschalten. Auf „Auto“ schaltet das Boost-Ende nie

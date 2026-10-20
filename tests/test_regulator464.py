@@ -30,3 +30,17 @@ def test_fresh_regulator_sensor_still_counts():
     assert regulator._fresh_ha(eng, NOW) == "sensor.thermostat_hc1_seltemp"
     eng.states["sensor.thermostat_hc1_seltemp"] = _st("unavailable", NOW - 30)
     assert regulator._fresh_ha(eng, NOW) is None
+
+
+def test_user_confirmed_removal_gives_go_unless_emsesp_reports_values():
+    """0.46.9: „Regler ist abgebaut“ angehakt → frei ohne Warten; nur echte Werte des Reglers von EMS-ESP sperren."""
+    from heatpilot.config import Config
+    eng = _eng({}, {})
+    eng.cfg = Config(emsesp_host="ems.local", regulator_removed=True)
+    eng.ems, eng.ems_ts, eng.regulator_watch = {"boiler": {"curflowtemp": 40}}, NOW, {"last": "fehler", "ts": NOW}
+    r = regulator.regulator(eng, NOW)
+    assert r["present"] is False and "bestätigt" in r["text"]
+    eng.ems["thermostat"] = {"hc1_seltemp": 21.0}
+    assert regulator.regulator(eng, NOW)["present"] is True
+    eng.cfg.regulator_removed, eng.ems = False, {"boiler": {"curflowtemp": 40}}
+    assert regulator.regulator(eng, NOW)["present"] is None  # ohne Bestätigung: wie bisher prüfen
