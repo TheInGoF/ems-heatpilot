@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.46.7
+**Heizbetrieb nur als Rückmeldung**
+- Bei manchen Kesseln ist „Heizbetrieb aktiviert“ (EMS-ESP `heatingactivated`) nur eine Rückmeldung und lässt sich nicht schreiben. Bei „Wenn kein Raum Wärme braucht: Pumpe läuft weiter“ (Standard) sperrt das nicht mehr: HeatPilot führt den Kessel allein über das Vorlauf-Soll und schaltet den Heizbetrieb nie; wo er sonst „Heizbetrieb aus“ setzen würde, gilt „nur Pumpe“ (Vorlauf-Soll 20 °C). Einstellungen → Kessel zeigt beim Heizbetrieb „nur Rückmeldung“ statt eines Hindernisses. Bei „Heizbetrieb ganz aus“ wird der Schalter weiter gebraucht
+- Weiter gilt: Ist am Kessel „Heizen abschalten“ (`heatingoff`) an, schreibt HeatPilot nicht – erst ausschalten
+- **Tests:** neu `tests/test_boiler467.py`
+
 ## 0.46.6
 **Kessel-Sperre nennt ihren Grund**
 - Einstellungen → Kessel zeigt bei „Zurzeit gesperrt“ den genauen Grund aus der Regler-Prüfung (z. B. „Der Regler antwortet EMS-ESP nicht, der Kessel schon – HeatPilot prüft noch (2 von 3 Abfragen, mindestens 5 min)“) statt nur „unbekannt“

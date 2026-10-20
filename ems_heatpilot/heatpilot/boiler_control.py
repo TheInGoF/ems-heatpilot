@@ -167,6 +167,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         self.verify(now)
         target, st["boost"] = boiler_flow.compute(self.eng, ts, st.get("boost"), self.bounds())
         target = self._blind(ts, target)
+        target = self._no_switch(target)
         cur = {w: self.current(w) for w in WHATS}
         blocked = self.blocker(now) if mode == "heatpilot" else None
         if mode == "heatpilot":
@@ -247,12 +248,23 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         return decide_flow(value, current, ts, last_ts, target.charging, paused, checking,
                            (down or {}).get("since"), over)
 
+    def _no_switch(self, target):
+        """Lässt sich der Heizbetrieb nicht schalten (nur Rückmeldung des Kessels, 0.46.7), wird aus „Heizbetrieb aus“
+        „nur Pumpe“: Heizbetrieb bleibt, Vorlauf-Soll ``PUMP_FLOW`` – der Brenner springt nicht an."""
+        if target.heating is not False or be.heat_usable(self.eng, self.entities["heating"]):
+            return target
+        pump = br.idle_flow(self.eng.cfg, self.bounds()) or br.PUMP_FLOW
+        return dataclasses.replace(target, heating=True, flow=pump, base=pump, idle=True,
+                                   reason=f"{target.reason} – Heizbetrieb nur Rückmeldung: {br.IDLE_TEXT}")
+
     def _heat_decision(self, ts: int, target, ref: dict, paused: bool, checking: bool, over, flow,
                        known: bool) -> Decision:
         """Heizbetrieb: aus erst nach ``HEAT_OFF_S`` ohne Bedarf, als Schutz sofort (Vorlauf über der Grenze ohne
         Bedarf, Fußboden-Grenze unter 35 °C); an nur, wenn das Vorlauf-Soll bekannt ist (``known``) und höchstens bei
         der Grenze liegt – oder es im selben Schritt geschrieben wird."""
         hch, want = self._ch("heating"), target.heating
+        if not be.heat_usable(self.eng, self.entities["heating"]):  # 0.46.7: nur Rückmeldung – nie schalten
+            return Decision(False, None, "Heizbetrieb ist nur eine Rückmeldung des Kessels – HeatPilot schaltet ihn nicht")
         if want is False:
             hch.setdefault("off_since", ts)
         else:
