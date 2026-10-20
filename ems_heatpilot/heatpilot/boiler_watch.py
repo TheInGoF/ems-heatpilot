@@ -22,7 +22,7 @@ import time
 
 from . import boiler_rule as br
 from . import watchdog
-from .boiler_rule import CHECK_TOL_K, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_S, shown
+from .boiler_rule import CHECK_TOL_K, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_S, PUMP_FLOW, shown
 from .boiler_status import ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, fallback
 
 log = logging.getLogger(__name__)
@@ -37,9 +37,13 @@ WATCHDOG_GAP_S = watchdog.STALE_MIN * 60 - 300  # so lange lief HeatPilot nicht:
 
 
 def same(what: str, a, b) -> bool:
-    """Gleicher Wert am Kessel: Vorlauf ±0,5 K, Heizbetrieb gleich; unbekannt ist nie gleich."""
+    """Gleicher Wert am Kessel: Vorlauf ±0,5 K, Heizbetrieb gleich; unbekannt ist nie gleich. Seit 0.47.4 gelten zwei
+    Vorlauf-Soll bis ``PUMP_FLOW`` als gleich: Der Kessel meldet „kein Wärmebedarf“ selbst als eigenen Wert (z. B. 7 °C
+    statt der geschriebenen 20 °C) – das ist kein anderer Schreiber."""
     if a is None or b is None:
         return False
+    if what == "flow" and float(a) <= PUMP_FLOW + CHECK_TOL_K and float(b) <= PUMP_FLOW + CHECK_TOL_K:
+        return True
     return abs(float(a) - float(b)) <= CHECK_TOL_K if what == "flow" else bool(a) == bool(b)
 
 

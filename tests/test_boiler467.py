@@ -79,3 +79,10 @@ def test_open_valve_gets_heat_even_if_models_say_no_need(tmp_path):
     climate(eng, "climate.wz", 21.0, 21.0, hvac_action="heating")       # Thermostat öffnet
     t = compute(eng, T0)[0]
     assert t.heating is True and not t.idle and t.flow >= br.FLOW_MIN and "Ventil offen" in t.reason
+
+
+def test_boiler_reports_own_no_demand_value_not_foreign():
+    """0.47.4: Geschrieben 20 °C (nur Pumpe), der Kessel meldet 7 °C („kein Wärmebedarf“) – gleich, kein Schreiber."""
+    from heatpilot.boiler_watch import same
+    assert same("flow", 7, 20) and same("flow", 20.0, 7.0)
+    assert not same("flow", 7, 35) and not same("flow", 30, 20) and same("flow", 35, 35.4)
