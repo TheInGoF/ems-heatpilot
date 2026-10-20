@@ -7,8 +7,8 @@ Fremdwärme-Ereignisse (``room_events`` und das laufende aus ``Engine.room_ext``
 * **Fenster offen:** Die Raumtemperatur fällt in 15 min um mindestens 0,5 K – von 15 min davor bis 45 min danach.
 * **Fremdwärme** (Kamin, Ofen, Gäste) und **Heizbetrieb aus** (nur für Kennlinie und Gütemaß: ohne Heizwasser
   sagt die Ventilstellung nichts über die Wärme).
-* **Ersatzwerte:** Meldet der Ventilsensor eines Raums nichts, nimmt der Messpunkt ``hvac_action`` (0/100 % bzw. seit
-  0.45.1 die typische Öffnung, ``valve_typical``) – solche Ventilwerte (Tabelle ``valve_subst``) lernt ein stetiges
+* **Ersatzwerte:** Meldet der Ventilsensor eines Raums nichts, nimmt der Messpunkt ``hvac_action`` (0/100 %) – solche
+  Ventilwerte (Tabelle ``valve_subst``) lernt ein stetiges
   Ventilmodell nicht. Ein Modell, das nur an/aus kennt (``binary_dev``), lernt aus ihnen an/aus (offen = an).
 * **Ruht** (``no_pct``, seit 0.45.1): ein %-Modell, dessen Raum nur noch an/aus meldet – es vergisst nichts
   (``decay`` hält an), bis wieder %-Werte kommen.

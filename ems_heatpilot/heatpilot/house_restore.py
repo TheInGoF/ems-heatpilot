@@ -30,7 +30,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import backfill, house_data, room_adopt, room_alias, room_stats, valve_since, valve_typical
+from . import backfill, house_data, room_adopt, room_alias, room_stats, valve_since
 from .dhw import DhwModel
 from .discovery import Room, device_sensors
 from .models import ROOM_STEP_H
@@ -188,7 +188,6 @@ async def restore(ha, eng, idx, stat_list) -> dict:
     hours = await backfill.backfill_statistics(ha, eng, eng.cfg.statistics_backfill_days)
     room_rows, old = await _fetch_old(ha, eng, idx)
     stats = await _room_stats(ha, eng, idx, stat_list)
-    valve_typical.learn(eng.store, [r.climate for r in eng.found.rooms])  # 0.45.1: aus allen eingelesenen %-Werten
     after = house_data.coverage(eng.store)
     entry = {"ts": int(time.time()), "kind": "restore", "assigned": assigned,
              "aliases": len(room_alias.get(eng.store)), "statistics_hours": hours, "room_rows": room_rows,

@@ -25,7 +25,7 @@ class SampleMixin:
     """Messpunkt und Raumwerte der ``Engine``.
 
     Nutzt von der Engine: ``states``, ``found``, ``store``, ``room_spikes``, ``_val``/``_boiler``/``_thermo``,
-    die Kesselzustände aus ``BoilerMixin``, ``on_vacation`` und (0.45.1) ``valve_typical``/``_gone``; setzt
+    die Kesselzustände aus ``BoilerMixin``, ``on_vacation`` und (0.45.1) ``_gone``; setzt
     ``_rejected``.
     """
 
@@ -168,8 +168,7 @@ class SampleMixin:
         aller Geräte der Gruppe, das Soll das des Schlüssels. Das Ventil ist das Mittel aller
         Geräte – seit 0.45 nur der echten (Sensor in %), sobald es mindestens einen gibt: 0/100 % aus ``hvac_action``
         anderer Geräte verwässern es nicht. (Fehlt der Schlüssel, fehlt der Raum – wie bisher.) Ist ein Ventilwert ein
-        Ersatzwert, merkt sich der Raum das in ``valve_subst`` (das Ventilmodell lernt ihn nicht, seit 0.39). Ohne
-        echten Wert gilt seit 0.45.1 in Räumen, die %-Werte kannten, beim Heizen die typische Öffnung (``_typical``).
+        Ersatzwert, merkt sich der Raum das in ``valve_subst`` (das Ventilmodell lernt ihn nicht, seit 0.39).
         """
         head = self._device_reading(r.devices[0])
         if head is None:
@@ -179,21 +178,10 @@ class SampleMixin:
             self.__dict__.setdefault("valve_subst", set()).add(r.climate)
         temps = [head[0]] if r.controller else [x[0] for x in (head, *others) if x[0] is not None]
         real = [x[2] for x in (head, *others) if x[5]]
-        valves = real or self._typical(r.climate, [x[2] for x in (head, *others) if x[2] is not None])
+        valves = real or [x[2] for x in (head, *others) if x[2] is not None]
         hums = [x[3] for x in (head, *others) if x[3] is not None]
         return (r.climate, sum(temps) / len(temps) if temps else None, head[1],
                 sum(valves) / len(valves) if valves else None, hums[0] if hums else None)
-
-    def _typical(self, key: str, valves: list[float]) -> list[float]:
-        """Kein echter Ventilwert: Kannte der Raum %-Werte (Attribut ``valve_typical`` aus ``valve_typical.table``),
-        gilt beim Heizen seine typische Öffnung (unbekannt: 100 %) und der Wert ist ein Ersatzwert – sonst 0/100 % wie
-        bisher."""
-        table = self.__dict__.get("valve_typical") or {}
-        if key not in table or not valves:
-            return valves
-        self.__dict__.setdefault("valve_subst", set()).add(key)
-        pct = table[key]
-        return valves if pct is None else [pct if v > 0 else 0.0 for v in valves]
 
     # ------------------------------------------------------------------ Prüfen und ergänzen
     def _check_ranges(self, sample: dict, rooms: list[tuple], persons: list[tuple]):
