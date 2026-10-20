@@ -1667,11 +1667,10 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
    Umgebung) oder ist zu wenig gelernt, gibt es keine Empfehlung.
 5. **Kleine, gedeckelte Selbstkorrektur:** Nach einer zu kalten Zapfung +2 K
    Warmwasser-Reserve, höchstens +10 K, Abbau 0,25 K pro Tag. Nur, wenn mehr
-   Reserve das Ziel davor angehoben hätte – das gilt auch für „keine Zapfung
-   erwartet“ mit jemandem zu Hause, denn dort ist Minimum + Reserve der Boden
-   (für Haushalte ohne feste Zeiten die einzige Korrektur). Lag das Ziel schon am
-   Maximum, war die Zapfung größer als Maximum minus Minimum (z. B. die volle
-   Wanne) oder war niemand zu Hause, wird sie nur gezählt. Im Urlaub und wenn
+   Reserve das Ziel davor angehoben hätte – seit 0.46 immer, wenn jemand zu Hause
+   und wach ist (dort gilt Komfort + Reserve). Lag das Ziel schon am Maximum, war
+   die Zapfung größer als Maximum minus Minimum (z. B. die volle Wanne), war
+   niemand zu Hause oder war Nacht (Minimum), wird sie nur gezählt. Im Urlaub und wenn
    alle lange weg sind, bleibt die Reserve eingefroren.
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
@@ -1910,11 +1909,28 @@ Gelernt wird aus Speichertemperatur, Ladestatus und Brennerleistung:
   mehr steigt (mit Nachlauf, ohne die flachen Schritte danach)
 
 Strategie (läuft im Schatten mit; gesetzt wird sie nur mit dem Schalter aus
-[Weg W](#warmwasser-über-heatpilot-weg-w)): Niemand zu Hause und keine
-Ankunft absehbar → Minimum. Zapfung in Kürze erwartet → Komfort
-(bei viel Verbrauch so hoch, dass der Speicher danach nicht unter das
-Minimum fällt). Sonst → Minimum. Nachgeladen wird rechtzeitig, weil die
-Ladegeschwindigkeit bekannt ist. Die Ersparnis ist der eingesparte
+[Weg W](#warmwasser-über-heatpilot-weg-w)). Seit 0.46 ist jedes Ziel die **tiefste
+Speichertemperatur, die gehalten werden soll** („Speicher bleibt über X °C“). Der Kessel lädt erst,
+wenn der Speicher um seine Einschalthysterese unter das Soll fällt (EMS-ESP `dhw_hyston`, z. B. −10 K);
+empfohlen wird deshalb das Soll X + Hysterese, auf 1 K aufgerundet, höchstens das Maximum. Meldet der
+Kessel keine Hysterese, rechnet HeatPilot mit 5 K und sagt das im Grund („Hysterese 5 K angenommen“).
+
+- **Urlaub** bzw. **niemand zu Hause** und die nächste Ankunft weiter weg als die Aufheizdauer + 1 h →
+  Minimum („Urlaub – Speicher darf bis … °C fallen“). Ist die Ankunft unbekannt, weil die Gewohnheit noch
+  lernt, bleibt das heutige Soll
+- **Nacht** laut Nachtplan (eingestellt bzw. gelernt), solange das Nachtende weiter weg ist als die
+  Aufheizdauer + 1 h → Minimum („Nacht – Speicher darf bis … °C fallen“)
+- **sonst** – jemand zu Hause und wach, bzw. innerhalb der Aufheizdauer vor Ankunft oder Aufstehen („vor dem
+  Aufstehen aufheizen“) → **Komfort** (+ gelernte Reserve). Ist eine große Zapfung üblich, so hoch, dass der
+  Speicher danach nicht unter das Minimum fällt (Minimum + Bedarf)
+
+Die Aufheizdauer rechnet mit der gelernten Ladegeschwindigkeit vom Minimum bis Komfort + Hysterese. Den
+früheren Tagesboden „keine Zapfung erwartet → Minimum + Reserve“ gibt es nicht mehr. Übersicht → Warmwasser
+zeigt in „Empfehlung jetzt“ das Soll und darunter „Speicher bleibt über X °C (Hysterese Y K)“ mit dem Grund;
+ist die Hysterese am Kessel größer als 5 K, steht darunter ein Hinweis: Eine kleinere Hysterese hält den
+Speicher näher am Ziel und spart Bereitschaftsverlust (am Kessel einstellen – HeatPilot ändert sie nicht).
+Vorschau, Weg W, Ersparnis-Schätzung und Reserve rechnen mit demselben Ziel; der Vergleichsspeicher lädt wie
+der Kessel erst unter Soll − Hysterese und dann bis zum Soll. Die Ersparnis ist der eingesparte
 Bereitschaftsverlust bei denselben Zapfungen; Zapfungen, bei denen der
 Speicher unter der Komforttemperatur gewesen wäre, werden als „zu kalt“ gezählt –
 nicht aber solche, die er nur dank der Legionellenschaltung bedient (deren Wärme

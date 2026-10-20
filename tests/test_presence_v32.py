@@ -247,7 +247,7 @@ def test_dhw_keeps_setpoint_when_arrival_unknown():
     r = m.recommend(now, False, None, cfg, unknown_from=now + timedelta(minutes=15), current_set=55.0)
     assert r["target"] == 55 and "Ankunft unbekannt" in r["reason"]
     r = m.recommend(now, False, None, cfg, unknown_from=None, current_set=55.0)
-    assert r["target"] == cfg.dhw_min_temp and r["reason"] == "niemand zu Hause"
+    assert r["hold"] == cfg.dhw_min_temp and r["reason"].startswith("niemand zu Hause")
 
 
 def test_engine_dhw_unknown_for_fresh_habit_but_minimum_when_long_away(tmp_path):
@@ -264,7 +264,7 @@ def test_engine_dhw_unknown_for_fresh_habit_but_minimum_when_long_away(tmp_path)
         assert "Ankunft unbekannt" in eng.dhw_rec["reason"] and eng.dhw_rec["target"] == 55
         eng.persons["person.a"].long_away = True
         eng.dhw_recommend(ts, {"home_count": 0, "dhw_set": 55.0})
-        assert eng.dhw_rec["target"] == eng.cfg.dhw_min_temp
+        assert eng.dhw_rec["hold"] == eng.cfg.dhw_min_temp
     finally:
         engmod.guards.check_dhw = orig
 

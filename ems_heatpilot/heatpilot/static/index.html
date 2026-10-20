@@ -820,6 +820,7 @@ ul.rules li { margin: 3px 0; }
   </div>
   <div id="ov-warmwasser" hidden>
   <div class="ov-kpis" id="dhw-tiles"></div>
+  <p class="muted" id="dhw-hyst-note" style="margin:0 0 8px" hidden></p>
   <div class="card">
     <div class="row" style="justify-content:space-between"><h2>Wann gezapft wird</h2>
       <div class="row" id="dhw-mode"><button class="btn small primary" data-m="day" onclick="setDhwMode('day')">Typischer Tag</button><button class="btn small" data-m="week" onclick="setDhwMode('week')">Woche</button></div></div>
@@ -1764,6 +1765,11 @@ function dhwChart(container, w) {
   });
 }
 
+// Warmwasser-Empfehlung (0.46): Soll groß, darunter die gehaltene Speichertemperatur (Soll − Hysterese) und der Grund
+function dhwRecNote(rec) {
+  if (rec.hold === undefined || rec.hold === null) return esc(rec.reason);
+  return `Speicher bleibt über ${fmt(rec.hold)} °C (Hysterese ${fmt(rec.hyst)} K${rec.hyst_assumed ? " angenommen" : ""}) · ${esc(rec.why || rec.reason)}`;
+}
 function tile(label, value, unit, note) {
   if (value === "–" || value === "" || value === null || value === undefined) return "";
   return `<div class="tile"><div class="label">${label}</div><div class="value">${value}<span class="unit"> ${unit || ""}</span></div>${note ? `<div class="muted">${note}</div>` : ""}</div>`;
@@ -1919,7 +1925,7 @@ async function load() {
   const kpk = w.kwh_per_k, dok = w.model_ok, rec = w.recommendation, prelim = dok ? "" : "vorläufig (Modell lernt noch) · ";
   $("dhw-tiles").innerHTML = [
     tile("Speicher", fmt(w.temp, 0), "°C", `Soll ${fmt(w.set, 0)} °C · ` + (w.charges > 0 ? `lädt mit ${fmt(w.charge_rate_kh, 0)} K/h nach` : "Nachladen noch nicht gemessen")),
-    rec && rec.target !== null ? tile("Empfehlung jetzt", fmt(rec.target, 0), "°C", esc(rec.reason))
+    rec && rec.target !== null ? tile("Empfehlung jetzt", fmt(rec.target, 0), "°C", dhwRecNote(rec))
       : w.temp !== null ? tile("Empfehlung jetzt", "lernt noch", "", rec ? esc(rec.reason) : "noch keine Messung") : "",
     tile("Bereitschaftsverlust", fmt(w.loss_w_now, 0), "W", prelim + `bei 45 °C ${fmt(w.loss_w_at[45], 0)} W · bei 55 °C ${fmt(w.loss_w_at[55], 0)} W`),
     tile("Ladekosten", fmt(kpk.kalt ?? kpk.warm, 3), "kWh/K", `Start unter 47 °C: ${fmt(kpk.kalt, 3)} (${w.kwh_per_k_n.kalt}×) · darüber: ${fmt(kpk.warm, 3)} (${w.kwh_per_k_n.warm}×)`),
@@ -1932,6 +1938,9 @@ async function load() {
       `Wird nicht gelernt · bisher ${w.disinfect.special_charges} Desinfektionen ausgeklammert`) : "",
   ].join("");
   LAST_DHW = w;
+  const hystNote = $("dhw-hyst-note"), hint = w.hyst_hint;  // 0.46: nur Hinweis, HeatPilot schreibt sie nicht
+  hystNote.hidden = !hint;
+  hystNote.textContent = hint || "";
   const big = w.big_draws || [];
   $("dhw-big").innerHTML = big.length
     ? `<b>Große Zapfungen</b> (z. B. Badewanne, letzte 60 Tage, im Profil nur gedeckelt; „nach Desinfektion“ = durch die Desinfektion gedeckt, dafür wird nicht vorgeladen): ` + big.slice(-8).reverse().map(([t, k, covered]) =>

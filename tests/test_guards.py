@@ -69,7 +69,7 @@ def test_dhw_reserve_grows_after_cold_draw_but_is_capped_and_decays():
     assert m.comfort_margin == guards.DHW_MARGIN_MAX
     cfg = Config()
     rec = m.recommend(datetime(2026, 11, 2, 12, 0), False, None, cfg)
-    assert rec["target"] == cfg.dhw_min_temp  # Reserve gilt nur für erwartete Nutzung
+    assert rec["hold"] == cfg.dhw_min_temp  # Reserve gilt nur für erwartete Nutzung
     when = datetime(2026, 11, 2, 0, 0)
     from datetime import timedelta
     for hour in range(24 * 10 + 1):  # 10 Tage (240 Stundenwechsel) ohne Problem

@@ -30,7 +30,8 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
   (nicht verfügbar), bleibt sie offen und die Grenze gilt (sicher). Auch beim Vorheizen und Aufheizen (``_capped``,
   nach allen anderen Regeln). Liegt die Grenze unter 35 °C, gilt sie, sobald ein Raum Wärme braucht. Der Grund sagt
   dann „… – begrenzt durch Fußboden …“.
-* **Warmwasser-Soll** aus ``DhwModel.recommend`` mit derselben Anwesenheit und dem Desinfektionstermin, auf ganze
+* **Warmwasser-Soll** aus ``DhwModel.recommend`` mit derselben Anwesenheit, dem Desinfektionstermin und (seit 0.46) der
+  Einschalthysterese des Kessels (Soll = gehaltene Speichertemperatur + Hysterese, ``dhw_target``), auf ganze
   Grad wie Weg W (``dhw_control.wish``: halbe Grad aufwärts, Minimum…Maximum).
 * **Schreibvorgänge, die es gäbe** (``count_writes``): nur bei Änderung ab 1 K bzw. an/aus, 5 min Haltezeit. Seit 0.38
   gilt beim Warmwasser dieselbe Regel wie in Weg W (die Schwelle auch für die ungerundete Empfehlung, ``dhw_exact``): Bei „Trockenlauf“ bzw. „HeatPilot setzt“ beginnt die Zählung beim
@@ -174,6 +175,7 @@ class _Run:
         self.offset = 0.0 if self.t_out_now is None or f_now is None else self.t_out_now - f_now
         self.dhw_check = guards.check_dhw(eng.dhw)
         self.dhw_last = num(self.sample.get("dhw_set"))
+        self.dhw_hyst = eng._boiler("dhw_hyst_on")  # Einschalthysterese wie im Takt (0.46)
         self.dis_h = eng.disinfect_ready_h()
         self.hh = household(eng, self.now, local(self.end_ts), persons)
         self.skipped: list[dict] = []
@@ -404,7 +406,8 @@ class _Run:
             someone = None if hc is None else hc > 0
             arrival, unknown = (pres.arrival, pres.arrival_unknown) if hc == 0 else (None, None)
         rec = self.eng.dhw.recommend(t, someone, arrival, self.cfg, unknown_from=unknown,
-                                     current_set=self.dhw_last, disinfect_h=self.dis_h)
+                                     current_set=self.dhw_last, disinfect_h=self.dis_h, hyst=self.dhw_hyst,
+                                     vacation=pres.vacation)
         self.dhw_last = rec["target"]
         # dieselbe Rundung und Schwelle wie Weg W (0.38)
         return dhw_control.wish(rec["target"], self.cfg), rec["reason"], dhw_control.unrounded(rec["target"], self.cfg)

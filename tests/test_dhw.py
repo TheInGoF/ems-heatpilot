@@ -8,8 +8,10 @@ KWH_PER_K = 0.186 / 0.9           # 160 l Wasser, 90 % Wirkungsgrad
 CHARGE_KW = 18 * 0.6
 
 
-def simulate(days=28, start=datetime(2026, 10, 5, 0, 0)):
-    """Speicher 55 °C, lädt unter 45 °C nach, Duschen 7 Uhr (−15 K), Abwasch 19 Uhr (−8 K)."""
+def simulate(days=28, start=datetime(2026, 10, 5, 0, 0), set_t=55.0, hyst=10.0):
+    """Speicher 55 °C, lädt unter 45 °C nach, Duschen 7 Uhr (−15 K), Abwasch 19 Uhr (−8 K).
+
+    ``set_t``/``hyst``: Soll und Einschalthysterese des Kessels – die Strategie rechnet mit derselben (0.46)."""
     m = DhwModel()
     shadow = DhwShadow()
     cfg = Config()
@@ -25,16 +27,16 @@ def simulate(days=28, start=datetime(2026, 10, 5, 0, 0)):
             t -= 15
         if now.minute == 0 and now.hour == 19:
             t -= 8
-        if not charging and t < 45:
+        if not charging and t < set_t - hyst:
             charging = True
         heated = charging  # in diesem Schritt lief der Brenner (auch wenn die Ladung jetzt endet)
         if charging:
             t += CHARGE_KW / KWH_PER_K * dt_h
-            if t >= 55:
+            if t >= set_t:
                 charging = False
         res = m.step(now, dt_h, round(t_prev, 1), round(t, 1), heated, CHARGE_KW if heated else None)
-        rec = m.recommend(now, True, None, cfg)
-        sh = shadow.step(m, round(t, 1), rec["target"], res["draw_k"], dt_h, cfg.dhw_comfort_temp)
+        rec = m.recommend(now, True, None, cfg, hyst=-hyst)
+        sh = shadow.step(m, round(t, 1), rec["hold"], res["draw_k"], dt_h, cfg.dhw_comfort_temp, top=rec["target"])
         if i > 14 * 288:  # nach zwei Wochen Lernen vergleichen
             loss_real += res["loss_kwh"]
             loss_strat += sh["loss_kwh"]
@@ -56,19 +58,22 @@ def test_dhw_learns_storage_physics_and_profile():
 def test_dhw_recommendation_follows_usage_and_presence():
     m, *_ = simulate()
     cfg = Config()
-    early = datetime(2026, 11, 2, 4, 30)  # Nachladen dauert nur Minuten – noch nicht nötig
-    assert m.recommend(early, True, None, cfg)["target"] == cfg.dhw_min_temp
+    early = datetime(2026, 11, 2, 2, 0)  # Nacht, Nachladen dauert nur Minuten – noch nicht nötig
+    assert m.recommend(early, True, None, cfg)["hold"] == cfg.dhw_min_temp
     morning = datetime(2026, 11, 2, 6, 30)  # Montag kurz vor der Dusche (−15 K)
     rec = m.recommend(morning, True, None, cfg)
-    assert rec["target"] == cfg.dhw_min_temp + 15 or rec["target"] >= cfg.dhw_comfort_temp
+    assert rec["hold"] == cfg.dhw_min_temp + 15 or rec["hold"] >= cfg.dhw_comfort_temp
+    # seit 0.46: jemand zu Hause und wach – Komfort, nicht mehr Minimum („keine Zapfung erwartet“)
     midday = datetime(2026, 11, 2, 12, 0)
-    assert m.recommend(midday, True, None, cfg)["target"] == cfg.dhw_min_temp
+    assert m.recommend(midday, True, None, cfg)["hold"] >= cfg.dhw_comfort_temp
     away = m.recommend(morning, False, morning + timedelta(hours=9), cfg)
-    assert away["target"] == cfg.dhw_min_temp and away["reason"] == "niemand zu Hause"
+    assert away["hold"] == cfg.dhw_min_temp and away["reason"].startswith("niemand zu Hause")
 
 
 def test_dhw_strategy_saves_standby_loss_without_cold_showers():
-    _, loss_real, loss_strat, cold = simulate()
+    # seit 0.46 hält die Strategie wach und zu Hause Komfort (Speicher über 50 °C): Sie spart gegenüber einem
+    # immer heißen Speicher (60 °C, Hysterese 5 K) nachts – ohne kalte Dusche
+    _, loss_real, loss_strat, cold = simulate(set_t=60.0, hyst=5.0)
     assert loss_strat < loss_real
     assert cold == 0
 

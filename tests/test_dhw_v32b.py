@@ -57,9 +57,9 @@ def _house_with_bath(weeks: int):
                      burner_kw_prev=10.8 if heated else 0.0)
         before = rec or {}
         rec = m.recommend(now, True, None, cfg)
-        out = sh.step(m, round(t, 1), rec["target"], res["draw_k"], dt_h, cfg.dhw_comfort_temp,
+        out = sh.step(m, round(t, 1), rec["hold"], res["draw_k"], dt_h, cfg.dhw_comfort_temp,
                       dhw_min=cfg.dhw_min_temp,
-                      margin_bound=bool(before.get("margin_bound")), dhw_max=cfg.dhw_max_temp)
+                      margin_bound=bool(before.get("margin_bound")), dhw_max=cfg.dhw_max_temp, top=rec["target"])
         if out["raise_margin"] and m.charges >= 3:
             m.note_cold_draw()
         if now.weekday() == 6 and now.hour == 23 and now.minute == 0:
@@ -71,7 +71,8 @@ def test_weekly_bath_at_the_cap_does_not_ratchet_the_reserve():
     m, cfg, monday_3am, margins = _house_with_bath(30)
     assert len(m.big_draws) >= 2  # das Bad ist als wiederkehrend bekannt
     assert max(margins[6:]) <= 2.0, margins
-    assert m.recommend(monday_3am, True, None, cfg)["target"] == cfg.dhw_min_temp
+    # mitten in der Nacht (seit 0.46: kurz vor dem Aufstehen wird schon geheizt): Minimum, keine Reserve
+    assert m.recommend(monday_3am - timedelta(hours=2), True, None, cfg)["hold"] == cfg.dhw_min_temp
 
 
 def test_recommend_says_whether_more_reserve_lifts_the_target():
@@ -138,9 +139,10 @@ def test_engine_hands_margin_bound_to_the_shadow():
         assert sum(cold) == 1  # in beiden Fällen zu kalt gezählt
         return eng.dhw.comfort_margin
 
-    assert run(1.5, 50.0, 22.0) > 1.5  # Ziel 50 °C aus Komfort: 2 K unter dem Minimum, Reserve steigt
+    # seit 0.46 lädt der Schatten bis Ziel + 5 K Hysterese (Soll): Zapfungen je 5 K größer
+    assert run(1.5, 50.0, 27.0) > 1.5  # Ziel 50 °C aus Komfort: 2 K unter dem Minimum, Reserve steigt
     # Ziel 65 °C aus Minimum + Bedarf (3 Stunden je 11,7 K): auch zu kalt, aber mehr Reserve hebt es nicht
-    assert run(35.0 / 3, 65.0, 37.0) == 0.0
+    assert run(35.0 / 3, 65.0, 42.0) == 0.0
 
 
 # ---------------------------------------------------------------------------- 2. Zapfprofil bei langer Abwesenheit

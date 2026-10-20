@@ -1,5 +1,6 @@
 """Warmwasser lernen: Auskühlen, Ladekosten, Zapfprofil – und daraus die sparsamste
-Speichertemperatur, die trotzdem für die nächste Nutzung reicht.
+Speichertemperatur, die trotzdem für die nächste Nutzung reicht (die Strategie selbst steht seit 0.46 in
+``dhw_target``).
 
 Gelernt wird aus den 5-Minuten-Werten von Speichertemperatur, Ladestatus und
 Brennerleistung:
@@ -30,7 +31,7 @@ import statistics
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
-from .dhw_disinfect import covers, is_disinfection, planned_for, remember
+from .dhw_disinfect import covers, is_disinfection, remember
 from .dhw_watch import (
     AFTER_CHARGE_H, HIT_K, SENSOR_STEP, SENSOR_STEP_N, SPECIAL_COVER_H, DrawWatch, sensor_step_of, tail_rising,
 )
@@ -448,55 +449,14 @@ class DhwModel:
         self.comfort_margin = min(self.comfort_margin + DHW_MARGIN_STEP, DHW_MARGIN_MAX)
 
     # ------------------------------------------------------------------ Strategie
-    def recommend(
-        self,
-        now: datetime,
-        someone_home: bool | None,
-        next_arrival: datetime | None,
-        cfg,
-        unknown_from: datetime | None = None,
-        current_set: float | None = None,
-        disinfect_h: float | None = None,
-    ) -> dict:
-        """Empfohlene Speichertemperatur jetzt (nur Empfehlung, wird nicht gesetzt).
-
-        ``unknown_from``: ab dann ist offen, ob jemand heimkommt (Gewohnheit dort noch nicht
-        verlässlich gelernt). Liegt das im Horizont, bleibt das heutige Soll ``current_set`` –
-        Minimum nur, wenn eine Ankunft sicher weit weg ist bzw. alle lange weg sind.
-        ``disinfect_h``: Ladedauer der Desinfektion zum Termin (``dhw_disinfect.ready_hours``).
-        """
-        comfort = min(cfg.dhw_comfort_temp + self.comfort_margin, cfg.dhw_max_temp)
-        reheat_h = (comfort - cfg.dhw_min_temp) / max(self.charge_rate_kh, 5.0)
-        horizon = reheat_h + 1.0
-        if someone_home is False:
-            if next_arrival is None or (next_arrival - now).total_seconds() / 3600 > horizon:
-                if unknown_from is not None and (unknown_from - now).total_seconds() / 3600 <= horizon:
-                    keep = current_set if current_set is not None else cfg.dhw_comfort_temp
-                    return {"target": round(keep), "reason": "Ankunft unbekannt (Gewohnheit lernt noch) – Soll bleibt",
-                            "expects_draw": False, "margin_bound": False}
-                return {"target": cfg.dhw_min_temp, "reason": "niemand zu Hause", "expects_draw": False,
-                        "margin_bound": False}
-        draw = self.expected_draw(now, horizon)
-        chance = max(self.hit_at(slot // 24, slot % 24)
-                     for slot in (slot_of(now + timedelta(hours=h)) for h in range(int(horizon) + 1)))
-        # geplanter Desinfektionstermin (0.36.3): große Zapfungen danach deckt dessen Wärme
-        big = self.big_draw_expected(now, horizon, planned_for(self, cfg, now, horizon, disinfect_h))
-        if draw >= 1.0 or chance >= HIT_THRESHOLD or big:
-            # Komfort zu Beginn der Nutzung; bei viel Verbrauch so hoch, dass er danach
-            # nicht unter das Minimum fällt
-            need = max(draw, big or 0.0)
-            target = min(max(comfort, cfg.dhw_min_temp + need), cfg.dhw_max_temp)
-            why = (f"große Zapfung üblich (≈{big:.0f} K)" if big else
-                   f"Zapfung erwartet (≈{draw:.0f} K)" if draw >= 1.0 else
-                   f"hier wird oft gezapft (in {chance * 100:.0f} % der Fälle)")
-            # margin_bound: mehr Reserve hebt dieses Ziel an (kommt aus Komfort + Reserve, unter dem
-            # Maximum) – nicht, wenn Minimum + Bedarf es bestimmt oder es schon am Maximum liegt
-            bound = comfort >= cfg.dhw_min_temp + need and target < cfg.dhw_max_temp
-            return {"target": round(target), "reason": why, "expects_draw": True, "margin_bound": bound}
-        # Selbstkorrektur nach zu kalten Zapfungen gilt auch für das Minimum
-        floor = min(cfg.dhw_min_temp + self.comfort_margin, comfort) if someone_home is not False else cfg.dhw_min_temp
-        return {"target": round(floor), "reason": "keine Zapfung erwartet", "expects_draw": False,
-                "margin_bound": someone_home is not False and floor < cfg.dhw_max_temp}
+    def recommend(self, now: datetime, someone_home: bool | None, next_arrival: datetime | None, cfg,
+                  unknown_from: datetime | None = None, current_set: float | None = None,
+                  disinfect_h: float | None = None, hyst=None, vacation: bool = False) -> dict:
+        """Empfohlenes Warmwasser-Soll jetzt (nur Empfehlung, gesetzt wird es über Weg W) – gerechnet in
+        ``dhw_target`` (seit 0.46: Ziel = tiefste gehaltene Speichertemperatur, Soll = Ziel + Hysterese)."""
+        from .dhw_target import recommend  # spät: dhw_target nutzt Namen aus diesem Modul
+        return recommend(self, now, someone_home, next_arrival, cfg, unknown_from=unknown_from,
+                         current_set=current_set, disinfect_h=disinfect_h, hyst=hyst, vacation=vacation)
 
     def summary(self, t_now: float | None) -> dict:
         hours = self.daily

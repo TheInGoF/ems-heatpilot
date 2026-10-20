@@ -211,11 +211,11 @@ class DhwShadow:
     def step(self, model: DhwModel, t_actual: float | None, target: float, draw_k: float,
              dt_h: float, comfort: float, *, dhw_min: float | None = None,
              margin_bound: bool | None = None, dhw_max: float | None = None,
-             mirror: float | None = None) -> dict:
-        """``cold_draw``: Ereignis war zu kalt (Kennzahl). ``raise_margin``: zu kalt, und mehr Reserve
-        hätte das Ziel davor angehoben (``margin_bound``) – nur dann lohnt sie. Das gilt auch für
-        „keine Zapfung erwartet“ mit jemandem zu Hause: Dort ist Minimum + Reserve der Boden, und die
-        Reserve ist für unregelmäßige Haushalte die einzige Korrektur. Ohne Angabe wie bisher. Beides
+             mirror: float | None = None, top: float | None = None) -> dict:
+        """``target``: darunter lädt die Strategie nach – seit 0.46 bis ``top`` (Soll; ``target`` = Soll − Hysterese,
+        wie der Kessel), ohne ``top`` bis ``target``. ``cold_draw``: Ereignis war zu kalt (Kennzahl). ``raise_margin``:
+        zu kalt, und mehr Reserve hätte das Ziel davor angehoben (``margin_bound``) – nur dann lohnt sie (seit 0.46
+        immer, wenn jemand zu Hause und wach ist: dort gilt Komfort + Reserve). Ohne Angabe wie bisher. Beides
         gilt so, wie es vor dem Ereignis stand. Ist der Fehlbetrag größer als die höchste Reserve oder
         die Zapfung größer als dhw_max − dhw_min, hilft keine Reserve: nur Kennzahl.
 
@@ -266,7 +266,7 @@ class DhwShadow:
         # Strategie lädt nach, sobald sie unter ihr Ziel fällt (Energie wird gleich verbucht);
         # ab da ist es wieder ihr eigener Stand, nicht mehr der der Sonderladung
         if cooled < target:
-            self.t_sim, self._ride = target, False
+            self.t_sim, self._ride = max(target, top if top is not None else target), False
         else:
             self.t_sim = cooled
         c = model.kwh_per_kelvin()

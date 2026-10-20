@@ -15,7 +15,7 @@ import time
 from collections import Counter
 from datetime import datetime, timedelta
 
-from . import dhw_disinfect, guards
+from . import dhw_disinfect, dhw_target, guards
 from .config import WEEKDAYS
 from .dhw_watch import AFTER_CHARGE_H, DrawWatch, tail_rising
 from .presence import arrival_unknown
@@ -88,8 +88,11 @@ class DhwMixin:
         if sample["dhw"] and self._boiler("heating_pump") is None:
             sample["heating"] = 0  # Ventil auf Warmwasser: Heizkreis bekommt nichts
 
-    def dhw_recommend(self, ts: int, sample: dict) -> tuple[dict, float]:
-        """Empfehlung für den Speicher jetzt; gibt (Prüfung, Ziel für den Schatten) zurück."""
+    def dhw_recommend(self, ts: int, sample: dict) -> tuple[dict, tuple[float, float]]:
+        """Empfehlung für den Speicher jetzt; gibt (Prüfung, (lädt unter, lädt bis) für den Schatten) zurück.
+
+        Seit 0.46 mit der Einschalthysterese des Kessels: Der Schatten lädt wie der Kessel erst unter Soll − Hysterese
+        (``hold``) und dann bis zum Soll (``target``)."""
         now = local(ts)
         home = sample.get("home_count")
         arrival = unknown = None
@@ -102,14 +105,17 @@ class DhwMixin:
             arrival = nxt["eta"] if nxt else None
             unknown = arrival_unknown(learners, now)  # Gewohnheit lernt noch: nicht auf Minimum
         check = guards.check_dhw(self.dhw)
+        hyst = self._boiler("dhw_hyst_on")
         if check["ok"]:
             self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg,
                                               unknown_from=unknown, current_set=num(sample.get("dhw_set")),
-                                              disinfect_h=self.disinfect_ready_h())
-            return check, self.dhw_rec["target"]
-        # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll
+                                              disinfect_h=self.disinfect_ready_h(), hyst=hyst,
+                                              vacation=bool(sample.get("vacation")))
+            return check, (self.dhw_rec["hold"], self.dhw_rec["target"])
+        # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll (mit derselben Hysterese)
         self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
-        return check, sample.get("dhw_set") or self.cfg.dhw_comfort_temp
+        top = num(sample.get("dhw_set")) or self.cfg.dhw_comfort_temp
+        return check, (top - dhw_target.hysteresis(hyst)[0], top)
 
     def dhw_step(self, ts: int, sample: dict) -> None:
         """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
@@ -131,21 +137,21 @@ class DhwMixin:
         vacation = bool(sample.get("vacation"))
         frozen = vacation or bool(sample.get("away_long"))  # Urlaub oder alle lange weg: Zapfprofil nicht lernen
         # hätte mehr Reserve das Ziel der Strategie bis eben angehoben? Nur dann hilft sie bei zu
-        # kaltem Wasser (Stand vor dem Schritt; auch der Boden „keine Zapfung erwartet“ mit jemandem
-        # zu Hause ist Minimum + Reserve)
+        # kaltem Wasser (Stand vor dem Schritt; seit 0.46 immer, wenn Komfort + Reserve gilt)
         bound = bool((self.dhw_rec or {}).get("margin_bound"))
         res = self.dhw.step(now, dt_h, prev[1], t_cur, bool(sample.get("dhw")), kw,
                             learn_usage=not frozen, special=bool(sample.get("dhw_special")),
                             dhw_set=num(sample.get("dhw_set")), burner_kw_prev=prev[2] if len(prev) > 2 else None,
                             disinfect=bool(sample.get("dhw_disinfecting")), disinfect_temp=self.disinfect_temp()[0])
-        check, shadow_target = self.dhw_recommend(ts, sample)
+        check, (shadow_hold, shadow_top) = self.dhw_recommend(ts, sample)
         # Sonderladung des Reglers trifft beide Speicher; ein bestätigter Desinfektionstermin (0.36.3) nur den
         # Schatten, nach der Ladedauer – die Strategie desinfiziert zum Termin
         mirror = t_cur if res.get("special") else dhw_disinfect.shadow_mirror(
             self.dhw, self.cfg, local(prev[0]), now, self.disinfect_temp()[0], self.disinfect_ready_h())
         sh = self.dhw_shadow.step(
-            self.dhw, t_cur, shadow_target, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp,
+            self.dhw, t_cur, shadow_hold, res["draw_k"], dt_h, self.cfg.dhw_comfort_temp,
             dhw_min=self.cfg.dhw_min_temp, margin_bound=bound, dhw_max=self.cfg.dhw_max_temp, mirror=mirror,
+            top=shadow_top,
         )
         if sh["raise_margin"] and check["ok"] and not frozen:  # Urlaub / lange weg: Reserve bleibt eingefroren
             self.dhw.note_cold_draw()
@@ -217,6 +223,7 @@ class DhwMixin:
             "temp": t_now,
             "set": num(self._boiler("dhw_seltemp")),
             "recommendation": self.dhw_rec,
+            "hyst_hint": dhw_target.hyst_hint(*dhw_target.hysteresis(self._boiler("dhw_hyst_on"))),  # 0.46
             "today": {k: round(v, 2) for k, v in self.store.daily(today).get(today, {}).items()
                       if k.startswith("dhw_")},
             "period_days": days,
@@ -384,11 +391,13 @@ class DhwMixin:
         t_now = num(self._boiler("dhw_temp"))
         if t_now is None:
             return None
-        target = min(self.cfg.dhw_comfort_temp + self.dhw.comfort_margin, self.cfg.dhw_max_temp)
+        # seit 0.46: lädt (wie die Empfehlung) bis Komfort + Hysterese, sobald der Speicher unter Komfort fällt
+        hyst = dhw_target.hysteresis(self._boiler("dhw_hyst_on"))[0]
+        target = dhw_target.setpoint(self.cfg.dhw_comfort_temp + self.dhw.comfort_margin, hyst, self.cfg)
         hours_to = max((arrival - now).total_seconds() / 3600, 0.0)
         # bis kurz vor Ankunft kühlt er weiter aus (Ladung ist erst gegen Ende geplant)
         t_start = self.dhw.cool(t_now, max(hours_to - 2.0, 0.0))
-        if t_start >= target - 1.0:
+        if t_start >= target - hyst - 1.0:
             return None
         if guards.check_dhw(self.dhw)["ok"]:
             hours = self.dhw.charge_hours(t_start, target)
