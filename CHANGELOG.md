@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.47.2
+**Offenes Ventil bekommt Wärme**
+- Fordert ein Thermostat jetzt Wärme an (Ventil offen bzw. „heizt“), liefert der Kessel mindestens 35 °C (bzw. was die Abnahme verlangt) – auch wenn die Modelle gerade keinen Bedarf sehen, z. B. weil HeatPilot die Räume nur beobachtet und laut Plan Nacht ist, Tado aber weiterheizt. Vorher ging der Kessel dann auf „nur Pumpe“ (20 °C)
+- **Tests:** `tests/test_boiler467.py` ergänzt
+
 ## 0.47.1
 **Status ohne Neuladen**
 - Einstellungen → Kessel, Warmwasser und Steuerung holen den Status jetzt alle 30 s selbst (wie Heizen und Übersicht) – neue Meldungen, Ziel, Entscheidung und letzter Schreibvorgang erscheinen ohne Neuladen der Seite

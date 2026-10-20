@@ -68,6 +68,11 @@ def _readings(eng) -> dict[str, tuple]:
     return {r.climate: x for r in eng.found.rooms if not r.ems and (x := eng.room_reading(r)) is not None}
 
 
+def _open(eng, readings: dict) -> list[str]:
+    """Räume, deren Thermostat jetzt Wärme anfordert (Ventil über ``BOOST_VALVE_PCT`` – ohne Ventilsensor „heizt“)."""
+    return [r.name for r in eng.found.rooms if (readings.get(r.climate, (None,) * 5)[3] or 0) > br.BOOST_VALVE_PCT]
+
+
 def _waiting(eng, readings: dict, gap: float = br.BOOST_GAP_K) -> list[str]:
     """Räume unter Soll (mehr als ``gap``) mit offenem Ventil – sie warten auf Wärme."""
     out = []
@@ -128,6 +133,10 @@ def compute(eng, now_ts: int, boost: dict | None = None, bounds: tuple | None = 
     lo, hi = br.flow_limits(eng.cfg, cap, bounds)
     common = {"cap": cap, "cap_why": cap_why, "charging": charging, "t_out": row["t_out"], "hi": hi}
     reset = br.boost_step(boost, False, now_ts, 0)
+    opened = _open(eng, readings)
+    if row["heating"] is False and opened and lo <= hi:  # 0.47.2: ein Thermostat fordert jetzt Wärme an
+        row = {**row, "heating": True, "flow": lo, "idle": False,
+               "why": f"{', '.join(opened)}: Ventil offen – Thermostat fordert Wärme an"}
     if row["heating"] is None:
         return _off(None, row["why"], **common), reset
     if row["heating"] is False:
