@@ -39,14 +39,15 @@ def test_preheat_takes_lowest_flow_within_cap_and_starts_earlier():
     room = slow_room()  # Beispielraum: 20 → 21 °C bei 5 °C außen
     # niedrigster Vorlauf ab 35 °C, der im Deckel (3 h) ans Ziel kommt: 45 °C – 44 °C bräuchte länger
     assert room.time_to_reach(20.0, 21.0, 44.0, 5.0) > 3.0 >= room.time_to_reach(20.0, 21.0, 45.0, 5.0)
-    lead = preheat_hours(room, 20.0, 21.0, 75, 5.0, 3.0)
+    lead = preheat_hours(room, 20.0, 21.0, 75, 5.0, 3.0, soft=True)  # seit 0.50.4 nur vor dem Urlaubsende
     assert lead == pytest.approx(room.time_to_reach(20.0, 21.0, 45.0, 5.0))
     assert lead > 2.5 and room.time_to_reach(20.0, 21.0, 75.0, 5.0) < 1.2  # früher als mit dem maximalen Vorlauf
     d = desired(wz(), at(MON, 23), CFG, Presence(home_count=1), room, 20.0, 5.0)
-    assert d.phase == "nacht" and d.until == at(TUE, 4, 30) - timedelta(hours=lead)
+    daily = preheat_hours(room, 20.0, 21.0, 75, 5.0, 3.0)  # täglich: Aufheiz-Vorlauf (≈ 1 h)
+    assert d.phase == "nacht" and d.until == at(TUE, 4, 30) - timedelta(hours=daily) and daily < 1.2
     # reicht schon der niedrigste (35 °C), so lange wie er braucht – nicht länger
     assert PREHEAT_FLOW_FROM == 35.0
-    assert preheat_hours(room, 20.8, 21.0, 75, 5.0, 3.0) == pytest.approx(room.time_to_reach(20.8, 21.0, 35.0, 5.0))
+    assert preheat_hours(room, 20.8, 21.0, 75, 5.0, 3.0, soft=True) == pytest.approx(room.time_to_reach(20.8, 21.0, 35.0, 5.0))
 
 
 def test_preheat_unreachable_within_cap_takes_the_cap():
@@ -61,7 +62,8 @@ def test_preview_finds_the_same_low_flow(tmp_path):
     run_ = pv._Run(eng, ts_of(MON, 23))
     r, until = run_.rooms[0], at(TUE, 4, 30)
     lead = preheat_hours(r.model, 20.0, 21.0, CFG.max_flow_temp, 5.0, 3.0)
-    assert run_._preheat_flow(r, 21.0, until, until - timedelta(hours=lead)) == 45.0
+    from heatpilot.heatup import heatup_flow
+    assert run_._preheat_flow(r, 21.0, until, until - timedelta(hours=lead)) == heatup_flow(r.model, 20.0, 21.0, 5.0, 75)
 
 
 def test_begun_preheat_stays_until_the_target(tmp_path, monkeypatch):
@@ -82,12 +84,12 @@ def test_begun_preheat_stays_until_the_target(tmp_path, monkeypatch):
     # Steuerung: merkt sich das Ziel und übergibt es (auch der Vorschau jetzt)
     climate(eng, "climate.wz", 20.0, 18.0)
     sample, rooms, _ = eng.snapshot()
-    loop.plan(ts_of(TUE, 2), sample, rooms)
+    loop.plan(ts_of(TUE, 4), sample, rooms)  # 0.50.4: Vorheizen ≈ 1 h vorher
     assert loop.rooms["climate.wz"]["phase"] == "vorheizen"
     assert loop.state["climate.wz"]["preheat"] == int(end.timestamp())
     climate(eng, "climate.wz", 21.2, 21.0)  # schneller warm als geplant
     sample, rooms, _ = eng.snapshot()
-    loop.plan(ts_of(TUE, 3), sample, rooms)
+    loop.plan(ts_of(TUE, 4) + 600, sample, rooms)
     assert loop.rooms["climate.wz"]["phase"] == "vorheizen"
     eng.control_loop = loop
     assert pv._Run(eng, ts_of(TUE, 3)).held == {"climate.wz": end}
@@ -115,8 +117,8 @@ def test_radiator_ratio_5_plausible_7_not():
 
 # ------------------------------------------------------------------ 4. 35 °C ist die Untergrenze, wenn geheizt wird
 def test_heating_up_below_35_heats_with_35_only_holding_is_off():
-    boosted = [(29.0, "Flur", "heizt auf 22,0 °C (+5 K)"), (28.0, "Wz", "hält 21,0 °C")]
-    assert flow_run()._flow(boosted, 5.0) == (35, True, "Flur heizt auf 22,0 °C (+5 K)")
+    boosted = [(29.0, "Flur", "heizt auf 22,0 °C (ca. 1 h)"), (28.0, "Wz", "hält 21,0 °C")]
+    assert flow_run()._flow(boosted, 5.0) == (35, True, "Flur heizt auf 22,0 °C (ca. 1 h)")
     pre = [(31.0, "Bad", "heizt vor bis 04:30")]
     assert flow_run()._flow(pre, 5.0)[:2] == (35, True)
     flow, heating, why = flow_run()._flow([(29.0, "Flur", "hält 21,0 °C"), (28.0, "Wz", "hält 21,0 °C")], 5.0)
@@ -126,7 +128,7 @@ def test_heating_up_below_35_heats_with_35_only_holding_is_off():
 def test_boosted_rooms_below_setpoint_keep_heating_on(tmp_path):
     eng, _, _ = boiler_house(tmp_path, temp=20.0, a=0.02)  # braucht zum Halten 29 °C, liegt 1 K unter dem Soll
     t, _ = compute(eng, T0)
-    assert (t.heating, t.flow) == (True, 35) and t.reason.startswith("Wz heizt auf 21,0 °C")
+    assert t.heating is True and t.flow >= 35 and t.reason.startswith("Wz heizt auf 21,0 °C")
 
 
 # ------------------------------------------------------------------ 5. Regler stumm, Kessel antwortet
