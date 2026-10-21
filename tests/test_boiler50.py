@@ -178,3 +178,21 @@ def test_ui_shows_the_surcharge_and_the_cycling_boost(tmp_path):
     r = js_run(tmp_path, f"out(boilerTarget({__import__('json').dumps(t)}, 'heatpilot'));")
     assert plain(r).endswith("Bedarf 44 °C · Zuschlag +4 K (kommt nicht hoch: Flur, Wz) · "
                              "Takt-Boost +2 K (Kessel taktet: 4 Starts/h, Läufe Ø 3 min)")
+
+
+def test_tado_back_on_its_schedule_after_a_boost_is_no_hand_change(tmp_path):
+    """0.50.2: Nach einem Tado-Boost (Timer) folgt Tado wieder seinem Zeitplan („auto“) – HeatPilot schreibt sofort
+    seinen Wunsch zurück, statt es als Handänderung bis zum Phasenwechsel stehen zu lassen."""
+    from test_control34 import MON, make, step as cstep, ts_of
+
+    eng, ha, _, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 19.0)
+    cstep(eng, loop, ts_of(MON, 12))
+    want = ha.calls[-1][3]["temperature"]
+    climate(eng, "climate.wz", 20.0, 17.0, mode="heat")  # von Hand: bleibt bis zum Phasenwechsel
+    n = len(ha.calls)
+    cstep(eng, loop, ts_of(MON, 12) + 60)
+    assert len(ha.calls) == n
+    climate(eng, "climate.wz", 20.0, 18.5, mode="auto")  # Timer vorbei: Tado-Zeitplan
+    cstep(eng, loop, ts_of(MON, 12) + 120)
+    assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": want})

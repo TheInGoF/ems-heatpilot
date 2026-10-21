@@ -390,6 +390,8 @@ class ControlLoop:
         if manual and _same(current, d.setpoint):  # von Hand genau auf den Wunsch gedreht
             st["last_written"], last, manual = current, current, False
         sp, reason, prop, write = d.setpoint, f"{d.phase}: {d.reason}", None, False
+        if manual and (self.eng.states.get(c) or {}).get("state") == "auto":  # 0.50.2: Tado folgt nach Boost bzw.
+            manual, st["boosted"] = False, True  # Timer wieder seinem Zeitplan – keine Hand: zurück zum Wunsch
         if c in boosts:
             st["boosted"] = True
         elif c in expired:

@@ -1778,11 +1778,20 @@ function drawRoomCharts() {
   if (!$("live-rooms-box").open) { $("live-rooms").innerHTML = ""; return; }  // zugeklappt: erst beim Aufklappen zeichnen
   $("live-rooms").innerHTML = j.rooms.map((r, i) => {
     const c = now[r.climate] || {};
-    return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><span class="muted">${fmt(c.temp)} °C · Soll ${fmt(c.target)} °C · Ventil ${fmt(c.valve, 0)} %${c.humidity !== null && c.humidity !== undefined ? ` · Feuchte ${fmt(c.humidity, 0)} %` : ""}</span></div><div id="ch-room-${i}"></div></div>`;
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h2>${esc(r.name)}</h2><span class="muted">${fmt(c.temp)} °C · Soll ${fmt(c.target)} °C · Ventil ${fmt(c.valve, 0)} %${c.humidity !== null && c.humidity !== undefined ? ` · Feuchte ${fmt(c.humidity, 0)} %` : ""}</span></div><div class="muted" id="plan-room-${i}">${esc(roomPlan(r.climate))}</div><div id="ch-room-${i}"></div></div>`;
   }).join("");
+  if (!HEAT) getJSON("api/heat").then((h) => {  // 0.50.2: Plan je Raum (Phase, Vorheizen ab …) auch ohne Reiter „Heizen“
+    if (!HEAT && !h.starting) HEAT = h;
+    j.rooms.forEach((r, i) => { const e = $("plan-room-" + i); if (e) e.textContent = roomPlan(r.climate); });
+  }).catch(() => {});
   j.rooms.forEach((r, i) => timeChart($("ch-room-" + i), r.ts, [
     { name: "Raum", values: r.temp, color: C.flow }, { name: "Soll", values: r.target, color: C.sel, dash: "5 4", width: 1.5, step: true }],
     { unit: "°C", height: 180, label: r.name }));  // 0.43: Ventil und Feuchte stehen im Kopf – keine zweite Achse
+}
+// 0.50.2: was HeatPilot im Raum vorhat (wie im Reiter „Heizen“: Phase, Soll, „Vorheizen ab 05:10“)
+function roomPlan(climate) {
+  const r = ((HEAT && HEAT.rooms) || []).find((x) => x.climate === climate);
+  return r && r.control && r.control.phase ? "Plan: " + roomState(r) : "";
 }
 // Gas je Stunde (0.43): nur Balken auf einer Achse (kWh) – die Außentemperatur zeigt die Ansicht „Außen & innen“
 function drawGasChart(ts, gas) {
