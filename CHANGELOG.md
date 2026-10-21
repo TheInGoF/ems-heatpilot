@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.49.2
+- **30-s-Werte als CSV:** Die Live-Werte (Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Brennerstarts, Anlagendruck, je Raum Ist/Soll/Ventil/Feuchte) speichert HeatPilot jetzt alle 30 s auch in der Datenbank – 48 h lang, übersteht einen Neustart. Herunterladen unter Einstellungen → Diagnose → Dateien („30-s-Werte herunterladen“, 12/24/48 h). Damit lassen sich Wassermenge und Abnahme aus Vor- und Rücklauf genau nachrechnen
+- **Tests:** neu `tests/test_live_log492.py`
+
 ## 0.49.1
 - **Kessel pausierte nach „Heizbetrieb aus nicht übernommen“:** Braucht kein Raum Wärme, schaltete HeatPilot nach 15 min den Heizbetrieb aus. Mancher Kessel ohne Regler nimmt „aus“ nicht an – er steht aber längst auf seinem Ruhewert (Vorlauf-Soll 7 °C) und heizt nicht. Das zählte dreimal als Fehlschlag, dann pausierte Weg B. Jetzt schaltet HeatPilot den Heizbetrieb nicht aus, solange der Kessel auf dem Ruhewert steht; zeigt er bei der Prüfung nach „aus“ noch „an“, aber den Ruhewert, ist das kein Fehlschlag. Braucht wieder ein Raum Wärme, geht es ohne Umschalten sofort mit dem neuen Vorlauf-Soll weiter
 - **Alte „Anderer Schreiber … → 7 °C“ verschwinden:** Vor 0.48.1 zählte der Rückfall des Kessels auf 7 °C noch als fremder Schreiber; der Hinweis blieb 24 h stehen. Solche Einträge vergisst HeatPilot beim Start

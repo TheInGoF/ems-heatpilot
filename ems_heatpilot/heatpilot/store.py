@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS valve_dry_log(
     starts_h REAL, act_over_k REAL, act_starts REAL, checked INTEGER, pred_over_k REAL
 );
 CREATE TABLE IF NOT EXISTS valve_subst(ts INTEGER, room TEXT, PRIMARY KEY(ts, room));
+CREATE TABLE IF NOT EXISTS live_samples(ts INTEGER PRIMARY KEY, data TEXT);
 CREATE TABLE IF NOT EXISTS room_stats(
     ts INTEGER, room TEXT, temp REAL, valve REAL, flow REAL,
     PRIMARY KEY(ts, room)
@@ -375,6 +376,19 @@ class Store:
             sql, params = sql + " WHERE ts >= ?", [since]
         rows = self.db.execute(sql + " ORDER BY ts DESC, rowid DESC LIMIT ?", (*params, int(limit))).fetchall()
         return [dict(r) for r in rows]
+
+    # --- 30-s-Protokoll (0.49.2, live_log) ---
+    def add_live(self, ts: int, data: dict, keep_s: int) -> None:
+        """Ein 30-s-Punkt der Live-Werte (JSON); Punkte älter als ``keep_s`` fallen weg."""
+        self.db.execute("INSERT OR REPLACE INTO live_samples VALUES(?, ?)",
+                        (int(ts), json.dumps(data, separators=(",", ":"))))
+        self.db.execute("DELETE FROM live_samples WHERE ts < ?", (int(ts) - int(keep_s),))
+        self.db.commit()
+
+    def live_rows(self, since: int) -> list[tuple[int, dict]]:
+        """30-s-Punkte ab ``since``, zeitlich geordnet: [(ts, Daten)]."""
+        return [(r["ts"], json.loads(r["data"])) for r in self.db.execute(
+            "SELECT ts, data FROM live_samples WHERE ts >= ? ORDER BY ts", (int(since),))]
 
     # --- Trockenlauf (0.37) ---
     def add_preview_plan(self, ts: int, plan: dict) -> bool:
