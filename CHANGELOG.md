@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.48.4
+- Live: Kachel „Pumpe“ zeigt groß nur an/aus, Modulation und Nachlauf im Hinweis; Brenner-Hinweis kürzer („Sperre 3 min (0A) · Räume warten“) – passt auch auf schmale Bildschirme
+
 ## 0.48.3
 - Live → Brenner: Die Taktsperre nennt den Statuscode des Kessels (z. B. „Taktsperre 4 min (0A)“) bzw. „(geschätzt)“, ohne Sperre „bereit (0H)“; Hinweise in den Kacheln umbrechen auf zwei Zeilen statt abgeschnitten zu werden
 
