@@ -47,6 +47,16 @@ def same(what: str, a, b) -> bool:
     return abs(float(a) - float(b)) <= CHECK_TOL_K if what == "flow" else bool(a) == bool(b)
 
 
+def forget_rest_drops(st: dict) -> None:
+    """Fremde Änderungen aus der Zeit vor 0.48.1 vergessen (seit 0.49.1): Damals zählte der Rückfall des Kessels auf
+    seinen Ruhewert (Vorlauf-Soll 7 °C) noch als fremder Schreiber – heute nicht mehr, der Hinweis bliebe sonst 24 h
+    stehen. Erkannt an der letzten fremden Änderung; mit ihr gehen die Zeitpunkte bis dahin."""
+    last = st.get("foreign_last")
+    if last and last.get("what") == "flow" and last.get("to") is not None and float(last["to"]) <= PUMP_FLOW + CHECK_TOL_K:
+        st.pop("foreign_last")
+        st["foreign"] = [t for t in st.get("foreign") or [] if t > last["ts"]]
+
+
 class BoilerWatch:
     """Überwachungs-Teil von ``BoilerControl`` (siehe Modulbeschreibung)."""
 

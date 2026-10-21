@@ -1218,7 +1218,10 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   dieser Haltezeit erneuert HeatPilot das gehaltene Soll jede Minute (seit 0.48.6, sonst fällt ein Kessel ohne Regler
   darin auf seinen Ruhewert, z. B. 7 °C). Der
   **Heizbetrieb** hat **5 min Haltezeit** nach jedem Schalten und geht **erst nach 15 min ohne Bedarf aus**. So pendelt
-  nichts, wenn ein Raum um eine Schwelle schwankt (z. B. 20,6 ↔ 20,7 °C).
+  nichts, wenn ein Raum um eine Schwelle schwankt (z. B. 20,6 ↔ 20,7 °C). Steht der Kessel dann schon auf seinem
+  **Ruhewert** (Vorlauf-Soll bis 20 °C, z. B. 7 °C), heizt er nicht – HeatPilot schaltet den Heizbetrieb dann nicht
+  aus (seit 0.49.1; mancher Kessel ohne Regler nimmt „aus“ gar nicht an). Zeigt er bei der Prüfung nach „aus“ noch
+  „an“, aber den Ruhewert, ist das kein Fehlschlag.
 - **Schutz über der Grenze:** Zeigt der Kessel ein Vorlauf-Soll über der Grenze, die gerade gilt (Fußboden-Grenze, die
   z. B. mit einem RTL-Raum neu greift, höchster Vorlauf, Höchstwert der Entität – auch wenn nur Home Assistant oder nur
   EMS-ESP es zeigt), schreibt HeatPilot sofort die Grenze bzw. das Ziel – ohne 60-s-Abstand und ohne auf eine offene

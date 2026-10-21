@@ -180,11 +180,13 @@ def decide_flow(value: int | None, current: float | None, ts: float, last_ts: fl
 
 def decide_heating(want: bool | None, current: bool | None, ts: float, last_ts: float | None = None,
                    paused: bool = False, checking: bool = False, off_since: float | None = None,
-                   unsafe: str | None = None, protect: str | None = None) -> Decision:
+                   unsafe: str | None = None, protect: str | None = None, resting: bool = False) -> Decision:
     """Heizbetrieb schalten? Nur bei Wechsel, nicht in der Haltezeit von 5 min nach dem letzten Schalten, nicht in
     einer Pause oder während einer offenen Prüfung. Aus erst, wenn seit ``off_since`` ``HEAT_OFF_S`` lang kein Bedarf
     war (None = gilt nicht: sofort). An nicht, solange ``unsafe`` (Vorlauf-Soll am Kessel unklar bzw. über der Grenze).
-    ``protect``: aus als Schutz – sofort, ohne Haltezeit und offene Prüfung."""
+    ``protect``: aus als Schutz – sofort, ohne Haltezeit und offene Prüfung. ``resting`` (seit 0.49.1): Der Kessel steht
+    schon auf seinem Ruhewert (Vorlauf-Soll bis ``PUMP_FLOW``, z. B. 7 °C) und heizt nicht – aus braucht es dann nicht
+    (mancher Kessel ohne Regler nimmt „aus“ gar nicht an)."""
     if want is None:
         return Decision(False, None, "Heizbetrieb offen – kein Vorlauf-Soll")
     if paused:
@@ -197,6 +199,8 @@ def decide_heating(want: bool | None, current: bool | None, ts: float, last_ts: 
         return Decision(False, want, f"{unsafe} – Heizbetrieb bleibt aus")
     if not want and protect:
         return Decision(True, want, f"Schutz: {protect} – Heizbetrieb an → aus")
+    if not want and resting:
+        return Decision(False, want, "Kessel steht auf seinem Ruhewert und heizt nicht – Heizbetrieb bleibt an")
     if checking:
         return Decision(False, want, "Prüfung des letzten Schaltens läuft")
     if last_ts is not None and ts < last_ts + HEAT_HOLD_S:
