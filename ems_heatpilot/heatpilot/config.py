@@ -107,6 +107,8 @@ FIELDS: dict[str, tuple] = {
     "power_exclude": ("entities",),
     "night_plan_auto": ("bool",),
     "preheat_max_h": ("float", 0.5, 6),
+    "away_distance_pct": ("float", 0, 50),   # 0.49: Abwesenheit nach Entfernung (controlloop.away_setpoint)
+    "arrival_margin_k": ("float", 0, 3),     # 0.49: Vorheizen bis so viel unter Komfort zur Ankunft
     "learn_schedule": ("bool",),
     "floor_heating_rooms": ("entities",),
     "vacations": ("strings",),
@@ -350,6 +352,10 @@ class Config:
     night_plan_learned: list[dict | None] | None = field(default=None, repr=False, compare=False)
     # so früh höchstens vorheizen (h) – Räume, die es nicht schaffen, werden akzeptiert
     preheat_max_h: float = 3.0
+    # Niemand zu Hause (seit 0.49, wie Tado): je 10 km Entfernung der nächsten Person so viel Prozent unter Komfort,
+    # nie unter away_temp; 0 = gleich away_temp. Zur erwarteten Ankunft reicht Komfort minus arrival_margin_k
+    away_distance_pct: float = 10.0
+    arrival_margin_k: float = 1.0
     # Nachtzeiten/-temperatur und Abwesenheit aus Tado weiterlernen (Einstellungen = Startwerte)
     learn_schedule: bool = True
     # Räume mit Fußbodenheizung (climate-Entitäten) – seit 0.39.1 samt denen mit Anschluss am Raum-Eintrag; ein

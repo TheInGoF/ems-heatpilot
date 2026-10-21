@@ -9,6 +9,9 @@ Zeitpunkt der nächsten 24 h und rechnet sie hier aus dem, was schon gelernt ist
   nicht; danach gilt wieder die Gewohnheit (``next_home_by_habit``).
 * Wo die Gewohnheit noch lernt, ist die Ankunft offen (wie ``arrival_unknown``) – die Steuerung bleibt dann bei Komfort.
 * Urlaub: laufend bis zur erwarteten Rückkehr (``Vacation.arrival``), geplante Reisen nach ihrem Zeitraum.
+* Entfernung (seit 0.49, Abwesenheits-Soll nach Entfernung): Ist jetzt niemand da, gilt die Entfernung der nächsten
+  Person (wie in der Steuerung, ``ControlLoop.away_km``) bis zur ersten Heimkehr – spätere Abwesenheiten ohne
+  Entfernung (Abwesenheitstemperatur).
 * Wer jetzt zu Hause ist, sagt der aktuelle Zustand in Home Assistant (wie im Messpunkt der Steuerung): Tracker
   ohne Wert („unavailable“) heißt Anwesenheit unbekannt, nicht der zuletzt beobachtete Zustand.
 
@@ -77,6 +80,8 @@ class Household:
     points: list[list[tuple[datetime, bool | None]]] = field(default_factory=list)
     unknown: list[list[datetime]] = field(default_factory=list)
     trips: list[tuple[datetime, datetime | None]] = field(default_factory=list)
+    away_km: float | None = None          # niemand da: Entfernung der nächsten Person jetzt …
+    away_until: datetime | None = None    # … bis zur ersten Heimkehr (None: im ganzen Zeitraum)
 
     def at(self, t: datetime) -> Presence:
         """Anwesenheit zum Zeitpunkt ``t`` in der Form, die ``controlloop.desired`` erwartet."""
@@ -91,8 +96,9 @@ class Household:
             return Presence(home_count=home or None)
         arrivals = [next((at for at, s in p if at > t and s), None) for p in self.points]
         unknown = [u[i] for u in self.unknown if (i := bisect.bisect_left(u, t)) < len(u)]
+        current = self.away_km is not None and (self.away_until is None or t < self.away_until)
         return Presence(home_count=0, arrival=min((a for a in arrivals if a), default=None),
-                        arrival_unknown=min(unknown, default=None))
+                        arrival_unknown=min(unknown, default=None), away_km=self.away_km if current else None)
 
 
 def household(eng, now: datetime, end: datetime, states: list[tuple] | None = None) -> Household:
@@ -124,4 +130,16 @@ def household(eng, now: datetime, end: datetime, states: list[tuple] | None = No
         pts, unknown = timeline(p, now, end, eta, gps, bool(home))
         hh.points.append(pts)
         hh.unknown.append(unknown)
+    _away_now(eng, hh, now, states)
     return hh
+
+
+def _away_now(eng, hh: Household, now: datetime, states: list[tuple] | None) -> None:
+    """Entfernung der laufenden Abwesenheit (seit 0.49): die der Steuerung, sonst die nächste Person aus ``states``."""
+    if not hh.points or any(pts[0][1] is not False for pts in hh.points):
+        return  # jemand da oder unbekannt: keine laufende Abwesenheit
+    km = getattr(getattr(eng, "control_loop", None), "away_km", None)
+    if km is None and states is not None:
+        km = min((d for _, h, d in states if h == 0 and d is not None), default=None)
+    hh.away_km = km
+    hh.away_until = min((at for pts in hh.points for at, s in pts if s), default=None)
