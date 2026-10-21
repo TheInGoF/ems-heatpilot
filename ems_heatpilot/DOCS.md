@@ -208,6 +208,11 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   Messwerte der letzten 48 Stunden als JSON. **Ohne GPS-Koordinaten** (weder
   Personen noch Zuhause – nur Entfernungen) und ohne Zugangsdaten. Diese Datei
   kann zur Fehlersuche weitergegeben werden.
+- **30-s-Werte herunterladen** (seit 0.49.2) – die Werte der Live-Ansicht alle 30 s als CSV, wahlweise 12, 24 oder
+  48 h: Zeit, Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Brennerstarts, Anlagendruck und je
+  Raum Ist, Soll, Ventil und Feuchte. HeatPilot hebt sie 48 h in der eigenen Datenbank auf (übersteht einen Neustart)
+  und löscht Älteres laufend. Damit lässt sich etwa die umgewälzte Wassermenge aus Brennerleistung und Spreizung
+  nachrechnen. Ohne Personen und GPS.
 
 Kommt keine Verbindung zu Home Assistant zustande (z. B. „Anmeldung bei Home
 Assistant fehlgeschlagen“), läuft die HeatPilot-Seite trotzdem: oben steht der

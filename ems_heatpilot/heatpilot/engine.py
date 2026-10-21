@@ -23,7 +23,7 @@ from __future__ import annotations
 import logging
 import time
 
-from . import keep_data, plausibility, preview_log, regulator, schedule, sensor_gone, sleep, valve_dry, valve_learn
+from . import keep_data, live_log, plausibility, preview_log, regulator, schedule, sensor_gone, sleep, valve_dry, valve_learn
 from .config import Config
 from .dhw import DhwModel
 from .dhw_watch import DhwShadow
@@ -317,7 +317,9 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
 
     def record_live(self, now_ts: int | None = None) -> None:
         sample, rooms, _ = self.snapshot()
-        self.live.add(now_ts or int(time.time()), sample, rooms)
+        ts = now_ts or int(time.time())
+        self.live.add(ts, sample, rooms)
+        live_log.record(self.store, ts, sample, rooms)  # 0.49.2: 48 h in der Datenbank, als CSV abrufbar
 
     # ------------------------------------------------------------------ Speichern
     def save(self) -> None:
