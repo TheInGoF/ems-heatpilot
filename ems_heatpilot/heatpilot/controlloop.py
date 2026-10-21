@@ -9,8 +9,9 @@ Der Wunschzustand ist eine reine Funktion ``desired(...)`` (testbar) mit den Pha
    laut Modell braucht (gedeckelt auf ``preheat_max_h``, mindestens 15 min; seit 0.46.5 sanft, ``preheat_hours``,
    und ein begonnenes Vorheizen bleibt bis zum Ziel, ``preheating``). Seit 0.37 mit der
    Außentemperatur zum Zielzeitpunkt (Nachtende, Ankunft, Rückkehr) laut Vorhersage, sonst der aktuellen.
-3. Niemand zu Hause (sicher) → Abwesenheitstemperatur; erwartete Ankunft innerhalb der Aufheizzeit →
-   vorheizen. Tracker unbekannt oder Ankunft offen (Gewohnheit lernt noch) → Komfort.
+3. Niemand zu Hause (sicher) → seit 0.49 nach Entfernung der nächsten Person (``away``, wie Tado), erwartete Ankunft
+   innerhalb der Aufheizzeit → vorheizen (rechtzeitig für Komfort − ``arrival_margin_k``). Tracker unbekannt oder
+   Ankunft offen (Gewohnheit lernt noch) → Komfort.
 4. Sonst Komfort.
 
 Geschrieben wird nur bei einer Änderung des Wunsch-Sollwerts (Phasenwechsel), nicht jeden Takt.
@@ -53,6 +54,7 @@ from .dhw_control import ACTIONS as DHW_ACTIONS
 from .dhw_control import LOG_NAME as DHW_LOG_NAME
 from .disinfect_status import ACTIONS as DISINFECT_ACTIONS
 from .disinfect_status import LOG_NAME as DISINFECT_LOG_NAME
+from .away import nearest_km, nobody_home
 from .presence import arrival_unknown, next_arrival
 
 log = logging.getLogger(__name__)
@@ -93,6 +95,7 @@ class Presence:
     vacation: bool = False
     arrival: datetime | None = None        # erwartete Ankunft (Gewohnheit/GPS bzw. Urlaubsende)
     arrival_unknown: datetime | None = None  # ab wann offen ist, ob jemand heimkommt
+    away_km: float | None = None           # 0.49: niemand da – Entfernung der nächsten Person (GPS), sonst None
 
 
 class Desired(NamedTuple):
@@ -148,7 +151,8 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
     ``preheating`` (seit 0.46.5): Ziel eines schon begonnenen Vorheizens – für dieses Ziel bleibt es dabei, auch wenn
     der Raum schneller warm wird als geplant (sonst pendelte die Phase zwischen Vorheizen und Nacht bzw. Abwesenheit).
     """
-    comfort, away, night = float(room.comfort), cfg.away_temp, cfg.night_temp
+    comfort, night = float(room.comfort), cfg.night_temp
+    arrive = comfort - cfg.arrival_margin_k  # 0.49: zur Rückkehr reicht knapp unter Komfort (wie ``away.nobody_home``)
     t_out = 5.0 if t_out is None else t_out
 
     def lead(target: float, at: datetime) -> timedelta:
@@ -161,22 +165,14 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
     # 1. Urlaub
     if presence.vacation:
         eta = presence.arrival
-        if eta is not None and now >= eta - lead(comfort, eta):
+        if eta is not None and now >= eta - lead(arrive, eta):
             return Desired(_clamp(comfort, comfort, cfg), "vorheizen", f"Rückkehr aus dem Urlaub {eta:%H:%M}", eta)
-        return Desired(_clamp(away, comfort, cfg), "urlaub", "Urlaub",
-                       None if eta is None else eta - lead(comfort, eta))
+        return Desired(_clamp(cfg.away_temp, comfort, cfg), "urlaub", "Urlaub",
+                       None if eta is None else eta - lead(arrive, eta))
 
     # Tagesziel (ohne Nacht): 3. niemand zu Hause, 4. sonst Komfort
     if presence.home_count == 0:
-        eta, unknown = presence.arrival, presence.arrival_unknown
-        if unknown is not None and unknown <= now + lead(comfort, unknown):
-            day = (comfort, "komfort", "Ankunft offen – Gewohnheit lernt noch", unknown)
-        elif eta is not None and now >= eta - lead(comfort, eta):
-            day = (comfort, "vorheizen", f"Ankunft erwartet {eta:%H:%M}", eta)
-        elif eta is not None:
-            day = (away, "abwesend", f"niemand zu Hause, Ankunft {eta:%H:%M}", eta - lead(comfort, eta))
-        else:
-            day = (away, "abwesend", "niemand zu Hause", None)
+        day = nobody_home(comfort, cfg, presence, now, lead)
     elif presence.home_count is None:
         day = (comfort, "komfort", "Anwesenheit unbekannt", None)
     else:
@@ -221,6 +217,7 @@ class ControlLoop:
         self.restores: list[tuple[str, float | None, float | None]] = []
         self.planned_ts: int | None = None
         self.stopped = False  # durch eine neue Schleife ersetzt (main.build): nichts mehr schreiben
+        self.away_km: float | None = None  # 0.49: Entfernung fürs Abwesenheits-Soll (``away.nearest_km``)
 
     def stop(self) -> None:
         """Schleife außer Dienst stellen – ein noch laufendes ``apply()`` bricht vor dem nächsten Schreiben ab."""
@@ -239,6 +236,9 @@ class ControlLoop:
             nxt = next_arrival(persons, now)
             p.arrival = nxt["eta"] if nxt else None
             p.arrival_unknown = arrival_unknown(persons, now)
+            self.away_km = p.away_km = nearest_km(persons, self.away_km)  # 0.49: Soll nach Entfernung
+        if home != 0 or p.vacation:
+            self.away_km = None
         return p
 
     def paused(self, ts: float | None = None) -> bool:

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.49.0
+- **Abwesenheit nach Entfernung (wie Tado):** Ist niemand zu Hause, senkt HeatPilot nicht mehr gleich auf die Abwesenheitstemperatur, sondern je 10 km bis zur nächsten Person (GPS) um einen Prozentsatz der Komforttemperatur – Standard 10 %: 21 °C → 19 °C in 10 km, 18 °C in 14 km, ab 24 km die Abwesenheitstemperatur. Neue Einstellung „Abwesend: je 10 km weniger (%)“ (`away_distance_pct`, 0 = wie bisher). Die Entfernung zählt erst nach 2 km Änderung neu, damit GPS-Schwankung das Soll nicht hin und her schreibt. Ohne GPS bleibt es bei der Abwesenheitstemperatur
+- **Vorheizen nur, wenn es nötig ist:** Zur erwarteten Ankunft (und zur Rückkehr aus dem Urlaub) reicht jetzt Komfort minus 1 K – ein kaum ausgekühlter Raum heizt erst kurz vorher, nur ein stark ausgekühlter früh. Neue Einstellung „Zur Ankunft bis zu (K) unter Komfort“ (`arrival_margin_k`, Standard 1, 0 = bis Komfort)
+- Vorschau rechnet die laufende Abwesenheit mit derselben Entfernung
+- **Tests:** neu `tests/test_away49.py`
+
 ## 0.48.6
 - **Abwesenheit: Räume werden wieder abgesenkt.** Die Ankunft laut Gewohnheit zählte schon ab einem Feld knapp über 50 % – auch wenn die Person zu dieser Zeit nur jeden zweiten Tag zu Hause ist und gerade weg war. Dann „kam“ sie immer gleich nach der Fahrzeit, die Ankunft rollte mit der Uhr mit (07:30 → 07:45 → 08:15 …) und das Haus heizte durchgehend vor, obwohl niemand da war. Jetzt zählt ein Feld erst, wenn es sich um mindestens 10 Prozentpunkte vom tiefsten Wert seit dem Verlassen abhebt (die nächste echte Heimkehr der Gewohnheit, etwa 17 Uhr); ist eine so erwartete Heimkehr 60 min vorbei und niemand da (und keiner per GPS auf dem Heimweg), zählt der Rest dieses Blocks nicht mehr
 - **Kessel ohne Regler:** In den 10 min, bevor das Vorlauf-Soll sinkt, wurde es nicht erneuert – der Kessel fiel darin auf 7 °C, der Brenner ging aus und taktete. Jetzt erneuert HeatPilot auch dann jede Minute das gehaltene Soll; das 10-min-Fenster läuft dabei weiter

@@ -3795,7 +3795,9 @@ function controlCard(s) {
     <div class="warnbox" id="mode-warn"${mode === "heatpilot" ? "" : " hidden"}><details class="more"><summary>Zurück zu Tado nur über diesen Schalter, danach in der Tado-App den Zeitplan fortsetzen. <span class="m"></span></summary><div>Zurück zu Tado nur hier über den Schalter – HeatPilot stellt den Zeitplan nicht wieder her. Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt das zuletzt geschriebene Soll stehen – mit „Ventile führen“ auch ein laufender Schritt (höchstens einer neben dem Ziel). Es gibt keinen Zwischenmodus und keinen automatischen Rückfall.</div></details></div>`) +
     card("Temperaturen", `<div class="form-grid">
       ${field("Nachttemperatur (°C)", num("f-night_temp", s.night_temp, "0.5"), "Soll aller Räume mit „macht mit“ in der Nacht; im Modus Beobachten Untergrenze der Ersparnis-Rechnung" + learnedHint("night_temp", (v) => fmt(v) + " °C"))}
-      ${field("Temperatur bei Abwesenheit (°C)", num("f-away_temp", s.away_temp, "0.5"), "Soll, wenn niemand zu Hause ist oder im Urlaub" + learnedHint("away_temp", (v) => fmt(v) + " °C"))}
+      ${field("Temperatur bei Abwesenheit (°C)", num("f-away_temp", s.away_temp, "0.5"), "Soll im Urlaub; wenn niemand zu Hause ist, die Untergrenze (mit Entfernung, siehe unten)" + learnedHint("away_temp", (v) => fmt(v) + " °C"))}
+      ${field("Abwesend: je 10 km weniger (%)", num("f-away_distance_pct", s.away_distance_pct, "1"), "Niemand zu Hause: je 10 km bis zur nächsten Person (GPS) so viel Prozent unter Komfort, nie unter der Abwesenheitstemperatur – 10 %: 21 °C → 18,9 °C in 10 km. 0 = gleich die Abwesenheitstemperatur, ohne GPS ebenso.")}
+      ${field("Zur Ankunft bis zu (K) unter Komfort", num("f-arrival_margin_k", s.arrival_margin_k, "0.5"), "Vorheizen zur erwarteten Ankunft (auch aus dem Urlaub) nur so weit, dass der Raum dann höchstens so viel unter Komfort ist – kaum ausgekühlte Räume heizen erst kurz vorher. 0 = bis Komfort.")}
       ${field("Vorheizen höchstens (h)", num("f-preheat_max_h", s.preheat_max_h, "0.5"), "Deckel für die Aufheizzeit aus dem Raummodell (0,5–6 h). Räume, die das Ziel nicht schaffen, werden akzeptiert – nichts wird hochgedreht.")}
     </div>`) +
     card("Nachtzeiten", `<h3 class="sec">Nachtabsenkung – Wochenplan</h3>
@@ -5724,6 +5726,7 @@ function collect() {
   if (!out.dhw_disinfect_day && !out.dhw_disinfect_time) delete out.dhw_disinfect_time;
   for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
                    "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp", "preheat_max_h",
+                   "away_distance_pct", "arrival_margin_k",  // 0.49: Abwesenheit nach Entfernung, Ankunft knapp unter Komfort
                    "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days", "keep_days",
                    "boiler_fallback_flow"]) out[k] = v("f-" + k);  // Rückfall-Vorlauf (0.41)
   if ($("f-boiler_idle")) out.boiler_idle = $("f-boiler_idle").value;  // 0.46.5: wenn kein Raum Wärme braucht

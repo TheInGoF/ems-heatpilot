@@ -241,12 +241,15 @@ def test_timeline_points_and_unknown_slots(tmp_path):
 
 
 def test_vacation_until_return_then_comfort(tmp_path):
-    cfg = Config(control_mode="heatpilot", vacations=["2026-10-05 - 2026-10-12 18:00"])
+    cfg = Config(control_mode="heatpilot", vacations=["2026-10-05 - 2026-10-12 18:00"], arrival_margin_k=0.0)
     eng, _, _ = house(tmp_path, cfg=cfg)
     h = by_hour(pv.preview(eng, ts_of(MON, 12)))
     assert h["13:00"]["vacation"] is True and h["13:00"]["phases"]["Wz"] == "urlaub"
     assert h["17:00"]["phases"]["Wz"] == "vorheizen"
     assert h["19:00"]["vacation"] is False and h["19:00"]["phases"]["Wz"] == "komfort"
+    cfg.arrival_margin_k = 1.0  # seit 0.49 Standard: kaum ausgekühlt (21 → 20,x °C) – vorheizen erst kurz vorher
+    h = by_hour(pv.preview(eng, ts_of(MON, 12)))
+    assert h["17:00"]["phases"]["Wz"] == "urlaub" and h["19:00"]["phases"]["Wz"] == "komfort"
 
 
 # ------------------------------------------------------------------ Warmwasser
@@ -360,7 +363,9 @@ def test_desired_preheat_uses_outdoor_at_target_time():
     assert desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 19.0, 5.0, lambda w: None) == base
     capped = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 15.0, 5.0, lambda w: -20.0)
     assert capped.until == at(TUE, 4, 30) - timedelta(hours=cfg.preheat_max_h)
-    # Ankunft: Außentemperatur zur Ankunft (Raum 20,8 °C wie oben: bei 5 °C reicht der niedrigste Vorlauf)
+    # Ankunft: Außentemperatur zur Ankunft (Raum 20,8 °C wie oben: bei 5 °C reicht der niedrigste Vorlauf) – ganz
+    # bis Komfort (seit 0.49 reicht zur Ankunft sonst Komfort − 1 K, die hat der Raum schon)
+    cfg.arrival_margin_k = 0.0
     away = Presence(home_count=0, arrival=at(MON, 17))
     warm = desired(wz(), at(MON, 12), cfg, away, m, 20.8, 5.0)
     cold_arr = desired(wz(), at(MON, 12), cfg, away, m, 20.8, 5.0, lambda w: -10.0 if w == at(MON, 17) else None)

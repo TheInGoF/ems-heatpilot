@@ -660,10 +660,16 @@ Für jeden Raum mit „macht mit“ bestimmt HeatPilot eine Phase und das dazuge
    Außentemperatur **zum Zielzeitpunkt** (Nachtende, Ankunft, Rückkehr aus dem Urlaub) laut
    Vorhersage – höchstens 90 min daneben –, sonst wie bisher mit der aktuellen: Wird es bis zum Morgen
    kälter, beginnt das Vorheizen früher.
-3. **Niemand zu Hause** (alle gewählten Personen sicher weg) → Abwesenheitstemperatur; liegt die
-   erwartete Ankunft (GPS-Heimfahrt oder Gewohnheit) innerhalb der Aufheizzeit, wird auf Komfort
-   vorgeheizt. Ist die Ankunft offen (Gewohnheit lernt noch) oder die Anwesenheit unbekannt
-   (Tracker meldet nichts), bleibt es bei Komfort – im Zweifel warm.
+3. **Niemand zu Hause** (alle gewählten Personen sicher weg) → seit 0.49 **nach Entfernung** wie bei Tado: je 10 km
+   bis zur nächsten Person (GPS) **„Abwesend: je 10 km weniger“** Prozent unter Komfort (Standard 10 %), nie unter
+   der Abwesenheitstemperatur. Bei 21 °C Komfort und 16 °C Abwesenheit: 5 km → 20 °C, 10 km → 19 °C, 14 km → 18 °C,
+   ab 24 km 16 °C. Die Entfernung zählt erst nach 2 km Änderung neu – GPS-Schwankung lässt das Soll nicht springen.
+   Ohne Entfernung (kein GPS) oder mit 0 % gilt gleich die Abwesenheitstemperatur. Liegt die erwartete Ankunft
+   (GPS-Heimfahrt oder Gewohnheit) innerhalb der Aufheizzeit, wird auf Komfort vorgeheizt – seit 0.49 nur so früh, dass
+   der Raum zur Ankunft **„Zur Ankunft bis zu … K unter Komfort“** erreicht (Standard 1 K: 20 statt 21 °C). Ein kaum
+   ausgekühlter Raum heizt also erst kurz vorher (mindestens 15 min), nur ein stark ausgekühlter braucht die
+   Vorhersage wirklich. Dasselbe gilt für die Rückkehr aus dem Urlaub. Ist die Ankunft offen (Gewohnheit lernt noch)
+   oder die Anwesenheit unbekannt (Tracker meldet nichts), bleibt es bei Komfort – im Zweifel warm.
 4. Sonst **Komfort**.
 
 Feste Grenzen: nie unter der kleineren von Abwesenheits- und Nachttemperatur, nie über der
