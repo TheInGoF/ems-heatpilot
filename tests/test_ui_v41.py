@@ -222,7 +222,7 @@ def test_status_line_and_box_when_writing(tmp_path):
     facts = [plain(li) for li in re.findall(r"<li>(.*?)</li>", r["box"].split('id="boiler-facts">')[1].split("</ul>")[0])]
     assert facts[0] == "Kessel jetzt: Vorlauf-Soll 46 °C · Heizbetrieb an"
     assert facts[1] == ("Ziel: Vorlauf 48 °C , Heizbetrieb an – Wz heizt auf 21,0 °C (+5 K) · Boost +2 K Bedarf 46 °C · "
-                        "Takt-Boost +2 K (wartet: Wz; Kessel taktet: 4 Starts/h, Läufe Ø 3 min)")
+                        "Takt-Boost +2 K (Kessel taktet: 4 Starts/h, Läufe Ø 3 min)")  # 0.50: nur am Takten
     assert facts[2].startswith("Abnahme-Regel aus: Mindestleistung unbekannt")  # Grund aus dem Backend (Text seit 0.42)
     assert facts[3] == "Entscheidung: Vorlauf-Soll: 46 → 48 °C · Heizbetrieb an passt"
     assert facts[4] == "Regler am Bus: nein (Kein Regler am Bus (EMS-ESP meldet kein Gerät thermostat))"

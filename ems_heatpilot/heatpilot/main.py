@@ -26,6 +26,7 @@ from aiohttp import web
 from . import __version__
 from . import boiler_period, boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
 from . import room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel
+from . import live_log  # 0.50: Entscheidung von Weg B ins 30-s-Protokoll
 from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
 from .app_jobs import JobsMixin
 from .backfill import run_backfill
@@ -403,6 +404,10 @@ async def boiler_step(app: App, now: float | None = None) -> int:
     except Exception:  # noqa: BLE001 – Lernen und Raumsteuerung laufen weiter, es wird nichts geschrieben
         ctl.pending = []
         log.exception("Kessel über HeatPilot: Schritt fehlgeschlagen – nichts geschrieben")
+    try:
+        live_log.note_boiler(eng.store, ctl.view)  # 0.50: Entscheidung in die 30-s-Zeile dieses Takts
+    except Exception:  # noqa: BLE001 – nur das Protokoll
+        log.exception("Kessel über HeatPilot: Entscheidung nicht ins 30-s-Protokoll geschrieben")
     n = await ctl.apply(now)
     await send_notes(app, eng)
     return n

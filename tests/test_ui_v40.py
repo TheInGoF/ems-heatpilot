@@ -207,4 +207,4 @@ def test_docs_name_the_places():
                  "Ventil geführt: 20,5 statt 21 °C – früh drosseln, zurück ≈ 15:40", "„Ventile – HeatPilot schreibt“"):
         assert text in docs, text
     log = (root / "CHANGELOG.md").read_text(encoding="utf-8").split("## 0.39.1")[0]
-    assert log.startswith("# Changelog\n\n## 0.4") and "\n## 0.40.0\n" in log and "Ventile führen" in log
+    assert log.startswith("# Changelog\n\n## 0.") and "\n## 0.40.0\n" in log and "Ventile führen" in log

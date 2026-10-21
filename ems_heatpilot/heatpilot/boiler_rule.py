@@ -6,14 +6,14 @@ Wunsch. Die Regeln (Planungspapier, „Regeln für den Vorlauf“, festgelegt vo
 * ``decide_flow`` – Vorlauf-Soll nur bei Änderung ab 1 K zum Kessel-Soll, höchstens ein Schreiben je 60 s (der
   Kessel braucht die Prüfung), nicht während einer Warmwasser-Ladung, einer Pause oder einer offenen Prüfung.
   **Anheben sofort** (wer Wärme braucht, bekommt sie sofort), **senken erst, wenn das Ziel 10 min lang niedriger
-  bleibt** (kein Pendeln an einer Schwelle). **Schutz:** Liegt das Vorlauf-Soll am Kessel über der Grenze (Fußboden,
-  höchster Vorlauf, Entität), wird sofort gesenkt – ohne 60-s-Abstand und ohne auf eine offene Prüfung zu warten,
+  bleibt** (kein Pendeln an einer Schwelle) **und der Brenner nicht erst seit weniger als 10 min läuft** (seit 0.50:
+  Senken schaltete ihn sonst nach wenigen Minuten ab – ein Takt mehr). **Schutz:** Liegt das Vorlauf-Soll am Kessel
+  über der Grenze (Fußboden, höchster Vorlauf, Entität), wird sofort gesenkt – ohne 60-s-Abstand und ohne auf eine offene Prüfung zu warten,
 * ``decide_heating`` – Heizbetrieb an/aus mit 5 min Haltezeit nach jedem Schalten (nicht hin und her); aus erst nach
   15 min ohne Bedarf; an nur, wenn das Vorlauf-Soll am Kessel bekannt ist und höchstens bei der Grenze liegt (bzw. im
   selben Schritt geschrieben wird); aus sofort als Schutz (Vorlauf über der Grenze, Fußboden-Grenze unter 35 °C),
-* ``boost_step`` – Takt-Boost: in 2-K-Schritten bis +10 K (der erste sofort, dann je 10 min), zurück in 2-K-Schritten,
-  sobald der Raum warm ist (der erste Schritt zurück sofort) bzw. 10 min, nachdem kein Raum mehr wartet oder das
-  Takten aufgehört hat (kein Pendeln an der Schwelle),
+* ``boost_step`` – Takt-Boost: in 2-K-Schritten bis +10 K (der erste sofort, dann je 10 min), zurück in 2-K-Schritten
+  10 min, nachdem das Takten aufgehört hat (kein Pendeln an der Schwelle); mit ``settled`` (bis 0.49) sofort,
 * ``load_flow`` – Mindest-Vorlauf aus der Abnahme: kleinster Vorlauf, bei dem die anfordernden Räume die
   Mindestleistung des Kessels abnehmen; reicht auch der höchste nicht, gilt nichts (lange Pausen, keine Sonderlogik),
 * ``flow_limits``/``fallback_value`` – 35 °C bis ``max_flow_temp`` bzw. Fußboden-Grenze und die Grenzen der Entität,
@@ -47,11 +47,11 @@ HEAT_OFF_S = 900          # Heizbetrieb aus erst nach so langer Zeit ohne Bedarf
 FLOW_DOWN_S = 600         # Vorlauf-Soll senken erst, wenn das Ziel so lange niedriger bleibt (anheben sofort)
 BLIND_S = 900             # kein Vorlauf-Soll rechenbar: nach so langer Zeit der Rückfall-Vorlauf
 BOOST_STEP_K = 2          # Takt-Boost: Schritt …
-BOOST_MAX_K = 10          # … bis höchstens so viel über dem Wert aus Bedarf und Abnahme …
+BOOST_MAX_K = 10          # … bis höchstens so viel über dem Wert aus Bedarf, Abnahme und Zuschlag …
 BOOST_STEP_S = 600        # … ein Schritt je so viele Sekunden (der erste sofort)
 BOOST_GAP_K = 0.2         # ein Raum wartet: so weit unter seinem Soll …
-BOOST_VALVE_PCT = 5.0     # … mit dem Ventil weiter offen
-BOOST_WARM_K = 0.1        # Boost zurück sofort, sobald kein Raum mehr so weit unter Soll mit offenem Ventil wartet
+BOOST_VALVE_PCT = 5.0     # … mit dem Ventil weiter offen (ab hier gilt ein Ventil als offen)
+BURN_HOLD_S = 600         # 0.50: nicht senken, solange der Brenner kürzer als so lange läuft
 FALLBACK_DEFAULT, FALLBACK_MIN, FALLBACK_MAX = 45, 35, 75  # Rückfall-Vorlauf (Zurückschalten, Wächter)
 REGULATOR_FRESH_S = 600   # Werte des Reglers in Home Assistant gelten so lange als frisch („Regler am Bus“)
 
@@ -142,12 +142,15 @@ def idle_flow(cfg, bounds: tuple | None = None) -> int | None:
 # ------------------------------------------------------------------ Entscheidungen
 def decide_flow(value: int | None, current: float | None, ts: float, last_ts: float | None = None,
                 charging: bool = False, paused: bool = False, checking: bool = False,
-                down_since: float | None = None, over: float | None = None, keepalive: bool = False) -> Decision:
+                down_since: float | None = None, over: float | None = None, keepalive: bool = False,
+                burning_until: float | None = None) -> Decision:
     """Vorlauf-Soll schreiben? Nur bei Änderung ab ``STEP_K`` zum Kessel-Soll ``current``, höchstens einmal je
     ``FLOW_GAP_S`` nach ``last_ts``, nicht während einer Warmwasser-Ladung, einer Pause oder einer offenen Prüfung.
     Senken erst, wenn das Ziel seit ``down_since`` mindestens ``FLOW_DOWN_S`` niedriger ist (None = gilt nicht, z. B.
-    für reine Regeltests: sofort). ``over``: Kesselwert über der Grenze (auch nur in einer Quelle bei unklarem Wert) –
-    Schutz: sofort senken, ohne Abstand und offene Prüfung; nur eine Warmwasser-Ladung bzw. Pause hält es auf."""
+    für reine Regeltests: sofort), und seit 0.50 nicht vor ``burning_until`` (Brenner läuft seit weniger als
+    ``BURN_HOLD_S``; None = aus bzw. unbekannt). ``over``: Kesselwert über der Grenze (auch nur in einer Quelle bei
+    unklarem Wert) – Schutz: sofort senken, ohne Abstand und offene Prüfung; nur eine Warmwasser-Ladung bzw. Pause hält
+    es auf."""
     if value is None:
         return Decision(False, None, "kein Vorlauf-Soll")
     if paused:
@@ -169,13 +172,32 @@ def decide_flow(value: int | None, current: float | None, ts: float, last_ts: fl
     if last_ts is not None and ts < last_ts + FLOW_GAP_S:
         return Decision(False, value, f"höchstens ein Vorlauf-Schreiben je {FLOW_GAP_S} s",
                         until=int(last_ts + FLOW_GAP_S))
-    if value < current and down_since is not None and ts < down_since + FLOW_DOWN_S:
-        hold = f"senkt auf {value} °C erst, wenn das Ziel {FLOW_DOWN_S // 60} min niedriger bleibt"
+    until, hold = _down_hold(value, current, ts, down_since, burning_until)
+    if hold:
         if keepalive and current >= FLOW_MIN and (last_ts is None or ts >= last_ts + KEEPALIVE_S):  # 0.48.6: das
             return Decision(True, round(current), f"erneuert: {_c(current)} °C, {hold}",  # gehaltene Soll
-                            until=int(down_since + FLOW_DOWN_S))  # erneuern, sonst fällt der Kessel darin auf 7 °C
-        return Decision(False, value, hold, until=int(down_since + FLOW_DOWN_S))
+                            until=until)  # erneuern, sonst fällt der Kessel darin auf 7 °C
+        return Decision(False, value, hold, until=until)
     return Decision(True, value, f"{_c(current)} → {value} °C")
+
+
+def _down_hold(value: int, current: float, ts: float, down_since: float | None,
+               burning_until: float | None) -> tuple[int | None, str | None]:
+    """Senken aufhalten? (bis wann, Text) – nach dem niedrigeren Ziel (``FLOW_DOWN_S``) und dem laufenden Brenner
+    (``BURN_HOLD_S``, seit 0.50); (None, None), wenn gesenkt werden darf."""
+    if value >= current:
+        return None, None
+    holds = []
+    if down_since is not None and ts < down_since + FLOW_DOWN_S:
+        holds.append((down_since + FLOW_DOWN_S, f"senkt auf {value} °C erst, wenn das Ziel {FLOW_DOWN_S // 60} min "
+                                                "niedriger bleibt"))
+    if burning_until is not None and ts < burning_until:
+        holds.append((burning_until, f"senkt auf {value} °C erst, wenn der Brenner aus ist oder {BURN_HOLD_S // 60} "
+                                     "min läuft"))
+    if not holds:
+        return None, None
+    until, hold = max(holds)
+    return int(until), hold
 
 
 def decide_heating(want: bool | None, current: bool | None, ts: float, last_ts: float | None = None,
