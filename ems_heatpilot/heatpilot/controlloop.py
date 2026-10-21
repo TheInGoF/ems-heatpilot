@@ -118,8 +118,7 @@ def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_o
     cap = max(cap, PREHEAT_MIN_H)
     if model is None or temp is None:
         return min(PREHEAT_DEFAULT_H, cap)
-    # 0.50.1: ab dem Vorlauf, den der Raum beim Aufheizen ohnehin bekommt (Halten + Aufheizzuschlag) – ab 35 °C begann
-    # das Vorheizen fast jede Nacht schon den ganzen Deckel (3 h) vorher
+    # 0.50.1: ab dem Aufheiz-Vorlauf (Halten + Zuschlag) – ab 35 °C begann es fast jede Nacht den ganzen Deckel vorher
     start = max(PREHEAT_FLOW_FROM, math.ceil(model.required_flow(target, t_out) + PREHEAT_HEATUP_K))
     for flow in range(int(min(start, max_flow)), int(max_flow) + 1):
         hours = model.time_to_reach(temp, target, float(flow), t_out)
