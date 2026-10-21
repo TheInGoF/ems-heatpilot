@@ -39,8 +39,6 @@ Neuaufbau) hält ein noch laufendes ``apply()`` an, damit die alte Schleife nich
 
 from __future__ import annotations
 
-import math
-
 import logging
 import time
 from collections.abc import Callable
@@ -57,13 +55,12 @@ from .dhw_control import LOG_NAME as DHW_LOG_NAME
 from .disinfect_status import ACTIONS as DISINFECT_ACTIONS
 from .disinfect_status import LOG_NAME as DISINFECT_LOG_NAME
 from .away import nearest_km, nobody_home
+from .heatup import PREHEAT_DEFAULT_H, PREHEAT_FLOW_FROM, PREHEAT_MIN_H, preheat_hours, shared_flow  # noqa: F401
 from .presence import arrival_unknown, next_arrival
 
 log = logging.getLogger(__name__)
 
 PHASES = ("komfort", "nacht", "abwesend", "vorheizen", "urlaub")
-PREHEAT_MIN_H = 0.25      # so früh mindestens umschalten
-PREHEAT_DEFAULT_H = 1.0   # Raummodell noch nicht plausibel: pauschal so lange vorheizen
 REACH_GAP_K = 0.3         # Gleichgewicht so weit unter dem Ziel: „erreicht ≈ …“ anzeigen
 RETRY_MIN = 15            # nach einem Schreibfehler so lange warten
 MAX_FAILS = 3             # ab so vielen Fehlschlägen in Folge Hinweis in der Oberfläche
@@ -107,28 +104,6 @@ class Desired(NamedTuple):
     until: datetime | None  # geplanter nächster Wechsel (None: keiner absehbar)
 
 
-def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_out: float, cap: float, soft=False) -> float:
-    """Vorlauf fürs Vorheizen in Stunden: aus dem Raummodell, gedeckelt; unerreichbar → Deckel.
-
-    Seit 0.46.5 sanft: so früh, dass der niedrigste Vorlauf ab ``PREHEAT_FLOW_FROM`` reicht, der innerhalb des
-    Deckels ans Ziel kommt – statt kurz mit dem höchsten Vorlauf (morgens 60 °C, danach wieder 35 °C). Die Vorschau
-    findet denselben Vorlauf (``preview._preheat_flow``). ``model`` None (nicht plausibel) oder Raumtemperatur
-    unbekannt → ``PREHEAT_DEFAULT_H``.
-    """
-    cap = max(cap, PREHEAT_MIN_H)
-    if model is None or temp is None:
-        return min(PREHEAT_DEFAULT_H, cap)
-    # 0.50.1: täglich ab Halten + Zuschlag (ab 35 °C begann es jede Nacht den ganzen Deckel vorher), sanft nur vorm Urlaubsende
-    start = PREHEAT_FLOW_FROM if soft else max(PREHEAT_FLOW_FROM, math.ceil(model.required_flow(target, t_out) + PREHEAT_HEATUP_K))
-    for flow in range(int(min(start, max_flow)), int(max_flow) + 1):
-        hours = model.time_to_reach(temp, target, float(flow), t_out)
-        if hours is not None and hours <= cap:
-            return max(hours, PREHEAT_MIN_H)
-    return cap  # Ziel auch mit maximalem Vorlauf nicht im Deckel erreichbar: bis zum Deckel vorheizen
-
-
-PREHEAT_FLOW_FROM = 35.0  # kleinster Vorlauf beim Vorheizen (wie ``preview.FLOW_MIN``)
-PREHEAT_HEATUP_K = 5.0    # 0.50.1: Vorheizen rechnet mit Halten + so viel (wie ``preview.HEATUP_K``)
 
 
 def reach_c(model, target: float, max_flow: float, t_out: float) -> float | None:
@@ -148,7 +123,7 @@ def _clamp(value: float, comfort: float, cfg) -> float:
 
 def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: float | None = None,
             t_out: float | None = None, t_out_at: Callable[[datetime], float | None] | None = None,
-            preheating: datetime | None = None) -> Desired:
+            preheating: datetime | None = None, preheat_flow: float | None = None) -> Desired:
     """Wunschzustand eines Raums (``discovery.Room``) – reine Funktion, siehe Modulbeschreibung.
 
     ``t_out_at(Zeitpunkt)`` (seit 0.37, z. B. ``Engine.outdoor_forecast_at``): Außentemperatur zum Ziel des
@@ -165,7 +140,8 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
             return max(at - now, timedelta(0))  # läuft schon: bleibt bis zum Ziel
         t_at = t_out_at(at) if t_out_at is not None else None
         return timedelta(hours=preheat_hours(model, temp, target, cfg.max_flow_temp,
-                                             t_out if t_at is None else t_at, cfg.preheat_max_h, soft))
+                                             t_out if t_at is None else t_at, cfg.preheat_max_h, soft,
+                                             None if soft else preheat_flow))
 
     # 1. Urlaub
     if presence.vacation:
@@ -309,6 +285,7 @@ class ControlLoop:
         presence, t_out = self.presence(now, sample), sample.get("t_out")
         t_out_at = eng.outdoor_forecast_at  # 0.37: Vorheizdauer mit der Außentemperatur zum Zielzeitpunkt
         desireds: dict[str, Desired] = {}
+        shared = self._shared_flow(readings, t_out)  # 0.50.4: ein Vorlauf fürs tägliche Vorheizen aller Räume
         for room in eng.found.rooms:
             reading = readings.get(room.climate)
             temp = reading[1] if reading else None
@@ -316,14 +293,15 @@ class ControlLoop:
             ok = model is not None and guards.check_room(model)["ok"]
             held = self.state.get(room.climate, {}).get("preheat")  # 0.46.5: begonnenes Vorheizen bleibt
             d = desired(room, now, cfg, presence, model if ok else None, temp, t_out, t_out_at,
-                        local(held) if held else None)
+                        local(held) if held else None, shared)
             desireds[room.climate] = d
             self.rooms[room.climate] = {
                 "managed": bool(room.managed), "phase": d.phase if managing else None,
                 "desired": d.setpoint if managing else None, "reason": d.reason if managing else None,
                 "next_change": _iso(d.until) if managing else None,
                 "next_phase": (desired(room, d.until + timedelta(minutes=1), cfg, presence, model if ok else None,
-                                       temp, t_out, t_out_at).phase if managing and d.until else None),
+                                       temp, t_out, t_out_at, None, shared).phase if managing and d.until else None),
+                "preheat_flow": shared if managing else None,  # 0.50.4: gemeinsamer Vorlauf fürs Vorheizen
                 "reach_c": reach_c(model if ok else None, d.setpoint, cfg.max_flow_temp,
                                    5.0 if t_out is None else t_out),
                 "manual": False, "manual_until": None, "boost": room.climate in boosts,
@@ -331,6 +309,20 @@ class ControlLoop:
                 "valve": None, "valve_guided": False,  # 0.40: laufender Eingriff der Ventilführung, geführt?
             }
         return desireds
+
+    def _shared_flow(self, readings: dict, t_out: float | None) -> float | None:
+        """0.50.4: gemeinsamer Vorlauf fürs tägliche Vorheizen (``heatup.shared_flow``) der Räume, die mitmachen, ein
+        plausibles Modell haben und mehr als 0,3 K unter Komfort liegen – mit der Mindestleistung des Kessels."""
+        from .boiler_flow import min_power_kw
+        eng, out, rooms = self.eng, 5.0 if t_out is None else t_out, []
+        for r in eng.found.rooms:
+            m, temp = eng.rooms.get(r.climate), (readings.get(r.climate) or (None, None))[1]
+            if r.managed and m is not None and temp is not None and temp < r.comfort - 0.3 and guards.check_room(m)["ok"]:
+                rooms.append((m, temp, float(r.comfort), out))
+        need = sum(max(m.b * (t - out) - m.c, 0.0) for m, t, _, _ in rooms)
+        house = (eng.house.demand_kw(sum(x[1] for x in rooms) / len(rooms), out)
+                 if rooms and need > 0 and guards.check_house(eng.house)["ok"] else 0.0)
+        return shared_flow(rooms, eng.cfg.max_flow_temp, min_power_kw(eng)[0], house / need if house > 0 else None)
 
     def _restores(self, ts: int, desireds: dict, managing: bool, paused: bool) -> set[str]:
         """Abgelaufene lokale Boosts: Wunschzustand zurück (heatpilot, Raum macht mit, keine Pause), sonst Soll von

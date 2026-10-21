@@ -1594,7 +1594,7 @@ function roomState(r) {
     const d = fmt(c.desired) + "°";
     let s = c.paused ? `Pause · ${t}` : c.phase === "vorheizen" ? `Vorheizen → ${d}` : `HeatPilot · ${PHASE[c.phase] || c.phase} ${d}`;
     if (unreachable(c)) s += ` · erreicht ≈ ${fmt(c.reach_c)}°`;
-    if (c.next_phase === "vorheizen" && c.next_change) s += ` · Vorheizen ab ${clock(c.next_change)}`;  // 0.50.1
+    if (c.next_phase === "vorheizen" && c.next_change) s += ` · Vorheizen ab ${clock(c.next_change)}` + (c.preheat_flow ? ` (${fmt(c.preheat_flow, 0)} °C)` : "");  // 0.50.1/0.50.4
     return s;
   }
   if (r.mode === "off") return "Frostschutz";
