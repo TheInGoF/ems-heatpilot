@@ -1296,14 +1296,14 @@ async function loadLive() {
   $("live-status").innerHTML = `Stand ${new Date(n.ts * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} · ${esc(n.source)} · alle 30 s`;
   $("live-range").innerHTML = seg([["3", "3 h"], ["6", "6 h"], ["12", "12 h"], ["24", "24 h"]], $("live-hours").value, "setLiveHours", 'aria-label="Zeitraum"');
   const burnerNote = n.burner_on ? (n.dhw ? "lädt Warmwasser" : "heizt") + (n.flame !== null ? ` · Flamme ${fmt(n.flame)} µA` : "")
-    : n.lock_left_min ? `Taktsperre ${n.lock_left_min} min` + (n.service_code ? ` (${n.service_code})` : " (geschätzt)")
-      + (n.blocked ? " – Räume warten" : "") : "bereit" + (n.service_code ? ` (${n.service_code})` : "");  // 0.48.3: Kesselcode
+    : n.lock_left_min ? `Sperre ${n.lock_left_min} min` + (n.service_code ? ` (${n.service_code})` : " (geschätzt)")
+      + (n.blocked ? " · Räume warten" : "") : "bereit" + (n.service_code ? ` (${n.service_code})` : "");  // 0.48.4: kürzer
   const pump = n.pump_on === null || n.pump_on === undefined ? (n.pump_mod !== null && n.pump_mod !== undefined ? (n.pump_mod > 0 ? "an" : "aus") : "–") : n.pump_on ? "an" : "aus";
   // „Jetzt“ (0.43): Kennzahlen, seit 0.46.5 mit der Pumpe; die übrigen Werte stehen in den Köpfen der Karten Kessel, Warmwasser und Räume
   $("live-tiles").innerHTML = [
     kpi("Brenner", onOff(n.burner_on) + (n.burner_on && n.burner_pow !== null ? ` · ${fmt(n.burner_pow, 0)} %` : ""), "", burnerNote + (n.power_kw !== null && n.burner_on ? ` · ca. ${fmt(n.power_kw)} kW` : "")),
-    kpi("Pumpe", pump + (n.pump_mod !== null && n.pump_mod !== undefined ? ` · ${fmt(n.pump_mod, 0)} %` : ""), "",
-      n.pump_delay ? `Nachlauf ${fmt(n.pump_delay, 0)} min` : ""),
+    kpi("Pumpe", pump, "", [n.pump_mod !== null && n.pump_mod !== undefined ? `${fmt(n.pump_mod, 0)} %` : "",
+      n.pump_delay ? `Nachlauf ${fmt(n.pump_delay, 0)} min` : ""].filter(Boolean).join(" · ")),  // 0.48.4: % in den Hinweis
     kpi("Vorlauf", fmt(n.flow), "°C", `Vorlauf-Soll ${fmt(n.sel_flow, 0)} °C · Regler ${fmt(n.calc_flow, 0)} °C`),
     kpi("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "")),
     kpi("Außen", fmt(n.t_out), "°C"),
