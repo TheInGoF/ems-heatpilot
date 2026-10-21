@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.49.3
+- **Warmwasser-Ladung ohne Regler löste Fehler und Meldungen aus:** Der Kessel setzt sein Soll für die Ladung selbst (z. B. 75 °C) – oft schon, bevor er „lädt“ meldet, und noch kurz danach. HeatPilot sah darin ein Soll über der Grenze, schrieb sofort sein eigenes als Schutz, und die Prüfung meldete „Vorlauf-Soll 40 °C nicht übernommen (Kessel zeigt 75 °C)“ – bis zur Pause nach drei Fehlschlägen. Jetzt gilt als Ladung auch: Kessel zeigt ein Soll mindestens 5 K über dem eigenen, während der Speicher unter seinem Soll ist (ohne Speicherwerte: über dem höchsten Vorlauf), und 3 min nach dem Ende der Meldung. Kein Schreiben, kein Fehlschlag, kein fremder Schreiber in dieser Zeit. Das eigene, zuletzt geschriebene Soll zählt nie als Lade-Soll – der Schutz nach einem gesenkten höchsten Vorlauf greift weiter sofort
+- Erneuert wird nur noch das eigene Vorlauf-Soll, nie ein Lade-Soll, das nach der Ladung noch steht
+- **Tests:** neu `tests/test_boiler493.py`
+
 ## 0.49.2
 - **30-s-Werte als CSV:** Die Live-Werte (Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Brennerstarts, Anlagendruck, je Raum Ist/Soll/Ventil/Feuchte) speichert HeatPilot jetzt alle 30 s auch in der Datenbank – 48 h lang, übersteht einen Neustart. Herunterladen unter Einstellungen → Diagnose → Dateien („30-s-Werte herunterladen“, 12/24/48 h). Damit lassen sich Wassermenge und Abnahme aus Vor- und Rücklauf genau nachrechnen
 - **Tests:** neu `tests/test_live_log492.py`
