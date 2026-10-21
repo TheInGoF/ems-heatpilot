@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.48.5
+- Live: Brenner-Hinweis „heizt · ca. 9,7 kW · Flamme 20 µA“ (Leistung zuerst), Vorlauf ohne Regler nur „Soll 44 °C“ statt „Regler – °C“
+
 ## 0.48.4
 - Live: Kachel „Pumpe“ zeigt groß nur an/aus, Modulation und Nachlauf im Hinweis; Brenner-Hinweis kürzer („Sperre 3 min (0A) · Räume warten“) – passt auch auf schmale Bildschirme
 
