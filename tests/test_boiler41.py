@@ -44,6 +44,7 @@ T0 = ts_of(MON, 12)
 def house(tmp_path, mode="heatpilot", temp=20.5, target=21.0, a=0.008, regulator=False, rooms=None, **cfg_kw):
     """Engine mit Raum „Wz“ (macht mit, braucht ≈ 41 °C zum Halten bei 5 °C außen, heizt auf: +5 K), Kessel-Entitäten
     in HA, EMS-ESP antwortet (ohne Regler) und Weg B wie in ``main.App._build_control``."""
+    cfg_kw.setdefault("boiler_keepalive", False)  # seit 0.48.1 eigene Tests (test_keepalive481)
     cfg = Config(control_mode="heatpilot", boiler_control=mode, emsesp_host="ems.local", notify_targets=TARGETS,
                  **cfg_kw)
     eng, _, _, _ = make(tmp_path, rooms=rooms, cfg=cfg, outdoor=["sensor.out"],
