@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.50.2
+- **Nach einem Boost zurück in den HeatPilot-Plan:** Endet ein Tado-Boost bzw. -Timer, folgt Tado wieder seinem eigenen Zeitplan („auto“). HeatPilot hielt das für eine Handänderung und ließ den Raum bis zum nächsten Phasenwechsel stehen. Jetzt schreibt HeatPilot sofort sein Soll zurück
+- **Live → Je Raum einzeln:** unter jedem Raum der Plan wie im Reiter „Heizen“ (Phase, Soll, „Vorheizen ab 05:10“)
+
 ## 0.50.1
 - **Vorheizen nach der Nacht nicht mehr fast immer 3 h vorher:** Das sanfte Vorheizen (0.46.5) suchte den niedrigsten Vorlauf ab 35 °C, der es innerhalb des Deckels schafft – und begann deshalb fast jede Nacht schon den ganzen Deckel vorher. Jetzt rechnet es mit dem Vorlauf, den der Raum beim Aufheizen ohnehin bekommt (Halten + 5 K); reicht der nicht, wie bisher höher
 - **Räume zeigen, wann das Vorheizen beginnt:** „HeatPilot · Nacht 18° · Vorheizen ab 05:10“
