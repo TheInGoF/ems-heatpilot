@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.50.1
+- **Vorheizen nach der Nacht nicht mehr fast immer 3 h vorher:** Das sanfte Vorheizen (0.46.5) suchte den niedrigsten Vorlauf ab 35 °C, der es innerhalb des Deckels schafft – und begann deshalb fast jede Nacht schon den ganzen Deckel vorher. Jetzt rechnet es mit dem Vorlauf, den der Raum beim Aufheizen ohnehin bekommt (Halten + 5 K); reicht der nicht, wie bisher höher
+- **Räume zeigen, wann das Vorheizen beginnt:** „HeatPilot · Nacht 18° · Vorheizen ab 05:10“
+
 ## 0.50.0
 - **Zuschlag „Raum kommt nicht hoch“:** Im 30-s-Protokoll blieben Küche, Flur und Wohnzimmer eine Stunde mit offenem Ventil unter Soll, während HeatPilot den Vorlauf auf 35–37 °C hielt – die Raummodelle hielten das für genug. Jetzt gilt unabhängig vom Takten: Steht ein Raum mindestens 0,3 K unter Soll mit dem Ventil ab 80 % und ist er in 30 min nicht um 0,2 K gestiegen, hebt HeatPilot den Vorlauf um 2 K je 15 min bis zur Obergrenze. Steigt der Raum wieder, bleibt die Stufe; am Soll geht es in 2-K-Schritten zurück. Andere Räume werden nicht überheizt (ihre Thermostate machen zu), Fußbodenräume zählen nicht. Im Ziel und in der Statuszeile: „Zuschlag +4 K (Flur, Wohnzimmer kommen nicht hoch)“
 - **Takt-Boost nur noch am Takten:** an bei mindestens 3 Starts in der letzten Stunde mit Läufen unter 10 min und einem offenen Ventil, zurück in 2-K-Schritten 10 min nach dem Takten. Bisher brauchte er zusätzlich einen wartenden Raum – und sprang bei langen Pausen (zu tiefer Vorlauf, also wenige Starts) gerade dann nicht an, endete aber beim Takten nie, solange ein Raum sein Soll nicht erreichte
