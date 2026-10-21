@@ -56,7 +56,7 @@ from .boiler_status import (ACT_DRY, ACT_FAIL, ACT_FALLBACK, ACT_FOREIGN, ACT_PA
                             ACTIONS, LOG_ROOM, BoilerStatus)
 from .boiler_status import fallback as fallback_flow
 from .boiler_watch import (BLOCKED_NOTE_S, K_BLIND, K_BLOCKED, K_FAIL, K_FOREIGN, K_PAUSED,  # noqa: F401
-                           K_REJECTED, K_WATCHDOG, BoilerWatch, same)
+                           K_REJECTED, K_WATCHDOG, BoilerWatch, forget_rest_drops, same)
 from .dhw_control import special_running
 from .period_control import PeriodControl
 from .discovery_roles import BOILER_ROLES
@@ -68,6 +68,11 @@ KV = "boiler_control.state"
 WHATS = ("flow", "heating")
 ROLES = {"flow": "sel_flow_temp", "heating": "heating_activated"}
 _same = same  # wie bisher hier zu holen
+
+
+def _resting(flow) -> bool:
+    """Vorlauf-Soll am Kessel auf seinem Ruhewert (bis ``PUMP_FLOW``, z. B. 7 °C): Er heizt nicht (seit 0.49.1)."""
+    return flow is not None and float(flow) <= br.PUMP_FLOW + br.CHECK_TOL_K
 
 
 def _value(what: str, raw):
@@ -92,6 +97,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         self.entities = {w: (ents.get(w) or (None, None))[0] for w in WHATS}
         self.sources = {w: (ents.get(w) or (None, None))[1] for w in WHATS}
         self.state: dict = carry.state if carry is not None else dict(self.store.get(KV) or {})
+        forget_rest_drops(self.state)  # 0.49.1: alte „fremd → 7 °C“ aus der Zeit vor 0.48.1
         self.pending: list[tuple[str, object, str]] = []
         self.planned_ts: int | None = None
         self.view: dict = {}
@@ -291,7 +297,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             unsafe = (f"Vorlauf-Soll am Kessel {_c(over)} °C über der Grenze {target.hi} °C" if over is not None
                       else "Vorlauf-Soll am Kessel unbekannt" if not known else None)
         return decide_heating(want, ref["heating"][0], ts, ref["heating"][1], paused, checking, hch.get("off_since"),
-                              unsafe, protect)
+                              unsafe, protect, resting=_resting(ref["flow"][0]))
 
     def _blind(self, ts: int, target):
         """Kein Vorlauf-Soll rechenbar (Außentemperatur fehlt, kein Raummodell …): nach ``BLIND_S`` gilt der
@@ -461,6 +467,8 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             self._ch(what).pop("check")
             if what == "flow" and seen is not None and seen <= br.PUMP_FLOW + 0.5 and chk["value"] >= br.FLOW_MIN:
                 continue  # 0.48.1: Kessel hat das Soll schon wieder verworfen – kein Fehlschlag, wird neu geschrieben
+            if what == "heating" and seen and not chk["value"] and _resting(self.current("flow")):
+                continue  # 0.49.1: Kessel lässt den Heizbetrieb an, steht aber auf dem Ruhewert – heizt nicht
             ok = _same(what, seen, chk["value"])
             st["last_check"] = {"ts": int(now), "what": what, "value": chk["value"], "seen": seen, "ok": ok,
                                 "shown": self._shown(what, seen, r)}

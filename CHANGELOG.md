@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.49.1
+- **Kessel pausierte nach „Heizbetrieb aus nicht übernommen“:** Braucht kein Raum Wärme, schaltete HeatPilot nach 15 min den Heizbetrieb aus. Mancher Kessel ohne Regler nimmt „aus“ nicht an – er steht aber längst auf seinem Ruhewert (Vorlauf-Soll 7 °C) und heizt nicht. Das zählte dreimal als Fehlschlag, dann pausierte Weg B. Jetzt schaltet HeatPilot den Heizbetrieb nicht aus, solange der Kessel auf dem Ruhewert steht; zeigt er bei der Prüfung nach „aus“ noch „an“, aber den Ruhewert, ist das kein Fehlschlag. Braucht wieder ein Raum Wärme, geht es ohne Umschalten sofort mit dem neuen Vorlauf-Soll weiter
+- **Alte „Anderer Schreiber … → 7 °C“ verschwinden:** Vor 0.48.1 zählte der Rückfall des Kessels auf 7 °C noch als fremder Schreiber; der Hinweis blieb 24 h stehen. Solche Einträge vergisst HeatPilot beim Start
+- **Tests:** neu `tests/test_boiler491.py`
+
 ## 0.49.0
 - **Abwesenheit nach Entfernung (wie Tado):** Ist niemand zu Hause, senkt HeatPilot nicht mehr gleich auf die Abwesenheitstemperatur, sondern je 10 km bis zur nächsten Person (GPS) um einen Prozentsatz der Komforttemperatur – Standard 10 %: 21 °C → 19 °C in 10 km, 18 °C in 14 km, ab 24 km die Abwesenheitstemperatur. Neue Einstellung „Abwesend: je 10 km weniger (%)“ (`away_distance_pct`, 0 = wie bisher). Die Entfernung zählt erst nach 2 km Änderung neu, damit GPS-Schwankung das Soll nicht hin und her schreibt. Ohne GPS bleibt es bei der Abwesenheitstemperatur
 - **Vorheizen nur, wenn es nötig ist:** Zur erwarteten Ankunft (und zur Rückkehr aus dem Urlaub) reicht jetzt Komfort minus 1 K – ein kaum ausgekühlter Raum heizt erst kurz vorher, nur ein stark ausgekühlter früh. Neue Einstellung „Zur Ankunft bis zu (K) unter Komfort“ (`arrival_margin_k`, Standard 1, 0 = bis Komfort)
