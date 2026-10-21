@@ -39,6 +39,8 @@ Neuaufbau) hält ein noch laufendes ``apply()`` an, damit die alte Schleife nich
 
 from __future__ import annotations
 
+import math
+
 import logging
 import time
 from collections.abc import Callable
@@ -116,7 +118,10 @@ def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_o
     cap = max(cap, PREHEAT_MIN_H)
     if model is None or temp is None:
         return min(PREHEAT_DEFAULT_H, cap)
-    for flow in range(int(PREHEAT_FLOW_FROM), int(max_flow) + 1):
+    # 0.50.1: ab dem Vorlauf, den der Raum beim Aufheizen ohnehin bekommt (Halten + Aufheizzuschlag) – ab 35 °C begann
+    # das Vorheizen fast jede Nacht schon den ganzen Deckel (3 h) vorher
+    start = max(PREHEAT_FLOW_FROM, math.ceil(model.required_flow(target, t_out) + PREHEAT_HEATUP_K))
+    for flow in range(int(min(start, max_flow)), int(max_flow) + 1):
         hours = model.time_to_reach(temp, target, float(flow), t_out)
         if hours is not None and hours <= cap:
             return max(hours, PREHEAT_MIN_H)
@@ -124,6 +129,7 @@ def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_o
 
 
 PREHEAT_FLOW_FROM = 35.0  # kleinster Vorlauf beim Vorheizen (wie ``preview.FLOW_MIN``)
+PREHEAT_HEATUP_K = 5.0    # 0.50.1: Vorheizen rechnet mit Halten + so viel (wie ``preview.HEATUP_K``)
 
 
 def reach_c(model, target: float, max_flow: float, t_out: float) -> float | None:
