@@ -19,14 +19,16 @@ Ablauf je Schritt (``plan`` im 30-s-Takt der Live-Werte, danach ``apply``; ``mai
    (frisch, höchstens 90 s alt; widersprechen sich beide, ist der Wert unklar, geprüft wird bis 5 min danach weiter).
    Nicht übernommen: Fehlschlag (Protokoll, Hinweis, Meldung, Problem-Sensor); nach 3 Fehlschlägen in Folge Pause bis
    „wieder einschalten“. Während einer Warmwasser-Ladung wartet die Prüfung des Vorlaufs, bis sie vorbei ist.
-2. Ziel rechnen (``boiler_flow.compute``: Bedarf, Abnahme, Takt-Boost, Fußboden-Grenze, Obergrenze, Grenzen der
-   Entität). Ist es länger als ``BLIND_S`` nicht rechenbar (Außentemperatur fehlt, kein Raummodell), gilt der
-   Rückfall-Vorlauf mit Heizbetrieb an (``_blind``) – mit Hinweis und Meldung; danach geht es normal weiter.
+2. Ziel rechnen (``boiler_flow.compute``: Bedarf, Abnahme, Zuschlag „Raum kommt nicht hoch“, Takt-Boost,
+   Fußboden-Grenze, Obergrenze, Grenzen der Entität). Ist es länger als ``BLIND_S`` nicht rechenbar (Außentemperatur
+   fehlt, kein Raummodell), gilt der Rückfall-Vorlauf mit Heizbetrieb an (``_blind``) – mit Hinweis und Meldung;
+   danach geht es normal weiter.
 3. Fremde Änderungen erkennen (nur „heatpilot“, nicht gesperrt, ``boiler_watch``): ändert sich ein Wert ohne
    HeatPilot, Hinweis und Meldung („Regler noch dran? Automation?“); 2 fremde Änderungen in 1 h → Pause. Ein Eingriff
    des Wächters in Home Assistant wird erkannt und gemeldet, aber nicht gezählt.
 4. Entscheiden (``boiler_rule``): Vorlauf-Soll nur ab 1 K Änderung, höchstens ein Schreiben je 60 s, anheben sofort,
-   senken erst nach 10 min niedrigerem Ziel, nicht während einer Warmwasser-Ladung; Heizbetrieb mit 5 min Haltezeit,
+   senken erst nach 10 min niedrigerem Ziel und nicht in den ersten 10 min eines Brennerlaufs (seit 0.50), nicht
+   während einer Warmwasser-Ladung; Heizbetrieb mit 5 min Haltezeit,
    aus erst nach 15 min ohne Bedarf, an nur mit bekanntem Vorlauf-Soll bis zur Grenze. **Schutz:** Steht das
    Vorlauf-Soll am Kessel über der Grenze (Fußboden, höchster Vorlauf, Entität – in einer der beiden Quellen), wird
    sofort gesenkt bzw. – ohne Bedarf – der Heizbetrieb ausgeschaltet. Bei „heatpilot“ vormerken – nur ohne Hindernis
@@ -87,7 +89,7 @@ def _value(what: str, raw):
 
 class BoilerControl(BoilerStatus, BoilerWatch):
     """Zustand von Weg B (je Wert: letztes Schreiben, Prüfung, zuletzt gesehen, Trockenlauf; Fehlschläge, Pause,
-    fremde Änderungen, Takt-Boost) und der Schritt dazu."""
+    fremde Änderungen, Zuschlag, Takt-Boost) und der Schritt dazu."""
 
     def __init__(self, eng, control=None, notifier=None, entities: dict | None = None,
                  carry: BoilerControl | None = None) -> None:
@@ -198,7 +200,8 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             self.period.plan(ts, None, now)
             return
         self.verify(now)
-        target, st["boost"] = boiler_flow.compute(self.eng, ts, st.get("boost"), self.bounds())
+        target, st["boost"] = boiler_flow.compute(self.eng, ts, st.get("boost"), self.bounds(), st.get("stall"))
+        st["stall"] = target.stall
         target = self._blind(ts, target)
         target = self._no_switch(target)
         if not target.charging and self.charging(now):  # 0.49.3: auch kurz davor und danach (siehe ``charging``)
@@ -291,7 +294,15 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         own = current is None or last is None or current <= br.PUMP_FLOW + 0.5 or abs(current - last) <= br.CHECK_TOL_K
         keep = self.mode == "heatpilot" and getattr(self.eng.cfg, "boiler_keepalive", True) and own  # 0.48.1
         return decide_flow(value, current, ts, last_ts, target.charging, paused, checking,
-                           (down or {}).get("since"), over, keep)
+                           (down or {}).get("since"), over, keep, self._burning_until())
+
+    def _burning_until(self) -> int | None:
+        """0.50: Läuft der Brenner seit weniger als ``BURN_HOLD_S``, bis wann (Start laut Brennerereignissen) – sonst
+        None. Senken schaltete ihn sonst nach wenigen Minuten ab."""
+        if self.eng.burner_on() != 1:
+            return None
+        r = self.store.query("SELECT ts, state FROM burner_events ORDER BY ts DESC LIMIT 1")
+        return int(r[0]["ts"]) + br.BURN_HOLD_S if r and r[0]["state"] == 1 else None
 
     def _no_switch(self, target):
         """Lässt sich der Heizbetrieb nicht schalten (nur Rückmeldung des Kessels, 0.46.7), wird aus „Heizbetrieb aus“
@@ -366,7 +377,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
     def _switch(self, mode: str, ts: int) -> None:
         """Schalter umgestellt: weg von „heatpilot“ Prüfungen verwerfen und den Stand für den Hinweis merken (den
         Rückfallwert schreibt ``fallback`` vorher über die alte Schreibstelle); Trockenlauf neu beginnen; bei
-        „heatpilot“ Fehlschläge und fremde Werte ab jetzt zählen. Der Takt-Boost beginnt immer neu."""
+        „heatpilot“ Fehlschläge und fremde Werte ab jetzt zählen. Zuschlag und Takt-Boost beginnen immer neu."""
         st = self.state
         prev = st.get("mode")
         if prev == mode:
@@ -386,7 +397,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             st.pop("stopped", None)
             st.pop("blocked_since", None)
             st["fails"], st["since"] = 0, ts
-        st["boost"] = None
+        st["boost"] = st["stall"] = None
         for key in ("blind", "rejected"):
             st.pop(key, None)
         st["mode"] = mode

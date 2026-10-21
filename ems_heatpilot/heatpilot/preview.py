@@ -39,7 +39,7 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
   die Warmwasser-Schreibvorgänge „schreibt“ (``dhw_writes``), sonst „würde schreiben“. Seit 0.41 (Weg B) ebenso
   Vorlauf und Heizbetrieb (``flow_writes``): bei „Kessel über HeatPilot“ trocken bzw. heatpilot beginnt die Zählung
   beim Wert des Schritts (zuletzt „geschrieben“ bzw. am Kessel), „schreibt“ nur bei heatpilot ohne Pause und Sperre.
-  Live rechnet ``boiler_flow`` dazu Abnahme-Untergrenze und Takt-Boost – die Vorschau zeigt den Plan aus dem Bedarf.
+  Live rechnet ``boiler_flow`` dazu Abnahme, Zuschlag und Takt-Boost – die Vorschau zeigt den Plan aus dem Bedarf.
 
 Je volle Stunde gilt der Wert, der den größten Teil der Stunde gilt; ``steps`` enthält jede Änderung genau.
 Gerechnet wird bei Abruf (``cached``, höchstens alle 5 min) und stündlich fürs Protokoll (``preview_log``).
@@ -76,7 +76,7 @@ DAY_SP_H = 48          # Tages-Soll nicht gesteuerter Räume, nachts abgefragt: 
 CACHE_S = 300
 NOTE = "Beobachten – HeatPilot schreibt nichts an den Kessel"
 NOTE_BOILER = ("Kessel über HeatPilot schreibt Vorlauf und Heizbetrieb – die Vorschau zeigt den Plan aus dem Bedarf, "
-               "Abnahme-Untergrenze und Takt-Boost rechnet HeatPilot live dazu")
+               "Abnahme-Untergrenze, Zuschlag und Takt-Boost rechnet HeatPilot live dazu")
 NO_MODELS = "Noch kein Raummodell plausibel (ohne Fußbodenheizung) – ohne Raummodelle kein Vorlauf-Soll"
 NO_T_OUT = "Keine Außentemperatur – ohne sie kein Vorlauf-Soll"
 

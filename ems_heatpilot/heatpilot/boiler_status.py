@@ -2,10 +2,10 @@
 
 ``BoilerStatus`` ist ein Mixin für ``boiler_control.BoilerControl`` (wie ``dhw_status`` für Weg W): Es liest den Zustand
 und baut daraus, was Heizen, Übersicht und Einstellungen zeigen (``as_dict`` für ``GET api/boiler`` und ``boiler`` in
-``api/heat``) – Statuszeile „Kessel: HeatPilot · Vorlauf 42 °C (Wz hält 21 °C) · Boost +4 K“ bzw. Trockenlauf,
-gesperrt (Regler am Bus), pausiert. ``ready`` ist der Block „Kessel über HeatPilot“ in „Bereit für die Steuerung?“:
-Entitäten gefunden und tauglich, schreibbar laut EMS-ESP, Regler am Bus (sperrt), Wächter, letzte Prüfung, Pause,
-fremder Schreiber. Hier stehen auch die Aktionen der Kessel-Zeilen im Protokoll (``control_log``).
+``api/heat``) – Statuszeile „Kessel: HeatPilot · Vorlauf 42 °C (Wz hält 21 °C) · Zuschlag +2 K · Boost +4 K“ bzw.
+Trockenlauf, gesperrt (Regler am Bus), pausiert. ``ready`` ist der Block „Kessel über HeatPilot“ in „Bereit für die
+Steuerung?“: Entitäten gefunden und tauglich, schreibbar laut EMS-ESP, Regler am Bus (sperrt), Wächter, letzte Prüfung,
+Pause, fremder Schreiber. Hier stehen auch die Aktionen der Kessel-Zeilen im Protokoll (``control_log``).
 
 Uhrzeiten gehen als ISO-Felder hinaus (der Browser setzt sie in seiner Zeitzone ein), Texte für die Oberfläche tragen
 keine Uhrzeit des Add-ons.
@@ -17,6 +17,7 @@ import time
 
 from . import boiler_entity as be
 from . import boiler_rule as br
+from . import boiler_stall as bs
 from . import entity_guard as eg
 from . import floor_limit, watchdog
 from .boiler_period import ACTIONS as PERIOD_ACTIONS
@@ -141,6 +142,8 @@ class BoilerStatus:
         parts = [f"{lead} · {dry}Vorlauf {t.flow} °C{' setzen' if dry else ''} ({_first(t.reason)})"]
         if t.load is not None and t.load > (t.base or 0):
             parts.append(f"Abnahme mind. {t.load} °C")
+        if getattr(t, "stall_k", 0):
+            parts.append(f"Zuschlag +{t.stall_k} K")
         if t.boost_k:
             parts.append(f"Boost +{t.boost_k} K")
         if t.limited and t.cap is not None:
@@ -154,7 +157,8 @@ class BoilerStatus:
         if t is None:
             return None
         return {"heating": t.heating, "flow": t.flow, "reason": t.reason, "base": t.base, "load": t.load,
-                "load_text": t.load_text, "boost_k": t.boost_k, "boost_wanted": t.boost_wanted,
+                "load_text": t.load_text, "stall_k": getattr(t, "stall_k", 0),
+                "stalled": list(getattr(t, "stalled", [])), "boost_k": t.boost_k, "boost_wanted": t.boost_wanted,
                 "waiting": list(t.waiting), "cycling": t.cycling, "cap": t.cap, "cap_why": t.cap_why,
                 "limited": t.limited, "charging": t.charging, "t_out": t.t_out, "idle": getattr(t, "idle", False)}
 
@@ -204,7 +208,10 @@ class BoilerStatus:
                       "check_s": CHECK_S, "check_max_s": CHECK_MAX_S,
                       "tolerance_k": CHECK_TOL_K, "max_fails": MAX_FAILS, "foreign_max": FOREIGN_MAX,
                       "foreign_window_min": FOREIGN_WINDOW_S // 60, "boost_step_k": br.BOOST_STEP_K,
-                      "boost_max_k": br.BOOST_MAX_K, "boost_step_min": br.BOOST_STEP_S // 60},
+                      "boost_max_k": br.BOOST_MAX_K, "boost_step_min": br.BOOST_STEP_S // 60,
+                      "burn_hold_min": br.BURN_HOLD_S // 60, "stall_gap_k": bs.GAP_K,  # 0.50
+                      "stall_valve_pct": bs.VALVE_PCT, "stall_rise_k": bs.RISE_K, "stall_window_min": bs.WINDOW_S // 60,
+                      "stall_step_k": bs.STEP_K, "stall_step_min": bs.STEP_S // 60},
             "log": self.log_rows(),
         }
 

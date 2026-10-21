@@ -5,7 +5,11 @@ Wassermenge und Abnahme aus Vor- und Rücklauf, Brennerleistung und Pumpe – br
 
 * ``record`` – je Takt eine Zeile in ``live_samples`` (Kesselwerte und je Raum Ist/Soll/Ventil/Feuchte); älter als
   ``KEEP_H`` fällt weg. Übersteht einen Neustart.
-* ``csv_text`` – die letzten Stunden als CSV (Komma, Dezimalpunkt): Zeit, Kesselwerte, je Raum vier Spalten.
+* ``note_boiler`` (seit 0.50) – gleich danach HeatPilots Entscheidung für den Kessel in dieselbe Zeile (``BOILER_COLS``:
+  Ziel, Bedarf, Abnahme, Zuschlag, Boost, Takten, wartende und nicht hochkommende Räume, Grund, Entscheidung) – damit
+  eine Auswertung nicht rekonstruieren muss, warum das Vorlauf-Soll so stand.
+* ``csv_text`` – die letzten Stunden als CSV (Komma, Dezimalpunkt): Zeit, Kesselwerte, HeatPilot, je Raum vier
+  Spalten.
 * ``routes`` – ``GET /api/live/export?hours=24`` (Download, Einstellungen → Diagnose → Dateien).
 
 Nur lesen und speichern, schreibt nichts an Kessel oder Thermostate.
@@ -28,6 +32,9 @@ DEFAULT_H = 24
 EXTRA = ("burn_starts", "heat_starts", "heat_min", "min_period", "syspress", "demand_pct")
 COLS = KEYS + EXTRA
 ROOM_COLS = ("ist", "soll", "ventil", "feuchte")
+# 0.50: HeatPilots Entscheidung für den Kessel (Weg B, auch im Trockenlauf) – leer bei „aus“
+BOILER_COLS = ("hp_heizbetrieb", "hp_ziel", "hp_bedarf", "hp_abnahme", "hp_zuschlag_k", "hp_boost_k", "hp_starts_h",
+               "hp_lauf_min", "hp_wartet", "hp_kommt_nicht_hoch", "hp_grund", "hp_vorlauf_entscheidung")
 
 
 def record(store, ts: int, sample: dict, rooms: list[tuple]) -> None:
@@ -35,6 +42,21 @@ def record(store, ts: int, sample: dict, rooms: list[tuple]) -> None:
     data = {"s": {k: sample.get(k) for k in COLS},
             "r": {r[0]: [r[1], r[2], r[3], r[4] if len(r) > 4 else None] for r in rooms}}
     store.add_live(ts, data, KEEP_H * 3600)
+
+
+def note_boiler(store, view: dict) -> None:
+    """HeatPilots Entscheidung (``BoilerControl.view`` nach ``plan``) in den 30-s-Punkt dieses Takts schreiben – der
+    jüngste Punkt, höchstens 45 s alt (``record`` läuft im selben Takt kurz davor)."""
+    t, ts = view.get("target"), view.get("ts")
+    rows = store.live_rows(ts - 45) if t is not None and ts is not None else []
+    if not rows:
+        return
+    cyc = t.cycling or {}
+    b = dict(zip(BOILER_COLS, (t.heating, t.flow, t.base, t.load, t.stall_k, t.boost_k, cyc.get("starts_h"),
+                               cyc.get("run_min"), "; ".join(t.waiting), "; ".join(t.stalled), t.reason,
+                               (view.get("decision") or {}).get("flow"))))
+    row_ts, data = rows[-1]
+    store.add_live(row_ts, {**data, "b": b}, KEEP_H * 3600)
 
 
 def _cell(value):
@@ -54,10 +76,12 @@ def csv_text(eng, hours: float = DEFAULT_H, now_ts: int | None = None) -> str:
     climates = [c for c in names if c in seen] + sorted(seen - set(names))
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\n")
-    w.writerow(["zeit", "ts", *COLS, *(f"{names.get(c, c)} {col}" for c in climates for col in ROOM_COLS)])
+    w.writerow(["zeit", "ts", *COLS, *BOILER_COLS,
+                *(f"{names.get(c, c)} {col}" for c in climates for col in ROOM_COLS)])
     for ts, d in rows:
-        s, r = d.get("s", {}), d.get("r", {})
+        s, r, b = d.get("s", {}), d.get("r", {}), d.get("b", {})
         w.writerow([local(ts).isoformat(timespec="seconds"), ts, *(_cell(s.get(k)) for k in COLS),
+                    *(_cell(b.get(k)) for k in BOILER_COLS),
                     *(_cell((r.get(c) or [None] * 4)[i]) for c in climates for i in range(len(ROOM_COLS)))])
     return out.getvalue()
 

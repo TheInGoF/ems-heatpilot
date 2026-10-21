@@ -212,7 +212,10 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   48 h: Zeit, Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Brennerstarts, Anlagendruck und je
   Raum Ist, Soll, Ventil und Feuchte. HeatPilot hebt sie 48 h in der eigenen Datenbank auf (übersteht einen Neustart)
   und löscht Älteres laufend. Damit lässt sich etwa die umgewälzte Wassermenge aus Brennerleistung und Spreizung
-  nachrechnen. Ohne Personen und GPS.
+  nachrechnen. Seit 0.50 steht in jeder Zeile auch, was HeatPilot für den Kessel entschieden hat (Spalten `hp_…`:
+  Heizbetrieb, Ziel, Bedarf, Abnahme, Zuschlag, Boost, Starts je Stunde, mittlere Laufzeit, wartende und nicht
+  hochkommende Räume, Grund und Entscheidung zum Vorlauf-Soll) – leer, solange „Kessel über HeatPilot“ aus ist. Ohne
+  Personen und GPS.
 
 Kommt keine Verbindung zu Home Assistant zustande (z. B. „Anmeldung bei Home
 Assistant fehlgeschlagen“), läuft die HeatPilot-Seite trotzdem: oben steht der
@@ -786,7 +789,7 @@ Schalter ([Weg W](#warmwasser-über-heatpilot-weg-w)): Die Vorschau rechnet Star
 Warmwassers nach derselben Regel und nennt sie bei „HeatPilot setzt“ „schreibt“ statt „würde schreiben“. Seit 0.41
 ebenso Vorlauf und Heizbetrieb mit dem Schalter [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b): Startwert wie im
 Schritt, „schreibt“ bei „HeatPilot setzt“ ohne Pause und Sperre (Regler am Bus) – die Überschrift heißt dann „Vorschau –
-Kessel über HeatPilot schreibt“; Abnahme-Untergrenze und Takt-Boost rechnet HeatPilot live dazu, die Vorschau zeigt den
+Kessel über HeatPilot schreibt“; Abnahme-Untergrenze, Zuschlag und Takt-Boost rechnet HeatPilot live dazu, die Vorschau zeigt den
 Plan aus dem Bedarf. Die
 Vorschau ist ein Vorschlag zum Vergleichen; wann und ob umgestellt wird, entscheidest
 du. Zu finden in der Übersicht, Abschnitt „Vorschau (Trockenlauf)“.
@@ -1221,7 +1224,9 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   **ein Schreiben je 60 s** – der Kessel braucht die Prüfung. **Anheben sofort** (wer Wärme braucht, bekommt sie
   sofort), **senken erst, wenn das Ziel 10 min lang niedriger bleibt** – dann auf den höchsten Wert dieser 10 min; in
   dieser Haltezeit erneuert HeatPilot das gehaltene Soll jede Minute (seit 0.48.6, sonst fällt ein Kessel ohne Regler
-  darin auf seinen Ruhewert, z. B. 7 °C). Der
+  darin auf seinen Ruhewert, z. B. 7 °C). **Seit 0.50 auch nicht mitten im Brennerlauf:** Läuft der Brenner seit
+  weniger als 10 min, wartet das Senken, bis er von selbst ausgeht oder 10 min gelaufen ist – vorher schaltete das
+  Senken ihn nach wenigen Minuten ab (ein Takt mehr). Der
   **Heizbetrieb** hat **5 min Haltezeit** nach jedem Schalten und geht **erst nach 15 min ohne Bedarf aus**. So pendelt
   nichts, wenn ein Raum um eine Schwelle schwankt (z. B. 20,6 ↔ 20,7 °C). Steht der Kessel dann schon auf seinem
   **Ruhewert** (Vorlauf-Soll bis 20 °C, z. B. 7 °C), heizt er nicht – HeatPilot schaltet den Heizbetrieb dann nicht
@@ -1248,8 +1253,10 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
      in % × Nennleistung, aus EMS-ESP bzw. Einstellungen → Kessel). HeatPilot rechnet, ab welchem Vorlauf die
      Räume mit offenem Ventil diese Leistung abnehmen (je Raum Heizwirkung × (Vorlauf − Raumtemperatur) aus dem
      Raummodell, in kW umgerechnet mit dem Hausmodell: Wärmebedarf des Hauses jetzt, verteilt auf die Räume – eine
-     Näherung, die Räume gleich schwer nimmt). Liegt das über dem Wert aus 1., gilt es. Reicht auch der höchste Vorlauf
-     nicht, gilt nichts: lieber lange Pausen – der Kessel taktet dann über seine eigene Sperre.
+     Näherung, die Räume gleich schwer nimmt). Seit 0.50 zählt jedes Ventil nach seiner Öffnung (ein Ventil bei 9 %
+     nimmt kaum etwas ab) – vorher ließ ein Ventil, das gerade über 5 % ging, den Wert von 35 auf 49 °C springen.
+     Liegt das über dem Wert aus 1., gilt es. Reicht auch der höchste Vorlauf nicht, gilt nichts: lieber lange Pausen –
+     der Kessel taktet dann über seine eigene Sperre.
      **Mindestleistung** (seit 0.42): Meldet der Kessel keine kleinste Brennerleistung (EMS-ESP `burnminpower`) und ist
      unter Einstellungen → Kessel nichts eingetragen, schlägt HeatPilot dort die Untergrenze des einstellbaren
      Bereichs der **maximalen Brennerleistung** vor (`burnmaxpower`, z. B. „Vorschlag 30 % – aus dem Bereich der
@@ -1257,14 +1264,23 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
      **„übernehmen“** trägt ihn ins Feld ein, gespeichert wird erst mit „Speichern“ – nie automatisch. Fehlt die
      Mindestleistung (oder die Nennleistung), ist die Regel aus: „Abnahme-Regel aus: Mindestleistung unbekannt – …“
      steht als Einschränkung in „Bereit für die Steuerung?“ und als Grund im Ziel.
-  3. **Takt-Boost:** Taktet der Kessel stark (mindestens 3 Brennerstarts in der letzten Stunde, Läufe im Mittel unter
-     10 min) und wartet ein Raum unter Soll mit offenem Ventil, hebt HeatPilot den Vorlauf in **2-K-Schritten bis
-     +10 K** über den Wert aus 1./2. (der erste Schritt sofort, dann je 10 min) – zurück in 2-K-Schritten, sobald der
-     Raum warm ist (höchstens 0,1 K unter Soll bzw. Ventil zu), sonst 10 min, nachdem kein Raum mehr wartet oder das
-     Takten aufgehört hat. Wer Wärme braucht, bekommt sie sofort – auch ein einzelner Raum, ohne auf andere zu warten.
-  4. **Fußboden-Grenze hart:** nie über der Grenze, die gerade gilt – auch beim Boost und beim Vorheizen. Liegt sie
+  3. **Zuschlag „Raum kommt nicht hoch“** (seit 0.50): Der Bedarf aus den Raummodellen kann zu tief liegen – etwa bei
+     zu kleinen Heizkörpern. Steht ein Raum **mindestens 0,3 K unter Soll mit dem Ventil ab 80 %** und ist er **in
+     30 min nicht um 0,2 K gestiegen**, hebt HeatPilot den Vorlauf um **2 K je 15 min** (der erste Schritt sofort) bis
+     zur Obergrenze. Steigt der Raum wieder, bleibt die Stufe; wartet kein Raum mehr so (am Soll, Ventil zu), geht es in
+     2-K-Schritten je 15 min zurück. Einmal erkannt, bleibt ein Raum dabei, solange er 0,2 K unter Soll und sein Ventil
+     über 50 % ist (Thermostate pendeln). Das gilt unabhängig vom Takten; andere Räume werden davon nicht überheizt,
+     ihre Thermostate machen zu. Räume mit Fußbodenheizung zählen nicht (träge, ihre Grenze gilt ohnehin). Im Ziel
+     steht z. B. „Zuschlag +4 K (Flur, Wohnzimmer kommen nicht hoch)“.
+  4. **Takt-Boost:** Taktet der Kessel stark (mindestens 3 Brennerstarts in der letzten Stunde, Läufe im Mittel unter
+     10 min) und ist ein Ventil offen, hebt HeatPilot den Vorlauf in **2-K-Schritten bis +10 K** über den Wert aus
+     1.–3. (der erste Schritt sofort, dann je 10 min) – zurück in 2-K-Schritten 10 min, nachdem das Takten aufgehört
+     hat. Seit 0.50 hängt der Boost nur am Takten: Ob ein Raum unter Soll wartet, spielt keine Rolle mehr (das macht
+     der Zuschlag) – vorher sprang er bei langen Pausen nicht an (zu wenig Starts) und endete beim Takten nicht, solange
+     ein Raum sein Soll nie erreichte.
+  5. **Fußboden-Grenze hart:** nie über der Grenze, die gerade gilt – auch bei Zuschlag, Boost und Vorheizen. Liegt sie
      unter 35 °C, ist der Heizbetrieb aus (darunter schreibt HeatPilot keinen Vorlauf).
-  5. **Obergrenze:** der höchste Vorlauf der Einstellungen; das Ergebnis in ganzen Grad.
+  6. **Obergrenze:** der höchste Vorlauf der Einstellungen; das Ergebnis in ganzen Grad.
 - **Warmwasser lädt** (oder Sonderladung bzw. Desinfektion): Das Vorlauf-Soll bleibt unberührt – der Kessel lädt den
   Speicher über das 3-Wege-Ventil; auch die Prüfung wartet so lange. Seit 0.49.3 zählt als Ladung auch, wenn der
   Kessel sein Lade-Soll schon zeigt, bevor „lädt“ gemeldet wird (mindestens 5 K über dem eigenen Vorlauf-Soll, während
@@ -1371,7 +1387,7 @@ HeatPilot anhalten und nach einer Stunde nachsehen, ob die Automation lief.
 Einstellungen → Entitäten → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die Wahl
 **„Wenn kein Raum Wärme braucht“** (Pumpe läuft weiter | Heizbetrieb ganz aus, seit 0.46.5), die
 Warnhinweise (der Warnkasten „Regler am Bus“ nur, solange laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt
-ist – sonst, seit 0.48, nur ein kurzer Hinweis auf Wächter und Rückfall-Vorlauf) und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Takt-Boost,
+ist – sonst, seit 0.48, nur ein kurzer Hinweis auf Wächter und Rückfall-Vorlauf) und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Zuschlag, Takt-Boost,
 Fußboden-Grenze), die letzte Entscheidung, zuletzt geschrieben und geprüft, fremde Änderungen, Regler am Bus, den
 Wächter mit dem Knopf „Anleitung Wächter“ und – bei einer Pause – „wieder einschalten“. Heizen und Übersicht zeigen eine
 Statuszeile („Kessel: HeatPilot · Vorlauf 42 °C (Wohnzimmer hält 21,0 °C)
@@ -1379,7 +1395,7 @@ Statuszeile („Kessel: HeatPilot · Vorlauf 42 °C (Wohnzimmer hält 21,0 °C)
 am Bus …“ bzw. „Kessel: pausiert – …“), das Protokoll (Einstellungen → Diagnose) auch die Kessel-Zeilen (Vorlauf-Soll, Heizbetrieb
 an/aus, würde schreiben, nicht übernommen, fremde Änderung, pausiert, wieder eingeschaltet, zurückgeschaltet). Die
 Vorschau sagt bei „HeatPilot setzt“ ohne Pause und Sperre „schreibt“ statt „würde schreiben“ – sie zeigt den Plan aus dem
-Bedarf; Abnahme-Untergrenze und Takt-Boost rechnet HeatPilot live dazu. Abfragen: `GET api/boiler` (Status und
+Bedarf; Abnahme-Untergrenze, Zuschlag und Takt-Boost rechnet HeatPilot live dazu. Abfragen: `GET api/boiler` (Status und
 Bereitschaft), `POST api/boiler/resume` („wieder einschalten“ – ohne Pause Antwort 409, es ändert sich nichts).
 
 ## Benachrichtigungen

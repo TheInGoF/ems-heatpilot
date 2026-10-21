@@ -259,16 +259,23 @@ def test_boost_when_cycling_and_room_waits_and_floor_cap_hard(tmp_path):
     assert t.heating is False and t.flow is None and "unter 35 °C" in t.reason and b["k"] == 0
 
 
-def test_boost_back_when_room_warm(tmp_path):
+def test_boost_follows_cycling_not_the_room(tmp_path):
+    """0.50: Der Boost hängt nur am Takten (mit offenem Ventil) – ein warmer Raum beendet ihn nicht mehr; 10 min,
+    nachdem er nicht mehr gewollt ist, zurück in 2-K-Schritten."""
     eng, ha, bc = house(tmp_path)
     cycle(eng, T0)
     t, b = compute(eng, T0)
     t, b = compute(eng, T0 + 600, b)
     assert t.boost_k == 4
-    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")  # warm: zurück in 2-K-Schritten
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="heating")  # warm, Ventil offen, Kessel taktet weiter
     t, b = compute(eng, T0 + 630, b)
-    assert t.boost_k == 2 and not t.boost_wanted
-    t, b = compute(eng, T0 + 1230, b)
+    assert t.boost_k == 4 and t.boost_wanted and t.waiting == []
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")  # Ventil zu: nicht mehr gewollt …
+    t, b = compute(eng, T0 + 660, b)
+    assert t.boost_k == 4 and not t.boost_wanted
+    t, b = compute(eng, T0 + 1260, b)  # … 10 min danach zurück in 2-K-Schritten
+    assert t.boost_k == 2
+    t, b = compute(eng, T0 + 1860, b)
     assert t.boost_k == 0
 
 

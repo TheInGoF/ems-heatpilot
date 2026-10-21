@@ -4877,7 +4877,9 @@ const BOILER_ACTION = { flow_set: "Vorlauf-Soll gesetzt", heating_on: "Heizbetri
   boiler_period_failed: "Antipendelzeit nicht übernommen", boiler_period_foreign: "Antipendelzeit fremd geändert",
   boiler_period_paused: "Antipendelzeit pausiert", boiler_period_back: "Antipendelzeit zurück" };
 const BOILER_RULES = { flow_min: 35, step_k: 1, flow_gap_s: 60, heat_hold_min: 5, check_s: 60, max_fails: 3,
-  foreign_max: 2, boost_step_k: 2, boost_max_k: 10, flow_down_min: 10, heat_off_min: 15, blind_min: 15 };  // wie boiler_rule – falls der Status (noch) fehlt
+  foreign_max: 2, boost_step_k: 2, boost_max_k: 10, flow_down_min: 10, heat_off_min: 15, blind_min: 15,
+  burn_hold_min: 10, stall_gap_k: 0.3, stall_valve_pct: 80, stall_rise_k: 0.2, stall_window_min: 30, stall_step_k: 2,
+  stall_step_min: 15 };  // wie boiler_rule – falls der Status (noch) fehlt
 const FLAME = `<span class="boiler-ico">${ICON.boost}</span>`;
 const WD_DOT = { erkannt: "dot-ok", aus: "dot-warn", fehlt: "dot-warn" };
 let BOILC = null;  // GET api/settings → boiler_control: Schalter, Vorschläge, Status, Bereitschaft
@@ -4972,12 +4974,15 @@ function boilerIntro(r) {
     `an und das Vorlauf-Soll geht auf ${r.pump_flow ?? 20} °C, der Brenner springt nicht an. Heizt ein Raum auf oder vor, gilt ` +
     `mindestens ${r.flow_min} °C. Das Vorlauf-Soll nur bei Änderung ` +
     `ab ${fmt(r.step_k)} K und höchstens einmal je ${r.flow_gap_s} s – anheben sofort, senken erst, wenn das Ziel ` +
-    `${r.flow_down_min} min niedriger bleibt; den Heizbetrieb mit ${r.heat_hold_min} min Haltezeit, aus erst nach ` +
+    `${r.flow_down_min} min niedriger bleibt und der Brenner nicht erst seit weniger als ${r.burn_hold_min ?? 10} min läuft; den Heizbetrieb mit ${r.heat_hold_min} min Haltezeit, aus erst nach ` +
     `${r.heat_off_min} min ohne Bedarf, an nur mit bekanntem Vorlauf-Soll bis zur Grenze. Steht das Vorlauf-Soll am Kessel ` +
     "über der Grenze, senkt HeatPilot es sofort (Schutz). Ist kein Ziel rechenbar (z. B. Außentemperatur fehlt), gilt nach " +
     `${r.blind_min} min der Rückfall-Vorlauf mit Heizbetrieb an; ` +
     `${r.check_s} s später prüft HeatPilot, ob der Kessel den Wert zeigt (${r.max_fails} Fehlschläge in Folge oder ${r.foreign_max} ` +
-    "fremde Änderungen in 1 h: Pause). Taktet der Kessel und wartet ein Raum, hebt HeatPilot den Vorlauf in " +
+    "fremde Änderungen in 1 h: Pause). Kommt ein Raum mit offenem Ventil nicht hoch (mindestens " +
+    `${fmt(r.stall_gap_k ?? 0.3)} K unter Soll, Ventil ab ${r.stall_valve_pct ?? 80} %, in ${r.stall_window_min ?? 30} min ` +
+    `nicht um ${fmt(r.stall_rise_k ?? 0.2)} K gestiegen), hebt HeatPilot den Vorlauf je ${r.stall_step_min ?? 15} min um ` +
+    `${r.stall_step_k ?? 2} K (Zuschlag), am Soll zurück. Taktet der Kessel und ist ein Ventil offen, hebt er ihn in ` +
     `${r.boost_step_k}-K-Schritten bis +${r.boost_max_k} K (Takt-Boost). EMS-ESP bleibt nur lesend, die Taktsperre des Kessels bleibt, wie sie ist – ` +
     "außer mit „Antipendelzeit anpassen“ (unten).";
 }
@@ -5063,8 +5068,8 @@ function boilerTarget(t, mode) {
   if (!t.heating) return `${lead}Heizbetrieb aus – ${esc(t.reason)}`;
   if (t.idle) return `${lead}kein Bedarf – Pumpe läuft, Vorlauf-Soll ${degC(t.flow)} (Heizbetrieb bleibt an)`;  // 0.46.5
   const c = t.cycling || {}, parts = [`Bedarf ${degC(t.base)}`, t.load !== null && t.load !== undefined && t.load > (t.base || 0) ? `Abnahme mind. ${degC(t.load)}` : "",
-    t.boost_k ? `Takt-Boost +${t.boost_k} K` + ((t.waiting || []).length ? ` (wartet: ${t.waiting.map(esc).join(", ")}` +
-      `${c.cycling ? `; Kessel taktet: ${fmt(c.starts_h, 0)} Starts/h, Läufe Ø ${fmt(c.run_min, 0)} min` : ""})` : "") : "",
+    t.stall_k ? `Zuschlag +${t.stall_k} K` + ((t.stalled || []).length ? ` (kommt nicht hoch: ${t.stalled.map(esc).join(", ")})` : "") : "",
+    t.boost_k ? `Takt-Boost +${t.boost_k} K` + (c.cycling ? ` (Kessel taktet: ${fmt(c.starts_h, 0)} Starts/h, Läufe Ø ${fmt(c.run_min, 0)} min)` : "") : "",
     t.limited && t.cap !== null && t.cap !== undefined ? `begrenzt auf ${fmt(t.cap, 0)} °C (Fußboden${t.cap_why ? ": " + esc(t.cap_why) : ""})` : "",
     t.charging ? "Warmwasser lädt – Vorlauf-Soll bleibt bis danach" : ""].filter(Boolean);
   return `${lead}Vorlauf <b>${degC(t.flow)}</b>, Heizbetrieb an – ${esc(t.reason)}<br><span class="muted">${parts.join(" · ")}</span>`;

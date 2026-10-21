@@ -170,7 +170,8 @@ def _flicker(tmp_path, temps, cycling=False, action="heating", minutes=60):
 
 def test_flicker_at_thresholds_writes_rarely(tmp_path):
     _, ha, _ = _flicker(tmp_path / "a", [20.7, 20.6])  # Aufheizzuschlag an der Schwelle Soll − 0,3 K
-    assert [c[3]["value"] for c in calls(ha)] == [41, 46]  # anheben sofort, dann bleibt es (kein 41, 46, 41 …)
+    # anheben sofort, dann bleibt es (kein 41, 46, 41 …); seit 0.50 nach 30 min ohne Anstieg der Zuschlag je 15 min
+    assert [c[3]["value"] for c in calls(ha)] == [41, 46, 48, 50]
     _, ha, bc = _flicker(tmp_path / "b", [20.8, 20.79], cycling=True)  # Boost-Schwelle Soll − 0,2 K
     values = [c[3]["value"] for c in calls(ha)]
     assert values == sorted(values) and len(values) <= 6  # nur aufwärts (Boost je 10 min), kein 41, 43, 41 …
@@ -183,7 +184,8 @@ def test_dry_run_log_stays_calm(tmp_path):
     for i in range(120):
         climate(eng, "climate.wz", [20.7, 20.6][i % 2], 21.0, hvac_action="heating")
         step(bc, T0 + i * 30)
-    assert calls(ha) == [] and actions(eng).count("boiler_dry") <= 2
+    assert calls(ha) == [] and actions(eng).count("boiler_dry") <= 4  # 41, 46 – seit 0.50 dazu zwei Zuschlag-Schritte
+    assert all("Zuschlag" in r["reason"] for r in eng.store.control_log(2))  # (kommt eine Stunde nicht hoch)
 
 
 def test_boost_back_waits_unless_the_room_is_warm():
