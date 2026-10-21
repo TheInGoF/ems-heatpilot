@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.50.3
+- **Vorheizen mit Aufheiz-Vorlauf nur täglich** (Nachtende, Heimkehr). Vor dem Ende eines Urlaubs bleibt es sanft: früh mit niedrigem Vorlauf ab 35 °C
+- Reicht die Zeit bis zum Ziel nicht (z. B. nur 1 h), rechnet HeatPilot wie bisher mit einem höheren Vorlauf – bis zum höchsten
+
 ## 0.50.2
 - **Nach einem Boost zurück in den HeatPilot-Plan:** Endet ein Tado-Boost bzw. -Timer, folgt Tado wieder seinem eigenen Zeitplan („auto“). HeatPilot hielt das für eine Handänderung und ließ den Raum bis zum nächsten Phasenwechsel stehen. Jetzt schreibt HeatPilot sofort sein Soll zurück
 - **Live → Je Raum einzeln:** unter jedem Raum der Plan wie im Reiter „Heizen“ (Phase, Soll, „Vorheizen ab 05:10“)
