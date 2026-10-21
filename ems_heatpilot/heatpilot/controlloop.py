@@ -107,7 +107,7 @@ class Desired(NamedTuple):
     until: datetime | None  # geplanter nächster Wechsel (None: keiner absehbar)
 
 
-def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_out: float, cap: float) -> float:
+def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_out: float, cap: float, soft=False) -> float:
     """Vorlauf fürs Vorheizen in Stunden: aus dem Raummodell, gedeckelt; unerreichbar → Deckel.
 
     Seit 0.46.5 sanft: so früh, dass der niedrigste Vorlauf ab ``PREHEAT_FLOW_FROM`` reicht, der innerhalb des
@@ -118,8 +118,8 @@ def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_o
     cap = max(cap, PREHEAT_MIN_H)
     if model is None or temp is None:
         return min(PREHEAT_DEFAULT_H, cap)
-    # 0.50.1: ab dem Aufheiz-Vorlauf (Halten + Zuschlag) – ab 35 °C begann es fast jede Nacht den ganzen Deckel vorher
-    start = max(PREHEAT_FLOW_FROM, math.ceil(model.required_flow(target, t_out) + PREHEAT_HEATUP_K))
+    # 0.50.1: täglich ab Halten + Zuschlag (ab 35 °C begann es jede Nacht den ganzen Deckel vorher), sanft nur vorm Urlaubsende
+    start = PREHEAT_FLOW_FROM if soft else max(PREHEAT_FLOW_FROM, math.ceil(model.required_flow(target, t_out) + PREHEAT_HEATUP_K))
     for flow in range(int(min(start, max_flow)), int(max_flow) + 1):
         hours = model.time_to_reach(temp, target, float(flow), t_out)
         if hours is not None and hours <= cap:
@@ -160,17 +160,17 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
     arrive = comfort - cfg.arrival_margin_k  # 0.49: zur Rückkehr reicht knapp unter Komfort (wie ``away.nobody_home``)
     t_out = 5.0 if t_out is None else t_out
 
-    def lead(target: float, at: datetime) -> timedelta:
+    def lead(target: float, at: datetime, soft: bool = False) -> timedelta:
         if preheating is not None and abs(at.timestamp() - preheating.timestamp()) < 1:
             return max(at - now, timedelta(0))  # läuft schon: bleibt bis zum Ziel
         t_at = t_out_at(at) if t_out_at is not None else None
         return timedelta(hours=preheat_hours(model, temp, target, cfg.max_flow_temp,
-                                             t_out if t_at is None else t_at, cfg.preheat_max_h))
+                                             t_out if t_at is None else t_at, cfg.preheat_max_h, soft))
 
     # 1. Urlaub
     if presence.vacation:
         eta = presence.arrival
-        if eta is not None and now >= eta - lead(arrive, eta):
+        if eta is not None and now >= eta - lead(arrive, eta, soft=True):
             return Desired(_clamp(comfort, comfort, cfg), "vorheizen", f"Rückkehr aus dem Urlaub {eta:%H:%M}", eta)
         return Desired(_clamp(cfg.away_temp, comfort, cfg), "urlaub", "Urlaub",
                        None if eta is None else eta - lead(arrive, eta))
