@@ -55,7 +55,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from . import boiler_rule, dhw_control, dhw_disinfect, floor_limit, guards
+from . import boiler_rule, dhw_control, dhw_disinfect, floor_limit, guards, heatup
 from .config import Config
 from .controlloop import Presence, desired
 from .engine_summary import FORECAST_MAX_GAP_MIN
@@ -68,7 +68,6 @@ FLOW_MIN = 35.0        # Vorlauf-Soll nie darunter; nur Halten darunter: Heizbet
 FLOW_STEP_K = 1.0      # Schreibschwelle Vorlauf (Planungspapier: ab 1 K)
 DHW_STEP_K = dhw_control.STEP_K        # Schreibschwelle Warmwasser – dieselbe wie Weg W (0.38)
 HOLD_MIN = dhw_control.HOLD_S // 60    # Haltezeit nach jedem Schreiben (5 min) – dieselbe wie Weg W
-HEATUP_K = 5.0         # Aufheizzuschlag ohne Vorheizplan
 HEATUP_GAP_K = 0.3     # Regelgenauigkeit des Thermostats: so weit unter dem Soll gilt ein Raum als am Soll …
 HOLD_BAND_K = 0.3      # … und so weit darüber auch; darüber kühlt er ab, darunter heizt er auf
 FORECAST_FADE_H = 6.0  # Versatz Außenfühler − Vorhersage (jetzt) klingt über so viele Stunden ab
@@ -287,7 +286,8 @@ class _Run:
             return hold, f"hält {_de(sp)} °C"
         if phase == "vorheizen" and until is not None:
             return max(hold, self._preheat_flow(r, sp, until, t)), f"heizt vor bis {until:%H:%M}"
-        return hold + HEATUP_K, f"heizt auf {_de(sp)} °C (+{HEATUP_K:.0f} K)"
+        flow = heatup.heatup_flow(m, r.temp, sp, t_out, self.cfg.max_flow_temp)  # 0.50.4: statt fest +5 K
+        return flow, f"heizt auf {_de(sp)} °C ({flow:.0f} °C, ca. {heatup.HEATUP_H:.0f} h)"
 
     def _other_need(self, r: _Room, sp: float, t_out: float) -> tuple[None, str] | None:
         """Braucht ein Raum Wärme, der nicht für den Vorlauf zählt? Den Vorlauf bestimmt er nicht, aber solange
