@@ -305,7 +305,12 @@ Unter den Grafen steht je gewählter Person:
   gesichert noch zurückgenommen.
 - **Entfernung im Verlauf** (12 h bis 7 Tage, grün hinterlegt: zu Hause).
 - **Gewohnheit (gelernt):** Wahrscheinlichkeit „zu Hause“ je Wochentag und Stunde.
-  Ohne GPS-Annäherung gilt das erste Feld ab 50 % als erwartete Ankunft. Die Farbe steht
+  Ohne GPS-Annäherung gilt das erste Feld über 50 % als erwartete Ankunft, das sich um mindestens
+  10 Prozentpunkte vom tiefsten Wert seit dem Verlassen abhebt (seit 0.48.6). Ist jemand weg zu einer Zeit, in der er
+  laut Gewohnheit genauso oft zu Hause ist wie danach (z. B. jeden zweiten Mittwoch den ganzen Tag: 51 %), sagt die
+  Gewohnheit nichts über eine Heimkehr – die Ankunft ist dann die nächste echte Heimkehr der Gewohnheit (etwa 17 Uhr),
+  nicht „gleich nach der Fahrzeit“. Ist eine so erwartete Heimkehr 60 min vorbei und die Person nicht da (und nicht per
+  GPS auf dem Heimweg), zählt der Rest dieses Blocks nicht mehr als Ankunft. Die Farbe steht
   in festen Stufen (10, 25, 40, 50, 65, 85 %), die Legende darunter nennt sie.
 - **Heimkehr-Kontrolle:** bei jeder Ankunft (nach mind. 30 min Abwesenheit) hält
   HeatPilot fest, was es 60, 30 und 15 min vorher erwartet hatte. „+5′“ heißt 5 min zu
@@ -1203,7 +1208,9 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
 
 - **Live:** alle 30 s neu gerechnet. Das Vorlauf-Soll nur bei **Änderung ab 1 K** (kein „55, 55, 55“) und höchstens
   **ein Schreiben je 60 s** – der Kessel braucht die Prüfung. **Anheben sofort** (wer Wärme braucht, bekommt sie
-  sofort), **senken erst, wenn das Ziel 10 min lang niedriger bleibt** – dann auf den höchsten Wert dieser 10 min. Der
+  sofort), **senken erst, wenn das Ziel 10 min lang niedriger bleibt** – dann auf den höchsten Wert dieser 10 min; in
+  dieser Haltezeit erneuert HeatPilot das gehaltene Soll jede Minute (seit 0.48.6, sonst fällt ein Kessel ohne Regler
+  darin auf seinen Ruhewert, z. B. 7 °C). Der
   **Heizbetrieb** hat **5 min Haltezeit** nach jedem Schalten und geht **erst nach 15 min ohne Bedarf aus**. So pendelt
   nichts, wenn ein Raum um eine Schwelle schwankt (z. B. 20,6 ↔ 20,7 °C).
 - **Schutz über der Grenze:** Zeigt der Kessel ein Vorlauf-Soll über der Grenze, die gerade gilt (Fußboden-Grenze, die

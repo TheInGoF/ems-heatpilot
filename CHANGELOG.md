@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.48.6
+- **Abwesenheit: Räume werden wieder abgesenkt.** Die Ankunft laut Gewohnheit zählte schon ab einem Feld knapp über 50 % – auch wenn die Person zu dieser Zeit nur jeden zweiten Tag zu Hause ist und gerade weg war. Dann „kam“ sie immer gleich nach der Fahrzeit, die Ankunft rollte mit der Uhr mit (07:30 → 07:45 → 08:15 …) und das Haus heizte durchgehend vor, obwohl niemand da war. Jetzt zählt ein Feld erst, wenn es sich um mindestens 10 Prozentpunkte vom tiefsten Wert seit dem Verlassen abhebt (die nächste echte Heimkehr der Gewohnheit, etwa 17 Uhr); ist eine so erwartete Heimkehr 60 min vorbei und niemand da (und keiner per GPS auf dem Heimweg), zählt der Rest dieses Blocks nicht mehr
+- **Kessel ohne Regler:** In den 10 min, bevor das Vorlauf-Soll sinkt, wurde es nicht erneuert – der Kessel fiel darin auf 7 °C, der Brenner ging aus und taktete. Jetzt erneuert HeatPilot auch dann jede Minute das gehaltene Soll; das 10-min-Fenster läuft dabei weiter
+- **Heimkehr-Kontrolle und Reisen nicht mehr doppelt:** Eine Neuberechnung spielte behaltene Personenmodelle noch einmal ab und hängte dieselben Heimkehren und langen Abwesenheiten erneut an. Jetzt je Zeitpunkt ein Eintrag; vorhandene Doppel verschwinden beim nächsten Start
+- **Tests:** neu `tests/test_presence486.py`
+
 ## 0.48.5
 - Live: Brenner-Hinweis „heizt · ca. 9,7 kW · Flamme 20 µA“ (Leistung zuerst), Vorlauf ohne Regler nur „Soll 44 °C“ statt „Regler – °C“
 

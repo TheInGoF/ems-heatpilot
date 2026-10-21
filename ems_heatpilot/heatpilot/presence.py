@@ -46,7 +46,13 @@ SHORT_TRIP_KM = 1.0      # … nicht weiter weg (Spaziergang): zählt nicht in d
 
 # Gewohnheit: Startwert 0,5 heißt „unbekannt“, nicht „zu Hause“
 HABIT_MIN_P = 0.5        # Feld zählt als „kommt heim“ nur strikt darüber …
-HABIT_MIN_VISITS = 2     # … und wenn es so oft gelernt wurde
+HABIT_MIN_VISITS = 2     # … und wenn es so oft gelernt wurde …
+# … und erst, wenn es sich so weit vom Tiefpunkt seit dem Verlassen abhebt (seit 0.48.6): Ist jemand weg zu einer Zeit,
+# in der er laut Gewohnheit genauso oft zu Hause ist wie danach (z. B. jeden zweiten Mittwoch den ganzen Tag, 0,51),
+# sagt die Gewohnheit nichts über eine Heimkehr – sonst rollte die Ankunft mit der Uhr mit (immer „gleich“ nach der
+# Fahrzeit) und das Haus heizte vor, obwohl niemand da ist
+HABIT_RISE = 0.1
+HABIT_LATE_MIN = 60      # so lange nach der erwarteten Heimkehr nicht da (und nicht auf dem Heimweg): Block verpasst
 VISITS_MAX = 99
 EARLIEST_MIN_KM = 1.0    # weiter weg: frühestens nach der Fahrzeit (Entfernung / gelerntes Tempo)
 
@@ -81,12 +87,31 @@ def slot_of(ts: datetime) -> int:
     return ts.weekday() * SLOTS_PER_DAY + (ts.hour * 60 + ts.minute) // SLOT_MIN
 
 
+def _rise(p: float, low: float | None) -> bool:
+    """Feld „kommt heim“: über 0,5 und (bei bekanntem Tiefpunkt) mindestens ``HABIT_RISE`` darüber – auf 6 Stellen
+    gerundet, damit 0,561 − 0,461 als 0,1 zählt."""
+    return p > HABIT_MIN_P and (low is None or round(p - low, 6) >= HABIT_RISE)
+
+
 def short_trip(a: dict) -> bool:
     """Kurzer Abstecher (Spaziergang, Mülltonne): Zeile bleibt, zählt aber nicht in der Güte."""
     if not a.get("left") or a.get("max_km") is None:
         return False  # ohne GPS oder Startzeit nicht entscheidbar: zählt mit
     mins = (datetime.fromisoformat(a["ts"]) - datetime.fromisoformat(a["left"])).total_seconds() / 60
     return mins < SHORT_TRIP_MIN and a["max_km"] < SHORT_TRIP_KM
+
+
+def _arrivals(rows) -> list[dict]:
+    """Heimkehr-Protokoll: je Zeitpunkt eine Zeile (die zuletzt geschriebene), zeitlich geordnet, die letzten
+    ``KEEP_ARRIVALS`` – eine Neuberechnung spielt behaltene Personenmodelle noch einmal ab (seit 0.48.6 nicht doppelt)."""
+    by_ts = {datetime.fromisoformat(a["ts"]): a for a in rows}
+    return [by_ts[t] for t in sorted(by_ts)][-KEEP_ARRIVALS:]
+
+
+def _trips(trips) -> list[tuple[datetime, float]]:
+    """Lange Abwesenheiten (Abfahrt, Stunden): je Abfahrt eine, zeitlich geordnet, die letzten ``KEEP_AWAY_TRIPS``."""
+    by_start = {start: (start, hours) for start, hours in trips}
+    return [by_start[t] for t in sorted(by_start)][-KEEP_AWAY_TRIPS:]
 
 
 @dataclass
@@ -183,7 +208,7 @@ class PersonLearner:
             if self._away_since is not None:
                 hours = (ts - self._away_since).total_seconds() / 3600
                 if hours >= LONG_AWAY_FAR_H:  # für die Erkennung regelmäßiger Abwesenheit merken
-                    self.away_trips = [*self.away_trips, (self._away_since, round(hours, 2))][-KEEP_AWAY_TRIPS:]
+                    self.away_trips = _trips([*self.away_trips, (self._away_since, round(hours, 2))])
             self.long_away, self._away_since, self._away_km, self._backup = False, None, None, None
             self.away_regular = False
             return
@@ -228,13 +253,12 @@ class PersonLearner:
                 t, eta, source = cands[-1]
                 checks.append({"before_min": before, "eta": eta.isoformat(), "source": source,
                                "error_min": round((eta - ts).total_seconds() / 60)})
-        self.arrivals.append({
+        self.arrivals = _arrivals([*self.arrivals, {
             "ts": ts.isoformat(),
             "left": self._left_at.isoformat() if self._left_at else None,
             "max_km": None if self._max_dist is None else round(self._max_dist, 1),
             "checks": checks,
-        })
-        del self.arrivals[:-KEEP_ARRIVALS]
+        }])
         self._preds.clear()
 
     def status(self, now: datetime) -> dict:
@@ -382,13 +406,44 @@ class PersonLearner:
     def habit_reliable(self, slot: int) -> bool:
         return self.visits[slot] >= HABIT_MIN_VISITS
 
-    def next_home_by_habit(self, now: datetime, horizon_h: int = 24,
-                           earliest: datetime | None = None) -> tuple[datetime, float] | None:
-        """Erstes verlässlich gelerntes Feld „zu Hause“ – unbesuchte Felder (0,5) liefern keine Ankunft."""
-        for at, slot in self._habit_slots(now, horizon_h, earliest):
+    def _habit_low(self, now: datetime, since: datetime | None) -> float | None:
+        """Tiefpunkt der Gewohnheit „zu Hause“ von ``since`` (Beginn der Abwesenheit; None: nur das laufende Feld) bis
+        jetzt – nach dem Raster vom Verlassen (``_backup``), denn die laufende Abwesenheit hat diese Felder seitdem schon
+        gesenkt. Eine erwartete Heimkehr (Anstieg um ``HABIT_RISE``), die ``HABIT_LATE_MIN`` vorbei ist, hebt den
+        Tiefpunkt auf ihr Feld: Die Person kam nicht, der Rest dieses Blocks ist keine Ankunft mehr. None: kein
+        verlässlich gelerntes Feld."""
+        week, visits = self._backup if self._backup is not None else (self.week, self.visits)
+        start = since if since is not None and since < now else now
+        # Wanduhr wie ``_habit_slots``: Minuten vom Beginn des ersten Felds bis jetzt; länger weg: die letzte Woche
+        span = (now.replace(tzinfo=None) - start.replace(tzinfo=None)).total_seconds() / 60 + start.minute % SLOT_MIN
+        first, steps, low = slot_of(start), int(span // SLOT_MIN), None
+        for k in range(max(steps - len(week) + 1, 0), steps + 1):
+            slot = (first + k) % len(week)
+            if visits[slot] < HABIT_MIN_VISITS:
+                continue
+            p = week[slot]
+            if low is None or p < low:
+                low = p
+            elif _rise(p, low) and span - k * SLOT_MIN >= HABIT_LATE_MIN:
+                low = p
+        return low
+
+    def next_home_by_habit(self, now: datetime, horizon_h: int = 24, earliest: datetime | None = None,
+                           since: datetime | None = None) -> tuple[datetime, float] | None:
+        """Erste erwartete Heimkehr: das erste verlässlich gelernte Feld „zu Hause“, das sich um ``HABIT_RISE`` vom
+        Tiefpunkt seit ``since`` (Beginn der Abwesenheit, sonst jetzt) abhebt (``_habit_low``) – unbesuchte Felder
+        (0,5) liefern keine Ankunft, ebenso wenig ein Zuhause, das nicht häufiger ist als die Zeit, in der die Person
+        schon weg ist. Felder vor ``earliest`` zählen für den Tiefpunkt, liefern aber keine Ankunft."""
+        low = self._habit_low(now, since)
+        for at, slot in self._habit_slots(now, horizon_h, None):
+            if not self.habit_reliable(slot):
+                continue
             p = self.week[slot]
-            if p > HABIT_MIN_P and self.habit_reliable(slot):
-                return at, p
+            if _rise(p, low):
+                if earliest is None or at >= earliest:
+                    return at, p
+            elif low is None or p < low:
+                low = p
         return None
 
     def next_away_by_habit(self, now: datetime, horizon_h: int = 24) -> datetime | None:
@@ -465,7 +520,7 @@ class PersonLearner:
             return info
         if self.long_away:
             return info  # lange weg: die Gewohnheit sagt über die Rückkehr nichts
-        habit = self.next_home_by_habit(now, earliest=self.earliest_arrival(now))
+        habit = self.next_home_by_habit(now, earliest=self.earliest_arrival(now), since=self._away_since)
         if habit:
             info["eta"], info["confidence"] = habit[0], round(habit[1], 2)
             info["source"] = "gewohnheit"
@@ -498,8 +553,8 @@ class PersonLearner:
             visits=list(d.get("visits") or [HABIT_MIN_VISITS] * n),
             approach_speed_kmh=d.get("approach_speed_kmh", 35.0),
             arrivals_learned=d.get("arrivals_learned", 0),
-            arrivals=list(d.get("arrivals", []))[-KEEP_ARRIVALS:],
-            away_trips=[(datetime.fromisoformat(t), h) for t, h in d.get("away_trips", [])][-KEEP_AWAY_TRIPS:],
+            arrivals=_arrivals(d.get("arrivals", [])),
+            away_trips=_trips((datetime.fromisoformat(t), h) for t, h in d.get("away_trips", [])),
         )
         away = d.get("away")
         if away and away.get("since"):

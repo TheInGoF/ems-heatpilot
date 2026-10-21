@@ -183,7 +183,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         heat_first = dec["heating"].write and dec["heating"].value is False  # aus vor dem Vorlauf
         for what in ("heating", "flow") if heat_first else ("flow", "heating"):
             d = dec[what]
-            if d.write and what == "flow":
+            if d.write and what == "flow" and not self._renews(mode, d.value, cur["flow"]):
                 self._ch("flow").pop("down", None)  # nach einem Schreiben beginnt das 10-min-Fenster neu
             if d.write and mode == "trocken":
                 self._ch(what)["dry"] = {"ts": ts, "value": d.value, "from": self._reference(mode, what, cur[what])[0]}
@@ -199,6 +199,12 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         self._settle(ts)
         self._save()
         self.period.plan(ts, target, now)  # 0.48: Antipendelzeit mit demselben Ziel und derselben Sperre
+
+    @staticmethod
+    def _renews(mode: str, value, current) -> bool:
+        """Erneuert dieses Vorlauf-Schreiben nur das Soll am Kessel (seit 0.48.6 auch in der Haltezeit vor dem Senken)?
+        Dann läuft das 10-min-Fenster weiter – sonst sänke das Soll nie."""
+        return mode == "heatpilot" and current is not None and abs(value - current) < br.STEP_K
 
     def _decide(self, mode: str, ts: int, target, cur: dict, blocked: str | None) -> dict[str, Decision]:
         """Vorlauf-Soll und Heizbetrieb nach den Regeln (``boiler_rule``) – mit dem Schutz über der Grenze."""
