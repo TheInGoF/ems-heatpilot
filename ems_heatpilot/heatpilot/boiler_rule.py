@@ -41,6 +41,7 @@ PUMP_FLOW = 20            # kein Bedarf, Pumpe läuft: so tief, dass der Brenner
 IDLE_TEXT = f"Pumpe läuft, Vorlauf-Soll {PUMP_FLOW} °C"  # statt „Heizbetrieb aus“ (Vorschau, Status)
 STEP_K = 1.0              # Vorlauf-Soll nur bei Änderung ab so viel
 FLOW_GAP_S = 60           # höchstens ein Vorlauf-Schreiben je so viele Sekunden
+KEEPALIVE_S = 60          # 0.48.1: Soll so oft erneuern – ein Kessel ohne Regler verwirft es sonst (zeigt dann 7 °C)
 HEAT_HOLD_S = 300         # Heizbetrieb an/aus: Haltezeit nach jedem Schalten
 HEAT_OFF_S = 900          # Heizbetrieb aus erst nach so langer Zeit ohne Bedarf (kein Pendeln an der Schwelle)
 FLOW_DOWN_S = 600         # Vorlauf-Soll senken erst, wenn das Ziel so lange niedriger bleibt (anheben sofort)
@@ -61,6 +62,7 @@ FIELDS: dict[str, tuple] = {
     "heating_switch_entity": ("entity", "switch"),
     "boiler_fallback_flow": ("int", FALLBACK_MIN, FALLBACK_MAX),
     "boiler_idle": ("choice", IDLE_MODES),
+    "boiler_keepalive": ("bool",),  # 0.48.1: Vorlauf-Soll jede Minute erneuern (Kessel ohne Regler verwirft es sonst)
     "regulator_removed": ("bool",),  # 0.46.9: „Regler ist abgebaut“ – vom Nutzer bestätigt, Prüfung entfällt
     "boiler_period": ("bool",),      # 0.48: „Antipendelzeit anpassen“ (boiler_period, period_control), Standard aus
     "period_set_entity": ("entity", "number"),  # 0.48: Entität der Antipendelzeit, leer = erkannt
@@ -140,7 +142,7 @@ def idle_flow(cfg, bounds: tuple | None = None) -> int | None:
 # ------------------------------------------------------------------ Entscheidungen
 def decide_flow(value: int | None, current: float | None, ts: float, last_ts: float | None = None,
                 charging: bool = False, paused: bool = False, checking: bool = False,
-                down_since: float | None = None, over: float | None = None) -> Decision:
+                down_since: float | None = None, over: float | None = None, keepalive: bool = False) -> Decision:
     """Vorlauf-Soll schreiben? Nur bei Änderung ab ``STEP_K`` zum Kessel-Soll ``current``, höchstens einmal je
     ``FLOW_GAP_S`` nach ``last_ts``, nicht während einer Warmwasser-Ladung, einer Pause oder einer offenen Prüfung.
     Senken erst, wenn das Ziel seit ``down_since`` mindestens ``FLOW_DOWN_S`` niedriger ist (None = gilt nicht, z. B.
@@ -156,7 +158,11 @@ def decide_flow(value: int | None, current: float | None, ts: float, last_ts: fl
         return Decision(True, value, f"Schutz: Kessel zeigt {_c(over)} °C, über der Grenze → {value} °C")
     if current is None:
         return Decision(False, value, "Vorlauf-Soll am Kessel unbekannt – nichts geschrieben")
+    if keepalive and value >= FLOW_MIN and current <= PUMP_FLOW + 0.5:  # 0.48.1: Kessel hat das Soll verworfen
+        return Decision(True, value, f"Kessel hat das Soll verworfen ({_c(current)} °C) → {value} °C")
     if abs(value - current) < STEP_K - 1e-9:
+        if keepalive and value >= FLOW_MIN and not checking and (last_ts is None or ts >= last_ts + KEEPALIVE_S):
+            return Decision(True, value, f"erneuert: {value} °C (der Kessel verwirft das Soll sonst)")  # 0.48.1
         return Decision(False, value, f"Vorlauf-Soll {_c(current)} °C passt")
     if checking:
         return Decision(False, value, "Prüfung des letzten Schreibens läuft")

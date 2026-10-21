@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.48.1
+**Vorlauf-Soll jede Minute erneuern**
+- Ein Kessel ohne Regler verwirft das geschriebene Vorlauf-Soll nach einigen Minuten und zeigt dann seinen Ruhewert (z. B. 7 °C) – ein Regler sendet es sonst ständig neu. HeatPilot erneuert das Soll jetzt jede Minute (solange geheizt wird, nicht bei „nur Pumpe“, Pause, Sperre oder Warmwasserladung) und schreibt nach einem Rückfall sofort neu. Ein Rückfall gilt weder als fremde Änderung noch als „nicht übernommen“. Neue Einstellung `boiler_keepalive` (Standard an)
+- **Tests:** neu `tests/test_keepalive481.py`
+
 ## 0.48.0
 **Antipendelzeit anpassen**
 - Neuer Schalter unter Einstellungen → Kessel: „Antipendelzeit anpassen“ (Standard aus). Bei „HeatPilot steuert“ führt HeatPilot die Taktsperre des Kessels mit: **10 min**, solange die Räume mit offenem Ventil die kleinste Brennerleistung beim Ziel-Vorlauf abnehmen und der Kessel nicht taktet; sonst der **Grundwert** (Wert am Kessel beim Einschalten, mindestens 25 min); ohne Wärmebedarf und während Warmwasser lädt bleibt sie, wie sie ist. Bisher blockierte die feste Sperre Starts auch in guten Momenten

@@ -250,8 +250,9 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             fch.pop("down", None)
         down = fch.get("down")
         value = target.flow if over is not None or not down else min(down["peak"], target.hi or down["peak"])
+        keep = self.mode == "heatpilot" and getattr(self.eng.cfg, "boiler_keepalive", True)  # 0.48.1
         return decide_flow(value, current, ts, last_ts, target.charging, paused, checking,
-                           (down or {}).get("since"), over)
+                           (down or {}).get("since"), over, keep)
 
     def _no_switch(self, target):
         """Lässt sich der Heizbetrieb nicht schalten (nur Rückmeldung des Kessels, 0.46.7), wird aus „Heizbetrieb aus“
@@ -452,6 +453,8 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             if seen is None and now < chk["until"]:
                 continue
             self._ch(what).pop("check")
+            if what == "flow" and seen is not None and seen <= br.PUMP_FLOW + 0.5 and chk["value"] >= br.FLOW_MIN:
+                continue  # 0.48.1: Kessel hat das Soll schon wieder verworfen – kein Fehlschlag, wird neu geschrieben
             ok = _same(what, seen, chk["value"])
             st["last_check"] = {"ts": int(now), "what": what, "value": chk["value"], "seen": seen, "ok": ok,
                                 "shown": self._shown(what, seen, r)}
