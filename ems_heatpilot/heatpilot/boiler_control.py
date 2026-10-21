@@ -68,6 +68,8 @@ KV = "boiler_control.state"
 WHATS = ("flow", "heating")
 ROLES = {"flow": "sel_flow_temp", "heating": "heating_activated"}
 _same = same  # wie bisher hier zu holen
+DHW_AFTER_S = 180  # 0.49.3: so lange nach „lädt“ gehört das Kessel-Soll noch der Warmwasser-Ladung
+DHW_JUMP_K = 5     # 0.49.3: so weit über dem eigenen Vorlauf-Soll gilt ein Kessel-Soll als Lade-Soll
 
 
 def _resting(flow) -> bool:
@@ -144,10 +146,31 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             return f"unklar: Home Assistant zeigt {shown(what, r['ha'])}, EMS-ESP {shown(what, r['ems'])}"
         return f"{br.LABELS[what]} unbekannt"
 
-    def charging(self) -> bool:
-        """Warmwasser lädt bzw. Sonderladung läuft – das Vorlauf-Soll am Kessel gehört gerade der Ladung."""
+    def charging(self, now: float | None = None) -> bool:
+        """Warmwasser lädt bzw. Sonderladung läuft – das Vorlauf-Soll am Kessel gehört gerade der Ladung. Seit 0.49.3
+        auch ``DHW_AFTER_S`` nach dem Ende der Meldung (der Kessel zeigt sein Lade-Soll noch kurz) und schon, wenn er sein
+        Lade-Soll zeigt, bevor „lädt“ gemeldet wird (``_dhw_setpoint``) – beides kein Fehlschlag, kein Schutz-Schreiben."""
+        now = time.time() if now is None else now
         sample = {"dhw_special": self.eng.dhw_special(), "dhw_disinfecting": flag(self.eng._boiler("dhw_disinfecting"))}
-        return flag(self.eng._boiler("dhw_active")) == 1 or special_running(self.eng, sample)
+        if flag(self.eng._boiler("dhw_active")) == 1 or special_running(self.eng, sample):
+            self.state["dhw_ts"] = int(now)
+            return True
+        last = self.state.get("dhw_ts")
+        return (last is not None and 0 <= now - last < DHW_AFTER_S) or self._dhw_setpoint()
+
+    def _dhw_setpoint(self) -> bool:
+        """Zeigt der Kessel sein eigenes Lade-Soll? Mindestens ``DHW_JUMP_K`` über dem zuletzt geschriebenen Vorlauf (noch
+        nichts geschrieben: über dem höchsten Vorlauf), während der Speicher unter seinem Soll ist; ohne Speicherwerte
+        erst über dem höchsten Vorlauf, den HeatPilot nie schreibt. Ohne Regler am Bus setzt nur der Kessel selbst das
+        Soll so hoch – für die Ladung."""
+        flow, top = self.current("flow"), self.eng.cfg.max_flow_temp + br.CHECK_TOL_K
+        last = (self._ch("flow").get("last") or {}).get("value")
+        if flow is None or flow < (top if last is None else last + DHW_JUMP_K):
+            return False  # das eigene Soll ist nie ein Lade-Soll (auch nicht über einem gesenkten höchsten Vorlauf)
+        tank, tank_set = num(self.eng._boiler("dhw_temp")), num(self.eng._boiler("dhw_seltemp"))
+        if tank is not None and tank_set is not None:
+            return tank < tank_set
+        return flow > top
 
     def bounds(self) -> tuple[float | None, float | None]:
         """(min, max) der Entität des Vorlauf-Solls laut Home Assistant – Grenzen fürs Ziel (``boiler_flow``)."""
@@ -178,6 +201,8 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         target, st["boost"] = boiler_flow.compute(self.eng, ts, st.get("boost"), self.bounds())
         target = self._blind(ts, target)
         target = self._no_switch(target)
+        if not target.charging and self.charging(now):  # 0.49.3: auch kurz davor und danach (siehe ``charging``)
+            target = dataclasses.replace(target, charging=True)
         cur = {w: self.current(w) for w in WHATS}
         blocked = self.blocker(now) if mode == "heatpilot" else None
         if mode == "heatpilot":
@@ -262,7 +287,9 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             fch.pop("down", None)
         down = fch.get("down")
         value = target.flow if over is not None or not down else min(down["peak"], target.hi or down["peak"])
-        keep = self.mode == "heatpilot" and getattr(self.eng.cfg, "boiler_keepalive", True)  # 0.48.1
+        last = (fch.get("last") or {}).get("value")  # 0.49.3: nur das eigene Soll erneuern, nie ein fremdes/Lade-Soll
+        own = current is None or last is None or current <= br.PUMP_FLOW + 0.5 or abs(current - last) <= br.CHECK_TOL_K
+        keep = self.mode == "heatpilot" and getattr(self.eng.cfg, "boiler_keepalive", True) and own  # 0.48.1
         return decide_flow(value, current, ts, last_ts, target.charging, paused, checking,
                            (down or {}).get("since"), over, keep)
 
@@ -457,7 +484,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             if self.mode != "heatpilot":
                 self._ch(what).pop("check")
                 continue
-            if what == "flow" and self.charging():
+            if what == "flow" and self.charging(now):
                 chk["until"] = max(chk["until"], now + CHECK_MAX_S)
                 continue
             r = self.readings(what)

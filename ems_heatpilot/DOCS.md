@@ -1266,7 +1266,11 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
      unter 35 °C, ist der Heizbetrieb aus (darunter schreibt HeatPilot keinen Vorlauf).
   5. **Obergrenze:** der höchste Vorlauf der Einstellungen; das Ergebnis in ganzen Grad.
 - **Warmwasser lädt** (oder Sonderladung bzw. Desinfektion): Das Vorlauf-Soll bleibt unberührt – der Kessel lädt den
-  Speicher über das 3-Wege-Ventil; auch die Prüfung wartet so lange.
+  Speicher über das 3-Wege-Ventil; auch die Prüfung wartet so lange. Seit 0.49.3 zählt als Ladung auch, wenn der
+  Kessel sein Lade-Soll schon zeigt, bevor „lädt“ gemeldet wird (mindestens 5 K über dem eigenen Vorlauf-Soll, während
+  der Speicher unter seinem Soll ist), und noch 3 min nach der Meldung – ein Kessel ohne Regler setzt sein Soll für die
+  Ladung selbst (z. B. 75 °C). Das ist dann weder ein Fehlschlag noch ein Anlass für das Schutz-Schreiben noch ein
+  fremder Schreiber. Erneuert wird nur das eigene Soll, nie ein Lade-Soll, das noch steht.
 - **Kein Ziel rechenbar** (z. B. Außentemperatur fehlt, noch kein Raummodell): Hinweis; hält das 15 min an, stellt
   HeatPilot den **Rückfall-Vorlauf** und **Heizbetrieb an** ein – nach denselben Regeln wie sonst – und meldet es
   („kein Vorlauf-Soll rechenbar – Kessel auf Rückfallwert“). Ist das Ziel wieder rechenbar, geht es normal weiter. So
