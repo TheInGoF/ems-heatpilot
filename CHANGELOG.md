@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.48.2
+- Antipendelzeit anpassen: Warten Räume auf Wärme (unter Soll, Ventil offen), wird die Sperre kurz (10 min) – auch wenn die Abnahme nicht reicht; lang bleibt sie nur, wenn der Kessel mit 6 und mehr Starts je Stunde taktet
+
 ## 0.48.1
 **Vorlauf-Soll jede Minute erneuern**
 - Ein Kessel ohne Regler verwirft das geschriebene Vorlauf-Soll nach einigen Minuten und zeigt dann seinen Ruhewert (z. B. 7 °C) – ein Regler sendet es sonst ständig neu. HeatPilot erneuert das Soll jetzt jede Minute (solange geheizt wird, nicht bei „nur Pumpe“, Pause, Sperre oder Warmwasserladung) und schreibt nach einem Rückfall sofort neu. Ein Rückfall gilt weder als fremde Änderung noch als „nicht übernommen“. Neue Einstellung `boiler_keepalive` (Standard an)
