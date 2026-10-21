@@ -111,7 +111,9 @@ def test_preheat_from_model_capped_and_unreachable_accepted():
     # statt ≈ 1,1 h vorher mit 75 °C
     assert 1.0 < slow.time_to_reach(20.0, 21.0, 75, 5.0) < 1.2
     assert slow.time_to_reach(20.0, 21.0, 44, 5.0) > 3.0 >= slow.time_to_reach(20.0, 21.0, 45, 5.0)
-    assert 2.9 < preheat_hours(slow, 20.0, 21.0, 75, 5.0, cfg.preheat_max_h) <= 3.0
+    assert 2.9 < preheat_hours(slow, 20.0, 21.0, 75, 5.0, cfg.preheat_max_h, soft=True) <= 3.0  # sanft: Urlaubsende
+    # seit 0.50.4 täglich mit dem Aufheiz-Vorlauf (Soll in ≈ 1 h – dieser träge Raum braucht dafür 75 °C)
+    assert preheat_hours(slow, 20.0, 21.0, 75, 5.0, cfg.preheat_max_h) == slow.time_to_reach(20.0, 21.0, 75, 5.0)
     d = desired(wz(), at(MON, 23), cfg, HOME, model=slow, temp=18.0, t_out=5.0)
     assert d.phase == "nacht" and d.until == at((2026, 10, 13), 1, 30)
     cfg.preheat_max_h = 2.0

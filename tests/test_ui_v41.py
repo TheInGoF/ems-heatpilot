@@ -216,12 +216,12 @@ def test_status_line_and_box_when_writing(tmp_path):
       renderBoilerLine("ov-boiler", B);  // 0.43: Zeile in Übersicht → Status
       out({{ line: $("ov-boiler").innerHTML, hidden: $("ov-boiler").hidden, box: boilerBoxHtml(B, R),
             sec: boilerSectionHtml(S, X), guideOpen: (boilerGuide(), $("boiler-guide").hidden) }});""")
-    assert b["status_text"] == "Kessel: HeatPilot · Vorlauf 48 °C (Wz heizt auf 21,0 °C (+5 K)) · Boost +2 K"
+    assert b["status_text"] == "Kessel: HeatPilot · Vorlauf 48 °C (Wz heizt auf 21,0 °C (ca. 1 h)) · Boost +2 K"
     assert plain(r["line"]) == b["status_text"] and r["hidden"] is False and "dot-ok" in r["line"]
     assert "boilerResume" not in r["line"] and "Einstellungen →" not in r["line"]  # läuft: kein Knopf, kein Link
     facts = [plain(li) for li in re.findall(r"<li>(.*?)</li>", r["box"].split('id="boiler-facts">')[1].split("</ul>")[0])]
     assert facts[0] == "Kessel jetzt: Vorlauf-Soll 46 °C · Heizbetrieb an"
-    assert facts[1] == ("Ziel: Vorlauf 48 °C , Heizbetrieb an – Wz heizt auf 21,0 °C (+5 K) · Boost +2 K Bedarf 46 °C · "
+    assert facts[1] == ("Ziel: Vorlauf 48 °C , Heizbetrieb an – Wz heizt auf 21,0 °C (ca. 1 h) · Boost +2 K Bedarf 46 °C · "
                         "Takt-Boost +2 K (Kessel taktet: 4 Starts/h, Läufe Ø 3 min)")  # 0.50: nur am Takten
     assert facts[2].startswith("Abnahme-Regel aus: Mindestleistung unbekannt")  # Grund aus dem Backend (Text seit 0.42)
     assert facts[3] == "Entscheidung: Vorlauf-Soll: 46 → 48 °C · Heizbetrieb an passt"
@@ -417,8 +417,8 @@ def test_heat_log_rows_for_the_boiler(tmp_path):
     assert got[0].endswith("Kessel Heizbetrieb aus aus kein Raum braucht Wärme")
     assert got[1].endswith("Kessel würde schreiben aus Trockenlauf: würde Heizbetrieb aus schreiben (x)")
     assert got[2].endswith("Kessel nicht übernommen 46 °C Vorlauf-Soll 46 °C nicht übernommen")
-    assert got[3].endswith("Kessel Vorlauf-Soll gesetzt 48 °C Wz heizt auf 21,0 °C (+5 K) · Boost +2 K (vorher 46 °C)")
-    assert got[4].endswith("Kessel Vorlauf-Soll gesetzt 46 °C Wz heizt auf 21,0 °C (+5 K) (vorher 30 °C)")
+    assert got[3].endswith("Kessel Vorlauf-Soll gesetzt 48 °C Wz heizt auf 21,0 °C (ca. 1 h) · Boost +2 K (vorher 46 °C)")
+    assert got[4].endswith("Kessel Vorlauf-Soll gesetzt 46 °C Wz heizt auf 21,0 °C (ca. 1 h) (vorher 30 °C)")
     assert t(b["log"][0]["time"])[-5:] in got[3]
     assert r["html"].count('<span class="boiler-ico">') == 5
 

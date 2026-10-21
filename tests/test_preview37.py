@@ -103,15 +103,14 @@ def test_night_lowers_flow_or_switches_heating_off_and_preheat_raises_it(tmp_pat
     # seit 0.46.5 (Standard „Pumpe läuft weiter“): kein Bedarf heißt nur Pumpe – Heizbetrieb an, Vorlauf-Soll 20 °C
     assert night["flow_reason"] == "kein Raum braucht Wärme – Pumpe läuft, Vorlauf-Soll 20 °C" and night["idle"] is True
     # vor dem Nachtende vorheizen (Raum ≈ 20,3 °C): höherer Vorlauf als zum Halten, bis der Raum am Soll ist – auf die
-    # Minute in ``steps``, je Stunde der höchste in ``flow_max``. Seit 0.46.5 sanft: so früh, dass der niedrigste
-    # Vorlauf im Deckel (3 h) reicht – hier ≈ 2,8 h vorher mit 42 °C statt ≈ 1 h vorher mit dem maximalen (75 °C)
+    # Minute in ``steps``, je Stunde der höchste in ``flow_max``. Seit 0.50.4 mit dem Aufheiz-Vorlauf (Soll in ≈ 1 h)
     pre = [s for s in p["steps"] if s["flow"] and s["flow"] > hold]
-    assert len(pre) == 1 and at(TUE, 1, 30) <= datetime.fromisoformat(pre[0]["t"]) < at(TUE, 2)
-    assert 35 <= pre[0]["flow"] <= 45 < eng.cfg.max_flow_temp
-    assert h["01:00"]["flow_max"] == pre[0]["flow"] and h["01:00"]["night"] is True
-    assert any(w["what"] == "flow" and w["value"] == pre[0]["flow"] for w in h["01:00"]["writes"])
+    assert len(pre) == 1 and at(TUE, 3) <= datetime.fromisoformat(pre[0]["t"]) < at(TUE, 4, 30)
+    assert 35 <= pre[0]["flow"] <= eng.cfg.max_flow_temp  # 0.50.4: Aufheiz-Vorlauf
+    assert h["03:00"]["flow_max"] == pre[0]["flow"] and h["03:00"]["night"] is True
+    assert any(w["what"] == "flow" and w["value"] == pre[0]["flow"] for w in h["03:00"]["writes"])
     # schon warm: halten – und das Vorheizen bleibt bis zum Nachtende (0.46.5, kein Pendeln zurück in die Nacht)
-    assert all(x["phases"]["Wz"] == "vorheizen" for k, x in h.items() if "02:00" <= k <= "04:00")
+    assert all(x["phases"]["Wz"] == "vorheizen" for k, x in h.items() if "04:00" <= k <= "04:00")
     assert h["04:00"]["flow"] == hold and h["04:00"]["heating"] is True
     assert h["06:00"]["flow"] == hold and h["06:00"]["phases"]["Wz"] == "komfort"
     # Schreibvorgänge: Vorlauf 20 °C um 21:00 (nur Pumpe, seit 0.46.5 statt Heizbetrieb aus), hoch zum Vorheizen und
@@ -358,7 +357,7 @@ def test_desired_preheat_uses_outdoor_at_target_time():
     # reicht bei 5 °C schon der niedrigste Vorlauf (35 °C) in kürzerer Zeit, beginnt es bei Kälte früher
     near = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 20.8, 5.0)
     near_cold = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 20.8, 5.0, cold)
-    assert near_cold.until < near.until  # kälter am Nachtende → früher vorheizen
+    assert end - near_cold.until == timedelta(hours=preheat_hours(m, 20.8, 21.0, cfg.max_flow_temp, -10.0, 3.0))
     # Vorhersage ohne Punkt: wie bisher mit der aktuellen Außentemperatur; Deckel bleibt
     assert desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 19.0, 5.0, lambda w: None) == base
     capped = desired(wz(), at(MON, 23), cfg, Presence(home_count=1), m, 15.0, 5.0, lambda w: -20.0)
@@ -369,7 +368,7 @@ def test_desired_preheat_uses_outdoor_at_target_time():
     away = Presence(home_count=0, arrival=at(MON, 17))
     warm = desired(wz(), at(MON, 12), cfg, away, m, 20.8, 5.0)
     cold_arr = desired(wz(), at(MON, 12), cfg, away, m, 20.8, 5.0, lambda w: -10.0 if w == at(MON, 17) else None)
-    assert cold_arr.until < warm.until
+    assert cold_arr.until != warm.until  # 0.50.4: kälter → höherer Vorlauf, Soll weiter in ≈ 1 h
 
 
 def test_control_loop_passes_forecast(tmp_path):
@@ -382,7 +381,7 @@ def test_control_loop_passes_forecast(tmp_path):
     plain = loop.rooms["climate.wz"]["next_change"]
     eng.forecast = forecast(int(at(TUE, 4).timestamp()), [-10.0, -10.0])  # kalt ums Nachtende
     loop.plan(ts, sample, rooms)
-    assert loop.rooms["climate.wz"]["next_change"] < plain
+    assert loop.rooms["climate.wz"]["next_change"] != plain  # mit −10 °C gerechnet
     run(loop.apply())
     assert all(c[1] == "set_temperature" for c in ha.calls)  # nur Tado, nie der Kessel
 

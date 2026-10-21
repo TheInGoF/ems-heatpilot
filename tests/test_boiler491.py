@@ -52,7 +52,7 @@ def test_boiler_that_ignores_heating_off_is_not_paused(tmp_path):
     _run(eng, ha, bc, 75, 90, cold, last)
     acts = actions(eng)
     assert "heating_off" not in acts and "boiler_check_failed" not in acts and not bc.paused()
-    assert eng.states[FLOW]["state"] == "46"  # wieder Bedarf: sofort neues Vorlauf-Soll, Heizbetrieb war ja an
+    assert eng.states[FLOW]["state"] == "50"  # wieder Bedarf: sofort neues Vorlauf-Soll, Heizbetrieb war ja an
 
 
 def test_off_check_tolerates_a_resting_boiler(tmp_path):

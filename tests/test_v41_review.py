@@ -171,7 +171,7 @@ def _flicker(tmp_path, temps, cycling=False, action="heating", minutes=60):
 def test_flicker_at_thresholds_writes_rarely(tmp_path):
     _, ha, _ = _flicker(tmp_path / "a", [20.7, 20.6])  # Aufheizzuschlag an der Schwelle Soll − 0,3 K
     # anheben sofort, dann bleibt es (kein 41, 46, 41 …); seit 0.50 nach 30 min ohne Anstieg der Zuschlag je 15 min
-    assert [c[3]["value"] for c in calls(ha)] == [41, 46, 48, 50]
+    assert [c[3]["value"] for c in calls(ha)] == [41, 45, 47, 49]
     _, ha, bc = _flicker(tmp_path / "b", [20.8, 20.79], cycling=True)  # Boost-Schwelle Soll − 0,2 K
     values = [c[3]["value"] for c in calls(ha)]
     assert values == sorted(values) and len(values) <= 6  # nur aufwärts (Boost je 10 min), kein 41, 43, 41 …
@@ -487,7 +487,7 @@ def test_blind_target_falls_back_after_15_minutes(tmp_path):
     eng.states["sensor.out"]["state"] = "5.0"  # wieder da: normal weiter
     step(bc, t + 1530)
     assert not bc.state.get("blind") and K_BLIND not in eng.notifier.open_keys()
-    assert bc.view["target"].flow == 46
+    assert bc.view["target"].flow == 68  # 0.50.4: Aufheizen aus dem Modell
 
 
 # ------------------------------------------------------------------ 10. Anleitung Wächter

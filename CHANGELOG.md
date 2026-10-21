@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.50.4
+- **Aufheizen und Vorheizen aus den Raummodellen statt fest +5 K:** Heizt ein Raum auf, nimmt HeatPilot den niedrigsten Vorlauf, mit dem er laut Raummodell in etwa 1 h sein Soll erreicht (mindestens 35 °C bzw. Halten, höchstens der höchste Vorlauf)
+- **Tägliches Vorheizen mit einem gemeinsamen Vorlauf:** für alle Räume, die zum Ziel (z. B. Nachtende) aufheizen müssen – so hoch, dass der langsamste es in etwa 1 h schafft und die Räume zusammen die Mindestleistung des Kessels abnehmen. Jeder Raum beginnt so spät, dass er bei diesem Vorlauf rechtzeitig fertig ist (ein Raum, der 0,2 h braucht, 12 min vorher). Vor dem Ende eines Urlaubs bleibt es sanft
+- Im Raum: „Vorheizen ab 05:48 (46 °C)“
+- **Tests:** angepasst; das Testhaus hat ein realistischeres Raummodell (Halten 41 °C, Aufheizen 46 °C in 1 h)
+
 ## 0.50.3
 - **Vorheizen mit Aufheiz-Vorlauf nur täglich** (Nachtende, Heimkehr). Vor dem Ende eines Urlaubs bleibt es sanft: früh mit niedrigem Vorlauf ab 35 °C
 - Reicht die Zeit bis zum Ziel nicht (z. B. nur 1 h), rechnet HeatPilot wie bisher mit einem höheren Vorlauf – bis zum höchsten

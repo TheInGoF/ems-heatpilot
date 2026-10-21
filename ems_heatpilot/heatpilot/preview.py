@@ -287,7 +287,7 @@ class _Run:
         if phase == "vorheizen" and until is not None:
             return max(hold, self._preheat_flow(r, sp, until, t)), f"heizt vor bis {until:%H:%M}"
         flow = heatup.heatup_flow(m, r.temp, sp, t_out, self.cfg.max_flow_temp)  # 0.50.4: statt fest +5 K
-        return flow, f"heizt auf {_de(sp)} °C ({flow:.0f} °C, ca. {heatup.HEATUP_H:.0f} h)"
+        return flow, f"heizt auf {_de(sp)} °C (ca. {heatup.HEATUP_H:.0f} h)"
 
     def _other_need(self, r: _Room, sp: float, t_out: float) -> tuple[None, str] | None:
         """Braucht ein Raum Wärme, der nicht für den Vorlauf zählt? Den Vorlauf bestimmt er nicht, aber solange

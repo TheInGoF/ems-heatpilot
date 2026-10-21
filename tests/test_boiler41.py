@@ -41,8 +41,8 @@ TARGETS = ["notify.handy"]
 T0 = ts_of(MON, 12)
 
 
-def house(tmp_path, mode="heatpilot", temp=20.5, target=21.0, a=0.008, regulator=False, rooms=None, **cfg_kw):
-    """Engine mit Raum „Wz“ (macht mit, braucht ≈ 41 °C zum Halten bei 5 °C außen, heizt auf: +5 K), Kessel-Entitäten
+def house(tmp_path, mode="heatpilot", temp=20.5, target=21.0, a=0.1, regulator=False, rooms=None, **cfg_kw):
+    """Engine mit Raum „Wz“ (macht mit, braucht ≈ 41 °C zum Halten bei 5 °C außen, heizt auf: 46 °C in 1 h), Kessel-Entitäten
     in HA, EMS-ESP antwortet (ohne Regler) und Weg B wie in ``main.App._build_control``."""
     cfg_kw.setdefault("boiler_keepalive", False)  # seit 0.48.1 eigene Tests (test_keepalive481)
     cfg = Config(control_mode="heatpilot", boiler_control=mode, emsesp_host="ems.local", notify_targets=TARGETS,
@@ -51,7 +51,7 @@ def house(tmp_path, mode="heatpilot", temp=20.5, target=21.0, a=0.008, regulator
                         boiler={"sel_flow_temp": FLOW, "heating_activated": HEAT})
     eng.states["sensor.out"] = {"state": "5.0", "attributes": {}}
     climate(eng, "climate.wz", temp, target, hvac_action="heating")
-    eng.rooms["climate.wz"] = slow_room(a=a, b=0.01)
+    eng.rooms["climate.wz"] = slow_room(a=a, b=a * 1.25)  # 0.50.4: Aufheizen aus dem Modell
     eng.house.rls.updates = 500
     eng.house.rls.theta = [0.2, 2.0, 0.3]  # 200 W/K – plausibel
     eng.states[FLOW] = {"state": "30", "attributes": {"unit_of_measurement": "°C", "min": 0, "max": 90,
@@ -212,7 +212,7 @@ def test_entity_detection_and_strict_check():
 def test_target_from_demand_floor_35_and_off(tmp_path):
     eng, ha, bc = house(tmp_path)
     t, _ = compute(eng, T0)
-    assert (t.heating, t.flow, t.base) == (True, 46, 46) and t.reason == "Wz heizt auf 21,0 °C (+5 K)"
+    assert (t.heating, t.flow, t.base) == (True, 46, 46) and t.reason == "Wz heizt auf 21,0 °C (ca. 1 h)"
     climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")
     assert compute(eng, T0)[0].flow == 41  # hält 21 °C
     eng.rooms["climate.wz"] = slow_room(a=0.02, b=0.01)  # braucht nur 29 °C: unter 35 → kein Bedarf
@@ -329,7 +329,7 @@ def test_writes_checks_after_60_s_and_accepts(tmp_path):
     assert step(bc, T0 + 60) == 0 and not bc.state["flow"].get("check")
     assert bc.state["last_check"]["ok"] and bc.state["fails"] == 0
     d = bc.as_dict(T0 + 60)
-    assert d["status_text"] == "Kessel: HeatPilot · Vorlauf 46 °C (Wz heizt auf 21,0 °C (+5 K))" and d["active"]
+    assert d["status_text"] == "Kessel: HeatPilot · Vorlauf 46 °C (Wz heizt auf 21,0 °C (ca. 1 h))" and d["active"]
     climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")  # warm: 41 °C – 5 K weniger
     assert step(bc, T0 + 90) == 0 and "10 min niedriger" in bc.view["decision"]["flow"]  # senken erst nach 10 min
     assert bc.as_dict(T0 + 90)["decision_until"]["flow"] is not None
