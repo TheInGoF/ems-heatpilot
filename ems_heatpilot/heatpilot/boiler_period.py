@@ -39,6 +39,7 @@ from .values import num
 
 SHORT_MIN = 10           # Abnahme reicht: kurz (höchstens 6 Starts je Stunde, auch wenn der Brenner gleich ausgeht)
 LONG_MIN = 25            # Grundwert mindestens so viel – der bisher feste Wert
+WAIT_MAX_STARTS_H = 6    # 0.48.2: warten Räume auf Wärme, kurz – außer bei so vielen Starts je Stunde
 LO_MIN, HI_MIN = 5, 60   # hart: HeatPilot schreibt nie außerhalb (Control weist ab)
 STEP_MIN = 5             # nur bei Änderung ab so viel Minuten
 HOLD_S = 900             # höchstens ein Schreiben je so viele Sekunden
@@ -77,6 +78,9 @@ def want(target, base: int) -> tuple[int | None, str]:
     if not target.heating or getattr(target, "idle", False):
         return None, "kein Wärmebedarf – Antipendelzeit bleibt"
     cyc = target.cycling or {}
+    waiting = list(getattr(target, "waiting", None) or [])
+    if waiting and (cyc.get("starts_h") or 0) < WAIT_MAX_STARTS_H:  # 0.48.2: Räume warten – Wärme geht vor
+        return SHORT_MIN, f"{', '.join(waiting)} warten auf Wärme – kurze Sperre"
     if cyc.get("cycling"):
         return base, f"Kessel taktet ({cyc.get('starts_h', 0)} Starts in 1 h) – lange Sperre"
     text = (target.load_text or "").replace("Abnahme: ", "")
