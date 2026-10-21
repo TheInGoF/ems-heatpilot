@@ -170,8 +170,11 @@ def decide_flow(value: int | None, current: float | None, ts: float, last_ts: fl
         return Decision(False, value, f"höchstens ein Vorlauf-Schreiben je {FLOW_GAP_S} s",
                         until=int(last_ts + FLOW_GAP_S))
     if value < current and down_since is not None and ts < down_since + FLOW_DOWN_S:
-        return Decision(False, value, f"senkt auf {value} °C erst, wenn das Ziel {FLOW_DOWN_S // 60} min niedriger "
-                                      "bleibt", until=int(down_since + FLOW_DOWN_S))
+        hold = f"senkt auf {value} °C erst, wenn das Ziel {FLOW_DOWN_S // 60} min niedriger bleibt"
+        if keepalive and current >= FLOW_MIN and (last_ts is None or ts >= last_ts + KEEPALIVE_S):  # 0.48.6: das
+            return Decision(True, round(current), f"erneuert: {_c(current)} °C, {hold}",  # gehaltene Soll
+                            until=int(down_since + FLOW_DOWN_S))  # erneuern, sonst fällt der Kessel darin auf 7 °C
+        return Decision(False, value, hold, until=int(down_since + FLOW_DOWN_S))
     return Decision(True, value, f"{_c(current)} → {value} °C")
 
 
