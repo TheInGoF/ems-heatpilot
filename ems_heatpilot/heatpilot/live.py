@@ -104,6 +104,8 @@ def now(eng) -> dict:
         "t_in": _mean(r[1] for r in rooms),
         "humidity": _mean(r[4] for r in rooms),
         "power_kw": None if power is None or not nom else round(power / 100 * nom, 1),
+        "nom_kw": nom,  # 0.50.6: abgenommene Wärme aus der Spreizung (Live-Kachel Rücklauf)
+        "dhw_hyst": _dhw_hyst(eng),  # 0.50.6: Einschaltschwelle Warmwasser = Soll − Hysterese
         "syspress": num(eng._boiler("sys_press")),
         "service_code": eng._boiler("service_code"),
         "pump_delay": num(eng._boiler("pump_delay")),
@@ -118,3 +120,10 @@ def now(eng) -> dict:
         "rooms": [{"climate": c, "name": names.get(c, c), "temp": t, "target": tg, "valve": v, "humidity": h}
                   for c, t, tg, v, h in rooms],
     }
+
+
+def _dhw_hyst(eng) -> float:
+    """Einschalthysterese des Speichers (K) – vom Kessel, sonst angenommen (``dhw_target.hysteresis``)."""
+    from .dhw_target import hysteresis
+
+    return hysteresis(eng._boiler("dhw_hyst_on"))[0]
