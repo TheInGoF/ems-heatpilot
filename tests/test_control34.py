@@ -251,7 +251,7 @@ def test_manual_change_respected_until_next_phase(tmp_path):
     info = step(eng, loop, ts_of(MON, 22))["climate.wz"]  # Phasenwechsel: HeatPilot schreibt wieder
     assert ha.calls[-1][3] == {"temperature": 18.0} and not info["manual"]
     climate(eng, "climate.wz", 20.0, 18.0)
-    climate(eng, "climate.wz", 20.0, 21.0)  # von Hand genau auf den kommenden Wunsch gedreht …
+    climate(eng, "climate.wz", 20.0, 20.5)  # von Hand genau auf den kommenden Wunsch gedreht (0.50.5: 0,5 K darunter) …
     step(eng, loop, ts_of((2026, 10, 13), 3, 0))
     n = len(ha.calls)
     info = step(eng, loop, ts_of((2026, 10, 13), 3, 45))["climate.wz"]

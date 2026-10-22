@@ -166,10 +166,10 @@ def test_no_demand_keeps_heating_on_with_pump_flow(tmp_path):
     assert t.reason == "kein Raum braucht Wärme – Pumpe läuft, Vorlauf-Soll 20 °C"
     assert compute(eng, T0, None, (25, 90))[0].flow == 25  # Mindestwert der Entität darüber
     assert compute(eng, T0, None, (40, 90))[0].heating is False  # das wäre schon Heizen: aus wie bisher
-    # Kessel zeigt 30 °C: senken erst nach 10 min, der Heizbetrieb bleibt an
+    # Kessel zeigt 30 °C: seit 0.50.5 sofort senken (kein Ventil offen), der Heizbetrieb bleibt an
     eng.states[FLOW]["state"] = "30"
     bc.plan(T0)
-    assert "10 min niedriger" in bc.view["decision"]["flow"] and not bc.view["write"]["heating"]
+    assert bc.view["decision"]["flow"] == "30 → 20 °C" and not bc.view["write"]["heating"]
     assert bc.as_dict(T0)["status_text"] == "Kessel: HeatPilot · kein Bedarf – Pumpe läuft, Vorlauf-Soll 20 °C"
     # Control lässt genau den Pumpenwert unter 35 °C zu – sonst nichts darunter
     run(bc.control.set_flow(20, "Test"))

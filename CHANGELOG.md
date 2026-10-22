@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.50.5
+- **Sofort senken, wenn kein Ventil mehr offen ist:** Nimmt kein Raum mehr Wärme ab, senkt HeatPilot den Vorlauf gleich – ohne die 10 min Haltezeit und ohne auf den laufenden Brenner zu warten. Heute früh blieb er nach dem Vorheizen noch 10 min auf 53–58 °C, obwohl alle Ventile zu waren
+- **Vorheizen knapp unter dem Ziel:** Beim täglichen Vorheizen bekommt das Thermostat zuerst das Ziel minus 0,5 K – die Restwärme des heißen Heizkörpers bringt den Rest; mit dem Ende des Vorheizens das echte Soll. Heute früh schossen die Räume um 0,7–1,5 K über
+- **Vorheizen lernt je Raum:** Nach jedem Vorheizen vergleicht HeatPilot geplante und tatsächliche Dauer (Geschwindigkeit 0,5–3 × Raummodell → der Beginn rückt passend) und die Spitze mit dem Ziel (Abstand 0–1,5 K). Vor dem Ende eines Urlaubs wird nicht gelernt
+- **Tests:** neu `tests/test_heatup505.py`
+
 ## 0.50.4
 - **Aufheizen und Vorheizen aus den Raummodellen statt fest +5 K:** Heizt ein Raum auf, nimmt HeatPilot den niedrigsten Vorlauf, mit dem er laut Raummodell in etwa 1 h sein Soll erreicht (mindestens 35 °C bzw. Halten, höchstens der höchste Vorlauf)
 - **Tägliches Vorheizen mit einem gemeinsamen Vorlauf:** für alle Räume, die zum Ziel (z. B. Nachtende) aufheizen müssen – so hoch, dass der langsamste es in etwa 1 h schafft und die Räume zusammen die Mindestleistung des Kessels abnehmen. Jeder Raum beginnt so spät, dass er bei diesem Vorlauf rechtzeitig fertig ist (ein Raum, der 0,2 h braucht, 12 min vorher). Vor dem Ende eines Urlaubs bleibt es sanft
