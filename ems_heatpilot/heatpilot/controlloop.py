@@ -55,6 +55,7 @@ from .dhw_control import LOG_NAME as DHW_LOG_NAME
 from .disinfect_status import ACTIONS as DISINFECT_ACTIONS
 from .disinfect_status import LOG_NAME as DISINFECT_LOG_NAME
 from .away import nearest_km, nobody_home
+from . import heatup
 from .heatup import PREHEAT_DEFAULT_H, PREHEAT_FLOW_FROM, PREHEAT_MIN_H, preheat_hours, shared_flow  # noqa: F401
 from .presence import arrival_unknown, next_arrival
 
@@ -123,7 +124,7 @@ def _clamp(value: float, comfort: float, cfg) -> float:
 
 def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: float | None = None,
             t_out: float | None = None, t_out_at: Callable[[datetime], float | None] | None = None,
-            preheating: datetime | None = None, preheat_flow: float | None = None) -> Desired:
+            preheating: datetime | None = None, preheat_flow: float | None = None, tune=None) -> Desired:
     """Wunschzustand eines Raums (``discovery.Room``) – reine Funktion, siehe Modulbeschreibung.
 
     ``t_out_at(Zeitpunkt)`` (seit 0.37, z. B. ``Engine.outdoor_forecast_at``): Außentemperatur zum Ziel des
@@ -133,15 +134,15 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
     """
     comfort, night = float(room.comfort), cfg.night_temp
     arrive = comfort - cfg.arrival_margin_k  # 0.49: zur Rückkehr reicht knapp unter Komfort (wie ``away.nobody_home``)
-    t_out = 5.0 if t_out is None else t_out
+    t_out, (margin, speed) = 5.0 if t_out is None else t_out, tune or (0.0, 1.0)  # 0.50.5: gelernt je Raum
 
     def lead(target: float, at: datetime, soft: bool = False) -> timedelta:
         if preheating is not None and abs(at.timestamp() - preheating.timestamp()) < 1:
             return max(at - now, timedelta(0))  # läuft schon: bleibt bis zum Ziel
         t_at = t_out_at(at) if t_out_at is not None else None
-        return timedelta(hours=preheat_hours(model, temp, target, cfg.max_flow_temp,
-                                             t_out if t_at is None else t_at, cfg.preheat_max_h, soft,
-                                             None if soft else preheat_flow))
+        h = preheat_hours(model, temp, target if soft else target - margin, cfg.max_flow_temp,
+                          t_out if t_at is None else t_at, cfg.preheat_max_h, soft, None if soft else preheat_flow)
+        return timedelta(hours=h if soft else max(h / speed, PREHEAT_MIN_H))
 
     # 1. Urlaub
     if presence.vacation:
@@ -149,7 +150,7 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
         if eta is not None and now >= eta - lead(arrive, eta, soft=True):
             return Desired(_clamp(comfort, comfort, cfg), "vorheizen", f"Rückkehr aus dem Urlaub {eta:%H:%M}", eta)
         return Desired(_clamp(cfg.away_temp, comfort, cfg), "urlaub", "Urlaub",
-                       None if eta is None else eta - lead(arrive, eta))
+                       None if eta is None else eta - lead(arrive, eta, soft=True))
 
     # Tagesziel (ohne Nacht): 3. niemand zu Hause, 4. sonst Komfort
     if presence.home_count == 0:
@@ -292,15 +293,20 @@ class ControlLoop:
             model = eng.rooms.get(room.climate)
             ok = model is not None and guards.check_room(model)["ok"]
             held = self.state.get(room.climate, {}).get("preheat")  # 0.46.5: begonnenes Vorheizen bleibt
+            st, vac = self.state.setdefault(room.climate, {}), bool(presence.vacation)
+            tn = heatup.tune(st)
             d = desired(room, now, cfg, presence, model if ok else None, temp, t_out, t_out_at,
-                        local(held) if held else None, shared)
+                        local(held) if held else None, shared, tn)
+            if d.phase == "vorheizen" and not vac:  # 0.50.5: erst knapp unter dem Ziel – die Restwärme bringt den Rest
+                d = d._replace(setpoint=_clamp(d.setpoint - tn[0], float(room.comfort), cfg))
+            heatup.track(st, d.phase, d.setpoint, d.until, temp, ts, vac)
             desireds[room.climate] = d
             self.rooms[room.climate] = {
                 "managed": bool(room.managed), "phase": d.phase if managing else None,
                 "desired": d.setpoint if managing else None, "reason": d.reason if managing else None,
                 "next_change": _iso(d.until) if managing else None,
                 "next_phase": (desired(room, d.until + timedelta(minutes=1), cfg, presence, model if ok else None,
-                                       temp, t_out, t_out_at, None, shared).phase if managing and d.until else None),
+                                       temp, t_out, t_out_at, None, shared, tn).phase if managing and d.until else None),
                 "preheat_flow": shared if managing else None,  # 0.50.4: gemeinsamer Vorlauf fürs Vorheizen
                 "reach_c": reach_c(model if ok else None, d.setpoint, cfg.max_flow_temp,
                                    5.0 if t_out is None else t_out),

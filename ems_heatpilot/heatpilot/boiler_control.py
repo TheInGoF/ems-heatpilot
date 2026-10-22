@@ -288,13 +288,13 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             fch["down"] = down
         else:
             fch.pop("down", None)
-        down = fch.get("down")
-        value = target.flow if over is not None or not down else min(down["peak"], target.hi or down["peak"])
+        down = None if not getattr(target, "opened", ["?"]) else fch.get("down")  # 0.50.5: kein Ventil offen –
+        value = target.flow if over is not None or not down else min(down["peak"], target.hi or down["peak"])  # sofort
         last = (fch.get("last") or {}).get("value")  # 0.49.3: nur das eigene Soll erneuern, nie ein fremdes/Lade-Soll
         own = current is None or last is None or current <= br.PUMP_FLOW + 0.5 or abs(current - last) <= br.CHECK_TOL_K
         keep = self.mode == "heatpilot" and getattr(self.eng.cfg, "boiler_keepalive", True) and own  # 0.48.1
         return decide_flow(value, current, ts, last_ts, target.charging, paused, checking,
-                           (down or {}).get("since"), over, keep, self._burning_until())
+                           (down or {}).get("since"), over, keep, self._burning_until() if down else None)
 
     def _burning_until(self) -> int | None:
         """0.50: Läuft der Brenner seit weniger als ``BURN_HOLD_S``, bis wann (Start laut Brennerereignissen) – sonst

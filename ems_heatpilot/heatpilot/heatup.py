@@ -59,3 +59,45 @@ def preheat_hours(model, temp: float | None, target: float, max_flow: float, t_o
         if hours is not None and hours <= cap:
             return max(hours, PREHEAT_MIN_H)
     return cap  # Ziel auch mit maximalem Vorlauf nicht im Deckel erreichbar: bis zum Deckel vorheizen
+
+
+# ------------------------------------------------------------------ 0.50.5: aus jedem Vorheizen lernen
+MARGIN_DEFAULT = 0.5       # Vorheizen: Thermostat zuerst so viel unter dem Ziel – die Restwärme bringt den Rest
+MARGIN_MAX = 1.5
+SPEED_MIN, SPEED_MAX = 0.5, 3.0  # gelernte Aufheizgeschwindigkeit gegenüber dem Raummodell
+LEARN = 0.3                # so viel zählt jedes neue Vorheizen
+COAST_S = 1800             # nach dem Ende so lange noch die Spitze (Restwärme) mitnehmen
+
+
+def tune(st: dict) -> tuple[float, float]:
+    """(Abstand unter dem Ziel, Geschwindigkeit) eines Raums – gelernt, sonst die Startwerte."""
+    t = st.get("tune") or {}
+    return float(t.get("margin", MARGIN_DEFAULT)), float(t.get("speed", 1.0))
+
+
+def track(st: dict, phase: str, setpoint: float, until, temp: float | None, ts: int, vacation: bool) -> None:
+    """Tägliches Vorheizen beobachten (Beginn, geplantes Ende, wann das abgesenkte Soll erreicht war, höchste
+    Temperatur bis ``COAST_S`` danach) und danach lernen: Geschwindigkeit = geplante / tatsächliche Dauer (nicht
+    erreicht: langsamer), Abstand so, dass die Spitze aufs Ziel fällt (Überschwingen → mehr Abstand)."""
+    pre = st.get("pre")
+    if phase == "vorheizen" and not vacation and until is not None and temp is not None:
+        if pre is None:
+            m = tune(st)[0]
+            pre = st["pre"] = {"start": ts, "end": int(until.timestamp()), "sp": setpoint, "m": m, "peak": temp,
+                               "reached": None}
+        pre["peak"] = max(pre["peak"], temp)
+        if pre["reached"] is None and temp >= pre["sp"] - 0.05:
+            pre["reached"] = ts
+        return
+    if pre is None:
+        return
+    if temp is not None and 0 <= ts - pre["end"] < COAST_S and phase != "nacht":
+        pre["peak"] = max(pre["peak"], temp)
+        return
+    st.pop("pre")
+    m, s = tune(st)
+    planned = max(pre["end"] - pre["start"], 60)
+    seen = s * planned / max(pre["reached"] - pre["start"], 60) if pre["reached"] else s * 0.8
+    over = pre["peak"] - (pre["sp"] + pre["m"]) if pre["reached"] else 0.0
+    st["tune"] = {"speed": round(min(max((1 - LEARN) * s + LEARN * seen, SPEED_MIN), SPEED_MAX), 3),
+                  "margin": round(min(max(m + LEARN * over, 0.0), MARGIN_MAX), 2)}
