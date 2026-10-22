@@ -1173,6 +1173,7 @@ function smoothPath(ts, values, sx, sy, maxGap = 1200) {
   }).join("");
 }
 function timeChart(container, ts, lines, opts = {}) {
+  if (opts.legend) lines = lines.map((l) => ({ ...l, hidden: l.hidden || LIVE_HIDE.has(opts.legend + "|" + l.name) }));  // 0.50.6
   const ys = lines.filter((l) => !l.hidden).flatMap((l) => l.values.filter((v) => v !== null && v !== undefined));
   if (ts.length < 2 || !ys.length) return empty(container, "Noch keine Werte in diesem Zeitraum.");
   const f = frame(container, ts, ys, { xTicks: timeTicks, label: opts.label, height: opts.height, yMin: opts.yMin, yMax: opts.yMax, right: opts.right });
@@ -1234,8 +1235,8 @@ function timeChart(container, ts, lines, opts = {}) {
   });
 }
 
-function legend(id, items) {
-  $(id).innerHTML = items.map(([name, color, dash]) => `<span><i style="background:${dash ? "transparent" : color};${dash ? `border-top:2px dashed ${color};height:0;vertical-align:3px` : ""}"></i>${name}</span>`).join("");
+function legend(id, items, toggle = false) {
+  $(id).innerHTML = items.map(([name, color, dash]) => `<span${toggle ? ` role="button" tabindex="0" style="cursor:pointer;${LIVE_HIDE.has(id + "|" + name) ? "opacity:.35" : ""}" onclick="toggleLine('${id}|${esc(name)}')"` : ""}><i style="background:${dash ? "transparent" : color};${dash ? `border-top:2px dashed ${color};height:0;vertical-align:3px` : ""}"></i>${name}</span>`).join("");
 }
 
 let SENSORS = [];
@@ -1298,7 +1299,7 @@ async function loadLive() {
   const n = j.now, s = j.series, ts = s.ts;
   const onOff = (v) => v === null || v === undefined ? "–" : v ? "an" : "aus";
   $("live-status").innerHTML = `Stand ${new Date(n.ts * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} · ${esc(n.source)} · alle 30 s`;
-  $("live-range").innerHTML = seg([["3", "3 h"], ["6", "6 h"], ["12", "12 h"], ["24", "24 h"]], $("live-hours").value, "setLiveHours", 'aria-label="Zeitraum"');
+  $("live-range").innerHTML = seg([["1", "1 h"], ["3", "3 h"], ["6", "6 h"], ["12", "12 h"], ["24", "24 h"]], $("live-hours").value, "setLiveHours", 'aria-label="Zeitraum"');
   const burnerNote = n.burner_on ? (n.dhw ? "lädt Warmwasser" : "heizt") + (n.power_kw !== null ? ` · ca. ${fmt(n.power_kw)} kW` : "")
       + (n.flame !== null ? ` · Flamme ${fmt(n.flame, 0)} µA` : "")  // 0.48.5: Leistung zuerst, passt in zwei Zeilen
     : n.lock_left_min ? `Sperre ${n.lock_left_min} min` + (n.service_code ? ` (${n.service_code})` : " (geschätzt)")
@@ -1311,7 +1312,8 @@ async function loadLive() {
       n.pump_delay ? `Nachlauf ${fmt(n.pump_delay, 0)} min` : ""].filter(Boolean).join(" · ")),  // 0.48.4: % in den Hinweis
     kpi("Vorlauf", fmt(n.flow), "°C", `Soll ${fmt(n.sel_flow, 0)} °C` + (n.calc_flow !== null && n.calc_flow !== undefined
       ? ` · Regler ${fmt(n.calc_flow, 0)} °C` : "")),  // 0.48.5: ohne Regler kein „Regler – °C“
-    kpi("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "")),
+    kpi("Rücklauf", fmt(n.ret), "°C", liveHeat(n, s)),  // 0.50.6: Spreizung und abgenommene Wärme
+    kpi("Warmwasser", fmt(n.dhw_temp), "°C", `Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : dhwOnAt(n, s))),
     kpi("Außen", fmt(n.t_out), "°C"),
     kpi("Innen Ø", fmt(n.t_in), "°C", `${n.rooms.length} Räume`),
     kpi("Zu Hause", n.home === null ? "–" : fmt(n.home, 0), n.persons ? `von ${n.persons}` : ""),
@@ -1340,6 +1342,32 @@ function liveView(card, v) {
   drawLive();
 }
 const liveKessel = (v) => liveView("kessel", v), liveHouse = (v) => liveView("house", v), liveRooms = (v) => liveView("rooms", v);
+// 0.50.6: Spreizung und – mit der Wassermenge aus den Brennerläufen im Zeitraum (kW je K) – die abgenommene Wärme
+function liveHeat(n, s) {
+  if (n.flow === null || n.ret === null || n.flow === undefined || n.ret === undefined) return "";
+  const d = n.flow - n.ret, k = [];
+  s.ts.forEach((_, i) => {
+    const dt = s.flow[i] - s.ret[i], p = s.burner_pow[i];
+    if (s.burner_on[i] && !s.dhw[i] && p > 0 && dt > 2 && n.nom_kw) k.push(p / 100 * n.nom_kw / dt);
+  });
+  const kwk = k.length >= 4 ? k.sort((a, b) => a - b)[Math.floor(k.length / 2)] : null;
+  return `Spreizung ${fmt(d)} K` + (kwk && d > 0 ? ` · ca. ${fmt(kwk * d)} kW abgenommen` : "");
+}
+// 0.50.6: wann der Speicher die Einschaltschwelle (Soll − Hysterese) erreicht – Gefälle der letzten Stunde ohne Ladung
+function dhwOnAt(n, s) {
+  if (n.dhw_temp === null || n.dhw_set === null || n.dhw_temp === undefined || n.dhw_set === undefined) return "";
+  const thr = n.dhw_set - (n.dhw_hyst ?? 5), t0 = n.ts - 3600;
+  const pts = s.ts.map((t, i) => [t, s.dhw_temp[i], s.dhw[i]]).filter((x) => x[0] >= t0 && x[1] !== null);
+  if (n.dhw_temp <= thr) return ` · Schwelle ${fmt(thr, 0)} °C erreicht`;
+  const last = pts.findLastIndex((x) => x[2]), run = pts.slice(last + 1);
+  if (run.length < 2 || run[run.length - 1][0] - run[0][0] < 1200) return ` · schaltet ein bei ${fmt(thr, 0)} °C`;
+  const slope = (run[run.length - 1][1] - run[0][1]) / (run[run.length - 1][0] - run[0][0]);
+  if (slope >= -1e-5) return ` · schaltet ein bei ${fmt(thr, 0)} °C`;
+  return ` · Einschalten ≈ ${new Date((n.ts + (n.dhw_temp - thr) / -slope) * 1000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })} (${fmt(thr, 0)} °C)`;
+}
+// 0.50.6: Linien über die Legende aus- und einblenden (je Chart, bis zum Neuladen)
+const LIVE_HIDE = new Set();
+function toggleLine(key) { LIVE_HIDE.has(key) ? LIVE_HIDE.delete(key) : LIVE_HIDE.add(key); drawLive(); }
 function setLiveHours(v) { $("live-hours").value = v; loadLive().catch(liveError); }
 function liveSeg(id, card, items, fn) {
   $(id).innerHTML = seg(items, LIVE_VIEW[card], fn);
@@ -1356,27 +1384,28 @@ function drawLive() {
   // 0.46.5: Pumpenlauf hinterlegt (unter den Brenner-Bändern) – ohne Umschalten sehen, wann sie lief
   const pumpBand = (s.pump_on || []).map((v, i) => v ?? ((s.pump_mod || [])[i] > 0 ? 1 : 0) ? 1 : 0);
   if (LIVE_VIEW.kessel === "temp") {
-  legend("lg-boiler", [["Vorlauf", C.flow], ["Rücklauf", C.ret], ["Vorlauf-Soll (Kessel)", C.sel, 1], ["Vorlauf-Soll (Regler)", C.calc, 1], ["Kessel", C.boiler]]);
+  legend("lg-boiler", [["Vorlauf", C.flow], ["Rücklauf", C.ret], ["Vorlauf-Soll (Kessel)", C.sel, 1], ["Vorlauf-Soll (Regler)", C.calc, 1], ["Kessel", C.boiler]], true);
+  const rest = (v) => v !== null && v !== undefined && v < 15 ? null : v;  // 0.50.6: Ruhewert (7 °C) nicht zeichnen – sonst gestaucht
   timeChart($("ch-boiler"), ts, [
     { name: "Vorlauf", values: s.flow, color: C.flow }, { name: "Rücklauf", values: s.ret, color: C.ret },
-    { name: "Vorlauf-Soll (Kessel)", values: s.sel_flow, color: C.sel, dash: "5 4", width: 1.5 },
+    { name: "Vorlauf-Soll (Kessel)", values: s.sel_flow.map(rest), color: C.sel, dash: "5 4", width: 1.5 },
     { name: "Vorlauf-Soll (Regler)", values: s.calc_flow, color: C.calc, dash: "2 3", width: 1.5 },
     { name: "Kessel", values: s.boiler_temp, color: C.boiler, width: 1.5 }],
-    { unit: "°C", bands: [{ name: "Pumpe läuft", values: pumpBand, color: "var(--band-pump)" }, ...bands], label: "Kesseltemperaturen" });
+    { unit: "°C", bands: [{ name: "Pumpe läuft", values: pumpBand, color: "var(--band-pump)" }, ...bands], label: "Kesseltemperaturen", legend: "lg-boiler" });
   } else {
-  legend("lg-burner", [["Brennerleistung", C.flow], ["Pumpe (Modulation)", C.ret]]);
+  legend("lg-burner", [["Brennerleistung", C.flow], ["Pumpe", C.ret]], true);
   timeChart($("ch-burner"), ts, [
     { name: "Brennerleistung", values: s.burner_pow.map((v, i) => v ?? (s.burner_on[i] === null ? null : s.burner_on[i] * 100)), color: C.flow, unit: "%", step: true },
     { name: "Pumpe", values: s.pump_mod.map((v, i) => v ?? (s.pump_on[i] === null ? null : s.pump_on[i] * 100)), color: C.ret, width: 1.5, unit: "%", step: true }],
-    { yMin: 0, yMax: 100, bands: [bands[1]], label: "Brenner" });
+    { yMin: 0, yMax: 100, bands: [bands[1]], label: "Brenner", legend: "lg-burner" });
   }
   if (LIVE_VIEW.house === "temp") {
-  legend("lg-house", [["Außen", C.ret], ["Innen Ø", C.flow]]);
-  timeChart($("ch-house"), ts, [{ name: "Außen", values: s.t_out, color: C.ret }, { name: "Innen Ø", values: s.t_in, color: C.flow }], { unit: "°C", label: "Außen und innen" });
+  legend("lg-house", [["Außen", C.ret], ["Innen Ø", C.flow]], true);
+  timeChart($("ch-house"), ts, [{ name: "Außen", values: s.t_out, color: C.ret }, { name: "Innen Ø", values: s.t_in, color: C.flow }], { unit: "°C", label: "Außen und innen", legend: "lg-house" });
   } else drawGasChart(ts, j.gas_hours || []);
-  legend("lg-dhw", [["Speicher", C.flow], ["Soll", C.sel, 1]]);
+  legend("lg-dhw", [["Speicher", C.flow], ["Soll", C.sel, 1]], true);
   timeChart($("ch-dhw"), ts, [{ name: "Speicher", values: s.dhw_temp, color: C.flow }, { name: "Soll", values: s.dhw_set, color: C.sel, dash: "5 4", width: 1.5, step: true }],
-    { unit: "°C", bands: [bands[1]], label: "Warmwasser" });
+    { unit: "°C", bands: [bands[1]], label: "Warmwasser", legend: "lg-dhw" });
   drawRoomCharts();
 }
 

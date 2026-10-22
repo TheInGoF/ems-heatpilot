@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.50.6
+- **Live:** Zeitraum „1 h“; Vorlauf-Soll ohne den Ruhewert (7 °C) gezeichnet – der Chart ist nicht mehr gestaucht; Linien lassen sich über die Legende aus- und einblenden
+- **Kachel Rücklauf** mit Spreizung und abgenommener Wärme (kW je K aus den Brennerläufen im Zeitraum)
+- **Kachel Warmwasser:** wann der Speicher die Einschaltschwelle (Soll − Hysterese) erreicht, aus dem Gefälle der letzten Stunde
+
 ## 0.50.5
 - **Sofort senken, wenn kein Ventil mehr offen ist:** Nimmt kein Raum mehr Wärme ab, senkt HeatPilot den Vorlauf gleich – ohne die 10 min Haltezeit und ohne auf den laufenden Brenner zu warten. Heute früh blieb er nach dem Vorheizen noch 10 min auf 53–58 °C, obwohl alle Ventile zu waren
 - **Vorheizen knapp unter dem Ziel:** Beim täglichen Vorheizen bekommt das Thermostat zuerst das Ziel minus 0,5 K – die Restwärme des heißen Heizkörpers bringt den Rest; mit dem Ende des Vorheizens das echte Soll. Heute früh schossen die Räume um 0,7–1,5 K über
