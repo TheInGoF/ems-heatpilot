@@ -374,7 +374,7 @@ def test_desired_preheat_uses_outdoor_at_target_time():
 def test_control_loop_passes_forecast(tmp_path):
     # Raum 20,8 °C: bei 5 °C reicht der niedrigste Vorlauf in kürzerer Zeit als dem Deckel – kälter beginnt dann früher
     # (seit 0.46.5 sanft; bei 19 °C bräuchte es in beiden Fällen fast den ganzen Deckel)
-    eng, ha, loop = house(tmp_path, temp=20.8, weather="weather.home")
+    eng, ha, loop = house(tmp_path, temp=19.5, weather="weather.home")  # 0.50.5: muss vorheizen
     ts = ts_of(MON, 23)
     sample, rooms, _ = eng.snapshot()
     loop.plan(ts, sample, rooms)

@@ -330,7 +330,7 @@ def test_writes_checks_after_60_s_and_accepts(tmp_path):
     assert bc.state["last_check"]["ok"] and bc.state["fails"] == 0
     d = bc.as_dict(T0 + 60)
     assert d["status_text"] == "Kessel: HeatPilot · Vorlauf 46 °C (Wz heizt auf 21,0 °C (ca. 1 h))" and d["active"]
-    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")  # warm: 41 °C – 5 K weniger
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="heating")  # warm: 41 °C – 5 K weniger (Ventil offen: Haltezeit gilt)
     assert step(bc, T0 + 90) == 0 and "10 min niedriger" in bc.view["decision"]["flow"]  # senken erst nach 10 min
     assert bc.as_dict(T0 + 90)["decision_until"]["flow"] is not None
     assert step(bc, T0 + 660) == 0 and step(bc, T0 + 690) == 1 and calls(ha)[-1][3] == {"value": 41}

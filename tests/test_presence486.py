@@ -167,7 +167,7 @@ def test_renewing_keeps_the_lowering_window(tmp_path):
     assert step(bc, t0) == 1 and calls(ha)[-1][3] == {"value": 46}
     shows(eng, flow=46)
     step(bc, t0 + 60)
-    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")  # warm: Ziel 41 °C
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="heating")  # warm: Ziel 41 °C (Ventil offen)
     written = []
     for k in range(1, 23):
         n = len(calls(ha))

@@ -137,7 +137,7 @@ def test_lowering_waits_until_the_burner_ran_ten_minutes_or_stopped(tmp_path):
     eng, ha, bc = house(tmp_path)
     assert step(bc, T0) == 1 and calls(ha)[-1][3] == {"value": 46}
     shows(eng, flow=46)
-    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="idle")  # warm: Ziel 41 °C
+    climate(eng, "climate.wz", 21.0, 21.0, hvac_action="heating")  # warm: Ziel 41 °C (Ventil offen)
     eng.ems["boiler"]["burngas"] = 1
     eng.store.add_burner_event(T0 + 400, True)  # Brenner springt kurz vor Ende der 10 min an
     for i in range(1, 25):
