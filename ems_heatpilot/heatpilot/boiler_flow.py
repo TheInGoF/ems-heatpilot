@@ -67,6 +67,7 @@ class Target:
     t_out: float | None = None
     hi: int | None = None            # höchstes Vorlauf-Soll jetzt (Fußboden-Grenze, max_flow_temp, Entität)
     cap_off: bool = False            # Heizbetrieb aus, weil die Grenze unter 35 °C liegt (Schutz: sofort)
+    opened: list = field(default_factory=list)    # 0.50.5: Räume mit offenem Ventil – keiner: sofort senken
     idle: bool = False               # kein Wärmebedarf: Heizbetrieb an, Vorlauf-Soll „nur Pumpe“ (0.46.5)
 
 
@@ -191,5 +192,5 @@ def compute(eng, now_ts: int, boost: dict | None = None, bounds: tuple | None = 
             and hi == math.floor(bounds[1] + 1e-9):
         reason = f"{reason} – begrenzt durch den Höchstwert der Entität ({hi} °C)"
     return Target(True, flow, reason, base=base, load=load, load_text=load_text, stall_k=sk, stalled=stalled,
-                  boost_k=k, boost_wanted=wanted, waiting=_waiting(eng, readings), cycling=cyc, limited=limited,
+                  boost_k=k, boost_wanted=wanted, waiting=_waiting(eng, readings), cycling=cyc, limited=limited, opened=opened,
                   **common), new_boost
