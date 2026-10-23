@@ -425,11 +425,3 @@ def test_switch_loop_is_closed():
     assert d == "M0,100H130V0M300,0H90V100"
 
 
-# ------------------------------------------------------------------ Lesbarkeit
-def test_new_files_small_and_documented():
-    for name in ("valve_model.py", "valve_learn.py", "valve_dry.py", "valve_predict.py", "valve_text.py"):
-        text = (PKG / name).read_text(encoding="utf-8")
-        assert len(text.splitlines()) <= 600 and text.startswith('"""'), name
-        for node in ast.walk(ast.parse(text)):
-            if isinstance(node, ast.FunctionDef):
-                assert node.end_lineno - node.lineno + 1 <= 60, (name, node.name)

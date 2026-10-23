@@ -223,33 +223,6 @@ def test_learning_keeps_running_for_valve_led_rooms(tmp_path):
     assert eng.room_reading(eng.found.rooms[0])[3] == 62.0
 
 
-# ------------------------------------------------------------------ Version, Doku, Struktur
-def test_version_changelog_docs_and_files():
-    from heatpilot import __version__
-
-    assert tuple(int(x) for x in __version__.split(".")) >= (0, 51, 0)
-    assert f'version: "{__version__}"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
-    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    part = log.split("\n## 0.51.0\n")[1].split("\n## ")[0]
-    for word in ("ventilgeführt", "Shelly", "PID", "Abgleich", "tests/test_valve_pid51.py"):
-        assert word in part, word
-    docs = (ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8")
-    assert "ventilgeführt" in docs and "Ventilstellung" in docs
-    for name in ("room_lead.py", "valve_pid.py", "valve_pid_control.py", "balance_auto.py", "control.py",
-                 "controlloop.py", "web.py", "main.py", "discovery.py", "engine_sample.py", "room_entry.py"):
-        text = (PKG / name).read_text(encoding="utf-8")
-        assert len(text.splitlines()) <= 600 and text.startswith('"""'), name
-
-
-def test_functions_stay_short():
-    for mod in (room_lead, valve_pid, valve_pid_control, balance_auto):
-        for name, fn in inspect.getmembers(mod, inspect.isfunction):
-            if fn.__module__ == mod.__name__:
-                assert len(inspect.getsource(fn).splitlines()) <= 60, f"{mod.__name__}.{name}"
-    for name, fn in inspect.getmembers(ValvePidControl, inspect.isfunction):
-        assert len(inspect.getsource(fn).splitlines()) <= 65, name
-
-
 def test_only_through_control_apply():
     src = (PKG / "valve_pid_control.py").read_text(encoding="utf-8")
     assert not re.search(r"ha\.call|set_temperature|call_service", src)

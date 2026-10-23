@@ -468,12 +468,3 @@ def test_preview_uses_same_rule_and_says_writes(tmp_path):
     assert p["note"] == pv.NOTE  # Vorlauf bleibt Trockenlauf
 
 
-def test_files_readable_and_documented():
-    for name in ("dhw_control.py", "dhw_rule.py", "dhw_status.py", "dhw_entity.py", "notify.py", "control.py",
-                 "controlloop.py", "readiness.py", "web.py", "preview.py", "config.py", "dhw.py", "main.py",
-                 "publisher.py", "ha_client.py"):
-        text = (PKG / name).read_text(encoding="utf-8")
-        assert len(text.splitlines()) <= 600, name
-        assert text.startswith('"""'), name
-    assert (PKG / "dhw_control.py").read_text(encoding="utf-8").startswith('"""Weg W (seit 0.38)')
-    assert (PKG / "notify.py").read_text(encoding="utf-8").startswith('"""Benachrichtigungen (seit 0.38)')

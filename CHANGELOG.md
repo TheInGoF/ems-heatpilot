@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.52.1
+- **Test-Suite entschlackt:** Die in fast jeder Feature-Testdatei wiederholten Strukturprüfungen (Module ≤ 600 Zeilen mit Docstring, Funktionen ≤ 60/65 Zeilen, Version/CHANGELOG konsistent) macht jetzt eine zentrale Datei `tests/test_struktur.py` für das ganze Paket – mit Bestandsschutz für 24 ältere, längere Funktionen, die nicht weiter wachsen dürfen. 14 doppelte Tests entfernt, keine Änderung am Add-on selbst
+
 ## 0.52.0
 - **Gast-Ansicht für Lovelace:** Der Reiter „Heizen“ lässt sich als Webpage-Karte ins Dashboard einbinden, damit alle im Haushalt (auch ohne Admin-Rechte) die Heizung bedienen können – Boost, Soll, zurück zum Zeitplan. Dazu in den Add-on-Einstellungen → Netzwerk den Port 8099 freigeben (Standard aus) und `http://<ha-adresse>:8099/` als Karte einbinden
 - Wer über den Port kommt (statt über Ingress), ist Gast: Der Server erlaubt nur die Heizen-Endpunkte – Einstellungen, Diagnose, Export und die Pause sind hart gesperrt (403); die Oberfläche blendet die übrigen Reiter aus. Der Port hat keine eigene Anmeldung: nur im eigenen Netz freigeben, nie ins Internet weiterleiten
