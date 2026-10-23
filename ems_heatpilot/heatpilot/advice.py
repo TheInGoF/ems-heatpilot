@@ -66,10 +66,6 @@ def _local(ts: int) -> datetime:
     return datetime.fromtimestamp(ts).astimezone()
 
 
-def _clock(ts: int) -> str:
-    return _local(ts).strftime("%H:%M")
-
-
 def _round5(minutes: float) -> int:
     return int(min(max(5 * round(minutes / 5), 10), MAX_SHIFT_MIN))
 

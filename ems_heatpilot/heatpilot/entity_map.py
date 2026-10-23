@@ -47,6 +47,7 @@ SOURCE_SET, SOURCE_AUTO, SOURCE_EMS, SOURCE_MISSING = "gewählt", "automatisch",
 # gewählt (optional ohne Erkennung) – der Filter „nur fehlende“ zeigt die ersten drei
 ISSUE_MISSING, ISSUE_OFF, ISSUE_NOT_FOUND, ISSUE_NOT_SET = "fehlt", "nicht verfügbar", "nicht gefunden", "nicht gewählt"
 ISSUE_GONE = "gibt es nicht mehr"  # 0.45.1: Raum-Sensor weder in den Zuständen noch in der Registry – kein Problem
+ISSUE_REMOVED = "Regler abgebaut"  # 0.52.2: Werte des Reglers fehlen zu Recht – kein Problem
 PROBLEMS = (ISSUE_MISSING, ISSUE_OFF, ISSUE_NOT_FOUND)
 OFF_STATES = ("unavailable", "unknown")
 
@@ -434,10 +435,15 @@ def _room_entries(c: _Ctx) -> list[dict]:
     return out
 
 
-def _needs(entries: list[dict]) -> None:
-    """Ersatz (``covered_by``), ``missing`` (nötig, fehlt ohne Ersatz) und ``issue`` je Eintrag."""
+def _needs(entries: list[dict], removed: bool = False) -> None:
+    """Ersatz (``covered_by``), ``missing`` (nötig, fehlt ohne Ersatz) und ``issue`` je Eintrag. ``removed``: der Regler
+    ist abgebaut – seine Werte fehlen zu Recht (``ISSUE_REMOVED``, kein Problem)."""
     by_key = {e["key"]: e for e in entries}
     for e in entries:
+        e["removed"] = removed and e["group"] == "regler" and not e["required"]
+        if e["removed"]:
+            e.update(covered_by=None, missing=False, issue=ISSUE_REMOVED, problem=False)
+            continue
         alt = [by_key[k] for k in e["alt"] if k in by_key and by_key[k]["source"] != SOURCE_MISSING]
         e["covered_by"] = alt[0]["label"] if alt and e["source"] == SOURCE_MISSING else None
         e["missing"] = bool(e["required"] and e["source"] == SOURCE_MISSING and not alt)
@@ -463,6 +469,11 @@ def counts(entries: list[dict]) -> dict:
             "problems": sum(e["problem"] for e in entries), "auto": any(e["auto"] for e in entries)}
 
 
+def regulator_removed(cfg, ems: dict | None) -> bool:
+    """Regler abgebaut (0.52.2): vom Nutzer bestätigt, oder EMS-ESP antwortet und meldet kein Gerät „thermostat“."""
+    return bool(getattr(cfg, "regulator_removed", False) or (ems and ems.get("boiler") and not ems.get("thermostat")))
+
+
 def build(cfg, found, auto: dict | None, states: dict, idx=None, ems: dict | None = None,
           services: dict | None = None) -> dict:
     """Alle Rollen in Gruppen mit dem, was gilt. ``auto``: Erkennung ohne eigene Vorgaben (``Discovered.as_dict``),
@@ -470,7 +481,7 @@ def build(cfg, found, auto: dict | None, states: dict, idx=None, ems: dict | Non
     Assistant (für Benachrichtigungsziele; None = unbekannt)."""
     c = _Ctx(cfg, found, dict(auto or {}), states or {}, idx, ems or {}, services)
     entries = _ems_entries(c) + _field_entries(c) + _room_entries(c)
-    _needs(entries)
+    _needs(entries, regulator_removed(cfg, c.ems))
     groups = [{"key": key, "title": title, "text": text, "entries": [e for e in entries if e["group"] == key]}
               for key, (title, text) in GROUPS.items()]
     for g in groups:
