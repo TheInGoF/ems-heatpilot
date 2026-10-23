@@ -148,6 +148,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.dhw_control = None   # dhw_control.DhwControl, von main gesetzt (Weg W seit 0.38)
         self.notifier = None      # notify.Notifier, von main gesetzt (Meldungen, Problem-Sensor seit 0.38)
         self.boiler_control = None  # boiler_control.BoilerControl, von main gesetzt (Weg B seit 0.41)
+        self.valve_pid = None  # valve_pid_control.ValvePidControl, von main gesetzt (ventilgeführt seit 0.51)
         self.disinfect_control = None  # disinfect_control.DisinfectControl, von main gesetzt (Desinfektion seit 0.42)
         self.watchdog: dict = {}    # Wächter-Automationen in HA (watchdog.scan, main alle 10 min) – nur gelesen
         self.heartbeat_ts: float | None = None  # zuletzt gesetzter sensor.heatpilot_heartbeat (0.41)

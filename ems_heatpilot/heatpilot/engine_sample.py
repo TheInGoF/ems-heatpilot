@@ -144,6 +144,12 @@ class SampleMixin:
         if not st:
             return None
         a = st.get("attributes", {})
+        pos = num(self._val(dev.get("valve_pos")))  # 0.51: ventilgeführt – die gestellte Öffnung ist der Ventilwert
+        if pos is not None and 0 <= pos <= 100:
+            target = num(a.get("temperature")) if st.get("state") != "off" else None
+            hum = num(self._val(dev.get("humidity")))
+            hum = num(a.get("current_humidity")) if hum is None else hum
+            return num(a.get("current_temperature")), target, pos, hum, False, True
         sensor = dev.get("heating_power")
         if sensor in self.__dict__.get("_gone", ()):
             sensor = None

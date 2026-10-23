@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import guards, valve_control
+from . import guards, room_lead, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
@@ -257,7 +257,7 @@ class ControlLoop:
             self.guide.clear()
             self._settle_problems()
             return
-        managed = [r.climate for r in eng.found.rooms if r.managed]
+        managed = [r.climate for r in eng.found.rooms if r.managed and not room_lead.valve_led(r)]
         lags = {c for c in managed if self._observe(c, targets.get(c))}
         ctx = {c: self._context(c, desireds[c], targets.get(c), boosts, expired, c in lags) for c in managed}
         wants = self.guide.plan(ts, sample, rooms, ctx)
@@ -269,6 +269,8 @@ class ControlLoop:
         for room in eng.found.rooms:
             if not room.managed:
                 self.state.pop(room.climate, None)
+                continue
+            if room_lead.valve_led(room):  # 0.51: HeatPilot stellt die Öffnung (valve_pid) – kein Soll-Schreiben
                 continue
             self._decide(room.climate, desireds[room.climate], targets.get(room.climate), boosts, expired, paused,
                          ts, wants.get(room.climate), room.climate in lags)
@@ -286,7 +288,7 @@ class ControlLoop:
         presence, t_out = self.presence(now, sample), sample.get("t_out")
         t_out_at = eng.outdoor_forecast_at  # 0.37: Vorheizdauer mit der Außentemperatur zum Zielzeitpunkt
         desireds: dict[str, Desired] = {}
-        shared = self._shared_flow(readings, t_out)  # 0.50.4: ein Vorlauf fürs tägliche Vorheizen aller Räume
+        shared = heatup.engine_shared_flow(eng, readings, t_out)  # 0.50.4: ein Vorlauf fürs Vorheizen aller Räume
         for room in eng.found.rooms:
             reading = readings.get(room.climate)
             temp = reading[1] if reading else None
@@ -303,6 +305,7 @@ class ControlLoop:
             desireds[room.climate] = d
             self.rooms[room.climate] = {
                 "managed": bool(room.managed), "phase": d.phase if managing else None,
+                "lead": room.lead if room_lead.valve_led(room) else "temp",
                 "desired": d.setpoint if managing else None, "reason": d.reason if managing else None,
                 "next_change": _iso(d.until) if managing else None,
                 "next_phase": (desired(room, d.until + timedelta(minutes=1), cfg, presence, model if ok else None,
@@ -315,20 +318,6 @@ class ControlLoop:
                 "valve": None, "valve_guided": False,  # 0.40: laufender Eingriff der Ventilführung, geführt?
             }
         return desireds
-
-    def _shared_flow(self, readings: dict, t_out: float | None) -> float | None:
-        """0.50.4: gemeinsamer Vorlauf fürs tägliche Vorheizen (``heatup.shared_flow``) der Räume, die mitmachen, ein
-        plausibles Modell haben und mehr als 0,3 K unter Komfort liegen – mit der Mindestleistung des Kessels."""
-        from .boiler_flow import min_power_kw
-        eng, out, rooms = self.eng, 5.0 if t_out is None else t_out, []
-        for r in eng.found.rooms:
-            m, temp = eng.rooms.get(r.climate), (readings.get(r.climate) or (None, None))[1]
-            if r.managed and m is not None and temp is not None and temp < r.comfort - 0.3 and guards.check_room(m)["ok"]:
-                rooms.append((m, temp, float(r.comfort), out))
-        need = sum(max(m.b * (t - out) - m.c, 0.0) for m, t, _, _ in rooms)
-        house = (eng.house.demand_kw(sum(x[1] for x in rooms) / len(rooms), out)
-                 if rooms and need > 0 and guards.check_house(eng.house)["ok"] else 0.0)
-        return shared_flow(rooms, eng.cfg.max_flow_temp, min_power_kw(eng)[0], house / need if house > 0 else None)
 
     def _restores(self, ts: int, desireds: dict, managing: bool, paused: bool) -> set[str]:
         """Abgelaufene lokale Boosts: Wunschzustand zurück (heatpilot, Raum macht mit, keine Pause), sonst Soll von

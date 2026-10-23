@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 
-from . import floor_limit
+from . import floor_limit, room_lead
 
 ENTITY = re.compile(r"^[a-z_]+\.[A-Za-z0-9_]+$")
 ID = re.compile(r"^[a-z0-9][a-z0-9_:.-]{0,63}$")  # feste Raumkennung (0.44, room_ids)
@@ -80,4 +80,5 @@ def clean_room(r: dict) -> dict:
         room["comfort"] = _comfort(r, climate)
     room.update(_presets(r, climate))
     room.update(floor_limit.clean_entry(r, climate))
+    room.update(room_lead.clean_entry(r, climate))  # 0.51: Führung und Ventilstellung
     return room

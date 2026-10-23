@@ -66,6 +66,9 @@ class Room:
     ems: bool = False
     # seit 0.44: feste Raumkennung (``room_ids``) – bleibt, wenn der Schlüssel (das Thermostat) wechselt
     room_id: str | None = None
+    # seit 0.51: Führung „temp“ (Soll ans Thermostat) | „ventil“ (HeatPilot stellt die Öffnung, ``room_lead``)
+    lead: str = "temp"
+    valve_pos: str | None = None  # number-Entität der Ventilöffnung (0–100 %, z. B. Shelly BLU TRV)
 
     @property
     def climates(self) -> list[str]:
@@ -76,7 +79,7 @@ class Room:
     def devices(self) -> list[dict]:
         """Schlüssel und Mitläufer in einheitlicher Form."""
         head = {"climate": self.climate, "heating_power": self.heating_power, "humidity": self.humidity,
-                "temp_sensor": self.temp_sensor, "platform": self.platform,
+                "temp_sensor": self.temp_sensor, "platform": self.platform, "valve_pos": self.valve_pos,
                 "preset": self.preset, "preset_max": self.preset_max}
         return [head, *self.members]
 
@@ -411,7 +414,7 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dic
     def device(r: dict) -> dict:
         return {"climate": r["climate"], "heating_power": r.get("heating_power") or None,
                 "humidity": r.get("humidity") or None, "temp_sensor": r.get("temperature") or None,
-                "platform": reg.get(r["climate"], {}).get("platform"),
+                "platform": reg.get(r["climate"], {}).get("platform"), "valve_pos": r.get("valve_pos") or None,
                 "preset": _preset(r, "preset"), "preset_max": _preset(r, "preset_max")}
 
     def friendly(climate: str) -> str:
@@ -445,6 +448,7 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dic
             humidity=head.get("humidity") or None, temp_sensor=head.get("temperature") or None,
             group=head.get("group") or None, controller=bool(head.get("controller")),
             managed=managed and not ems, comfort=comfort, ems=ems,
+            lead=head.get("lead") or "temp", valve_pos=head.get("valve_pos") or None,
             platform=reg.get(head["climate"], {}).get("platform"),
             members=[device(r) for r in others],
             preset=_preset(head, "preset"), preset_max=_preset(head, "preset_max"),

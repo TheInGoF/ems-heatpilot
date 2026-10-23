@@ -1546,13 +1546,42 @@ Vorlauf, siehe [Fußbodenheizung je Raum](#fußbodenheizung-je-raum)), Voreinste
 Ventils (siehe „Hydraulischer Abgleich“), Ventil-/Heizleistungs-Sensor (%),
 Temperatursensor (für die Langzeitstatistik) und Feuchtesensor. Unter jeder Entität
 stehen Bereich und Gerät aus Home Assistant; die Tabelle ist nach Bereich und Name
-sortiert. Ohne Angaben schlägt die automatische Erkennung die Tado-Räume samt
+sortiert. Seit 0.51 je Raum dazu die **Führung**: „Temperatur“ (Standard – HeatPilot schreibt das Soll ans
+Thermostat) oder „ventilgeführt“ – dann stellt HeatPilot die **Ventilöffnung in Prozent selbst**, über die
+number-Entität im Feld **Ventilstellung** (z. B. Shelly BLU TRV, 0–100 %). Siehe
+[Ventilgeführte Räume](#ventilgeführte-räume-seit-051). Ohne Angaben schlägt die automatische Erkennung die Tado-Räume samt
 Sensoren vor – für jedes Thermostat mit Gerät in Home Assistant (Tado-Cloud, HomeKit,
 andere): Name und Raum aus dem Bereich, Temperatur/Feuchte/Heizleistung aus den
 Sensoren desselben Geräts, Raumregler bei Wandthermostaten. Vorschläge füllen nur
 leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder ein);
 „macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Entitäten →
 Räume.
+
+## Ventilgeführte Räume (seit 0.51)
+
+Hat ein Raum ein Stellventil mit eigener Prozent-Entität (z. B. **Shelly BLU TRV** über das BLU Gateway), kann
+HeatPilot die Öffnung direkt stellen, statt ein Soll zu schreiben – Einstellungen → Räume → Einzelheiten →
+**Führung „Ventil“** plus **Ventilstellung** (number, 0–100 %). Das Wunsch-Soll je Raum (Komfort, Nacht, Abwesenheit,
+Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
+
+- **PID mit Vorsteuerung aus dem Raummodell:** Die Vorsteuerung ist die Öffnung, die das Soll beim aktuellen Vorlauf
+  dauerhaft hält; der PI-Teil korrigiert den Rest. Die **Verstärkung lernt je Raum**: Pendelt der Raum (4
+  Vorzeichenwechsel über ±0,15 K in 2 h), sinkt sie um 20 %; bleibt er trotz Luft nach oben 90 min mehr als 0,3 K
+  unter Soll, steigt sie um 15 % (0,3–3,0).
+- **Schreibregeln:** nur bei Änderung ab 3 Punkten, höchstens ein Schreiben je 5 min – Sprünge ab 15 Punkten sofort
+  (schont Motor und Batterie). Geschrieben wird nur über die eine zugewiesene Entität, nur ganze Prozent 0–100,
+  innerhalb der Grenzen der Entität; alles andere weist HeatPilot hart ab. 60 s nach dem Schreiben liest HeatPilot
+  zurück; nach **3 Fehlschlägen in Folge pausiert der Raum 1 h** (Meldung – Gateway/Batterie prüfen). **Wer von Hand
+  dreht, behält das Ventil 1 h.** Die Nutzer-Pause der Steuerung hält auch diese Schiene an. Ohne Raumtemperatur
+  stellt HeatPilot nach 30 min einmal den **sicheren Wert 40 %** (kein Frost, kein Überheizen) und wartet.
+- **Automatischer hydraulischer Abgleich:** Bleibt ein Raum am Anschlag unter Soll (mindestens 30 min am Tag),
+  während ein anderer sein Soll mit höchstens 60 % Öffnung hält (mindestens 1 h), senkt HeatPilot dem leichten Raum
+  den **Öffnungs-Deckel** um 5 Punkte je Tag – nie unter 40 %. Bleibt die Unterversorgung 3 Tage aus, gehen die
+  Deckel schrittweise zurück auf 100 %. Der Deckel begrenzt nur den PID-Ausgang. Der handgeführte Abgleich
+  (Empfehlungen zur Voreinstellung am Ventilunterteil) bleibt für temperaturgeführte Räume.
+- Die Soll-Schiene und [Ventile führen](#ventile-führen) fassen ventilgeführte Räume nicht an; **gelernt** wird der
+  Raum weiter wie bisher – das gestellte Prozent ist sein Ventilwert. Die Raumkarte zeigt z. B.
+  „Ventil · komfort 21° · 45 %“.
 
 ## Räume wechseln (z. B. Tado-Cloud → HomeKit)
 
