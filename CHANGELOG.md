@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.52.0
+- **Gast-Ansicht für Lovelace:** Der Reiter „Heizen“ lässt sich als Webpage-Karte ins Dashboard einbinden, damit alle im Haushalt (auch ohne Admin-Rechte) die Heizung bedienen können – Boost, Soll, zurück zum Zeitplan. Dazu in den Add-on-Einstellungen → Netzwerk den Port 8099 freigeben (Standard aus) und `http://<ha-adresse>:8099/` als Karte einbinden
+- Wer über den Port kommt (statt über Ingress), ist Gast: Der Server erlaubt nur die Heizen-Endpunkte – Einstellungen, Diagnose, Export und die Pause sind hart gesperrt (403); die Oberfläche blendet die übrigen Reiter aus. Der Port hat keine eigene Anmeldung: nur im eigenen Netz freigeben, nie ins Internet weiterleiten
+- **Tests:** neu `tests/test_guest52.py`
+
 ## 0.51.0
 - **Ventilgeführte Räume (z. B. Shelly BLU TRV):** Je Raum neu die Führung „Temperatur“ (Soll ans Thermostat, wie bisher) oder „ventilgeführt“ – dann stellt HeatPilot die Ventilöffnung in Prozent selbst, über eine PID-Regelung mit Vorsteuerung aus dem Raummodell. So schließt das Ventil, bevor der Raum über das Ziel schießt. Die Verstärkung lernt je Raum (pendelt der Raum, runter; bleibt er träge unter Soll, hoch). Einstellungen → Räume → Einzelheiten: „Führung“ und „Ventilstellung“ (die number-Entität des TRV, 0–100 %)
 - **Harter Schreibweg:** Ventil-Prozente gehen nur über `Control.set_valve` auf die eine zugewiesene Entität, nur ganze Prozent 0–100, innerhalb der Grenzen der Entität – alles andere wird abgewiesen. Höchstens ein Schreiben je 5 min (Sprünge ab 15 Punkten sofort, Änderungen unter 3 Punkten nie – schont Motor und Batterie); 60 s nach dem Schreiben wird zurückgelesen, nach 3 Fehlschlägen pausiert der Raum 1 h mit Meldung. Wer von Hand dreht, behält das Ventil 1 h. Ohne Raumtemperatur stellt HeatPilot nach 30 min einmal den sicheren Wert 40 %

@@ -1,5 +1,5 @@
 name: EMS HeatPilot
-version: "0.51.0"
+version: "0.52.0"
 slug: ems_heatpilot
 description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
 url: https://github.com/TheInGoF/ems-heatpilot
@@ -16,6 +16,12 @@ panel_icon: mdi:fire
 panel_title: HeatPilot
 map:
   - addon_config:rw
+# Gast-Ansicht (0.52): Port standardmäßig aus - eingeschaltet zeigt er NUR den Reiter „Heizen“ (Bedienen ohne
+# Einstellungen) fürs Lovelace-Dashboard; keine eigene Anmeldung, nur im eigenen Netz freigeben
+ports:
+  8099/tcp: null
+ports_description:
+  8099/tcp: Gast-Ansicht „Heizen“ für Lovelace (Webpage-Karte) - ohne Einstellungen
 # Keine YAML-Optionen: Eingerichtet wird ausschließlich über die HeatPilot-Seite
 # (Reiter „Einstellungen“). Die Werte liegen in /data/settings.json.
 options: {}

@@ -1557,6 +1557,23 @@ leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder
 „macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Entitäten →
 Räume.
 
+## Heizen im Lovelace-Dashboard (Gast-Ansicht, seit 0.52)
+
+Die HeatPilot-Seite läuft über Ingress und ist damit nur für Administratoren erreichbar. Damit alle im Haushalt die
+Heizung bedienen können, gibt es die **Gast-Ansicht**: derselbe Server, direkt am **Port 8099** – sie zeigt nur den
+Reiter „Heizen“ (Boost, Soll, zurück zum Zeitplan), ohne Einstellungen, Übersicht, Live, Diagnose und ohne die
+Pause. Alles außer den Heizen-Endpunkten weist der Server für Gäste hart ab (403), unabhängig von der Oberfläche.
+
+Einrichten:
+
+1. In den Einstellungen des Add-ons unter **Netzwerk** dem Port 8099 einen Host-Port geben (z. B. 8099) und speichern.
+2. In Lovelace eine **Webpage-Karte** anlegen: `http://<ha-adresse>:8099/`.
+
+Hinweise: Der Port hat **keine eigene Anmeldung** – nur im eigenen, vertrauten Netz freigeben und **nie ins Internet
+weiterleiten**. Öffnest du Home Assistant über **https** (z. B. Nabu Casa), blockt der Browser die http-Karte
+(gemischte Inhalte) – dann das Dashboard im Heimnetz über http öffnen oder dem Port einen eigenen
+https-Reverse-Proxy geben. Über Ingress (HeatPilot-Seitenleiste) bleibt alles wie bisher.
+
 ## Ventilgeführte Räume (seit 0.51)
 
 Hat ein Raum ein Stellventil mit eigener Prozent-Entität (z. B. **Shelly BLU TRV** über das BLU Gateway), kann

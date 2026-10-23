@@ -48,7 +48,7 @@ from aiohttp import web
 
 from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX, WEEKDAYS, Config
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
-from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness
+from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness, web_guest
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
 from . import boiler_period, boiler_power, disinfect_entity, live_log, room_identity, sensor_gone, web_adopt, web_restore
 from . import web_switch
@@ -96,7 +96,7 @@ async def api_errors(request, handler):
 
 def make_app(app) -> web.Application:
     """``app``: main.App (cfg, eng, status, apply_settings, suggestions, reload_history, ...)."""
-    web_app = web.Application(middlewares=[api_errors])
+    web_app = web.Application(middlewares=[api_errors, web_guest.guard])  # 0.52: Gast-Ansicht (Lovelace)
 
     async def index(_req):
         # nach einem Update nicht die alte Seite aus dem Zwischenspeicher zeigen (0.43.1): immer nachfragen,
@@ -457,10 +457,10 @@ def make_app(app) -> web.Application:
             return json_response({"ok": False, "sent": [], "errors": [notify.NO_TARGETS]}, status=400)
         return json_response(await n.test())
 
-    async def heat_get(_req):
+    async def heat_get(req):
         if app.eng is None:
             return json_response({"starting": True, "status": app.status})
-        return json_response(heat_state())
+        return json_response({**heat_state(), "guest": web_guest.is_guest(req)})
 
     async def heat_post(req):
         """Bedienung auf Knopfdruck – nur Tado, nur die gewählten Räume (siehe control.py)."""
