@@ -67,7 +67,8 @@ def test_heat_tab_pause_only_when_managing_and_status_from_control():
     assert 'id="heat-status"' in markup and 'id="heat-log-box"' in markup and 'id="heat-foot"' in markup
     render = js.split("function renderHeat()")[1].split("function act(")[0]
     # 0.43: vierte Kachel „Pause“ immer da (das Raster springt nicht), bei Beobachten gesperrt
-    assert 'act("pause", "Pause", !pil ? "nur bei HeatPilot steuert"' in render and "!!c.paused_until, !pil);" in render
+    assert 'act("pause", "Pause", !pil ? "nur bei HeatPilot steuert"' in render and "!!c.paused_until, !pil));" in render
+    assert '(GUEST ? "" : act("pause"' in render  # 0.52: Gäste (Lovelace) sehen die Pause nicht
     assert '${off ? " disabled" : ""}' in js.split("function act(")[1].split("\n}\n")[0]
     assert 'const managing = () => ctl().mode === "heatpilot"' in js
     assert "c.status_text" in js and "c.warnings" in js and "c.pause_left_min" in js

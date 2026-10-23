@@ -1555,6 +1555,7 @@ async function loadHeat() {
   clearTimeout(heatTimer);
   const j = await getJSON("api/heat");
   if (j.starting) { heatMsg("Startet noch …"); heatTimer = setTimeout(() => loadHeat().catch(heatError), 5000); return; }
+  guestMode(j.guest);  // 0.52: Gast-Ansicht (Lovelace) – nur der Reiter „Heizen“, Bedienen ohne Einstellungen
   HEAT = j; renderHeat();
   const box = statusPage();  // 0.47.1: Kessel/Warmwasser in den Einstellungen ohne Neuladen aktuell halten
   if (box) {
@@ -1597,7 +1598,7 @@ function renderHeat() {
     act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
     act("sched", "Zeitplan", autoN === n ? "alle Räume" : `${autoN} von ${n} Räumen`, false) +
     act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false) +
-    act("pause", "Pause", !pil ? "nur bei HeatPilot steuert" : c.paused_until ? `noch ${leftText(c.pause_left_min || 1)}` : "HeatPilot anhalten", !!c.paused_until, !pil);
+    (GUEST ? "" : act("pause", "Pause", !pil ? "nur bei HeatPilot steuert" : c.paused_until ? `noch ${leftText(c.pause_left_min || 1)}` : "HeatPilot anhalten", !!c.paused_until, !pil));
   const tiles = $("heat-rooms"), k = j.rooms.length;
   tiles.innerHTML = j.rooms.map(roomTile).join("");
   tiles.style.setProperty("--cols", k <= 4 ? Math.max(k, 1) : k <= 6 ? 3 : 4);  // breit: kein einzelner Rest in der letzten Reihe
@@ -3537,6 +3538,14 @@ const esc = (v) => String(v ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;"
 
 // Vier Reiter (0.43): Diagnose ist die letzte Unterseite der Einstellungen – showTab("diag") führt dorthin
 const TABS = ["heat", "overview", "live", "settings"];
+// 0.52: Gast-Ansicht (direkt über den Port statt Ingress): nur „Heizen“ – die übrigen Reiter und die Pause sind weg
+let GUEST = false;
+function guestMode(on) {
+  if (!on || GUEST) { return; }
+  GUEST = true;
+  for (const t of ["overview", "live", "settings"]) $("tab-" + t).hidden = true;
+  showTab("heat");
+}
 function showTab(name) {
   if (name === "diag") return openSettings("diagnose");
   for (const t of TABS) {
