@@ -91,3 +91,33 @@ def boiler_control(eng) -> dict:
 def write_blocked(eng) -> str | None:
     """Hindernis, wenn EMS-ESP das Warmwasser-Soll nicht schreiben lässt (nicht schreibbar bzw. nicht gefunden)."""
     return eg.ems_write_blocked(eng, "wwseltemp", WHAT)
+
+
+def _num(value) -> float | None:
+    try:
+        return None if isinstance(value, bool) else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def check_call(entity_id: str, dhw_entity: str | None, limits, data: dict, state: dict) -> None:
+    """Warmwasser-Soll (Weg W): nur die eine eingestellte ``number``-Entität, nur ``value``, ganzzahlig,
+    Minimum ≤ Wert ≤ Maximum (Einstellungen und, wenn HA sie meldet, die Grenzen der Entität); die Entität muss
+    taugen (``dhw_entity.entity_problem``: verfügbar, Einheit °C, kein Heizkreis, kein anderer Kesselwert).
+    Alles andere hart abgewiesen."""
+    if not dhw_entity or entity_id != dhw_entity or not limits:
+        raise PermissionError(f"number.set_value auf {entity_id} ist gesperrt – nur das eingestellte "
+                  "Warmwasser-Soll bei „HeatPilot setzt“")
+    value = data.get("value")
+    lo, hi = limits
+    if set(data) != {"value"} or isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
+        raise PermissionError(f"Warmwasser-Soll {value!r} gesperrt – nur ganze Grad von {lo:g} bis {hi:g} °C")
+    problem = entity_problem(entity_id, state)
+    if problem:
+        raise PermissionError(f"{problem} – gesperrt")
+    attrs = state.get("attributes") or {}
+    e_lo, e_hi = _num(attrs.get("min")), _num(attrs.get("max"))
+    if (e_lo is not None and value < e_lo) or (e_hi is not None and value > e_hi):
+        raise PermissionError(f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id} "
+                  f"({e_lo:g}…{e_hi:g} °C)" if e_lo is not None and e_hi is not None
+                  else f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id}")

@@ -30,7 +30,9 @@ from . import live_log  # 0.50: Entscheidung von Weg B ins 30-s-Protokoll
 from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
 from .app_jobs import JobsMixin
 from .backfill import run_backfill
+from . import room_lead
 from .boiler_control import BoilerControl
+from .valve_pid_control import ValvePidControl
 from .boiler_entity import flow_target, heat_target, regulator_block, same_entity
 from .control import Control
 from .controlloop import ControlLoop
@@ -251,7 +253,8 @@ class App(JobsMixin):
                                dhw_limits=(cfg.dhw_min_temp, cfg.dhw_max_temp), notify_targets=cfg.notify_targets,
                                boiler=writes, boiler_lock=lambda: regulator_block(eng),
                                disinfect=dis[0] if disinfect_rule.writes(cfg) else None,
-                               disinfect_lock=lambda: disinfect_rule.lock(eng))
+                               disinfect_lock=lambda: disinfect_rule.lock(eng),
+                               valves=room_lead.valve_rooms(found.rooms))  # 0.51: ventilgeführte Räume
         eng.notifier = Notifier(self.store, self.control, cfg.notify_targets,
                                 carry=old.notifier if old is not None else None)
         eng.control_loop = ControlLoop(eng, self.control)
@@ -261,6 +264,8 @@ class App(JobsMixin):
                                            carry=old.boiler_control if old is not None else None)
         eng.disinfect_control = DisinfectControl(eng, self.control, eng.notifier, dis,
                                                  carry=getattr(old, "disinfect_control", None))
+        eng.valve_pid = ValvePidControl(eng, self.control, eng.notifier,
+                                        carry=getattr(old, "valve_pid", None))  # 0.51: ventilgeführte Räume
         # zählt der Termin im Warmwasser-Modell (HeatPilot löst ihn aus, der letzte ist nicht eben gescheitert)? Gleich,
         # nicht erst im nächsten 30-s-Schritt
         cfg.disinfect_triggered = eng.disinfect_control.triggered(time.time())
@@ -272,6 +277,8 @@ class App(JobsMixin):
             old.dhw_control.stop()
         if old is not None and old.boiler_control is not None:
             old.boiler_control.stop()
+        if old is not None and getattr(old, "valve_pid", None) is not None:
+            old.valve_pid.stop()
         if old is not None and getattr(old, "disinfect_control", None) is not None:
             old.disinfect_control.stop()
 
@@ -383,6 +390,7 @@ async def live_loop(app: App) -> None:
         except Exception:  # noqa: BLE001
             log.exception("Live-Werte nicht erfasst")
         for name, step in (("Prüfung des Warmwasser-Solls", check_dhw), ("Kessel über HeatPilot", boiler_step),
+                           ("Ventilgeführte Räume", valve_pid_step),
                            ("Desinfektion", disinfect_step), ("Heartbeat", heartbeat),
                            ("Wächter lesen", scan_watchdog)):
             try:
@@ -411,6 +419,20 @@ async def boiler_step(app: App, now: float | None = None) -> int:
     n = await ctl.apply(now)
     await send_notes(app, eng)
     return n
+
+
+async def valve_pid_step(app: App, now: float | None = None) -> int:
+    """Ventilgeführte Räume (0.51) im 30-s-Takt: PID rechnen, vormerken (``plan``), schreiben (``apply``)."""
+    eng = app.eng
+    ctl = getattr(eng, "valve_pid", None) if eng is not None else None
+    if ctl is None or not ctl.rooms():
+        return 0
+    try:
+        ctl.plan(now)
+    except Exception:  # noqa: BLE001 – die übrigen Schritte laufen weiter, es wird nichts geschrieben
+        ctl.pending = []
+        log.exception("Ventilgeführte Räume: Schritt fehlgeschlagen – nichts geschrieben")
+    return await ctl.apply(now)
 
 
 async def disinfect_step(app: App, now: float | None = None) -> bool:

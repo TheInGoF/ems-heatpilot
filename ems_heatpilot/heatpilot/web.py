@@ -235,7 +235,8 @@ def make_app(app) -> web.Application:
                    if eid.startswith("climate.") else {}),
                 **({"dhw": dhw_entity.picker(eid, st, app.eng.found),
                     "flow": boiler_entity.flow_picker(eid, st, app.eng.found),
-                    "period": boiler_period.picker(eid, st, app.eng.found)} if eid.startswith("number.") else {}),
+                    "period": boiler_period.picker(eid, st, app.eng.found),
+                    "min": a.get("min"), "max": a.get("max")} if eid.startswith("number.") else {}),
                 **({"heating": boiler_entity.heat_picker(eid, st, app.eng.found),
                     "disinfect": disinfect_entity.picker(eid, st, app.eng.found)} if eid.startswith("switch.") else {}),
             })
@@ -355,6 +356,8 @@ def make_app(app) -> web.Application:
                    for r in eng.found.rooms}
         boosts = ctl.active(targets) if ctl else {}
         ctl_rooms = loop.rooms if loop else {}
+        vp = getattr(eng, "valve_pid", None)  # 0.51: Status der ventilgeführten Räume
+        valve_states = (vp.as_dict().get("rooms") or {}) if vp is not None else {}
         rooms = []
         for r in eng.found.rooms:
             st = eng.states.get(r.climate) or {}
@@ -379,6 +382,7 @@ def make_app(app) -> web.Application:
                 "modes": a.get("hvac_modes") or [], "boost": boosts.get(r.climate),
                 # seit 0.34: Gruppe, Steuerung
                 "group": r.group, "controller": r.controller, "managed": r.managed, "comfort": r.comfort,
+                "lead": r.lead, "valve_pos": r.valve_pos, "valve_pid": valve_states.get(r.climate),
                 "platform": r.platform, "tado_cloud": bool(ctl and ctl.is_tado(r.climate)),
                 "ems": r.ems,  # 0.36.3: Heizkreis von EMS-ESP – Bedienung gesperrt
                 "climates": r.climates, "devices": devices,

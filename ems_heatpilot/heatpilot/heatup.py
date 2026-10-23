@@ -101,3 +101,20 @@ def track(st: dict, phase: str, setpoint: float, until, temp: float | None, ts: 
     over = pre["peak"] - (pre["sp"] + pre["m"]) if pre["reached"] else 0.0
     st["tune"] = {"speed": round(min(max((1 - LEARN) * s + LEARN * seen, SPEED_MIN), SPEED_MAX), 3),
                   "margin": round(min(max(m + LEARN * over, 0.0), MARGIN_MAX), 2)}
+
+
+def engine_shared_flow(eng, readings: dict, t_out: float | None) -> float | None:
+    """Gemeinsamer Vorlauf fürs tägliche Vorheizen (``shared_flow``) der Räume, die mitmachen, ein plausibles
+    Modell haben und mehr als 0,3 K unter Komfort liegen – mit der Mindestleistung des Kessels (``controlloop``)."""
+    from . import guards
+    from .boiler_flow import min_power_kw
+
+    out, rooms = 5.0 if t_out is None else t_out, []
+    for r in eng.found.rooms:
+        m, temp = eng.rooms.get(r.climate), (readings.get(r.climate) or (None, None))[1]
+        if r.managed and m is not None and temp is not None and temp < r.comfort - 0.3 and guards.check_room(m)["ok"]:
+            rooms.append((m, temp, float(r.comfort), out))
+    need = sum(max(m.b * (t - out) - m.c, 0.0) for m, t, _, _ in rooms)
+    house = (eng.house.demand_kw(sum(x[1] for x in rooms) / len(rooms), out)
+             if rooms and need > 0 and guards.check_house(eng.house)["ok"] else 0.0)
+    return shared_flow(rooms, eng.cfg.max_flow_temp, min_power_kw(eng)[0], house / need if house > 0 else None)

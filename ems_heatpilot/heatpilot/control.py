@@ -56,10 +56,10 @@ import logging
 import math
 import time
 
-from . import boiler_entity, boiler_period, disinfect_entity, floor_limit
+from . import boiler_entity, boiler_period, disinfect_entity, floor_limit, room_lead
 from .boiler_rule import CHECK_MAX_S, CHECK_TOL_K, FLOW_MIN, PUMP_FLOW
 from .config import NOTIFY_TARGET
-from .dhw_entity import entity_problem
+from .dhw_entity import check_call as dhw_check_call
 from .discovery import Room
 from .ems_lock import LOCK_TEXT
 from .ha_client import HAConnectionLost
@@ -100,7 +100,8 @@ def _num(value) -> float | None:
 class Control(boiler_period.PeriodWrite):
     def __init__(self, ha, store, rooms: list, states: dict | None = None, dhw_entity: str | None = None,
                  dhw_limits: tuple[float, float] | None = None, notify_targets=(), boiler: dict | None = None,
-                 boiler_lock=None, disinfect: str | None = None, disinfect_lock=None) -> None:
+                 boiler_lock=None, disinfect: str | None = None, disinfect_lock=None,
+                 valves: dict | None = None) -> None:
         """``rooms``: ``discovery.Room`` (Gruppen) oder nur climate-IDs (jede ihr eigener Raum).
         ``states``: HA-Zustände (``engine.states``), um Betriebsart und Soll vor dem Schreiben zu kennen.
         ``dhw_entity``/``dhw_limits`` (0.38): die eine ``number``-Entität des Warmwasser-Solls und (Minimum, Maximum)
@@ -131,6 +132,8 @@ class Control(boiler_period.PeriodWrite):
                          "Schreibwege gesperrt" if self.flow_entity and self.flow_entity == self.dhw_entity else None)
         if self.conflict:
             log.error(self.conflict)
+        # 0.51: {Ventil-Entität: Raumname} der ventilgeführten Räume – die einzigen erlaubten Ventil-Schreibziele
+        self.valves: dict[str, str] = {e: n for e, n in (valves or {}).items() if str(e).startswith("number.")}
         self._flow_sent: tuple[int, float] | None = None  # zuletzt geschriebenes Vorlauf-Soll (Wert, Zeit)
         self._services: tuple[float, dict] | None = None
         self.groups: dict[str, Room] = {}
@@ -241,8 +244,12 @@ class Control(boiler_period.PeriodWrite):
             raise PermissionError(self.conflict)
         if domain == "number" and self.flow_entity and entity_id == self.flow_entity:
             self._check_flow(entity_id, data)  # nur das Vorlauf-Soll, nur in den Grenzen (Weg B, 0.41)
-        elif domain == "number":  # Antipendelzeit (0.48) bzw. das eingestellte Warmwasser-Soll (0.38), in den Grenzen
-            (self._check_period if entity_id == self.period_entity else self._check_dhw)(entity_id, data)
+        elif domain == "number" and entity_id in self.valves:  # Ventilöffnung eines ventilgeführten Raums (0.51)
+            room_lead.check_valve_call(self.valves, entity_id, data, self._state(entity_id))
+        elif domain == "number" and entity_id == self.period_entity:  # Antipendelzeit (0.48)
+            self._check_period(entity_id, data)
+        elif domain == "number":  # das eingestellte Warmwasser-Soll (0.38), in den Grenzen
+            dhw_check_call(entity_id, self.dhw_entity, self.dhw_limits, data, self._state(entity_id))
         elif domain == "switch" and self.disinfect_entity and entity_id == self.disinfect_entity:  # Desinfektion (0.42)
             disinfect_entity.check_call(entity_id, self.disinfect_entity, data, self._state(entity_id),
                                         self.disinfect_lock() if self.disinfect_lock is not None else None)
@@ -260,28 +267,6 @@ class Control(boiler_period.PeriodWrite):
         if domain == "number" and entity_id == self.flow_entity:
             self._flow_sent = (int(value), time.time())
         self.store.add_control_log(int(time.time()), entity_id, action or service, value, reason)
-
-    def _check_dhw(self, entity_id: str, data: dict) -> None:
-        """Warmwasser-Soll (Weg W): nur die eine eingestellte ``number``-Entität, nur ``value``, ganzzahlig,
-        Minimum ≤ Wert ≤ Maximum (Einstellungen und, wenn HA sie meldet, die Grenzen der Entität); die Entität muss
-        taugen (``dhw_entity.entity_problem``: verfügbar, Einheit °C, kein Heizkreis, kein anderer Kesselwert).
-        Alles andere hart abgewiesen."""
-        if not self.dhw_entity or entity_id != self.dhw_entity or not self.dhw_limits:
-            raise PermissionError(f"number.set_value auf {entity_id} ist gesperrt – nur das eingestellte "
-                                  "Warmwasser-Soll bei „HeatPilot setzt“")
-        value = data.get("value")
-        lo, hi = self.dhw_limits
-        if set(data) != {"value"} or isinstance(value, bool) or not isinstance(value, int) or not lo <= value <= hi:
-            raise PermissionError(f"Warmwasser-Soll {value!r} gesperrt – nur ganze Grad von {lo:g} bis {hi:g} °C")
-        problem = entity_problem(entity_id, self._state(entity_id))
-        if problem:
-            raise PermissionError(f"{problem} – gesperrt")
-        attrs = self._state(entity_id).get("attributes") or {}
-        e_lo, e_hi = _num(attrs.get("min")), _num(attrs.get("max"))
-        if (e_lo is not None and value < e_lo) or (e_hi is not None and value > e_hi):
-            raise PermissionError(f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id} "
-                                  f"({e_lo:g}…{e_hi:g} °C)" if e_lo is not None and e_hi is not None
-                                  else f"Warmwasser-Soll {value} °C außerhalb der Grenzen von {entity_id}")
 
     def _boiler_guard(self, entity_id: str, what: str) -> None:
         """Weg B: gesperrt ohne Schalter „heatpilot“, für eine andere Entität und solange ein Regler am Bus ist."""
@@ -373,6 +358,13 @@ class Control(boiler_period.PeriodWrite):
                                   "setzt“ oder keine Entität)")
         await self._call("switch", "turn_on" if on else "turn_off", self.disinfect_entity, {}, reason,
                          action="disinfect_on" if on else "disinfect_off")
+
+    async def set_valve(self, entity_id: str, value: int, reason: str) -> None:
+        """Ventilöffnung eines ventilgeführten Raums stellen (seit 0.51): ``number.set_value`` – die harten
+        Schutzregeln macht ``room_lead.check_valve_call`` in ``_call``."""
+        if entity_id not in self.valves:
+            raise PermissionError(f"Ventilstellung: Schreiben auf {entity_id} gesperrt – kein ventilgeführter Raum")
+        await self._call("number", "set_value", entity_id, {"value": value}, reason, action="valve_set")
 
     async def set_dhw(self, value: int, reason: str) -> None:
         """Warmwasser-Soll schreiben (Weg W, seit 0.38): ``number.set_value`` auf ``dhw_entity`` – die Prüfung

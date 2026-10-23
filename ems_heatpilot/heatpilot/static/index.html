@@ -1616,6 +1616,12 @@ function roomState(r) {
   const c = r.control, t = fmt(r.target) + "°";
   if (r.ems) return `Nur Anzeige · ${t}`;  // Heizkreis von EMS-ESP (0.36.3)
   if (r.boost) return `Boost · ${t} · ${boostLeft(r.boost)}`;
+  if (managing() && r.managed && r.lead === "ventil" && c && c.phase) {  // 0.51: HeatPilot stellt die Öffnung
+    const v = r.valve_pid || {}, pct = v.want ?? r.valve;
+    let s = `Ventil · ${PHASE[c.phase] || c.phase} ${fmt(c.desired)}°` + (pct !== null && pct !== undefined ? ` · ${fmt(pct, 0)} %` : "");
+    if (v.hold) s += " · von Hand";
+    return s;
+  }
   if (managing() && r.managed && c && c.phase) {  // Zustand aus der Regelschleife
     const until = c.manual_until ? ` bis ${clock(c.manual_until)}` : "";
     if (r.mode === "off") return "Aus" + until;
@@ -3631,6 +3637,8 @@ const isTemp = (e) => e.id.startsWith("sensor.") && (e.device_class === "tempera
 const isSensor = (e) => e.id.startsWith("sensor.") || e.id.startsWith("counter.");
 const PICKERS = {
   temp: { filter: isTemp, label: "Temperatur-Sensoren" },
+  // 0.51: Ventilstellung eines TRV – number in %, oder 0–100 laut Grenzen (z. B. Shelly BLU TRV)
+  valvepos: { filter: (e) => e.id.startsWith("number.") && (e.unit === "%" || (e.min === 0 && e.max === 100)), label: "Ventilstellung (number, 0–100 %)" },
   sensor: { filter: isSensor, label: "Sensoren" },
   // Warmwasser-Soll (0.38): nur number mit °C ohne andere Rolle (api/entities: dhw.fits), Vorschlag und Namen mit
   // Warmwasser-Hinweis zuerst
@@ -3762,6 +3770,8 @@ function roomRows() {
       ${field("Ventil / Heizleistung", `<input class="r-valve" list="dl-sensor" value="${esc(valveVal)}" placeholder="Ventil % (optional)">`, goneHint("heating_power", valveVal) || vfHint)}
       ${field("Temperatur-Sensor", `<input class="r-temp" list="dl-temp" value="${esc(tempVal)}" placeholder="Temperatur (optional)">`, goneHint("temperature", tempVal))}
       ${field("Feuchte", `<input class="r-hum" list="dl-sensor" value="${esc(humVal)}" placeholder="Feuchte (optional)">`, goneHint("humidity", humVal))}
+      ${field("Führung", `<select class="r-lead" onchange="leadSync(this)"><option value="temp"${(r.lead || "temp") !== "ventil" ? " selected" : ""}>Temperatur – Soll ans Thermostat</option><option value="ventil"${r.lead === "ventil" ? " selected" : ""}>Ventil – HeatPilot stellt die Öffnung</option></select>`, "„Ventil“ braucht die Stellgrößen-Entität rechts (z. B. Shelly BLU TRV)")}
+      ${field("Ventilstellung (Stellgröße)", `<input class="r-valvepos" list="dl-valvepos" value="${esc(r.valve_pos || "")}" placeholder="number.… (0–100 %)">`, "die number-Entität, mit der sich das Ventil in % stellen lässt")}
       </div>${roomStates(c.id)}<div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
   }).join("");
 }
@@ -4109,6 +4119,11 @@ async function loadAdopt(msg = "") {
   ADOPT_MSG = msg; renderAdopt();
 }
 // Raum-Tabelle geändert (Eingabe, „Bereiche übernehmen“, „Vorschläge übernehmen“): sperren bis „Speichern“
+// 0.51: „Ventil“ ohne Stellgrößen-Entität ergibt keinen Sinn – beim Umschalten kurz hinweisen
+function leadSync(sel) {
+  const tr = sel.closest(".room"), pos = tr.querySelector(".r-valvepos");
+  if (sel.value === "ventil" && !pos.value.trim()) pos.focus();
+}
 function roomsDirty() { setDirty(); if (!ROOMS_DIRTY) { ROOMS_DIRTY = true; ADOPT_MSG = ""; ALIAS_MSG = ""; SWITCH_MSG = ""; renderAdopt(); renderAliases(); renderSwitch(); } }
 const adoptGo = (btn) => adoptRun(btn.dataset.from, btn.dataset.to);
 function adoptPick(btn) {
@@ -5798,6 +5813,7 @@ function collect() {
     const rid = ((SET.rooms || []).find((r) => r.climate === c) || {}).id;  // 0.44: feste Raumkennung, unverändert
     out.rooms.push({ ...(rid ? { id: rid } : {}), climate: c, name: tr.querySelector(".r-name").value.trim(), heating_power: tr.querySelector(".r-valve").value.trim(),
                      temperature: tr.querySelector(".r-temp").value.trim(), humidity: tr.querySelector(".r-hum").value.trim(),
+                     lead: tr.querySelector(".r-lead").value, valve_pos: tr.querySelector(".r-valvepos").value.trim(),
                      group: tr.querySelector(".r-group").value.trim(), controller: tr.querySelector(".r-controller").checked,
                      managed: managedOf(tr, c), comfort: tr.querySelector(".r-comfort").value.trim(),
                      // Hydraulik (0.35): leer = unbekannt (wird nicht gespeichert), Stufen 0 = kein Voreinstellventil

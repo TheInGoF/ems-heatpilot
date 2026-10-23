@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.51.0
+- **Ventilgeführte Räume (z. B. Shelly BLU TRV):** Je Raum neu die Führung „Temperatur“ (Soll ans Thermostat, wie bisher) oder „ventilgeführt“ – dann stellt HeatPilot die Ventilöffnung in Prozent selbst, über eine PID-Regelung mit Vorsteuerung aus dem Raummodell. So schließt das Ventil, bevor der Raum über das Ziel schießt. Die Verstärkung lernt je Raum (pendelt der Raum, runter; bleibt er träge unter Soll, hoch). Einstellungen → Räume → Einzelheiten: „Führung“ und „Ventilstellung“ (die number-Entität des TRV, 0–100 %)
+- **Harter Schreibweg:** Ventil-Prozente gehen nur über `Control.set_valve` auf die eine zugewiesene Entität, nur ganze Prozent 0–100, innerhalb der Grenzen der Entität – alles andere wird abgewiesen. Höchstens ein Schreiben je 5 min (Sprünge ab 15 Punkten sofort, Änderungen unter 3 Punkten nie – schont Motor und Batterie); 60 s nach dem Schreiben wird zurückgelesen, nach 3 Fehlschlägen pausiert der Raum 1 h mit Meldung. Wer von Hand dreht, behält das Ventil 1 h. Ohne Raumtemperatur stellt HeatPilot nach 30 min einmal den sicheren Wert 40 %
+- **Automatischer hydraulischer Abgleich** (ventilgeführte Räume): Bleibt ein Raum am Anschlag unter Soll, während ein anderer sein Soll mit wenig Öffnung hält, senkt HeatPilot dem leichten Raum den Öffnungs-Deckel um 5 Punkte je Tag (nie unter 40 %); nach 3 ruhigen Tagen gehen die Deckel zurück Richtung 100 %. Der handgeführte Abgleich (Empfehlungen zur Voreinstellung) bleibt für temperaturgeführte Räume
+- Die Soll-Schiene und die Ventilführung (Stufe 2) fassen ventilgeführte Räume nicht an; gelernt wird der Raum weiter (das gestellte Prozent ist sein Ventilwert). Raumkarte zeigt „Ventil · komfort 21° · 45 %“
+- **Tests:** neu `tests/test_valve_pid51.py`, `tests/test_balance_auto51.py`
+
 ## 0.50.6
 - **Live:** Zeitraum „1 h“; Vorlauf-Soll ohne den Ruhewert (7 °C) gezeichnet – der Chart ist nicht mehr gestaucht; Linien lassen sich über die Legende aus- und einblenden
 - **Kachel Rücklauf** mit Spreizung und abgenommener Wärme (kW je K aus den Brennerläufen im Zeitraum)
