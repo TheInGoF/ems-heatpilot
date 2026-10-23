@@ -1557,6 +1557,10 @@ leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder
 „macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Entitäten →
 Räume.
 
+Ist der Regler abgebaut („Regler ist abgebaut“ angehakt, oder EMS-ESP meldet kein Gerät „thermostat“), stehen
+seine Werte auf Einstellungen → Entitäten und in Diagnose → Alle Sensoren als „Regler abgebaut – nicht gebraucht“ und
+zählen nicht als Problem (seit 0.52.2).
+
 ## Heizen im Lovelace-Dashboard (Gast-Ansicht, seit 0.52)
 
 Die HeatPilot-Seite läuft über Ingress und ist damit nur für Administratoren erreichbar. Damit alle im Haushalt die

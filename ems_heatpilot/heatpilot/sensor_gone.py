@@ -28,7 +28,6 @@ log = logging.getLogger(__name__)
 # Feld am Gerät (``Room.devices``) → Feld in den Einstellungen; ``DROP``: diese nimmt ``drop`` aus dem Raum
 FIELDS = {"heating_power": "heating_power", "humidity": "humidity", "temp_sensor": "temperature"}
 DROP = ("heating_power", "humidity")
-GONE_TEXT = "gibt es in Home Assistant nicht mehr – kann leer bleiben"
 
 
 def exists(eid: str | None, states: dict, idx) -> bool:

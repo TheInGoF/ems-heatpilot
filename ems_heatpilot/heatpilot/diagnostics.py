@@ -23,6 +23,7 @@ from pathlib import Path
 
 from . import __version__, guards, valve_control
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
+from .entity_map import regulator_removed
 from .engine import num
 
 LOG_RING_SIZE = 3000
@@ -529,7 +530,6 @@ def sensor_table(eng) -> list[dict]:
     """Alle Sensoren auf einen Blick: wofür, woher, Name in HA, aktueller Wert, Stand, Zustand."""
     rows: list[dict] = []
     f = eng.found
-    now = time.time()
 
     def ha(eid: str | None) -> dict:
         st = eng.states.get(eid or "")
@@ -542,12 +542,12 @@ def sensor_table(eng) -> list[dict]:
 
     def add(group, label, source, info, status=None):
         value = info.get("value")
-        if status is None:
-            status = "fehlt" if value in (None, "unknown", "unavailable") else "ok"
+        if status is None or (group == "Regler" and removed):  # 0.52.2: Werte eines abgebauten Reglers fehlen zu Recht
+            status = "Regler abgebaut" if group == "Regler" and removed else "fehlt" if value in (None, "unknown", "unavailable") else "ok"
         rows.append({"group": group, "label": label, "source": source, "name": info.get("name"),
                      "value": value, "unit": info.get("unit"), "age_min": info.get("age_min"), "status": status})
 
-    used_ems = set()
+    used_ems, removed = set(), regulator_removed(eng.cfg, eng.ems)
     for group, roles, device, found_map in (("Kessel", BOILER_ROLES, "boiler", f.boiler),
                                             ("Regler", THERMOSTAT_ROLES, "thermostat", f.thermostat)):
         ems = eng.ems.get(device) or {}

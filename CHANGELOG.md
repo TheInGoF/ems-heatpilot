@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.52.2
+- **Abgebauter Regler ist kein Fehler mehr:** Seine Werte (Betriebsart, Vorlauf des Reglers, Heizkurve, Termine) fehlen zu Recht. Entitätenseite und Diagnose → Alle Sensoren zeigen sie als „Regler abgebaut – nicht gebraucht“ statt „nicht verfügbar“/„fehlt“ und zählen sie nicht mehr als Problem – wenn „Regler ist abgebaut“ angehakt ist oder EMS-ESP antwortet und kein Gerät „thermostat“ meldet. Live: „Regler –“ und die leere Linie „Vorlauf-Soll (Regler)“ verschwinden ohne Regler
+- **Aufgeräumt:** ungenutzter Code entfernt, Fahrplan im README um Ventil-PID (0.51) und Gast-Ansicht (0.52) ergänzt
+- **Tests:** neu `tests/test_revision522.py`
+
 ## 0.52.1
 - **Test-Suite entschlackt:** Die in fast jeder Feature-Testdatei wiederholten Strukturprüfungen (Module ≤ 600 Zeilen mit Docstring, Funktionen ≤ 60/65 Zeilen, Version/CHANGELOG konsistent) macht jetzt eine zentrale Datei `tests/test_struktur.py` für das ganze Paket – mit Bestandsschutz für 24 ältere, längere Funktionen, die nicht weiter wachsen dürfen. 14 doppelte Tests entfernt, keine Änderung am Add-on selbst
 

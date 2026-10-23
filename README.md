@@ -108,7 +108,9 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 | 5 | Thermostate als Stellglied: Ventilverhalten lernen, Soll in voller Auflösung, Räume gemeinsam anfordern (weniger Takten) | 0.39 – Ventilverhalten und Trockenlauf gebaut; 0.40 – Ventile führen gebaut (eigener Schalter) |
 | 6 | Kessel übernehmen: Vorlauf live und Heizbetrieb über Home Assistant, eigene Witterungsführung – der Regler entfällt | 0.41 – Weg B gebaut (Vorlauf live, Heizbetrieb, Abnahme, Takt-Boost, Wächter; eigener Schalter); mit 0.42 auch die Desinfektion – der Regler kann nach dem Trockenlauf entfallen |
 | 7 | Wirkungsgrad je Vorlauf gelernt statt fester Richtwert (Vorlauf-Studie → Planung) | teilweise (gemessen) |
-| 8 | Offene Thermostate (Zigbee, Z-Wave, Matter, Homematic) getestet | optional |
+| 8 | Ventile direkt stellen: PID je Raum über die Ventilöffnung, automatischer hydraulischer Abgleich (z. B. Shelly BLU TRV) | 0.51 gebaut – im Einsatz zu erproben |
+| 9 | Heizen für alle im Haushalt: Reiter „Heizen“ als Lovelace-Karte ohne Einstellungen | 0.52 gebaut |
+| 10 | Weitere offene Thermostate (Zigbee, Z-Wave, Matter, Homematic) getestet | optional |
 
 ## Voraussetzungen
 

@@ -1241,7 +1241,8 @@ function legend(id, items, toggle = false) {
 
 let SENSORS = [];
 const STATUS_CSS = { ok: "var(--good)", fehlt: "#e34948", veraltet: "var(--warn)", "nicht gefunden": "var(--text-muted)",
-  "nicht gewählt": "var(--text-muted)", "nicht verwendet": "var(--text-muted)", "Kessel liefert nicht": "var(--text-muted)" };
+  "nicht gewählt": "var(--text-muted)", "nicht verwendet": "var(--text-muted)", "Kessel liefert nicht": "var(--text-muted)",
+  "Regler abgebaut": "var(--text-muted)" };
 async function loadSensors() {
   const j = await getJSON("api/sensors");
   SENSORS = j.rows || [];
@@ -1325,7 +1326,7 @@ async function loadLive() {
     `Druck ${press}`,
     `<span title="${esc(SERVICE_CODES[n.service_code] || "Servicecode des Kessels")}">Status ${n.service_code ? esc(n.service_code) : "–"}</span>`,
     `Kessel ${fmt(n.boiler_temp)} °C`,
-    `Wärme angefordert: <b>${n.setpoint_demand === null ? "–" : n.setpoint_demand ? "ja" : "nein"}</b> · Regler ${esc(n.hc_mode ?? "–")}` + (n.overrun ? " · Brenner läuft ohne Bedarf" : ""),
+    `Wärme angefordert: <b>${n.setpoint_demand === null ? "–" : n.setpoint_demand ? "ja" : "nein"}</b>` + (n.hc_mode !== null && n.hc_mode !== undefined ? ` · Regler ${esc(n.hc_mode)}` : "") + (n.overrun ? " · Brenner läuft ohne Bedarf" : ""),
   ].join(" · ") + (n.pump_on === null && n.pump_mod === null ? '<br><span class="muted">Pumpe fehlt – unter Einstellungen → Entitäten „Heizungspumpe“/„Pumpenmodulation“ prüfen</span>' : "");
   $("live-dhw-head").textContent = `Speicher ${fmt(n.dhw_temp)} °C · Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "");
   $("live-rooms-head").innerHTML = `Innen Ø ${fmt(n.t_in)} °C · Luftfeuchte Ø ${fmt(n.humidity, 0)} %` + (humidityNote(n.rooms) ? ` · ${humidityNote(n.rooms)}` : "");
@@ -1384,7 +1385,8 @@ function drawLive() {
   // 0.46.5: Pumpenlauf hinterlegt (unter den Brenner-Bändern) – ohne Umschalten sehen, wann sie lief
   const pumpBand = (s.pump_on || []).map((v, i) => v ?? ((s.pump_mod || [])[i] > 0 ? 1 : 0) ? 1 : 0);
   if (LIVE_VIEW.kessel === "temp") {
-  legend("lg-boiler", [["Vorlauf", C.flow], ["Rücklauf", C.ret], ["Vorlauf-Soll (Kessel)", C.sel, 1], ["Vorlauf-Soll (Regler)", C.calc, 1], ["Kessel", C.boiler]], true);
+  const hasCalc = (s.calc_flow || []).some((v) => v !== null && v !== undefined);  // ohne Regler: keine Linie, kein Eintrag
+  legend("lg-boiler", [["Vorlauf", C.flow], ["Rücklauf", C.ret], ["Vorlauf-Soll (Kessel)", C.sel, 1], ...(hasCalc ? [["Vorlauf-Soll (Regler)", C.calc, 1]] : []), ["Kessel", C.boiler]], true);
   const rest = (v) => v !== null && v !== undefined && v < 15 ? null : v;  // 0.50.6: Ruhewert (7 °C) nicht zeichnen – sonst gestaucht
   timeChart($("ch-boiler"), ts, [
     { name: "Vorlauf", values: s.flow, color: C.flow }, { name: "Rücklauf", values: s.ret, color: C.ret },
@@ -5336,7 +5338,8 @@ const EM_PROBLEMS = ["fehlt", "nicht verfügbar", "nicht gefunden"];  // wie ent
 const EM_FREE = /^[a-z_]+\.[A-Za-z0-9_]+$/;  // frei eingetragen (nicht in Home Assistant): nur so und nur mit Enter
 const EM_BADGE = { "gewählt": ["gewählt", "em-s-set"], automatisch: ["automatisch gefunden", "em-s-auto"],
   "EMS-ESP": ["über EMS-ESP", "em-s-auto"], fehlt: ["fehlt", "em-s-miss"], "nicht verfügbar": ["nicht verfügbar", "em-s-off"],
-  "nicht gefunden": ["nicht gefunden", ""], "nicht gewählt": ["nicht gewählt", ""] };
+  "nicht gefunden": ["nicht gefunden", ""], "nicht gewählt": ["nicht gewählt", ""],
+  "Regler abgebaut": ["Regler abgebaut – nicht gebraucht", ""] };
 // Zeilen mit eigener Tabelle: Personen (Häkchen) und Benachrichtigungsziele (Entitäten und Dienste)
 const EM_CUSTOM = { persons: () => emPersons(), notify_targets: () => notifyHtml(NOTIFY) };
 
@@ -5389,9 +5392,9 @@ function emState(e, value, has = () => false) {
   const ids = own ? [].concat(chosen) : auto;
   const items = ids.map((id) => emItem(e, id));
   const source = own ? "gewählt" : ids.length ? "automatisch" : e.ems_key ? "EMS-ESP" : "fehlt";
-  const alt = source === "fehlt" ? (e.alt || []).find((k) => has(k)) || null : null;
+  const alt = source === "fehlt" && !e.removed ? (e.alt || []).find((k) => has(k)) || null : null;
   const gone = !e.multi && !!e.gone && chosen === e.gone;  // 0.45.1: Raum-Sensor gibt es nicht mehr – kein Problem
-  const issue = source === "fehlt" && e.required && !alt ? "fehlt" : gone ? "gibt es nicht mehr"
+  const issue = e.removed ? "Regler abgebaut" : source === "fehlt" && e.required && !alt ? "fehlt" : gone ? "gibt es nicht mehr"
     : items.some((i) => i.available === false) && !e.ems_key ? "nicht verfügbar"
     : source === "fehlt" && !alt ? (e.auto && e.group !== "raeume" ? "nicht gefunden" : "nicht gewählt") : null;
   return { source, items, alt, issue, problem: EM_PROBLEMS.includes(issue), own, gone };
