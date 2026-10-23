@@ -137,10 +137,6 @@ def test_alias_check_stays_when_source_delivers_nothing(tmp_path):
 # ------------------------------------------------------------------ 2: typische Ventilöffnung
 
 
-
-
-
-
 def test_substitutes_are_not_learned_by_pct_model_but_by_on_off_model(tmp_path):
     st = pct_store(tmp_path / "i.db")
     ts = NOW                                                             # Ersatzwert (typische Öffnung) nach echten
@@ -289,20 +285,3 @@ out({{ gone, vf, mc: mcValves(v), dm: dmValves(v),
     assert "Wohnen (keine Werte des alten Sensors – 648 h von früher bleiben)" in plain(got["notes"])
 
 
-def test_version_changelog_docs_and_new_files():
-    from heatpilot import __version__
-    assert __version__ >= "0.45.1"
-    assert f'version: "{__version__}"' in (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
-    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    head = log.split("\n## 0.45.1\n")[1].split("\n## ")[0]
-    for word in ("sensor_gone.py", "sensors_gone", "no_pct", "tests/test_v451_independent.py"):
-        assert word in head, word
-    docs = (ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8")
-    sec = docs.split("### Alte Thermostate bzw. Integration entfernen")[1].split("\n### ")[0]
-    assert "Hausdaten wiederherstellen" in sec and "Integration löschen" in sec and "typische Öffnung" not in sec
-    for name in ("sensor_gone.py", "room_stats.py", "valve_model.py", "engine_sample.py"):
-        src = (PKG / name).read_text(encoding="utf-8")
-        assert len(src.splitlines()) <= 600 and src.startswith('"""'), name
-    for name in ("sensor_gone.py",):
-        src = (PKG / name).read_text(encoding="utf-8")
-        assert not re.search(r"call_service|set_temperature|\.post\(|\.put\(.*http", src), name

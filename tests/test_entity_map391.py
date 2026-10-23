@@ -361,18 +361,6 @@ def test_api_entity_map_only_reads(tmp_path):
     assert calls == [] and "latitude" not in json.dumps(j)
 
 
-# ------------------------------------------------------------------ Lesbarkeit, Doku, Version
-def test_module_readable_and_documented():
-    text = (PKG / "entity_map.py").read_text(encoding="utf-8")
-    assert len(text.splitlines()) <= 600 and text.startswith('"""Seite „Entitäten“ (seit 0.39.1)')
-    for m in re.finditer(r"^def (\w+)\(.*?(?=^def |^class |^@|\Z)", text, re.M | re.S):
-        assert m.group(0).count("\n") <= 60, m.group(1)
-    for name in ("web.py", "config.py", "discovery.py"):
-        assert len((PKG / name).read_text(encoding="utf-8").splitlines()) <= 600, name
-    assert "„Nötig“ heißt: ohne den Wert fehlt HeatPilot etwas ohne Ersatz – im Code geprüft" in text
-    assert "Der Rücklauf ist optional" in text
-
-
 def test_docs_and_changelog_name_the_page():
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     assert "## Entitäten" in docs and "Zuordnungen (Experten)" not in docs

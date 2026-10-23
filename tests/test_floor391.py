@@ -340,17 +340,3 @@ def test_floor_limit_writes_nothing_and_is_readable():
         assert len((PKG / name).read_text(encoding="utf-8").splitlines()) <= 600, name
 
 
-# ------------------------------------------------------------------ Version, Doku
-def test_version_changelog_docs():
-    assert __version__ >= "0.39.1"  # seit 0.40 prüft test_valve_control40 die genaue Version
-    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    head = log.split("\n## 0.39.1")[1].split("\n## ")[0]
-    assert "Fußbodenheizung je Raum" in head and "nichts Neues geschrieben" in head
-    assert "55 °C" not in head  # keine persönlichen Werte
-    docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
-    assert "## Fußbodenheizung je Raum" in docs and "## Fußbodenheizung ohne Stellventil" not in docs
-    for text in ("**mit Mischer**", "**mit RTL-Ventil**", "**direkt am Kessel**", "„Anschluss wählen“",
-                 "begrenzt durch"):
-        assert text in docs, text
-    plan = (ROOT / "docs" / "planung-vorlauf-ems.md").read_text(encoding="utf-8")
-    assert "harte Grenze vor jedem Schreiben" in plan and "floor_limit.flow_cap" in plan

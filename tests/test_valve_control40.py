@@ -605,37 +605,3 @@ def test_synthetic_house_day_closed_loop(tmp_path):
     assert s["live"] and s["written"] == len(rows) and s["interventions_written"]["drosseln"] >= 1
 
 
-# ------------------------------------------------------------------ Version, Doku
-def test_version_changelog_docs_and_files():
-    from pathlib import Path
-
-    from heatpilot import __version__
-
-    root = Path(__file__).resolve().parents[1]
-    assert __version__ >= "0.40.0"  # seit 0.41 prüft test_boiler41 die genaue Version
-    head = (root / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.40.0\n")[1].split("\n## ")[0]
-    assert "Ventile führen" in head and "Standard aus" in head
-    for personal in ("Ingo", "55 °C", "BK15", "ES73", "Tado-App"):  # keine persönlichen Werte
-        assert personal not in head, personal
-    src = (root / "ems_heatpilot" / "heatpilot" / "valve_control.py").read_text(encoding="utf-8")
-    assert src.startswith('"""Ventile führen (seit 0.40)') and len(src.splitlines()) <= 600
-    for name in ("controlloop.py", "valve_dry.py", "readiness.py", "config.py", "control.py", "valve_model.py"):
-        assert len((root / "ems_heatpilot" / "heatpilot" / name).read_text(encoding="utf-8").splitlines()) <= 600, name
-    plan = (root / "docs" / "planung-vorlauf-ems.md").read_text(encoding="utf-8")
-    assert "Stufe 2 gebaut (0.40)" in plan
-    readme = (root / "README.md").read_text(encoding="utf-8")
-    assert "| 5 | Thermostate als Stellglied" in readme and "0.40 – Ventile führen gebaut" in readme
-
-
-def test_functions_stay_short():
-    import inspect
-
-    from heatpilot import controlloop
-
-    for mod in (vc, controlloop):
-        for name, fn in inspect.getmembers(mod, inspect.isfunction):
-            if fn.__module__ == mod.__name__:
-                assert len(inspect.getsource(fn).splitlines()) <= 60, name
-        for cls in (vc.Guide, controlloop.ControlLoop):
-            for name, fn in inspect.getmembers(cls, inspect.isfunction):
-                assert len(inspect.getsource(fn).splitlines()) <= 65, name

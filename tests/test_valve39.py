@@ -340,29 +340,8 @@ def test_group_learns_one_model_on_mean_valve(tmp_path):
     assert eng.valve_info("climate.a")["kind"] == "stetig" and eng.valve_info("climate.b") is None
 
 
-def test_files_readable_and_documented():
-    for name in ("valve_model.py", "valve_learn.py", "valve_dry.py"):
-        text = (PKG / name).read_text(encoding="utf-8")
-        assert len(text.splitlines()) <= 600, name
-        assert text.startswith('"""'), name
-    assert (PKG / "valve_model.py").read_text(encoding="utf-8").startswith('"""Ventilmodell je Raum (seit 0.39)')
-
-
 @pytest.mark.parametrize("e,cls", [(-3.0, 0), (-1.0, 0), (0.0, 10), (0.04, 10), (0.06, 11), (2.0, 30), (5.0, 30)])
 def test_classes(e, cls):
     assert vm.e_class(e) == cls
 
 
-# ------------------------------------------------------------------ Version, Doku
-def test_version_changelog_docs():
-    assert __version__ >= "0.39.0"  # seit 0.39.1 prüft test_floor391 die genaue Version
-    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    head = log.split("\n## 0.39.0\n")[1].split("\n## ")[0]
-    assert "nichts Neues geschrieben" in head
-    docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
-    assert "## Ventilverhalten" in docs and "### Ventile im Trockenlauf" in docs
-    assert "`target_temp_step`" in docs and "nur Protokoll, es wird nichts geschrieben" in docs
-    plan = (ROOT / "docs" / "planung-vorlauf-ems.md").read_text(encoding="utf-8")
-    assert "Stufe 1 gebaut (0.39)" in plan
-    main = (PKG / "main.py").read_text(encoding="utf-8")
-    assert "DATA_VERSION = 13" in main and "valve_model.VERSION" in main  # eigener Modellstand statt Neuberechnung

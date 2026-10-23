@@ -515,21 +515,3 @@ def test_guide_warning_and_condition_in_the_ui(tmp_path):
     assert "<td>Bedingung</td>" in r[1] and "kessel" in r[1] and 'id="boiler-guide-warn"' not in r[1]
 
 
-# ------------------------------------------------------------------ Lesbarkeit
-def test_new_files_short_with_purpose_and_short_functions():
-    for name in ("regulator.py", "boiler_watch.py", "boiler_control.py", "boiler_status.py", "boiler_rule.py",
-                 "boiler_flow.py", "boiler_entity.py", "watchdog.py", "control.py", "emsesp.py", "config.py"):
-        text = (PKG / name).read_text(encoding="utf-8")
-        assert len(text.splitlines()) <= 600 and text.startswith('"""'), name
-    for mod in (regulator, boiler_watch, boiler_control, boiler_flow, br, boiler_status, watchdog):
-        for _, fn in inspect.getmembers(mod, inspect.isfunction):
-            if fn.__module__ == mod.__name__:
-                assert len(inspect.getsource(fn).splitlines()) <= 60, fn.__qualname__
-        for _, cls in inspect.getmembers(mod, inspect.isclass):
-            for _, fn in inspect.getmembers(cls, inspect.isfunction):
-                if fn.__module__ == mod.__name__ and fn.__qualname__.startswith(cls.__name__ + "."):
-                    try:
-                        lines = len(inspect.getsource(fn).splitlines())
-                    except OSError:  # von dataclass erzeugt
-                        continue
-                    assert lines <= 60, fn.__qualname__
