@@ -1251,10 +1251,10 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
      gelten als „Pumpe läuft weiter“. Der Takt-Boost wirkt nur bei laufendem Heizbetrieb.
   2. **Mindest-Vorlauf aus der Abnahme:** Der Kessel kann nicht unter seine kleinste Leistung (kleinste Brennerleistung
      in % × Nennleistung, aus EMS-ESP bzw. Einstellungen → Kessel). HeatPilot rechnet, ab welchem Vorlauf die
-     Räume mit offenem Ventil diese Leistung abnehmen (je Raum Heizwirkung × (Vorlauf − Raumtemperatur) aus dem
+     Räume mit offenem Ventil diese Leistung abnehmen (je Raum Heizwirkung × (Vorlauf − Raumtemperatur)^n aus dem
      Raummodell, in kW umgerechnet mit dem Hausmodell: Wärmebedarf des Hauses jetzt, verteilt auf die Räume – eine
      Näherung, die Räume gleich schwer nimmt). Seit 0.50 zählt jedes Ventil nach seiner Öffnung (ein Ventil bei 9 %
-     nimmt kaum etwas ab) – vorher ließ ein Ventil, das gerade über 5 % ging, den Wert von 35 auf 49 °C springen.
+     nimmt kaum etwas ab; seit 0.53 mit der Form des Raummodells) – vorher ließ ein Ventil, das gerade über 5 % ging, den Wert von 35 auf 49 °C springen.
      Liegt das über dem Wert aus 1., gilt es. Reicht auch der höchste Vorlauf nicht, gilt nichts: lieber lange Pausen –
      der Kessel taktet dann über seine eigene Sperre.
      **Mindestleistung** (seit 0.42): Meldet der Kessel keine kleinste Brennerleistung (EMS-ESP `burnminpower`) und ist
@@ -1491,6 +1491,15 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
      wärmer, ohne dass der Heizkörper es erklären kann (Kamin, Backofen, viele Gäste), gilt
      das als **Fremdwärme-Ereignis**: diese Schritte lernt das Raummodell nicht (siehe
      „Fremdwärme“ unten).
+     Seit 0.53 lernt jeder Raum die Form seines Heizkörpers: Wärme ∝ (Vorlauf − Raum)^n × Ventilöffnung^p mit
+     n = 1,0 / 1,3 / 1,6 / 2,0 und p = 1 oder 0,5 (p = 0,5: schon ein wenig geöffnetes Ventil bringt viel Wärme). Alle
+     8 Formen lernen mit; die mit dem kleinsten Vorhersagefehler in Schritten mit Heizbetrieb gilt – erst ab etwa 48
+     solchen Schritten und nur, wenn sie die gültige um 2 % schlägt, bis dahin linear wie früher. An echten Daten
+     (7 Tage, 6 Räume) sank der Fehler der 1-h-Vorhersage beim Heizen damit um rund ein Viertel; bei mehr als 50 °C
+     Vorlauf war das lineare Modell um 0,5–1 K/h zu langsam. Die Heizwirkung zeigt die Diagnose bei 20 K über Raum und
+     offenem Ventil (vergleichbar über alle Formen), dazu Exponent und Ventilkennlinie. Modelle älterer Versionen
+     laden als lineare Form; beim ersten Start wird der alte Stand gesichert und der Raum aus den gespeicherten Daten
+     neu gelernt – der erste Start dauert dadurch etwas länger.
    - *Ventilmodell* (je Raum, halbstündlich, seit 0.39): wie das Thermostat sein Ventil abhängig vom Abstand
      zum Soll stellt – Kennlinie, Sprungantwort, kleines Reglermodell bzw. Schaltpunkte (siehe
      [Ventilverhalten](#ventilverhalten)). Lernt beim ersten Start aus den gespeicherten Messwerten nach.
@@ -1586,7 +1595,8 @@ HeatPilot die Öffnung direkt stellen, statt ein Soll zu schreiben – Einstellu
 Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
 
 - **PID mit Vorsteuerung aus dem Raummodell:** Die Vorsteuerung ist die Öffnung, die das Soll beim aktuellen Vorlauf
-  dauerhaft hält; der PI-Teil korrigiert den Rest. Die **Verstärkung lernt je Raum**: Pendelt der Raum (4
+  dauerhaft hält (seit 0.53 mit der Form des Raummodells – bei Öffnung^0,5 kleinere Öffnungen als linear); der
+  PI-Teil korrigiert den Rest. Die **Verstärkung lernt je Raum**: Pendelt der Raum (4
   Vorzeichenwechsel über ±0,15 K in 2 h), sinkt sie um 20 %; bleibt er trotz Luft nach oben 90 min mehr als 0,3 K
   unter Soll, steigt sie um 15 % (0,3–3,0).
 - **Schreibregeln:** nur bei Änderung ab 3 Punkten, höchstens ein Schreiben je 5 min – Sprünge ab 15 Punkten sofort

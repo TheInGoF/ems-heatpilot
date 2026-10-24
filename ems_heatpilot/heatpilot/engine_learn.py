@@ -81,6 +81,23 @@ class LearnMixin:
         for _ in self.relearn_steps(climates):
             pass
 
+    def migrate_rooms(self) -> set[str]:
+        """Raummodelle von vor 0.53 (linear, ``RoomModel.migrated``): den alten Stand einmal sichern
+        (``model.room.pre053.<climate>``), mit den umgerechneten Werten als Start neu anlegen – die Engine lernt sie
+        danach aus der gespeicherten Historie (``relearn_rooms``). Nichts Gelerntes geht verloren."""
+        out = set()
+        for climate, model in list(self.rooms.items()):
+            if not model.migrated:
+                continue
+            if self.store.get(f"model.room.pre053.{climate}") is None:
+                self.store.put(f"model.room.pre053.{climate}", self.store.get(f"model.room.{climate}"))
+            self.rooms[climate] = model.seeded()
+            out.add(climate)
+        if out:
+            log.info("Raummodelle %s auf die lernende Heizkörper-Form (0.53) umgestellt – lerne aus der Historie neu",
+                     sorted(out))
+        return out
+
     def relearn_steps(self, climates: set[str]):
         """Raumschritte der Räume ``climates`` von den ältesten Raumwerten bis zum letzten Raumschritt des Takts lernen;
         nach jedem Tag ein ``yield``. Das Ende wird jedes Mal neu gelesen – was der Takt inzwischen weiterzählt, lernt
@@ -160,7 +177,7 @@ class LearnMixin:
             rows = [r for r in rows if r["temp"] is not None]
             if len(rows) < 3 or rows[-1]["ts"] - rows[0]["ts"] < 0.8 * ROOM_STEP_H * 3600:
                 continue
-            inputs, floor_inputs, outs, suns, overs, valves = [], [], [], [], [], []
+            inputs, floor_inputs, outs, suns, overs, valves, parts = [], [], [], [], [], [], []
             vacation = False
             for r in rows:
                 s = sys_rows.get(r["ts"])
@@ -177,6 +194,7 @@ class LearnMixin:
                     active = 0  # Ventil auf Warmwasser
                 warm = max(s["flow"] - r["temp"], 0) * (active or 0)
                 inputs.append(warm * (r["valve"] or 0) / 100)
+                parts.append((warm, (r["valve"] or 0) / 100))  # 0.53: Ventilkennlinie, Exponent im Modell
                 floor_inputs.append(warm)  # Fußboden: kein Ventil, heizt immer mit
                 overs.append(max(s["flow"] - r["temp"], 0))  # was der Heizkörper höchstens liefern könnte
                 valves.append(r["valve"])  # None = kein Ventilwert
@@ -193,18 +211,19 @@ class LearnMixin:
             known = [v for v in valves if v is not None]
             if known:
                 ext = self.ext_heat_step(climate, model, start, end, t0, t1, dt_h, heat, floor_in, t_out, solar,
-                                         sum(overs) / len(overs), sum(known) / len(known), max(known))
+                                         sum(overs) / len(overs), sum(known) / len(known), max(known),
+                                         heat_q=model.heat_input(parts))
             else:  # ohne Ventilwert ist Heizkörperwärme nicht von Fremdwärme zu trennen: nicht erkennen
                 self._room_valve_prev.pop(climate, None)
                 ext = climate in self.room_ext
             # Fenster offen o. ä., Urlaub oder alle lange weg, Fremdwärme: Estrich nachführen, aber nicht lernen
             update = abs(t1 - t0) <= 2.0 and not vacation and not ext
-            model.learn(t0, t1, heat, t_out, dt_h, floor_input=floor_in, update=update, solar=solar)
+            model.learn(t0, t1, heat, t_out, dt_h, floor_input=floor_in, update=update, solar=solar, parts=parts)
 
     def ext_heat_step(self, climate: str, model: RoomModel, start: int, end: int, t0: float, t1: float,
                       dt_h: float, heat_input: float, floor_input: float, t_out: float,
                       solar: tuple[float, float, float] | None, flow_over: float, valve: float,
-                      valve_max: float) -> bool:
+                      valve_max: float, heat_q: float | None = None) -> bool:
         """Fremdwärme-Ereignis des Raums verfolgen; True = dieser Schritt gehört zu einem Ereignis.
 
         Beginn: unerklärter Anstieg (gemessen minus Modell) ≥ EXT_RATE_KH und ≥ EXT_MIN_K im Schritt,
@@ -232,7 +251,8 @@ class LearnMixin:
             return True
         if dt_h <= 0 or t1 - t0 < EXT_MIN_K or t1 - ref < EXT_MIN_K:
             return False
-        unexplained = (t1 - t0) / dt_h - model.explained_rate(heat_input, t_out, (t0 + t1) / 2, solar)
+        q = heat_input if heat_q is None else heat_q  # Heizkörper in der Form des Modells (0.53)
+        unexplained = (t1 - t0) / dt_h - model.explained_rate(q, t_out, (t0 + t1) / 2, solar)
         if unexplained < EXT_RATE_KH:
             return False
         if heat_input > EXT_HEAT_SHARE * flow_over or valve_prev is None or max(valve_max, valve_prev) > EXT_VALVE_MAX:

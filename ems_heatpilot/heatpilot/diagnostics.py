@@ -370,7 +370,8 @@ def explain_models(eng) -> dict:
         rooms[c] = {
             "fussboden": m.floor,
             "zeitkonstante_h": round(m.tau_h, 1),
-            "heizwirkung_k_h_je_k": round(m.a, 5),
+            "heizwirkung_k_h_je_k": round(m.a_ref, 5),  # bei 20 K über Raum, Ventil offen
+            "heizkoerper_exponent": m.n, "ventilkennlinie": m.p,  # Wärme ∝ (Vorlauf − Raum)^n · Öffnung^p
             "fussboden_wirkung": round(m.f, 5) if m.floor else None,
             "fremdwaerme_k_h": round(m.c, 3),
             "vorlauf_fuer_21_bei_0_grad": round(m.required_flow(21.0, 0.0), 1),

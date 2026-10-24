@@ -75,9 +75,10 @@ def check_room(room) -> dict:
     if room.rls.updates < LIMITS["room_min_updates"]:
         reasons.append(f"erst {room.rls.updates} Lernschritte")
     _within("room_tau_h", room.tau_h, reasons, "Zeitkonstante h")
-    _within("room_heat_gain", room.rls.theta[0], reasons, "Heizwirkung")
+    ref = getattr(room, "n", 1.0) - 1.0  # 0.53: Heizwirkung bei 20 K, über alle Exponenten vergleichbar
+    _within("room_heat_gain", room.rls.theta[0] * 20.0 ** ref, reasons, "Heizwirkung")
     gain = "room_static_gain_floor" if getattr(room, "floor", False) else "room_static_gain"
-    _within(gain, (room.a + room.f) / room.b, reasons, "Heizwirkung/Auskühlen")
+    _within(gain, (room.a * 20.0 ** ref + room.f) / room.b, reasons, "Heizwirkung/Auskühlen")
     if getattr(room, "excitation", None) is not None and room.excitation < LIMITS["room_min_excitation"]:
         reasons.append(f"zu wenig Heizbetrieb gelernt ({room.excitation:.0f} K·h)")
     if room.c / room.b < LIMITS["room_min_free_k"]:

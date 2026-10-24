@@ -163,7 +163,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.room_ext: dict[str, dict] = {c: e for c, e in (store.get("model.room_ext") or {}).items() if c in self.rooms}
         self._room_valve_prev: dict[str, float] = {}  # größte Ventilöffnung des vorigen Raumschritts
         self._room_temp_hist: dict[str, list[tuple[int, float]]] = {}  # (ts, Temperatur) am Ende der letzten Raumschritte
-        if fresh_rooms and self._last_room_step is not None:
+        if self._last_room_step is not None and (fresh_rooms := fresh_rooms | self.migrate_rooms()):  # 0.53
             self.relearn_rooms(fresh_rooms)
 
     # ------------------------------------------------------------------ Zustände
