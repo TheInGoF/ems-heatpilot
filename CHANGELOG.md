@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.52.4
+- **Boost-Dialog:** Der Schieberegler zeigt neben der Dauer gleich das Ende – „Dauer 1:30 h · bis 18:44“
+
 ## 0.52.3
 - **Boost mit Endzeit:** Heizen zeigt beim laufenden Boost die Restzeit und das Ende als Uhrzeit – Kachel „läuft · noch 2:00 h bis 18:44“, je Raum „Boost · 23° · 2:00 bis 18:44“
 
