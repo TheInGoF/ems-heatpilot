@@ -256,14 +256,15 @@ def boost_step(boost: dict | None, wanted: bool, ts: int, headroom: int, settled
 
 
 # ------------------------------------------------------------------ Mindest-Vorlauf aus der Abnahme
-def load_flow(min_kw: float, kw_per_kh: float, rooms: list[tuple[float, float]], lo: int, hi: int) -> int | None:
-    """Kleinster ganzer Vorlauf V in lo…hi, bei dem die anfordernden Räume (je Raum: Heizwirkung a in 1/h, Raum-
-    temperatur) mindestens ``min_kw`` abnehmen: Σ kw_per_kh · a · (V − T) ≥ min_kw (Ventil offen). None, wenn auch
-    ``hi`` nicht reicht – dann taktet der Kessel über seine eigene Sperre, keine Sonderlogik."""
+def load_flow(min_kw: float, kw_per_kh: float, rooms: list[tuple], lo: int, hi: int) -> int | None:
+    """Kleinster ganzer Vorlauf V in lo…hi, bei dem die anfordernden Räume (je Raum: Heizwirkung a, Raumtemperatur,
+    seit 0.53 optional der Exponent n des Raummodells, sonst 1) mindestens ``min_kw`` abnehmen:
+    Σ kw_per_kh · a · (V − T)^n ≥ min_kw. None, wenn auch ``hi`` nicht reicht – dann taktet der Kessel über seine
+    eigene Sperre, keine Sonderlogik."""
     if min_kw <= 0 or kw_per_kh <= 0 or not rooms or lo > hi:
         return None
 
     def power(v: float) -> float:
-        return kw_per_kh * sum(a * max(v - t, 0.0) for a, t in rooms)
+        return kw_per_kh * sum(r[0] * max(v - r[1], 0.0) ** (r[2] if len(r) > 2 else 1.0) for r in rooms)
 
     return next((v for v in range(lo, hi + 1) if power(v) >= min_kw - 1e-9), None)

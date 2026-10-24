@@ -113,7 +113,7 @@ def _load(eng, run, readings: dict, t_out: float, lo: int, hi: int) -> tuple[int
     house_kw = eng.house.demand_kw(sum(t for _, t in rooms) / len(rooms), t_out) if rooms else 0.0
     if need <= 0 or house_kw <= 0:
         return None, "Abnahme: gerade kein Wärmebedarf laut Haus- und Raummodellen"
-    open_rooms = [(r.model.a * min(v, 100.0) / 100.0, t) for r, t in rooms  # 0.50: nach der Öffnung gewichtet
+    open_rooms = [(r.model.a * (min(v, 100.0) / 100.0) ** r.model.p, t, r.model.n) for r, t in rooms  # nach Öffnung
                   if (v := readings[r.room.climate][3] or 0) > br.BOOST_VALVE_PCT]
     if not open_rooms:
         return None, "Abnahme: kein Raum mit offenem Ventil"

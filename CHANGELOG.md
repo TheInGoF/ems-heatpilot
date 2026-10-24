@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.53.0
+- **Raummodell genauer – Form des Heizkörpers gelernt:** Bisher rechnete jedes Raummodell die Heizkörperwärme linear als (Vorlauf − Raum) × Ventilöffnung. Nachgerechnet an einem 7-Tage-Export (6 Räume, Vorhersage über 1 h): Beim Heizen war es durchweg zu langsam, bei mehr als 50 °C Vorlauf um 0,5–1 K/h (daher das Überschwingen beim Vorheizen). Jetzt gilt Wärme ∝ (Vorlauf − Raum)^n × Öffnung^p:
+  - **Ventilkennlinie p = 0,5:** Schon ein wenig geöffnetes Ventil bringt viel Wärme (die gemeldete Heizleistung ist nicht der Durchfluss) – Fehler beim Heizen −20 %
+  - **Exponent n = 1,3 / 1,6 / 2,0:** zusammen mit p −26 %, bei > 50 °C fast ohne Versatz. Die Daten wählen meist 2,0 – steiler als der Lehrbuchwert 1,3 (Thermostat am Heizkörper, Hydraulik)
+  - **Je Raum gewählt:** Alle 8 Formen (n × p ∈ {1; 0,5}) lernen mit, die mit dem kleinsten Vorhersagefehler in Schritten mit Heizbetrieb gilt – erst ab ~48 solchen Schritten und nur, wenn sie die gültige um 2 % schlägt. Start ist die lineare Form wie bis 0.52: Ein Ventil, das wirklich linear wirkt, bleibt unverzerrt. Mit dem echten Code nachgerechnet (Neulernen über die 7 Tage): alle 6 Räume genauer, Fehler je 30-min-Schritt mit Heizbetrieb 0,80 → 0,72 K/h
+  - Geprüft und **nicht** übernommen, weil ohne messbaren Gewinn: Totzeit bzw. Speichermasse des Heizkörpers, eigener Term für den Messort am Heizkörper, Mittel aus Vor- und Rücklauf
+- **Gelerntes bleibt:** Modelle älterer Versionen laden unverändert als lineare Form (die übrigen Formen umgerechnet: gleiche Wirkung bei 20 K und halber Öffnung). Beim ersten Start wird der alte Stand unter `model.room.pre053.<Raum>` gesichert und der Raum aus den gespeicherten Daten neu gelernt – der erste Start dauert dadurch etwas länger. Der gespeicherte Stand enthält weiter die lineare Form unter `rls` (ältere Versionen laden ihn)
+- Mitgezogen: Gleichgewicht, Aufheizzeit und Halte-Vorlauf rechnen die gewählte Form (numerisch, wo nötig), ebenso die Abnahme der Kesselleistung und die Vorsteuerung ventilgeführter Räume. Diagnose: Heizwirkung bei 20 K über Raum und offenem Ventil (vergleichbar über alle Formen), dazu Exponent und Ventilkennlinie
+- **Tests:** neu `tests/test_model_form53.py` (synthetischer Raum mit ΔT^n- und Öffnung^0,5-Physik: das lineare Modell liegt bei hohem Vorlauf bzw. kleiner Öffnung > 0,4 K/h daneben, das neue < 0,1 K/h; Wahl der Form; linearer Raum bleibt linear; Umrechnen und Neulernen alter Modelle)
+
 ## 0.52.4
 - **Boost-Dialog:** Der Schieberegler zeigt neben der Dauer gleich das Ende – „Dauer 1:30 h · bis 18:44“
 

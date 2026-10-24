@@ -45,7 +45,7 @@ def feedforward(model, sp: float, flow: float | None, t_out: float | None) -> fl
     need = model.b * (sp - t_out) - model.c  # nötige Heizleistung in K/h (wie ``preview._need``)
     if need <= 0:
         return 0.0
-    return max(0.0, min(need / (model.a * (flow - sp)) * 100.0, 100.0))
+    return max(0.0, min(model.valve_for(need, flow, sp) * 100.0, 100.0))  # 0.53: Form des Raummodells
 
 
 def step(st: dict, sp: float, temp: float, flow: float | None, t_out: float | None, model, ts: int,

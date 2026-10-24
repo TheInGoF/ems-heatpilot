@@ -2,11 +2,12 @@
 
 Die Zeilen aus ``room_stats`` sind Stundenmittel (Temperatur, Heizleistung, Vorlauf) aus der Zeit ohne eigene
 Raumwerte. Das Raummodell (``models.RoomModel``: Aufheizen und Auskühlen) lernt aus ihnen in Schritten von einer
-Stunde statt der halben Stunde der Messpunkte – die Gleichung ist linear, Stundenmittel ergeben denselben Schritt mit
+Stunde statt der halben Stunde der Messpunkte – die Gleichung ist linear in den Parametern, Stundenmittel ergeben denselben Schritt mit
 gemittelten Eingängen (``dt_h`` = 1). Ein Schritt geht vom Mittel der Stunde h zum Mittel der Stunde h+1, seine
 Eingänge sind das Mittel beider Stunden (wie die mittige Ableitung des Hausmodells):
 
-* Wärmezufuhr wie in ``engine_learn.learn_rooms``: (Vorlauf − Raum) × Heizbetrieb × Heizleistung/100. Vorlauf und
+* Wärmezufuhr wie in ``engine_learn.learn_rooms``: (Vorlauf − Raum) × Heizbetrieb × Heizleistung/100 (seit 0.53
+  je Stunde an das Modell übergeben, das daraus seine Form rechnet: Exponent, Ventil^0,5). Vorlauf und
   Heizbetrieb kommen aus eigenen Messpunkten der Stunde, wo es sie gibt, sonst aus dem Stundenmittel des Vorlaufs der
   Langzeitstatistik und dem Heizgas der Stundenwerte (Heizbetrieb, wenn mehr als ``HEAT_GAS_KWH`` geheizt wurde);
 * ohne Heizleistung lernt das Modell nur Stunden ohne Heizbetrieb (Auskühlen, Fremdwärme) – eine Stunde mit
@@ -126,13 +127,14 @@ class StatLearner:
         if v0 is None or v1 is None:
             if w0 or w1:  # Heizbetrieb, aber Ventil unbekannt: Heizkörperwärme nicht von Fremdwärme zu trennen
                 return False
-            heat = 0.0
+            heat, parts = 0.0, None
         else:
-            heat = (w0 * v0 + w1 * v1) / 200
+            heat, parts = (w0 * v0 + w1 * v1) / 200, [(w0, v0 / 100), (w1, v1 / 100)]
         rows = [r for r in (r0, r1) if r]
         quiet = not any((r["vacation_frac"] or 0) > 0.5 or (r["ext_frac"] or 0) > 0 for r in rows)
         update = abs(t1 - t0) <= MAX_JUMP_K and quiet
         if update and model.rls.updates == 0 and self.eng.house.balance_plausible:
             model.adopt_house_tau(self.eng.house.tau_cool_h)
-        model.learn(t0, t1, heat, sum(outs) / len(outs), STEP_H, floor_input=(w0 + w1) / 2, update=update)
+        model.learn(t0, t1, heat, sum(outs) / len(outs), STEP_H, floor_input=(w0 + w1) / 2, update=update,
+                    parts=parts)
         return update

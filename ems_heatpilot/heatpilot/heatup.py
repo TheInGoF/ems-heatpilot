@@ -40,7 +40,7 @@ def shared_flow(rooms: list[tuple], max_flow: float, min_kw: float | None = None
     flow = max(heatup_flow(m, t, sp, out, max_flow) for m, t, sp, out in rooms)
     if min_kw and kw_per_kh:
         from .boiler_rule import load_flow
-        load = load_flow(min_kw, kw_per_kh, [(m.a, t) for m, t, _, _ in rooms], int(flow), int(max_flow))
+        load = load_flow(min_kw, kw_per_kh, [(m.a, t, m.n) for m, t, _, _ in rooms], int(flow), int(max_flow))
         flow = float(load) if load is not None else flow
     return flow
 
