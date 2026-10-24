@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.52.3
+- **Boost mit Endzeit:** Heizen zeigt beim laufenden Boost die Restzeit und das Ende als Uhrzeit – Kachel „läuft · noch 2:00 h bis 18:44“, je Raum „Boost · 23° · 2:00 bis 18:44“
+
 ## 0.52.2
 - **Abgebauter Regler ist kein Fehler mehr:** Seine Werte (Betriebsart, Vorlauf des Reglers, Heizkurve, Termine) fehlen zu Recht. Entitätenseite und Diagnose → Alle Sensoren zeigen sie als „Regler abgebaut – nicht gebraucht“ statt „nicht verfügbar“/„fehlt“ und zählen sie nicht mehr als Problem – wenn „Regler ist abgebaut“ angehakt ist oder EMS-ESP antwortet und kein Gerät „thermostat“ meldet. Live: „Regler –“ und die leere Linie „Vorlauf-Soll (Regler)“ verschwinden ohne Regler
 - **Aufgeräumt:** ungenutzter Code entfernt, Fahrplan im README um Ventil-PID (0.51) und Gast-Ansicht (0.52) ergänzt

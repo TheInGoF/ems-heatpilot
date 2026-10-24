@@ -1592,12 +1592,13 @@ function renderHeat() {
   const n = own.length, running = own.filter((r) => r.boost), offN = own.filter((r) => r.mode === "off").length;
   const autoN = own.filter((r) => r.mode === "auto" && !r.boost).length;
   const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
+  const last = running.length ? running.reduce((a, r) => (r.boost.left_min > a.left_min ? r.boost : a), running[0].boost) : null;
   const c = ctl(), pil = managing();
   // 0.43: oben nur eine Zeile zum Raumbetrieb; Warmwasser, Kessel, Bereitschaft und Warnungen in Übersicht → Status
   $("heat-status").innerHTML = heatStatus(c, LAST_SUMMARY && LAST_SUMMARY.vacation);
   // vier Kacheln immer – „Pause“ bei Beobachten gesperrt, das Raster springt nicht
   $("heat-acts").innerHTML =
-    act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
+    act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}${boostUntil(last)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
     act("sched", "Zeitplan", autoN === n ? "alle Räume" : `${autoN} von ${n} Räumen`, false) +
     act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false) +
     (GUEST ? "" : act("pause", "Pause", !pil ? "nur bei HeatPilot steuert" : c.paused_until ? `noch ${leftText(c.pause_left_min || 1)}` : "HeatPilot anhalten", !!c.paused_until, !pil));
@@ -1614,7 +1615,11 @@ function act(kind, title, sub, on, off = false) {
 const unreachable = (c) => c && c.reach_c !== null && c.reach_c !== undefined && c.desired !== null && c.reach_c < c.desired - 0.2;
 // Zustand der Raumkachel (0.43) nach einem Schema „Wer · Soll“: Zeitplan · 21° / HeatPilot · Nacht 18° /
 // Vorheizen → 21° / Manuell · 21° bis 18:00 / Boost · 21° · 0:45 / Pause · 21° / Aus / Frostschutz / Nur Anzeige · 21°
-const boostLeft = (b) => { const m = Math.max(0, Math.round(b.left_min || 0)); return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`; };
+// 0.52.3: Restzeit und Ende des Boosts als Uhrzeit („2:00 bis 18:44“) – aus ``end`` (Unix-Zeit) bzw. der Restzeit
+const boostUntil = (b) => { const t = b && (b.end ? b.end * 1000 : Date.now() + (b.left_min || 0) * 60000);
+  return t ? ` bis ${new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : ""; };
+const boostLeft = (b) => { const m = Math.max(0, Math.round(b.left_min || 0)), t = b.end ? b.end * 1000 : Date.now() + m * 60000;
+  return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} bis ${new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`; };
 function roomState(r) {
   const c = r.control, t = fmt(r.target) + "°";
   if (r.ems) return `Nur Anzeige · ${t}`;  // Heizkreis von EMS-ESP (0.36.3)
