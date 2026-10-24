@@ -54,3 +54,12 @@ def test_ui_knows_the_new_state():
             / "index.html").read_text(encoding="utf-8")
     assert '"Regler abgebaut": ["Regler abgebaut – nicht gebraucht"' in html
     assert "hasCalc ?" in html and "n.hc_mode !== null" in html
+
+
+def test_boost_shows_its_end_time():
+    """0.52.3: Boost mit Endzeit („bis 18:44“) in der Kachel und je Raum."""
+    from pathlib import Path
+
+    html = (Path(__file__).resolve().parents[1] / "ems_heatpilot" / "heatpilot" / "static"
+            / "index.html").read_text(encoding="utf-8")
+    assert "const boostUntil" in html and "${boostUntil(last)}" in html and "const boostLeft" in html and " bis ${new Date(t)" in html

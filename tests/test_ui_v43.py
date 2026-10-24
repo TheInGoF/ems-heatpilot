@@ -269,6 +269,8 @@ def test_room_states_follow_who_and_setpoint(tmp_path):
     }
     r = run_js(tmp_path, f"""const R = {json.dumps(ROOM)}, C = {json.dumps(cases)};
       out(Object.fromEntries(Object.entries(C).map(([k, [c, x]]) => {{ HEAT = {{ control: c }}; return [k, roomState({{ ...R, ...x }})]; }})));""")
+    assert all(__import__("re").search(r" bis \d\d:\d\d$", r[k]) for k in ("boost", "boost-hp"))  # 0.52.3: Endzeit
+    r = {k: __import__("re").sub(r" bis \d\d:\d\d$", "", v) if k.startswith("boost") else v for k, v in r.items()}
     assert r == {"zeitplan": "Zeitplan · 21°", "manuell": "Manuell · 21°", "frost": "Frostschutz", "boost": "Boost · 21° · 0:45",
                  "ems": "Nur Anzeige · 21°", "heatpilot": "HeatPilot · Nacht 18°", "vorheizen": "Vorheizen → 21°",
                  "hand": "Manuell · 21° bis 18:00", "aus": "Aus", "pause": "Pause · 21°", "boost-hp": "Boost · 21° · 1:15"}
