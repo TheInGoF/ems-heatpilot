@@ -1714,7 +1714,8 @@ function syncBoost(j) {
     `<span class="chip" onclick="boostAll()">${n === ids.length ? "Keine" : "Alle"}</span>`;
   $("boost-temp").textContent = fmt(BOOST.temp) + " °C";
   const dur = $("boost-dur"); if (String(dur.value) !== String(BOOST.minutes)) dur.value = BOOST.minutes;
-  $("boost-dur-text").textContent = hm(BOOST.minutes);
+  $("boost-dur-text").textContent = hm(BOOST.minutes) + " · bis " +  // 0.52.4: Ende beim Schieben („1:30 h · bis 18:44“)
+    new Date(Date.now() + BOOST.minutes * 60000).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" });
   $("boost-start").disabled = !n;
   // Tado-Cloud-Räume: Timer in Tado; andere: lokaler Timer in HeatPilot
   const local = j.rooms.some((r) => BOOST.rooms.includes(r.climate) && !r.tado_cloud), note = $("boost-note");
