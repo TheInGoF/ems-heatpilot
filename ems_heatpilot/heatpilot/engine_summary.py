@@ -150,7 +150,7 @@ class SummaryMixin:
         return {
             "now": now.isoformat(),
             "mode": self.cfg.mode,
-            "t_out": t_out,
+            "t_out": t_out, "wind": getattr(self, "wind_now", None),  # Wind m/s, letzter Messwert (0.55, setzt tick)
             "t_in": None if t_in is None else round(t_in, 2),
             "house": self.house.summary(self.cfg.design_outdoor_temp, t_out, t_in),
             "rooms": [

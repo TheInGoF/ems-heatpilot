@@ -565,6 +565,13 @@ h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-tran
 .ov-status .ready-line { display: flex; gap: var(--s2); align-items: flex-start; }
 .ov-status .ready-line > .dot { margin-top: 5px; }
 .card p.st-note { margin: 6px 0 0; font-size: 12px; }
+/* Übersicht (0.55): Zeitleiste „Nächste 24 Stunden“, Empfehlungen einzeilig, Ersparnis als Zeile */
+.plan-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.plan-list li { display: grid; grid-template-columns: 7.5em 18px 1fr; gap: var(--s1); align-items: baseline; padding: 3px 0; }
+.plan-t { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.adv-li { padding: 6px 0; border-bottom: 1px solid var(--border); }
+.adv-li summary { cursor: pointer; }
+.ov-save-line { margin: 0 0 12px; font-size: 14px; }
 .st-none { display: none; } #heat-log-box[hidden] + .st-none { display: block; margin: 0; }
 #ov-valve { border-top: 1px solid var(--border); margin-top: 12px; scroll-margin-top: 12px; }
 #ov-status { scroll-margin-top: 12px; }
@@ -801,23 +808,20 @@ ul.rules li { margin: 3px 0; }
   <div class="set-head" id="ov-head" hidden><button type="button" class="set-back" onclick="ovPage('start')">‹ Übersicht</button><h2 id="ov-title">Übersicht</h2></div>
   <div id="ov-start">
   <div class="card ov-status" id="ov-status">
-    <h2>Status</h2>
+    <h2>Jetzt</h2>
     <h3 class="st-h">Räume</h3><div id="ov-rooms-state"><p class="muted">Lade …</p></div><div id="ov-switch"></div>
+    <h3 class="st-h">Wetter</h3><div id="ov-weather"><p class="muted">Lade …</p></div>
     <h3 class="st-h">Warmwasser</h3><p class="sub dhw-line" id="ov-dhw" hidden></p><div class="st-fallback" id="ov-dhw-off"></div>
     <h3 class="st-h">Kessel</h3><p class="sub dhw-line" id="ov-boiler" hidden></p><div class="st-fallback" id="ov-boiler-off"></div>
     <h3 class="st-h">Zuletzt geschrieben</h3><div id="ov-last"><p class="muted">Lade …</p></div>
   </div>
   <p class="sub" id="status">Lade …</p>
-  <div class="card" id="advice"></div>
-  <div class="card" id="ov-save">
-    <h2>Ersparnis</h2>
-    <div class="ov-kpis" id="ov-save-kpi"></div>
-    <details class="more"><summary>Geschätzte Ersparnis pro Tag (kWh Gas) durch Absenken bei Abwesenheit und nachts. <span class="m"></span></summary><div id="savings-text">Berechnet mit dem gelernten Modell.</div></details>
-    <div id="chart-savings"></div>
-  </div>
-  <div class="ov-areas"><h3 class="nav-h">Bereiche</h3><div class="nav-list" id="ov-areas"></div></div>
-  <div class="card" id="guards"></div>
+  <!-- 0.55: was HeatPilot die nächsten 24 h vorhat (aus api/preview, renderOvPlan) -->
+  <div class="card" id="ov-plan"><div class="row mc-head"><h2>Nächste 24 Stunden</h2><a href="#" onclick="ovPage('vorschau');return false">Vorschau ›</a></div><div id="ov-plan-list"><p class="muted">Lade …</p></div></div>
   <div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>
+  <div class="card" id="advice"></div>
+  <p class="ov-save-line" id="ov-save-line" hidden></p>
+  <div class="ov-areas"><h3 class="nav-h">Bereiche</h3><div class="nav-list" id="ov-areas"></div></div>
   </div>
   <div id="ov-haus" hidden>
   <div class="ov-kpis" id="tiles"></div>
@@ -848,6 +852,13 @@ ul.rules li { margin: 3px 0; }
     <div id="chart-week"></div>
     <ul id="week-findings" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text-secondary)"></ul>
   </div>
+  <div class="card" id="ov-save">
+    <h2>Ersparnis</h2>
+    <div class="ov-kpis" id="ov-save-kpi"></div>
+    <details class="more"><summary>Geschätzte Ersparnis pro Tag (kWh Gas) durch Absenken bei Abwesenheit und nachts. <span class="m"></span></summary><div id="savings-text">Berechnet mit dem gelernten Modell.</div></details>
+    <div id="chart-savings"></div>
+  </div>
+  <div class="card" id="guards"></div>
   <div class="card" id="cert"></div>
   </div>
   <div id="ov-raeume" hidden>
@@ -1495,8 +1506,58 @@ function ovRoomsHtml(c, r, sum) {
   const ready = readyLine(r, pil);
   if (ready) h += `<div class="st st-ready">${ready}</div>`;
   for (const w of c.warnings || []) h += statusLine("err", `⚠ ${esc(w)}`);
-  return h + `<p class="muted st-note">${pil ? "HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst; was du von Hand einstellst, gilt bis zum nächsten Wechsel."
-    : "Geschaltet wird nur auf Knopfdruck im Reiter Heizen – HeatPilot schaltet nie von selbst."}</p>`;
+  return h;  // 0.55: ohne Erklärsatz – die Übersicht soll knapp bleiben
+}
+// 0.55: eine Zeile zu den Räumen – wie viele am Soll, wer mehr als 0,3 K darunter liegt
+function ovRoomsLine(j) {
+  const rs = ctlRooms(j).filter((r) => r.mode !== "off" && r.temp !== null && r.temp !== undefined && r.target !== null && r.target !== undefined);
+  if (!rs.length) return "";
+  const low = rs.filter((r) => r.temp < r.target - 0.3);
+  return statusLine(low.length ? "warn" : "ok", `${rs.length - low.length} von ${rs.length} Räumen am Soll` +
+    (low.length ? ` · darunter: ${low.map((r) => `${esc(shortName(r.name))} ${fmt(r.temp)} / ${fmt(r.target)} °C`).join(", ")}` : ""));
+}
+// 0.55: Wetter jetzt – außen, Wind (kühlt schneller aus, seit 0.54 je Raum gelernt), Spanne der nächsten 12 h
+function ovWeatherHtml(s) {
+  const parts = [s.t_out !== null && s.t_out !== undefined ? `Außen ${fmt(s.t_out)} °C` : "Außen unbekannt"];
+  if (s.wind !== null && s.wind !== undefined) parts.push(`Wind ${fmt(s.wind, 0)} m/s${s.wind >= 10 ? " – kühlt schneller aus" : ""}`);
+  const n = s.forecast && s.forecast.next12;
+  if (n) parts.push(`nächste 12 h ${fmt(n.min, 0)} bis ${fmt(n.max, 0)} °C`);
+  return statusLine("off", parts.join(" · "));
+}
+// 0.55: Übersicht → Nächste 24 Stunden – die Wechsel aus der Vorschau (api/preview, Stundenraster) als Zeitleiste:
+// Raumphasen (gleiche Phase und gleiches Soll zusammen), Warmwasser-Soll, Desinfektion, Heizbetrieb
+function ovPlanRows(p) {
+  const hs = (p && p.hours) || [], out = [], all = Object.keys((hs[0] || {}).phases || {}).length;
+  for (let i = 1; i < hs.length; i++) {
+    const a = hs[i - 1], b = hs[i], groups = {};
+    for (const [room, ph] of Object.entries(b.phases || {})) {
+      if (ph === (a.phases || {})[room] && b.rooms[room] === (a.rooms || {})[room]) continue;
+      const k = `${ph}|${b.rooms[room] ?? ""}`;
+      (groups[k] = groups[k] || []).push(shortName(room));
+    }
+    for (const [k, rooms] of Object.entries(groups)) {
+      const [ph, sp] = k.split("|");
+      out.push([b.t, "room", `${PHASE[ph] || ph}${sp ? ` ${fmt(+sp)} °C` : ""} · ${rooms.length === all && all > 1 ? "alle Räume" : rooms.join(", ")}`]);
+    }
+    if (b.dhw !== a.dhw && b.dhw !== null && b.dhw !== undefined) out.push([b.t, "dhw", `Warmwasser-Soll ${fmt(b.dhw, 0)} °C`]);
+    if (b.disinfect && !a.disinfect) out.push([b.t, "dhw", "Desinfektion"]);
+    if (b.heating !== a.heating) out.push([b.t, "boiler", b.heating ? "Heizbetrieb an" : "Heizbetrieb aus"]);
+  }
+  return out;
+}
+const planTime = (t) => (new Date(t).toDateString() !== new Date().toDateString() ? "morgen " : "") + clock(t);
+function renderOvPlan(pv) {
+  const el = $("ov-plan-list"), p = pv && pv.preview;
+  if (!el) return;
+  if (!p || !(p.hours || []).length) { el.innerHTML = '<p class="muted">Noch keine Vorschau – sie entsteht, sobald HeatPilot gerechnet hat.</p>'; return; }
+  const rows = ovPlanRows(p), fl = p.hours.filter((h) => h.heating && h.flow !== null).map((h) => h.flow);
+  const icon = { room: '<span class="plan-ico"></span>', dhw: DROP, boiler: FLAME };
+  el.innerHTML = (rows.length ? '<ul class="plan-list">' + rows.slice(0, 10).map(([t, k, x]) =>
+      `<li><span class="plan-t">${esc(planTime(t))}</span>${icon[k]}<span>${esc(x)}</span></li>`).join("") + "</ul>"
+    : '<p class="muted">Keine Wechsel – alles bleibt, wie es ist.</p>') +
+    (rows.length > 10 ? `<p class="muted st-note">… und ${rows.length - 10} weitere in der Vorschau</p>` : "") +
+    `<p class="muted st-note">${fl.length ? `Vorlauf ${fmt(Math.min(...fl), 0)}–${fmt(Math.max(...fl), 0)} °C` : "Heizbetrieb aus"}` +
+    `${p.dry_run ? " · nur geplant, HeatPilot schreibt nichts (Beobachten)" : ""}</p>`;
 }
 // Block „Zuletzt geschrieben“: die neueste Zeile des Protokolls (Diagnose → Protokoll) mit Link dorthin
 function ovLastHtml(c, d) {
@@ -1517,7 +1578,8 @@ function ovLastHtml(c, d) {
 function renderOvStatus(lines = true) {
   const j = HEAT, sum = LAST_SUMMARY, c = j && j.control ? j.control : null;
   if (!$("ov-status")) return;
-  if (c) $("ov-rooms-state").innerHTML = ovRoomsHtml(c, j.readiness || (sum && sum.readiness), sum);
+  if (c) $("ov-rooms-state").innerHTML = ovRoomsHtml(c, j.readiness || (sum && sum.readiness), sum) + ovRoomsLine(j);
+  if (sum) $("ov-weather").innerHTML = ovWeatherHtml(sum);
   else if (sum) $("ov-rooms-state").innerHTML = ovRoomsHtml({ mode: sum.control_mode, status_text: sum.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten" }, sum.readiness, sum);
   if (j && lines) { renderDhwLine("ov-dhw", j.dhw); renderBoilerLine("ov-boiler", j.boiler); }
   const d = (j && j.dhw) || (sum && sum.dhw_control), b = (j && j.boiler) || (sum && sum.boiler_control);
@@ -2027,6 +2089,9 @@ async function load() {
   $("ov-save-kpi").innerHTML = tile(sv.reliable ? "Ersparnis-Schätzung Heizen" : "Ersparnis Heizen (Modell lernt noch)", fmt(sv.saved_pct), "%", (sv.dhw_separated === false ? "vom gesamten Gas · " : "vom Heizgas · ") + (sv.year_kwh !== null ? `≈ ${fmt(sv.year_kwh, 0)} kWh / ${fmt(sv.year_eur, 0)} € pro Jahr` : `≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen`) +
       (sv.rooms_checked ? ` · Komfort je Raum geprüft (${sv.rooms_checked} Räume)` : " · Komfort nur fürs ganze Haus geprüft"));
 
+  $("ov-save-line").hidden = false;  // 0.55: auf der Startseite nur eine Zeile, die Karte steht unter Haus
+  $("ov-save-line").innerHTML = `<a href="#" onclick="openOverview('ersparnis');return false">Ersparnis ${fmt(sv.saved_pct)} %` +
+    ` · ≈ ${fmt(sv.saved_kwh, 0)} kWh / ${fmt(sv.saved_eur, 0)} € in ${fmt(sv.span_days, 0)} Tagen${sv.reliable ? "" : " (vorläufig)"} ›</a>`;
   renderAdvice(s.advice || { items: [], resolved: [] });
   const g = s.guards;
   const status = (name, chk) => `<li><b>${name}:</b> ${chk.ok ? "verlässlich – darf empfehlen" : "keine Empfehlung – " + chk.reasons.join("; ")}</li>`;
@@ -2380,6 +2445,7 @@ async function loadPreview() {
   const j = await getJSON("api/preview");
   if (j.starting) return;
   PV = j;
+  renderOvPlan(j);  // 0.55: Übersicht → Nächste 24 Stunden
   drawPreview();
   drawNext();  // 0.46.1: Übersicht → Warmwasser / Kessel, nächste 12 h – dieselbe Antwort, keine zweite Abfrage
 }
@@ -3348,15 +3414,14 @@ function adviceItem(a) {
   const ev = Object.entries(a.evidence || {}).filter(([, v]) => v !== null && v !== undefined)
     .map(([k, v]) => `${esc(k)}: ${typeof v === "number" ? fmt(v, Number.isInteger(v) ? 0 : 1) : esc(v)}`);
   if (!info && a.since) ev.push(`seit ${dateOf(a.since)}`);
-  return `<li style="padding:8px 0;border-bottom:1px solid var(--border)">
-      <span class="badge" style="${style}">${esc(a.impact)}</span> <b>${esc(a.title)}</b>${step}
+  return `<li class="adv-li"><details><summary><span class="badge" style="${style}">${esc(a.impact)}</span> <b>${esc(a.title)}</b>${step}</summary>
       ${main && main !== effect ? `<div style="margin:4px 0 2px">${esc(main)}</div>` : ""}${exp}
       ${effect ? `<div class="adv-effect">${info ? "" : "↳ "}${esc(effect)}</div>` : ""}
-      <div class="muted">${ev.join(" · ")}</div></li>`;
+      <div class="muted">${ev.join(" · ")}</div></details></li>`;  // 0.55: eine Zeile je Empfehlung, Text aufklappbar
 }
 function renderAdvice(adv) {
   const items = adv.items || [], resolved = adv.resolved || [];
-  $("advice").innerHTML = `<h2>Empfehlungen</h2>` + more("Was du an Tado oder den Ventilen einstellen kannst. HeatPilot ändert hier nichts selbst.",
+  $("advice").innerHTML = `<h2>Empfehlungen${items.length ? ` (${items.length})` : ""}</h2>` + more("Was du an Tado oder den Ventilen einstellen kannst. HeatPilot ändert hier nichts selbst.",
     "Je Raum, mit Beleg aus den letzten 3 Wochen (hydraulischer Abgleich). Voreinstellung und Stufen der Ventile stehen unter Einstellungen → Räume; nach einer Änderung misst HeatPilot nach und zeigt die Wirkung.") +
     (items.length ? `<ul style="margin:0;padding-left:0;list-style:none">${items.map(adviceItem).join("")}</ul>`
       : `<p class="muted">Keine Empfehlungen – alles passt, oder es liegen noch zu wenige Beobachtungen vor (mind. 4 in 3 Wochen).</p>`) +
@@ -3642,7 +3707,7 @@ function ovBurnerView(v) {
   ovCharts();
 }
 // Sprung in die Übersicht (0.43): Unterseite wählen; „status“ = Startseite oben; Räume mit Raum: dessen Ventilverhalten
-const OV_ANCHOR = { status: ["start", "ov-status"], raeume: ["raeume", "ov-rooms"] };
+const OV_ANCHOR = { status: ["start", "ov-status"], raeume: ["raeume", "ov-rooms"], ersparnis: ["haus", "ov-save"] };
 function openOverview(page, anchor) {
   const [p, a0] = OV_ANCHOR[page] || [page, anchor];
   showTab("overview");

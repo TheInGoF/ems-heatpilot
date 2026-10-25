@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.55.0
+- **Übersicht neu: schneller Überblick statt Textwand.** Drei Karten oben: **Jetzt** (Räume „x von y am Soll“ und wer darunter liegt, neu das Wetter mit Außentemperatur, Wind und Spanne der nächsten 12 h, Warmwasser, Kessel, zuletzt geschrieben), **Nächste 24 Stunden** (was HeatPilot vorhat, als Zeitleiste aus der Vorschau: Raumphasen mit Soll, Warmwasser-Soll, Desinfektion, Heizbetrieb an/aus, Vorlauf-Spanne) und **Modelle**
+- Empfehlungen je eine Zeile, der Beleg klappt beim Antippen auf; die Ersparnis ist eine Zeile mit Sprung nach Haus, wo jetzt auch die Ersparnis-Karte und der Lernstand stehen; die Erklärsätze unter „Räume“ sind weg
+- `api/summary` liefert den Wind von jetzt (`wind`, m/s)
+
 ## 0.54.0
 - **Wind im Raummodell:** Bei Sturm kühlt das Haus schneller aus – bisher war das Auskühlen je Raum eine feste Zahl. Jetzt lernt jedes Raummodell zusätzlich, wie stark der Wind auskühlt (Auskühlen = Grundrate + Anteil je m/s Wind, nie negativ): ein zugiger Raum lernt viel, ein geschützter „kaum Wind“. Der Wind kommt aus der Wetter-Integration (`wind_speed`, jede Einheit) und wird ab jetzt mit aufgezeichnet
 - Steuerung, Vorheizen, Vorschau und Kessel rechnen mit dem Wind von jetzt: bei Sturm früher vorheizen und etwas mehr Vorlauf, damit die Räume nicht absacken

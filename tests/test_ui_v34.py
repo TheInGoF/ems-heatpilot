@@ -85,7 +85,7 @@ def test_heat_tab_pause_only_when_managing_and_status_from_control():
     # selbst“ nur noch bei Beobachten)
     assert '<p class="muted" id="heat-foot">Antippen zum Bedienen.</p>' in markup
     rooms = js.split("function ovRoomsHtml(c, r, sum)")[1].split("function ovLastHtml")[0]
-    assert "schreibt die Solltemperaturen der Räume mit „macht mit“ selbst" in rooms and "schaltet nie von selbst" in rooms
+    assert "schaltet nie von selbst" not in rooms  # 0.55: Übersicht knapp, ohne Erklärsatz
 
 
 def test_room_tile_state_from_control_status():
