@@ -50,5 +50,5 @@ def test_old_room_model_is_extended_not_reset():
     old = RLS(n=3, theta=[0.03, 0.05, 0.1], P=[[1.0 if i == j else 0.0 for j in range(3)] for i in range(3)])
     d = {"room": "r", "floor": False, "rls": old.to_dict()}  # Stand von vor 0.20 (und vor 0.53: ohne „form“)
     m = RoomModel.from_dict(d)
-    # Sonne ergänzt, alles wie gelernt (gültig ist die lineare Form wie bis 0.52)
-    assert m.rls.n == 6 and m.rls.theta[:3] == [0.03, 0.05, 0.1] and m.solar == (0.0, 0.0, 0.0) and m.migrated
+    # Sonne ergänzt, alles wie gelernt (0.54: plus Wind; gültig ist die lineare Form wie bis 0.52)
+    assert m.rls.n == 7 and m.wind_gain == 0.0 and m.rls.theta[:3] == [0.03, 0.05, 0.1] and m.solar == (0.0, 0.0, 0.0) and m.migrated

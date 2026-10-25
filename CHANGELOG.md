@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.54.0
+- **Wind im Raummodell:** Bei Sturm kühlt das Haus schneller aus – bisher war das Auskühlen je Raum eine feste Zahl. Jetzt lernt jedes Raummodell zusätzlich, wie stark der Wind auskühlt (Auskühlen = Grundrate + Anteil je m/s Wind, nie negativ): ein zugiger Raum lernt viel, ein geschützter „kaum Wind“. Der Wind kommt aus der Wetter-Integration (`wind_speed`, jede Einheit) und wird ab jetzt mit aufgezeichnet
+- Steuerung, Vorheizen, Vorschau und Kessel rechnen mit dem Wind von jetzt: bei Sturm früher vorheizen und etwas mehr Vorlauf, damit die Räume nicht absacken
+- **Gelerntes bleibt:** Modelle älterer Versionen laden unverändert, der Wind-Anteil beginnt bei 0. Gelernt wird er erst ab jetzt (die Historie hat keinen Wind) – sicher wird er nach einigen windigen und ruhigen Tagen. Übersicht → Modelle zeigt je Raum „Wind: kühlt bei 10 m/s um … % schneller aus“
+- **Tests:** neu `tests/test_wind54.py`
+
 ## 0.53.0
 - **Raummodell genauer – Form des Heizkörpers gelernt:** Bisher rechnete jedes Raummodell die Heizkörperwärme linear als (Vorlauf − Raum) × Ventilöffnung. Nachgerechnet an einem 7-Tage-Export (6 Räume, Vorhersage über 1 h): Beim Heizen war es durchweg zu langsam, bei mehr als 50 °C Vorlauf um 0,5–1 K/h (daher das Überschwingen beim Vorheizen). Jetzt gilt Wärme ∝ (Vorlauf − Raum)^n × Öffnung^p:
   - **Ventilkennlinie p = 0,5:** Schon ein wenig geöffnetes Ventil bringt viel Wärme (die gemeldete Heizleistung ist nicht der Durchfluss) – Fehler beim Heizen −20 %

@@ -1835,6 +1835,17 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 
+## Wind (seit 0.54)
+
+Bei Sturm kühlt ein Haus schneller aus – Zugluft durch Fenster und Fugen. Jedes Raummodell lernt dafür einen
+eigenen Wind-Anteil: Auskühlen = Grundrate + Anteil je m/s Wind (nie negativ). Ein zugiger Raum lernt viel, ein
+geschützter „kaum Wind“. Der Wind kommt aus der Wetter-Integration (Attribut `wind_speed`, jede Einheit) und wird
+mit den Messwerten aufgezeichnet; die Historie aus der Zeit davor hat keinen Wind, gelernt wird also erst ab 0.54 –
+sicher nach einigen windigen und ruhigen Tagen. Steuerung, Vorheizen, Vorschau und Kessel rechnen mit dem Wind von
+jetzt: bei Sturm beginnt das Vorheizen früher und der Vorlauf liegt etwas höher. Übersicht → Modelle zeigt je Raum
+„Wind: kühlt bei 10 m/s um … % schneller aus“. Die Wind-Vorhersage nutzt HeatPilot (noch) nicht – bis zum
+Zielzeitpunkt gilt der Wind von jetzt.
+
 ## Sonne als Wärmequelle
 
 Die Sonne heizt Räume mit Süd-, Ost- oder Westfenstern kostenlos. HeatPilot berechnet

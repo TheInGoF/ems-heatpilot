@@ -113,11 +113,11 @@ def legacy(a=0.03, floor=False):
 def test_old_model_loads_and_keeps_its_effect(floor):
     m = RoomModel.from_dict(legacy(floor=floor))
     assert m.migrated and m.floor == floor and m.rls.updates == 900
-    assert (m.n, m.p) == (1.0, 1.0) and m.rls.theta == legacy(floor=floor)["rls"]["theta"]  # gilt wie bisher
+    assert (m.n, m.p) == (1.0, 1.0) and m.rls.theta[:-1] == legacy(floor=floor)["rls"]["theta"] and m.wind_gain == 0.0  # gilt wie bisher (0.54: + Wind)
     for i, (n, p) in enumerate(FORMS):  # jede Form wirkt bei 20 K und halber Öffnung wie das alte Modell
         r = m.rlss[i]
         assert r.theta[0] * drive(FLOW_REF_K, MIGRATE_VALVE, n, p) == pytest.approx(0.03 * FLOW_REF_K * MIGRATE_VALVE)
-        assert r.theta[1:] == legacy(floor=floor)["rls"]["theta"][1:]
+        assert r.theta[1:-1] == legacy(floor=floor)["rls"]["theta"][1:] and r.theta[-1] == 0.0
     back = RoomModel.from_dict(m.to_dict())
     assert not back.migrated and back.rlss[5].theta == m.rlss[5].theta and (back.n, back.p) == (m.n, m.p)
 

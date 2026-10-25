@@ -111,6 +111,8 @@ SAMPLE_COLS = (
     # seit 0.36: Hausleistung in W (Summe der Leistungssensoren; NULL, sobald einer fehlt) und davon
     # die Verbraucher, die nicht zählen (Summe der vorhandenen Ausschluss-Sensoren)
     "power_w", "power_ex_w",
+    # seit 0.54: Wind in m/s (Wetter-Integration) – das Raummodell lernt, wie stark er auskühlt
+    "wind",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",

@@ -255,6 +255,8 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
                 self.dhw_control.pending = None
                 log.exception("Warmwasser-Soll: Takt fehlgeschlagen")
         self.update_sleep(now_ts)  # Nachtzeiten aus dem Strom (0.36) – vor dem Wunschzustand, stündlich
+        for m in self.rooms.values():  # 0.54: Auskühlen mit dem Wind von jetzt (Steuerung, Vorschau, Kessel)
+            m.wind_now = sample.get("wind") or 0.0
         if self.control_loop is not None:  # Steuerung (0.34): Wunschzustände, Schreibvorgänge vormerken
             self.control_loop.plan(ts, sample, rooms)
         self.store.commit()
