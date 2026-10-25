@@ -180,6 +180,13 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         self.states[entity_id] = state
         if entity_id in self._live_entities:
             self.update_live()
+        if state.get("state") == "on" and entity_id in self.special_switches():  # 0.56.6: Taster – auch ein kurzes
+            self.special_pressed_ts = time.time()  # „an“ zwischen zwei Abfragen zählt (dhw_control.special_running)
+
+    def special_switches(self) -> tuple:
+        """Entitäten der Kesseltaster für Sonderladungen: Desinfektion, Einmalladung."""
+        roles = getattr(self.found, "boiler", None) or {}
+        return tuple(roles[r] for r in ("dhw_disinfecting", "dhw_onetime") if roles.get(r))
 
     def set_ems(self, values: dict[str, dict], status: dict[str, str] | None = None) -> None:
         """Neue Werte von EMS-ESP (main.poll_emsesp, nur bei einer Antwort) – mit Zeitstempel ``ems_ts``. ``status``
