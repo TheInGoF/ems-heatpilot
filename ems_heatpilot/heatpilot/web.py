@@ -51,7 +51,7 @@ from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, cl
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness, web_guest
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
 from . import boiler_period, boiler_power, disinfect_entity, live_log, room_identity, sensor_gone, web_adopt, web_restore, web_weather
-from . import web_switch
+from . import heat_actions, web_switch
 from .emsesp import EmsEsp
 
 log = logging.getLogger(__name__)
@@ -470,38 +470,15 @@ def make_app(app) -> web.Application:
             body = await req.json()
         except Exception:  # noqa: BLE001
             return json_response({"error": "Ungültige Daten"}, status=400)
-        action, ctl, loop = req.match_info["action"], app.control, app.eng.control_loop
+        action = req.match_info["action"]
         try:
-            if action == "boost":
-                res = await ctl.boost(body.get("rooms"), body.get("temp"), body.get("minutes"))
-            elif action == "schedule":
-                # Tado-Cloud: zurück in den Tado-Zeitplan; andere Entitäten: Wunschzustand (heatpilot) bzw. Hinweis
-                res = await ctl.schedule(body.get("rooms"), loop.desired_setpoints() if loop else None)
-                if loop:
-                    for r in res.get("done", []):
-                        st = loop.state.get(r)
-                        if st is not None and r in loop.desired_setpoints():
-                            st["last_written"] = loop.desired_setpoints()[r]
-            elif action == "pause":
-                # Steuerung anhalten: {"hours": 2} · {"hours": 0} = weiter
-                if loop is None:
-                    return json_response({"error": "Steuerung noch nicht bereit"}, status=503)
-                try:
-                    until = loop.pause(body.get("hours", 0))
-                except (TypeError, ValueError) as err:
-                    return json_response({"error": str(err) or "Stunden fehlen"}, status=400)
-                if until:  # Ventile führen (0.40): laufende Schritte vorher einmal zurück aufs Wunschsoll
-                    await loop.release(set(), "Pause")
-                return json_response({"ok": True, "paused_until": until and
-                                      datetime.fromtimestamp(until).astimezone().isoformat(), **heat_state()})
-            elif action == "temp":
-                res = await ctl.set_temp(body.get("room"), body.get("temp"))
-            elif action == "mode":
-                res = await ctl.set_mode(body.get("rooms") or body.get("room"), body.get("mode"))
-            else:
-                return json_response({"error": "Unbekannte Aktion"}, status=404)
+            res = await heat_actions.run(app, action, body)  # 0.56: dieselbe Stelle wie die Karten (card_bridge)
+        except KeyError:
+            return json_response({"error": "Unbekannte Aktion"}, status=404)
         except control_mod.ControlError as err:
             return json_response({"error": str(err)}, status=400)
+        if action == "pause":
+            return json_response({**res, **heat_state()})
         await asyncio.sleep(1.5)  # Tado meldet den neuen Zustand mit kurzer Verzögerung
         await app.refresh_rooms()
         return json_response({**res, **heat_state()})
