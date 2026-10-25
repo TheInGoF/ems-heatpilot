@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.56.5
+- **Desinfektion: Weg B wartet, bis der Brenner einmal aus war.** Beim Halten der Temperatur fällt die Meldung „Desinfektion“ bzw. „lädt“ zwischendurch weg, der Kessel heizt aber mit seinem eigenen Soll weiter. HeatPilot hielt das für fertig, schrieb sein Vorlauf-Soll, der Kessel nahm es nicht an („nicht übernommen“) – und der Brenner ging in die Taktsperre. Jetzt gehört das Vorlauf-Soll nach einer Sonderladung dem Kessel, bis der Brenner einmal aus war (höchstens 4 h); kein Schreiben, keine Prüfung, kein Fehlschlag
+- Tests: `tests/test_disinfect_hold565.py`
+
 ## 0.56.4
 - **Einstellungen → Erweitert → „Karten für Home Assistant“:** zeigt, ob der Befehls-Helfer da ist (sonst können die Karten nur anzeigen), die Einrichtung über HACS mit Link und das YAML der drei Karten (Räume mit deinen Raum-Sensoren, Steuerung, Wetter mit deiner Wetter-Entität) zum Kopieren. Neu: `GET api/cards`
 - Klare Aufteilung: das Soll eines Raums stellt die Raumkachel über das Thermostat-Pop-up von Home Assistant; die Karten senden nur noch `boost`, `schedule` und `mode` (der Befehl `temp` entfällt)
