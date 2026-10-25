@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.56.1
+- **Wetter jetzt in der Übersicht:** oben in der Karte „Wetter“ wie eine Wetter-Karte in Home Assistant – Symbol nach Zustand, große Temperatur, Zustand auf Deutsch, gefühlt, Spanne der nächsten 24 h, dazu Wind mit Richtung und Böen, Luftfeuchte, Luftdruck, UV und Wolken; darunter wie bisher die Stundenbalken. `api/weather` liefert dafür `now` (aus der Wetter-Entität)
+- Tests: `tests/test_weather552.py` erweitert
+
 ## 0.56.0
 - **Grundlage für die HeatPilot-Karten in Home Assistant** (HACS-Repository `heatpilot-card` folgt): je Raum `sensor.heatpilot_raum_<raum>` mit den Werten der Raumkachel (Ist, Soll, Betriebsart, heizt, Ventil, Luftfeuchte, Phase, nächster Wechsel, Boost), `sensor.heatpilot_boost` mit den laufenden Boosts und dem Ergebnis des letzten Befehls, alle 30 s und direkt nach einem Befehl aktualisiert
 - **Bedienen ohne Admin-Rechte und ohne Port:** HeatPilot legt den Helfer `input_text.heatpilot_befehl` an; die Karten schreiben Befehle (Boost, Zeitplan, Soll, Betriebsart) als JSON hinein, HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen (`heat_actions.py` – eine Stelle für Seite und Karten), leert das Feld und meldet das Ergebnis
