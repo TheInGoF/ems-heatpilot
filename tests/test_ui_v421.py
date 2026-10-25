@@ -111,7 +111,8 @@ def test_card_on_top_of_overview_and_details_under_diagnose():
     # 0.43 Schritt 6: Startseite der Übersicht – Status, Startzeile, Empfehlungen, Ersparnis, Bereiche, Lernstand, Modelle
     start = between(page, '<div id="ov-start">', '<div id="ov-haus" hidden>')
     assert '<p class="sub" id="status">Lade …</p>' in start and '<div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>' in start
-    assert start.index('id="guards"') < start.index('id="models"') and '<div class="ov-kpis" id="tiles"></div>' in page
+    assert start.index('id="ov-plan"') < start.index('id="models"') and '<div class="ov-kpis" id="tiles"></div>' in page
+    assert 'id="guards"' not in start and 'id="ov-save"' not in start  # 0.55: Lernstand und Ersparnis unter Haus
     ov = between(page, '<section id="view-overview" hidden>', "</section>")
     assert ov.index('id="ov-status"') < ov.index('id="models"')
     diag = between(page, '<section id="view-diag" hidden>', "</section>")

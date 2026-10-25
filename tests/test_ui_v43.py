@@ -237,7 +237,7 @@ def test_overview_status_section_is_first_and_complete():
     ov = between(page, '<section id="view-overview" hidden>', "</section>")
     assert between(ov, '<div id="ov-start">', "</div>").lstrip().startswith('<div class="card ov-status" id="ov-status">')
     heads = re.findall(r'<h3 class="st-h">([^<]+)</h3>', between(ov, 'id="ov-status"', '<p class="sub" id="status">'))
-    assert heads == ["Räume", "Warmwasser", "Kessel", "Zuletzt geschrieben"]
+    assert heads == ["Räume", "Wetter", "Warmwasser", "Kessel", "Zuletzt geschrieben"]  # 0.55: Wetter
     st = source(js, "renderOvStatus")
     assert 'renderDhwLine("ov-dhw", j.dhw); renderBoilerLine("ov-boiler", j.boiler);' in st  # „wieder einschalten“ dort
     assert "ovRoomsHtml(c, j.readiness || (sum && sum.readiness), sum)" in st and "ovLastHtml(c, d)" in st
@@ -311,8 +311,8 @@ def test_overview_status_rooms_warnings_and_last_write(tmp_path):
     assert plain(rooms).startswith("HeatPilot steuert · Nacht bis 04:30 · 4 von 5 Räumen machen mit")
     assert "Einschränkungen: Küche lernt noch. Einzelheiten ›" in plain(rooms)
     assert '<div class="st st-err"><span class="dot dot-err"></span><span class="st-t">⚠ Bad: 3 Schreibfehler' in rooms  # rot
-    assert "was du von Hand einstellst, gilt bis zum nächsten Wechsel" in plain(rooms)
-    assert "schaltet nie von selbst" in plain(r["watch"]) and "machen mit" not in plain(r["watch"])
+    assert "was du von Hand einstellst" not in plain(rooms)  # 0.55: ohne Erklärsatz
+    assert plain(r["watch"]) == "Beobachten"  # 0.55: ohne Erklärsatz, ohne „machen mit“
     assert plain(r["last"]) == "Di., 03:30 · Wohnzimmer · Soll 18 °C (nacht) Protokoll ›"
     assert "openSettings('diagnose', 'heat-log-box')" in r["last"] and "st-off" in r["last"]
     assert "st-err" in r["fail"] and "nicht übernommen 50 °C" in plain(r["fail"])
@@ -365,7 +365,7 @@ def test_jumps_go_through_open_settings_and_open_overview():
         assert call in source(js, fn), fn
     oo = source(js, "openOverview")
     assert "const [p, a0] = OV_ANCHOR[page] || [page, anchor];" in oo and "ovPage(p);" in oo
-    assert 'const OV_ANCHOR = { status: ["start", "ov-status"], raeume: ["raeume", "ov-rooms"] };' in js
+    assert 'const OV_ANCHOR = { status: ["start", "ov-status"], raeume: ["raeume", "ov-rooms"], ersparnis: ["haus", "ov-save"] };' in js
     assert 'showTab("diag");' in source(js, "openModels")  # alter Sprung, landet über showTab in der Unterseite
 
 

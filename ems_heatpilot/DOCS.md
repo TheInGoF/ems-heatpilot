@@ -15,8 +15,11 @@ Reiter **Einstellungen**. Eingerichtet wird ausschließlich dort – das Add-on 
 keine YAML-Optionen.
 
 **Aufbau der Oberfläche (seit 0.43):** vier Reiter. **Heizen** bedient die Räume (Aktionen, Raumkacheln und eine Zeile
-zum Raumbetrieb – keine Systemmeldungen). **Übersicht** beginnt mit dem Abschnitt **Status** (Räume, Warmwasser, Kessel,
-Bereitschaft, Warnungen, zuletzt geschrieben) und hat die Unterseiten Haus, Räume, Warmwasser, Kessel, Anwesenheit und
+zum Raumbetrieb – keine Systemmeldungen). **Übersicht** ist seit 0.55 ein schneller Überblick in drei Karten:
+**Jetzt** (Räume mit „x von y am Soll“, Wetter mit Wind, Warmwasser, Kessel, Bereitschaft, Warnungen, zuletzt geschrieben),
+**Nächste 24 Stunden** (Zeitleiste aus der Vorschau: Raumphasen mit Soll, Warmwasser-Soll, Desinfektion, Heizbetrieb an/aus,
+Vorlauf-Spanne) und **Modelle** (Zustand von Haus, Räumen, Ventilen, Warmwasser). Darunter die Empfehlungen je eine Zeile
+(antippen klappt den Beleg auf), die Ersparnis als eine Zeile (Karte und Lernstand stehen unter Haus) und die Unterseiten Haus, Räume, Warmwasser, Kessel, Anwesenheit und
 Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startliste mit den Unterseiten
 Grundlagen, Räume, Entitäten, Steuerung, Anwesenheit & Urlaub, Warmwasser, Kessel, Benachrichtigungen, Erweitert und
 **Diagnose** (früher eigener Reiter: Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien). Die
