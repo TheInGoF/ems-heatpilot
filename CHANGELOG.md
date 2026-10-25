@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.56.3
+- **Raum-Sensoren heißen nach dem Raum:** `sensor.heatpilot_raum_<raumname>` nach dem Raumnamen in HeatPilot (z. B. `sensor.heatpilot_raum_kleines_bad`, Umlaute ohne Punkte, gleiche Namen mit _2) statt nach dem Thermostat (`…_tado_smart_thermostat_su…`). Nur die Räume, die HeatPilot nutzt; Sensoren mit altem Namen entfernt HeatPilot von selbst – in Karten die neuen Namen eintragen
+
 ## 0.56.2
 - **Karten-Sensoren vollständig:** `sensor.heatpilot_raum_*` tragen jetzt alles, was die Raumkachel braucht (HeatPilot steuert, manuell bis, Pause, erreichbares Soll, Vorheizen mit Vorlauf, Wunsch-Öffnung und „von Hand“ bei ventilgeführten Räumen, Reihenfolge wie in HeatPilot); `sensor.heatpilot_boost` nennt je Boost die Gesamtdauer (Fortschrittsbalken). Karten: Repository `heatpilot-card` (HACS, Typ Dashboard)
 
