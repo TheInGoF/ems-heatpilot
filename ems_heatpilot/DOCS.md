@@ -1843,6 +1843,20 @@ heizen, damit der Speicher langsamer auskühlt). Deshalb gilt fest im Code
 
 Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 
+## Karten für Home Assistant (seit 0.56)
+
+Für eigene Dashboards (auch für Nicht-Admins und unterwegs in der App) stellt HeatPilot bereit – gedacht für die
+HeatPilot-Karten aus dem Repository `heatpilot-card` (HACS), nutzbar aber auch mit Standard-Karten:
+
+- **`sensor.heatpilot_raum_<raum>`** je Raum: Zustand = Ist-Temperatur; Attribute wie die Raumkachel – Soll,
+  Betriebsart, heizt, Ventil, Luftfeuchte, Phase und Wunsch-Soll der Steuerung, nächster Wechsel, Boost mit Ende.
+- **`sensor.heatpilot_boost`**: Zahl der Räume mit Boost; Attribute: laufende Boosts, Grenzen für Soll und Dauer,
+  Ergebnis des letzten Befehls (`last`).
+- **`input_text.heatpilot_befehl`**: legt HeatPilot beim Start einmal als Helfer an. Die Karten schreiben Befehle als
+  JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `temp` {room, temp}, `mode` {rooms, mode} –,
+  HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen, leert das Feld und meldet das Ergebnis. Die Pause bleibt
+  der HeatPilot-Seite vorbehalten. Die Sensoren werden alle 30 s und direkt nach einem Befehl aktualisiert.
+
 ## Wind (seit 0.54)
 
 Bei Sturm kühlt ein Haus schneller aus – Zugluft durch Fenster und Fugen. Jedes Raummodell lernt dafür einen

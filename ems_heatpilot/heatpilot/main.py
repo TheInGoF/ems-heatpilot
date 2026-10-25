@@ -25,7 +25,7 @@ from aiohttp import web
 
 from . import __version__
 from . import boiler_period, boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
-from . import room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel
+from . import card_bridge, room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel; 0.56: Karten
 from . import live_log  # 0.50: Entscheidung von Weg B ins 30-s-Protokoll
 from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
 from .app_jobs import JobsMixin
@@ -86,6 +86,7 @@ class App(JobsMixin):
         self.eng: Engine | None = None
         self.control: Control | None = None
         self.pending: dict[str, dict | None] = {}
+        self.tasks: set = set()  # 0.56: laufende Befehle der Karten (card_bridge.handle)
         self._ems_task: asyncio.Task | None = None
         self._lock = asyncio.Lock()
         self._registry: tuple[float, Registry] | None = None
@@ -113,6 +114,10 @@ class App(JobsMixin):
     def on_state(self, entity_id: str, state: dict | None) -> None:
         if self.eng is not None:
             self.eng.on_state(entity_id, state)
+            if entity_id == card_bridge.COMMAND and card_bridge.parse((state or {}).get("state")):  # 0.56: Karte
+                task = asyncio.get_running_loop().create_task(card_bridge.handle(self, state["state"]))
+                self.tasks.add(task)
+                task.add_done_callback(self.tasks.discard)
         else:
             self.pending[entity_id] = state
 
@@ -392,7 +397,7 @@ async def live_loop(app: App) -> None:
         for name, step in (("Prüfung des Warmwasser-Solls", check_dhw), ("Kessel über HeatPilot", boiler_step),
                            ("Ventilgeführte Räume", valve_pid_step),
                            ("Desinfektion", disinfect_step), ("Heartbeat", heartbeat),
-                           ("Wächter lesen", scan_watchdog)):
+                           ("Wächter lesen", scan_watchdog), ("Karten-Sensoren", card_bridge.step)):
             try:
                 await step(app)
             except Exception:  # noqa: BLE001

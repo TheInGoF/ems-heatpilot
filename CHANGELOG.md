@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.56.0
+- **Grundlage für die HeatPilot-Karten in Home Assistant** (HACS-Repository `heatpilot-card` folgt): je Raum `sensor.heatpilot_raum_<raum>` mit den Werten der Raumkachel (Ist, Soll, Betriebsart, heizt, Ventil, Luftfeuchte, Phase, nächster Wechsel, Boost), `sensor.heatpilot_boost` mit den laufenden Boosts und dem Ergebnis des letzten Befehls, alle 30 s und direkt nach einem Befehl aktualisiert
+- **Bedienen ohne Admin-Rechte und ohne Port:** HeatPilot legt den Helfer `input_text.heatpilot_befehl` an; die Karten schreiben Befehle (Boost, Zeitplan, Soll, Betriebsart) als JSON hinein, HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen (`heat_actions.py` – eine Stelle für Seite und Karten), leert das Feld und meldet das Ergebnis
+- Tests: `tests/test_card_bridge56.py`
+
 ## 0.55.2
 - **Wetter · 24 Stunden in der Übersicht:** unter „Jetzt“ je Größe eine Zeile mit 24 Stundenbalken (etwa 1 cm hoch): Temperatur, Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index), Wind (blass dahinter die Böen), links die Spanne. Aus der stündlichen Vorhersage, die HeatPilot ohnehin abruft; was die Wetter-Integration nicht liefert, fällt weg. Neu: `GET api/weather` (`web_weather.py`)
 - Tests: `tests/test_weather552.py`
