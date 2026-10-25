@@ -33,3 +33,21 @@ def test_ui_card_rows_and_axis():
     for k in ('["temp", "Temperatur"', '["rain", "Regen"', '["cloud", "Wolken"', '["uv", "Sonne (UV)"', '["wind", "Wind"'):
         assert k in page
     assert "height: 38px" in page  # etwa 1 cm je Graf
+
+
+def test_weather_now_like_a_weather_card():  # 0.56.1
+    st = {"state": "rainy", "attributes": {"temperature": 7.4, "apparent_temperature": 3, "humidity": 89,
+                                           "pressure": 987, "pressure_unit": "hPa", "wind_speed": 32,
+                                           "wind_speed_unit": "km/h", "wind_gust_speed": 56.7, "wind_bearing": 182,
+                                           "uv_index": 0, "cloud_coverage": 100}}
+    n = web_weather.current(st)
+    assert n["cond"] == "rainy" and n["temp"] == 7.4 and n["feels"] == 3 and n["humidity"] == 89
+    assert n["wind"] == 8.89 and n["gust"] == 15.75 and n["bearing"] == 182 and n["pressure_unit"] == "hPa"
+    assert web_weather.current(None) is None
+
+
+def test_ui_weather_now_header():  # 0.56.1
+    from pathlib import Path
+    page = (Path(__file__).parents[1] / "ems_heatpilot/heatpilot/static/index.html").read_text()
+    assert 'id="ov-wx-now"' in page and "renderWeatherNow(j.now, j.hours || [])" in page
+    assert 'rainy: "Regen"' in page and 'sunny: "Sonnig"' in page and "function wxIcon(c)" in page

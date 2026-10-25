@@ -18,7 +18,9 @@ keine YAML-Optionen.
 zum Raumbetrieb – keine Systemmeldungen). **Übersicht** ist seit 0.55 ein schneller Überblick in drei Karten:
 **Jetzt** (Räume mit „x von y am Soll“, Wetter mit Wind, Warmwasser, Kessel, Bereitschaft, Warnungen, zuletzt geschrieben),
 **Nächste 24 Stunden** (Zeitleiste aus der Vorschau: Raumphasen mit Soll, Warmwasser-Soll, Desinfektion, Heizbetrieb an/aus,
-Vorlauf-Spanne) und **Modelle**; dazwischen seit 0.55.2 **Wetter · 24 Stunden**: je Stunde ein Balken für Temperatur,
+Vorlauf-Spanne) und **Modelle**; dazwischen seit 0.55.2 die Karte **Wetter** – seit 0.56.1 oben
+wie eine Wetter-Karte das Wetter jetzt (Symbol, Temperatur, Zustand, gefühlt, Spanne 24 h, Wind mit Richtung und Böen,
+Luftfeuchte, Luftdruck, UV, Wolken), darunter die nächsten 24 Stunden: je Stunde ein Balken für Temperatur,
 Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index) und Wind (blass dahinter die Böen) – aus der
 stündlichen Vorhersage der Wetter-Integration, Antippen eines Balkens zeigt den Wert; was die Integration nicht liefert,
 fällt weg (Zustand von Haus, Räumen, Ventilen, Warmwasser). Darunter die Empfehlungen je eine Zeile
