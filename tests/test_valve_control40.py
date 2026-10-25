@@ -594,7 +594,8 @@ def test_synthetic_house_day_closed_loop(tmp_path):
         mine = [r for r in rows if r["room"] == c]
         for a, b in pairwise(mine):
             assert b["ts"] - a["ts"] >= 300 or b["reason"] == "zurück (Raum braucht Wärme)", (a, b)
-            assert b["setpoint"] != a["setpoint"], (a, b)
+            moved = by_ts[a["ts"]]["rooms"][c]["desired"] != by_ts[b["ts"]]["rooms"][c]["desired"]
+            assert b["setpoint"] != a["setpoint"] or moved, (a, b)  # gleich nur, wenn dazwischen das Wunschsoll wechselte
     # wer Wärme braucht, bekommt sie: nie gedrosselt, während der Raum unter Soll − 0,3 K liegt
     for t in trace:
         for c, info in t["rooms"].items():

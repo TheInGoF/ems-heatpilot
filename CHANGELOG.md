@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.56.9
+- **Vorheizen gemeinsam beginnen:** Heizt ein Raum schon vor, fangen die Räume, die zum selben Ziel binnen 45 min selbst anfingen, gleich mit an (`heatup.start_together`) – der Kessel heizt ja schon, und nur offene Thermostate holen die Wärme ab. Fall 25.10.: Vorlauf 55 °C ab 17:25, die Thermostate erst ab 18:30 offen, bei der Ankunft 18:45 alle Räume 0,4–1,4 K zu kalt
+- **Vorheizdauer nie kürzer als das Raummodell:** die gelernte Geschwindigkeit (0.50.5) darf das Vorheizen nur noch verlängern, nicht mehr verkürzen – so beginnen Räume und Kessel zur selben Zeit
+- Tests: `tests/test_preheat_together569.py`
+
 ## 0.56.8
 - **Desinfektion: warten, bis das Vorlauf-Soll des Kessels wieder niedrig ist** (statt „Brenner einmal aus“): HeatPilot startet die Desinfektion nur und ändert weder Vorlauf noch Warmwasser; Weg B schreibt erst wieder, wenn der Kessel sein hohes Lade-Soll verlassen hat (unter dem eigenen bzw. höchsten Vorlauf + 5 K), höchstens 4 h
 - **Kurzes Changelog für Home Assistant:** `ems_heatpilot/CHANGELOG.md` mit den letzten Versionen in Stichworten – das zeigt Home Assistant beim Update an (dieses ausführliche bleibt im Repository)

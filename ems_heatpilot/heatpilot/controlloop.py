@@ -142,7 +142,7 @@ def desired(room, now: datetime, cfg, presence: Presence, model=None, temp: floa
         t_at = t_out_at(at) if t_out_at is not None else None
         h = preheat_hours(model, temp, target if soft else target - margin, cfg.max_flow_temp,
                           t_out if t_at is None else t_at, cfg.preheat_max_h, soft, None if soft else preheat_flow)
-        return timedelta(hours=h if soft else max(h / speed, PREHEAT_MIN_H))
+        return timedelta(hours=h if soft else max(h / min(speed, 1.0), PREHEAT_MIN_H))  # 0.56.9: nie kürzer als Modell
 
     # 1. Urlaub
     if presence.vacation:
@@ -289,16 +289,25 @@ class ControlLoop:
         t_out_at = eng.outdoor_forecast_at  # 0.37: Vorheizdauer mit der Außentemperatur zum Zielzeitpunkt
         desireds: dict[str, Desired] = {}
         shared = heatup.engine_shared_flow(eng, readings, t_out)  # 0.50.4: ein Vorlauf fürs Vorheizen aller Räume
+        vac = bool(presence.vacation)
+
+        def want(room, at, held=None) -> Desired:
+            model, reading = eng.rooms.get(room.climate), readings.get(room.climate)
+            ok = model is not None and guards.check_room(model)["ok"]
+            return desired(room, at, cfg, presence, model if ok else None, reading[1] if reading else None, t_out,
+                           t_out_at, held, shared, heatup.tune(self.state.setdefault(room.climate, {})))
+
+        first = {r.climate: want(r, now, local(h) if (h := self.state.get(r.climate, {}).get("preheat")) else None)
+                 for r in eng.found.rooms}  # 0.46.5: begonnenes Vorheizen bleibt
+        first = heatup.start_together(first, lambda c, at: want(eng.found.room_of(c), at), now)  # 0.56.9
         for room in eng.found.rooms:
             reading = readings.get(room.climate)
             temp = reading[1] if reading else None
             model = eng.rooms.get(room.climate)
             ok = model is not None and guards.check_room(model)["ok"]
-            held = self.state.get(room.climate, {}).get("preheat")  # 0.46.5: begonnenes Vorheizen bleibt
-            st, vac = self.state.setdefault(room.climate, {}), bool(presence.vacation)
+            st = self.state.setdefault(room.climate, {})
             tn = heatup.tune(st)
-            d = desired(room, now, cfg, presence, model if ok else None, temp, t_out, t_out_at,
-                        local(held) if held else None, shared, tn)
+            d = first[room.climate]
             if d.phase == "vorheizen" and not vac:  # 0.50.5: erst knapp unter dem Ziel – die Restwärme bringt den Rest
                 d = d._replace(setpoint=_clamp(d.setpoint - tn[0], float(room.comfort), cfg))
             heatup.track(st, d.phase, d.setpoint, d.until, temp, ts, vac)

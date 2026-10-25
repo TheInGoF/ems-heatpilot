@@ -118,3 +118,27 @@ def engine_shared_flow(eng, readings: dict, t_out: float | None) -> float | None
     house = (eng.house.demand_kw(sum(x[1] for x in rooms) / len(rooms), out)
              if rooms and need > 0 and guards.check_house(eng.house)["ok"] else 0.0)
     return shared_flow(rooms, eng.cfg.max_flow_temp, min_power_kw(eng)[0], house / need if house > 0 else None)
+
+
+# ------------------------------------------------------------------ 0.56.9: gemeinsam anfangen
+JOIN_H = 0.75  # wer zum selben Ziel spätestens so bald selbst anfinge, fängt mit dem ersten Raum an
+
+
+def start_together(desireds: dict, want, now) -> dict:
+    """Vorheizen gemeinsam beginnen: Heizt ein Raum schon vor (Ziel ``until``), fangen die Räume, die zum selben Ziel
+    innerhalb von ``JOIN_H`` selbst anfingen, gleich mit an – der Kessel heizt schon, und nur offene Thermostate holen
+    die Wärme ab (Fall 25.10.: Vorlauf 55 °C ab 17:25, die Räume erst ab 18:30, alle zu kalt bei der Ankunft).
+    ``want(climate, Zeitpunkt)``: Wunschzustand des Raums zu einem Zeitpunkt (``controlloop.desired``)."""
+    from datetime import timedelta
+
+    goals = {d.until for d in desireds.values() if d.phase == "vorheizen" and d.until is not None}
+    if not goals:
+        return desireds
+    out = dict(desireds)
+    for c, d in desireds.items():
+        if d.phase not in ("abwesend", "nacht") or d.until is None or d.until - now > timedelta(hours=JOIN_H):
+            continue
+        later = want(c, d.until + timedelta(minutes=1))  # so sähe der Raum zu seinem eigenen Beginn aus
+        if later.phase == "vorheizen" and later.until in goals:
+            out[c] = later._replace(reason=f"{later.reason} – gemeinsam mit den anderen Räumen")
+    return out

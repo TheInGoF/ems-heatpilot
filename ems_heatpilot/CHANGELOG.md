@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.56.9
+- Vorheizen: alle Räume beginnen gemeinsam
+- Vorheizen nie kürzer als das Raummodell
+
 ## 0.56.8
 - Desinfektion: Kessel in Ruhe lassen, bis sein Vorlauf-Soll wieder niedrig ist
 - Kurzes Changelog für Home Assistant
