@@ -1,8 +1,8 @@
 """Wächter in Home Assistant (Weg B, seit 0.41): Heartbeat-Sensor, Erkennung der Wächter-Automation, Anleitung.
 
 Fällt HeatPilot aus, bleibt der letzte Vorlauf am Kessel stehen – steht er gerade auf einem Nacht-Wert, wird es kalt.
-Dagegen hilft eine Automation in Home Assistant, die du selbst in der Oberfläche anlegst (HeatPilot legt kein YAML
-an): „Wenn ``sensor.heatpilot_heartbeat`` seit 60 min unverändert ist und HeatPilot den Kessel geführt hat (Attribut
+Dagegen hilft eine Automation in Home Assistant, die du selbst anlegst – HeatPilot legt sie nicht an, schlägt sie
+aber seit 0.55 als fertiges YAML zum Kopieren vor (``automation_yaml``): „Wenn ``sensor.heatpilot_heartbeat`` seit 60 min unverändert ist und HeatPilot den Kessel geführt hat (Attribut
 ``kessel`` ist „heatpilot“) → Vorlauf-Soll auf den Rückfallwert, Heizbetrieb an, Meldung“. Die Bedingung lässt den
 Kessel in Ruhe, wenn du zurückgeschaltet hast und ihn selbst stellst. Liegt der Rückfall-Vorlauf unter 35 °C (strenge
 Fußboden-Grenze ohne Mischer), schlägt die Anleitung keinen Wert vor – ein fester Vorlauf darunter heizt nicht
@@ -15,7 +15,8 @@ sinnvoll; dann den Fußboden über einen Mischer anschließen bzw. den Kessel se
   auf das Attribut ``kessel`` hat.
 * ``status`` – erkannt, ausgeschaltet, nicht erkannt oder unbekannt – für „Bereit für die Steuerung?“ (nicht erkannt
   ist eine Einschränkung, kein Hindernis).
-* ``guide`` – die Anleitung Schritt für Schritt mit den Werten zum Abtippen (Knopf „Anleitung Wächter“).
+* ``guide`` – die Anleitung Schritt für Schritt mit den Werten zum Abtippen (Knopf „Anleitung Wächter“), dazu das
+  YAML der Automation mit den gewählten Entitäten (``automation_yaml``).
 """
 
 from __future__ import annotations
@@ -111,9 +112,52 @@ def status(eng, mode: str) -> dict:
                                               "als Auslöser (Anleitung Wächter)"}
 
 
+def _notify_yaml(targets, text: str) -> list[str]:
+    """Aktionen für die Meldung: Handy-App-Dienst direkt, notify-Entität über ``notify.send_message``, ohne Ziel eine
+    Meldung in Home Assistant (kommt immer an)."""
+    if not targets:
+        return ["  - action: persistent_notification.create", "    data:", f'      title: "{NAME}"', f'      message: "{text}"']
+    out = []
+    for t in targets:
+        if t.startswith("notify.mobile_app_") or "." not in t:
+            out += [f"  - action: {t}", "    data:", f'      title: "{NAME}"', f'      message: "{text}"']
+        else:
+            out += ["  - action: notify.send_message", "    target:", f"      entity_id: {t}", "    data:", f'      message: "{text}"']
+    return out
+
+
+def automation_yaml(flow_entity: str, heat_entity: str | None, fallback: int, targets, text: str) -> str:
+    """Die Wächter-Automation als YAML (Einstellungen › Automationen › Neu › ⋮ › „In YAML bearbeiten“, einfügen)."""
+    flow_dom = flow_entity.split(".")[0]
+    lines = [
+        f"alias: {NAME}",
+        f'description: "Stellt den Kessel auf {fallback} °C Vorlauf, wenn HeatPilot {STALE_MIN} min nicht antwortet"',
+        "mode: single",
+        "triggers:",
+        "  - trigger: state",
+        f"    entity_id: {HEARTBEAT}",
+        f'    for: "01:00:00"',
+        "conditions:",
+        "  - condition: state",
+        f"    entity_id: {HEARTBEAT}",
+        f"    attribute: {MODE_ATTR}",
+        f"    state: {MODE_VALUE}",
+        "actions:",
+        f"  - action: {flow_dom if flow_dom in ('number', 'input_number') else 'number'}.set_value",
+        "    target:",
+        f"      entity_id: {flow_entity}",
+        "    data:",
+        f"      value: {fallback}",
+    ]
+    if heat_entity:
+        lines += [f"  - action: {'switch' if heat_entity.startswith('switch.') else 'homeassistant'}.turn_on",
+                  "    target:", f"      entity_id: {heat_entity}"]
+    return "\n".join(lines + _notify_yaml(list(targets or ()), text)) + "\n"
+
+
 def guide(flow_entity: str | None, heat_entity: str | None, fallback: int | None, targets=(),
           cap: float | None = None) -> dict:
-    """Anleitung für die Wächter-Automation in der Oberfläche von Home Assistant – ohne YAML, mit den Werten (wie
+    """Anleitung für die Wächter-Automation in der Oberfläche von Home Assistant, dazu als YAML, mit den Werten (wie
     beim Zurückschalten). ``fallback`` None (die strengste Fußboden-Grenze ``cap`` liegt unter 35 °C): kein Wert und
     kein Wächter-Vorschlag, nur der Hinweis ``NO_VALUE`` (``warning``)."""
     flow, heat = flow_entity or "(Vorlauf-Soll-Entität)", heat_entity or "(Heizbetrieb-Entität)"
@@ -137,7 +181,8 @@ def guide(flow_entity: str | None, heat_entity: str | None, fallback: int | None
         f"„Aktion hinzufügen“ › „Benachrichtigungen“ › {notify}: Nachricht „{text}“.",
         f"Speichern, Name „{NAME}“. HeatPilot erkennt die Automation am Auslöser (bis zu 10 min später).",
     ]
-    return {"title": "Anleitung Wächter", "name": NAME, "steps": steps, "warning": None,
+    yaml = automation_yaml(flow_entity, heat_entity, fallback, targets, text) if flow_entity else None
+    return {"title": "Anleitung Wächter", "name": NAME, "steps": steps, "warning": None, "yaml": yaml,
             "values": {"trigger_entity": HEARTBEAT, "for": "01:00:00", "condition": condition,
                        "flow_entity": flow_entity, "flow_value": fallback, "heating_entity": heat_entity,
                        "message": text},

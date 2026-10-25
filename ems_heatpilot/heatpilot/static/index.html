@@ -365,6 +365,8 @@ details.boiler-rules { margin: 0 0 10px; font-size: 13px; }
 .card details.boiler-rules p { margin: 4px 0 0; }
 .boiler-wd .btn { margin-top: 6px; }
 #boiler-guide { margin-top: 8px; }
+.code-box { background: var(--surface-2, rgba(127,127,127,.08)); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+  font-size: 12px; overflow-x: auto; white-space: pre; margin: 6px 0; }
 #boiler-guide[hidden] { display: none; }
 ol.boiler-steps { margin: 4px 0 8px; padding-left: 20px; color: var(--text-primary); }
 ol.boiler-steps li { margin: 3px 0; }
@@ -5250,12 +5252,19 @@ function boilerGuideHtml(g) {
   if (!g) return '<p class="muted">Anleitung nicht verfügbar – startet das Add-on noch?</p>';
   const v = g.values || {}, row = (k, x) => `<tr><td>${k}</td><td>${x === null || x === undefined || x === "" ? '<span class="muted">– erst wählen bzw. eintragen</span>' : `<code>${esc(x)}</code>`}</td></tr>`;
   if (g.warning) return `<div class="warnbox" id="boiler-guide-warn">${esc(g.warning)}</div>`;  // Rückfall unter 35 °C: kein Wächter
-  return `<p class="muted">In der Oberfläche von Home Assistant – kein YAML nötig:</p><ol class="boiler-steps" id="boiler-steps">${(g.steps || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ol>` +
+  // 0.55: fertiges YAML zum Kopieren (mit den gewählten Entitäten), die Klick-Anleitung aufklappbar darunter
+  const yaml = g.yaml ? `<p class="muted">In Home Assistant: Einstellungen › Automationen & Szenen › „Automation erstellen“ › „Neue Automation erstellen“ › ⋮ › „In YAML bearbeiten“ – alles ersetzen durch:</p>` +
+    `<pre class="code-box" id="boiler-yaml">${esc(g.yaml)}</pre><button class="btn small primary" onclick="copyYaml(this)">YAML kopieren</button>` : "";
+  return yaml + `<details class="fold"${g.yaml ? "" : " open"}><summary>Lieber klicken statt YAML</summary><ol class="boiler-steps" id="boiler-steps">${(g.steps || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ol>` +
     `<p class="muted">Werte zum Abtippen:</p><div class="scroll"><table class="ready-t boiler-vals" id="boiler-vals">` +
     row("Auslöser: Entität", v.trigger_entity) + row("„Für“", v.for) +
     (v.condition ? row("Bedingung", v.condition) : "") + row("Vorlauf-Soll: Ziel", v.flow_entity) +
     row("Vorlauf-Soll: Wert", v.flow_value) + row("Heizbetrieb: Ziel", v.heating_entity) + row("Nachricht", v.message) +
-    row("Name", g.name) + "</table></div>" + (g.note ? `<p class="muted">${esc(g.note)}</p>` : "");
+    row("Name", g.name) + "</table></div></details>" + (g.note ? `<p class="muted">${esc(g.note)}</p>` : "");
+}
+async function copyYaml(btn) {
+  try { await navigator.clipboard.writeText($("boiler-yaml").textContent); btn.textContent = "Kopiert"; }
+  catch (e) { getSelection().selectAllChildren($("boiler-yaml")); btn.textContent = "Markiert – Strg+C"; }  // ohne Zwischenablage (http)
 }
 function boilerGuide() {
   BOILER_GUIDE = !BOILER_GUIDE;

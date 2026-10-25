@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.55.1
+- **Wächter als YAML zum Kopieren:** „Anleitung Wächter“ (Einstellungen → Kessel) zeigt die fertige Automation mit deinen Entitäten, dem Rückfall-Vorlauf und deinen Benachrichtigungszielen (Handy-App direkt, notify-Entität über `notify.send_message`, ohne Ziel eine Meldung in Home Assistant) und einen Knopf „YAML kopieren“; die Klick-Anleitung ist darunter aufklappbar. Ohne gewählte Vorlauf-Entität oder bei Rückfall unter 35 °C gibt es kein YAML
+- Tests: `tests/test_watchdog_yaml55.py`
+
 ## 0.55.0
 - **Übersicht neu: schneller Überblick statt Textwand.** Drei Karten oben: **Jetzt** (Räume „x von y am Soll“ und wer darunter liegt, neu das Wetter mit Außentemperatur, Wind und Spanne der nächsten 12 h, Warmwasser, Kessel, zuletzt geschrieben), **Nächste 24 Stunden** (was HeatPilot vorhat, als Zeitleiste aus der Vorschau: Raumphasen mit Soll, Warmwasser-Soll, Desinfektion, Heizbetrieb an/aus, Vorlauf-Spanne) und **Modelle**
 - Empfehlungen je eine Zeile, der Beleg klappt beim Antippen auf; die Ersparnis ist eine Zeile mit Sprung nach Haus, wo jetzt auch die Ersparnis-Karte und der Lernstand stehen; die Erklärsätze unter „Räume“ sind weg
