@@ -72,6 +72,7 @@ ROLES = {"flow": "sel_flow_temp", "heating": "heating_activated"}
 _same = same  # wie bisher hier zu holen
 DHW_AFTER_S = 180  # 0.49.3: so lange nach „lädt“ gehört das Kessel-Soll noch der Warmwasser-Ladung
 DHW_JUMP_K = 5     # 0.49.3: so weit über dem eigenen Vorlauf-Soll gilt ein Kessel-Soll als Lade-Soll
+SPECIAL_HOLD_MAX_S = 4 * 3600  # 0.56.5: nach einer Sonderladung höchstens so lange auf „Brenner aus“ warten
 
 
 def _resting(flow) -> bool:
@@ -151,14 +152,31 @@ class BoilerControl(BoilerStatus, BoilerWatch):
     def charging(self, now: float | None = None) -> bool:
         """Warmwasser lädt bzw. Sonderladung läuft – das Vorlauf-Soll am Kessel gehört gerade der Ladung. Seit 0.49.3
         auch ``DHW_AFTER_S`` nach dem Ende der Meldung (der Kessel zeigt sein Lade-Soll noch kurz) und schon, wenn er sein
-        Lade-Soll zeigt, bevor „lädt“ gemeldet wird (``_dhw_setpoint``) – beides kein Fehlschlag, kein Schutz-Schreiben."""
+        Lade-Soll zeigt, bevor „lädt“ gemeldet wird (``_dhw_setpoint``) – beides kein Fehlschlag, kein Schutz-Schreiben.
+        Seit 0.56.5 nach einer Sonderladung (Desinfektion) bis der Brenner einmal aus war (``_special_hold``): die Meldung
+        fällt beim Halten der Temperatur zwischendurch weg, der Kessel heizt aber weiter mit seinem eigenen Soll."""
         now = time.time() if now is None else now
         sample = {"dhw_special": self.eng.dhw_special(), "dhw_disinfecting": flag(self.eng._boiler("dhw_disinfecting"))}
-        if flag(self.eng._boiler("dhw_active")) == 1 or special_running(self.eng, sample):
+        special = special_running(self.eng, sample)
+        if flag(self.eng._boiler("dhw_active")) == 1 or special:
             self.state["dhw_ts"] = int(now)
+            if special:
+                self.state["special_ts"] = int(now)
+            return True
+        if self._special_hold(now):
             return True
         last = self.state.get("dhw_ts")
         return (last is not None and 0 <= now - last < DHW_AFTER_S) or self._dhw_setpoint()
+
+    def _special_hold(self, now: float) -> bool:
+        """Nach einer Sonderladung: halten, bis der Brenner einmal aus war (höchstens ``SPECIAL_HOLD_MAX_S``)."""
+        since = self.state.get("special_ts")
+        if since is None:
+            return False
+        if self.eng.burner_on() == 0 or now - since > SPECIAL_HOLD_MAX_S:
+            self.state.pop("special_ts", None)
+            return False
+        return True
 
     def _dhw_setpoint(self) -> bool:
         """Zeigt der Kessel sein eigenes Lade-Soll? Mindestens ``DHW_JUMP_K`` über dem zuletzt geschriebenen Vorlauf (noch
