@@ -3,7 +3,8 @@
 Aus der stündlichen Vorhersage, die HeatPilot ohnehin abruft (``eng.forecast``, ``weather.get_forecasts``): je Stunde
 Temperatur, gefühlt, Wolken, Regen (mm und Wahrscheinlichkeit), Wind und Böen in m/s (Einheit der Wetter-Entität,
 umgerechnet wie beim Lernen), UV-Index und Zustand. Fehlende Felder bleiben None – jede Integration liefert andere.
-Nur lesen, nur Anzeige.
+Seit 0.55.3 dazu ``now``: der Zustand der Wetter-Entität jetzt (wie eine Wetter-Karte in Home Assistant) – Zustand,
+Temperatur, gefühlt, Luftfeuchte, Luftdruck, Wind mit Richtung und Böen, UV, Wolken, Taupunkt. Nur lesen, nur Anzeige.
 """
 
 from __future__ import annotations
@@ -35,6 +36,19 @@ def hours(forecast, attrs: dict, now_ts: float) -> list[dict]:
     return sorted(out, key=lambda h: h["t"])[:HOURS]
 
 
+def current(state: dict | None) -> dict | None:
+    """Wetter jetzt aus Zustand und Attributen der Wetter-Entität; None ohne Entität."""
+    if not state:
+        return None
+    a = state.get("attributes", {})
+    unit = a.get("wind_speed_unit")
+    return {"cond": state.get("state"), "temp": num(a.get("temperature")), "feels": num(a.get("apparent_temperature")),
+            "humidity": num(a.get("humidity")), "pressure": num(a.get("pressure")), "pressure_unit": a.get("pressure_unit"),
+            "wind": wind_ms(a.get("wind_speed"), unit), "gust": wind_ms(a.get("wind_gust_speed"), unit),
+            "bearing": num(a.get("wind_bearing")), "uv": num(a.get("uv_index")), "cloud": num(a.get("cloud_coverage")),
+            "dew": num(a.get("dew_point")), "name": a.get("friendly_name")}
+
+
 def routes(app, json_response: Callable) -> list[tuple[str, str, Callable]]:
     """(Methode, Pfad, Handler) für ``web.make_app``."""
 
@@ -43,8 +57,9 @@ def routes(app, json_response: Callable) -> list[tuple[str, str, Callable]]:
         if eng is None:
             return json_response({"starting": True})
         ent = eng.found.weather
-        attrs = (eng.states.get(ent) or {}).get("attributes", {}) if ent else {}
-        return json_response({"entity": ent, "rain_unit": attrs.get("precipitation_unit") or "mm",
+        st = eng.states.get(ent) if ent else None
+        attrs = (st or {}).get("attributes", {})
+        return json_response({"entity": ent, "rain_unit": attrs.get("precipitation_unit") or "mm", "now": current(st),
                               "hours": hours(eng.forecast, attrs, time.time()) if ent else []})
 
     return [("GET", "/api/weather", weather)]
