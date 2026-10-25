@@ -39,6 +39,9 @@ class FakeHA:
     async def set_state(self, entity, state, attrs):
         self.states[entity] = (state, attrs)
 
+    async def remove_state(self, entity):
+        self.removed = getattr(self, "removed", []) + [entity]
+
     async def call(self, payload, timeout=120):
         self.calls.append(payload)
 
@@ -103,3 +106,14 @@ def test_helper_created_only_when_missing():
     assert run(cb.ensure_command(app)) and app.ha.calls[0]["type"] == "input_text/create"
     app2 = make_app(helper=True)
     assert not run(cb.ensure_command(app2)) and not app2.ha.calls
+
+
+def test_sensors_named_after_room_old_names_removed():  # 0.56.3
+    assert cb.slug("kleines Bad") == "kleines_bad" and cb.slug("Büro/Gäste") == "buro_gaste" and cb.slug("Große Diele") == "grosse_diele"
+    rs = [NS(climate="climate.tado_a", name="Bad"), NS(climate="climate.tado_b", name="Bad")]
+    assert cb.room_entities(rs) == {"climate.tado_a": "sensor.heatpilot_raum_bad", "climate.tado_b": "sensor.heatpilot_raum_bad_2"}
+    app = make_app()
+    app.eng.states["sensor.heatpilot_raum_tado_smart_thermostat_su1"] = {"state": "20"}
+    run(cb.publish(app))
+    assert "sensor.heatpilot_raum_wohnzimmer" in app.ha.states
+    assert app.ha.removed == ["sensor.heatpilot_raum_tado_smart_thermostat_su1"]

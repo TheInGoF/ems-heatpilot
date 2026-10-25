@@ -307,3 +307,11 @@ class HAClient:
         ) as resp:
             if resp.status >= 400:
                 log.warning("Sensor %s nicht gesetzt: HTTP %s", entity_id, resp.status)
+
+    async def remove_state(self, entity_id: str) -> None:
+        """Eigenen Sensor entfernen (REST DELETE /api/states, seit 0.56.3) – nur ``sensor.heatpilot_*`` wie oben."""
+        if not entity_id.startswith(OWN_PREFIXES):
+            raise PermissionError(f"Entfernen von {entity_id} ist gesperrt")
+        async with self._session.delete(f"{self.base_url}/api/states/{entity_id}", headers=self._headers) as resp:
+            if resp.status >= 400 and resp.status != 404:
+                log.warning("Sensor %s nicht entfernt: HTTP %s", entity_id, resp.status)

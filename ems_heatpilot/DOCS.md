@@ -1851,7 +1851,8 @@ Für eigene Dashboards (auch für Nicht-Admins und unterwegs in der App) stellt 
 HeatPilot-Karten (Räume, Boost, Wetter) aus https://github.com/TheInGoF/heatpilot-card (HACS → Benutzerdefinierte
 Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
 
-- **`sensor.heatpilot_raum_<raum>`** je Raum: Zustand = Ist-Temperatur; Attribute wie die Raumkachel – Soll,
+- **`sensor.heatpilot_raum_<raum>`** je Raum (seit 0.56.3 nach dem Raumnamen in HeatPilot, z. B.
+  `sensor.heatpilot_raum_kleines_bad`): Zustand = Ist-Temperatur; Attribute wie die Raumkachel – Soll,
   Betriebsart, heizt, Ventil, Luftfeuchte, Phase und Wunsch-Soll der Steuerung, nächster Wechsel, Boost mit Ende.
 - **`sensor.heatpilot_boost`**: Zahl der Räume mit Boost; Attribute: laufende Boosts, Grenzen für Soll und Dauer,
   Ergebnis des letzten Befehls (`last`).

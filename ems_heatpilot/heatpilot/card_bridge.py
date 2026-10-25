@@ -3,7 +3,8 @@
 Die Karten laufen im Browser in Home Assistant, nicht im Add-on – sie lesen nur Entitäten und schreiben Befehle in
 einen Helfer. Darum stellt HeatPilot bereit:
 
-* ``sensor.heatpilot_raum_<raum>`` je Raum (``rooms``): Zustand = Ist-Temperatur, Attribute wie die Raumkachel der
+* ``sensor.heatpilot_raum_<raum>`` je Raum (``rooms``, seit 0.56.3 nach dem Raumnamen in HeatPilot, z. B.
+  ``sensor.heatpilot_raum_kleines_bad``; Sensoren mit altem Namen entfernt ``publish`` einmal): Zustand = Ist-Temperatur, Attribute wie die Raumkachel der
   HeatPilot-Seite – Soll, Betriebsart, heizt, Ventil, Luftfeuchte, Phase und Wunsch-Soll der Steuerung, nächster
   Wechsel, Boost (Soll, Ende, Restzeit), Klima-Entität, Heizkreis von EMS-ESP (nur Anzeige).
 * ``sensor.heatpilot_boost`` (``boost``): Zahl der Räume mit Boost; Attribute: die laufenden Boosts, die Grenzen für
@@ -22,7 +23,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
+import unicodedata
 
 from . import control as control_mod
 from . import heat_actions
@@ -37,8 +40,23 @@ CARD_ACTIONS = ("boost", "schedule", "temp", "mode")  # Pause bleibt der HeatPil
 EVERY_S = 30
 
 
-def room_entity(climate: str) -> str:
-    return ROOM_PREFIX + climate.split(".", 1)[-1]
+def slug(name: str) -> str:
+    """Wie Home Assistant: klein, Umlaute ohne Punkte (ß → ss), alles andere zu „_“."""
+    s = unicodedata.normalize("NFKD", str(name).replace("ß", "ss")).encode("ascii", "ignore").decode().lower()
+    return re.sub(r"[^a-z0-9]+", "_", s).strip("_") or "raum"
+
+
+def room_entities(found_rooms) -> dict[str, str]:
+    """Klima-Entität → Sensor nach dem Raumnamen; gleiche Namen bekommen _2, _3 …"""
+    out, used = {}, set()
+    for r in found_rooms:
+        base = ROOM_PREFIX + slug(r.name)
+        e, i = base, 2
+        while e in used:
+            e, i = f"{base}_{i}", i + 1
+        used.add(e)
+        out[r.climate] = e
+    return out
 
 
 def rooms(eng, ctl) -> list[tuple[str, object, dict]]:
@@ -49,14 +67,14 @@ def rooms(eng, ctl) -> list[tuple[str, object, dict]]:
     loop, managing = eng.control_loop, eng.cfg.is_managing()
     vp = getattr(eng, "valve_pid", None)  # ventilgeführte Räume: Wunsch-Öffnung, von Hand gehalten
     vps = (vp.as_dict().get("rooms") or {}) if vp is not None else {}
-    out = []
+    out, names = [], room_entities(eng.found.rooms)
     for i, r in enumerate(eng.found.rooms):
         st = eng.states.get(r.climate) or {}
         a, reading = st.get("attributes", {}), eng.room_reading(r)
         c = (loop.rooms if loop else {}).get(r.climate) or {}
         b, v = boosts.get(r.climate), vps.get(r.climate) or {}
         temp = reading[1] if reading else a.get("current_temperature")
-        out.append((room_entity(r.climate), temp, {
+        out.append((names[r.climate], temp, {
             "friendly_name": f"HeatPilot {r.name}", "icon": "mdi:thermostat", "unit_of_measurement": "°C",
             "device_class": "temperature", "room": r.name, "order": i, "climate": r.climate, "mode": st.get("state"),
             "action": a.get("hvac_action"), "target": a.get("temperature"),
@@ -91,6 +109,10 @@ async def publish(app) -> int:
     items = [*rooms(eng, app.control), boost(eng, app.control, getattr(app, "card_last", None))]
     for entity, state, attrs in items:
         await app.ha.set_state(entity, state, attrs)
+    keep = {e for e, _s, _a in items}  # Raum umbenannt oder entfernt, alte Namen (bis 0.56.2: nach Thermostat)
+    for e in [e for e in eng.states if e.startswith(ROOM_PREFIX) and e not in keep]:
+        await app.ha.remove_state(e)
+        eng.states.pop(e, None)
     return len(items)
 
 
