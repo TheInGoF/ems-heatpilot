@@ -1291,7 +1291,7 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   6. **Obergrenze:** der höchste Vorlauf der Einstellungen; das Ergebnis in ganzen Grad.
 - **Warmwasser lädt** (oder Sonderladung bzw. Desinfektion): Das Vorlauf-Soll bleibt unberührt – der Kessel lädt den
   Speicher über das 3-Wege-Ventil; auch die Prüfung wartet so lange. Nach einer Sonderladung bzw. Desinfektion
-  (seit 0.56.5) bleibt das so, bis der Brenner einmal aus war (höchstens 4 h) – die Meldung fällt beim Halten der
+  (seit 0.56.5) bleibt das so, bis das Vorlauf-Soll des Kessels wieder niedrig ist (höchstens 4 h) – die Meldung fällt beim Halten der
   Temperatur zwischendurch weg, der Kessel heizt aber weiter. Seit 0.49.3 zählt als Ladung auch, wenn der
   Kessel sein Lade-Soll schon zeigt, bevor „lädt“ gemeldet wird (mindestens 5 K über dem eigenen Vorlauf-Soll, während
   der Speicher unter seinem Soll ist), und noch 3 min nach der Meldung – ein Kessel ohne Regler setzt sein Soll für die

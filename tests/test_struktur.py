@@ -50,6 +50,7 @@ def test_version_is_consistent_everywhere():
 
     cfg = (ROOT / "ems_heatpilot" / "config.yaml").read_text(encoding="utf-8")
     assert f'version: "{__version__}"' in cfg
-    log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
-    newest = log.split("\n## ", 1)[1].split("\n", 1)[0].strip()
-    assert newest == __version__, f"CHANGELOG beginnt mit {newest}, Version ist {__version__}"
+    for path in (ROOT / "CHANGELOG.md", ROOT / "ems_heatpilot" / "CHANGELOG.md"):  # ausführlich · kurz für HA (0.56.8)
+        log = path.read_text(encoding="utf-8")
+        newest = log.split("\n## ", 1)[1].split("\n", 1)[0].strip()
+        assert newest == __version__, f"{path.relative_to(ROOT)} beginnt mit {newest}, Version ist {__version__}"

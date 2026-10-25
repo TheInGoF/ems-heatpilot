@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.56.8
+- **Desinfektion: warten, bis das Vorlauf-Soll des Kessels wieder niedrig ist** (statt „Brenner einmal aus“): HeatPilot startet die Desinfektion nur und ändert weder Vorlauf noch Warmwasser; Weg B schreibt erst wieder, wenn der Kessel sein hohes Lade-Soll verlassen hat (unter dem eigenen bzw. höchsten Vorlauf + 5 K), höchstens 4 h
+- **Kurzes Changelog für Home Assistant:** `ems_heatpilot/CHANGELOG.md` mit den letzten Versionen in Stichworten – das zeigt Home Assistant beim Update an (dieses ausführliche bleibt im Repository)
+
 ## 0.56.7
 - Taster-Erkennung aus 0.56.6 wieder entfernt (unnötig). Es bleibt die einfache Regel aus 0.56.5: Während und nach einer Desinfektion schreibt Weg B kein Vorlauf-Soll, bis der Brenner einmal aus war
 
