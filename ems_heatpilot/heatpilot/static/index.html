@@ -365,7 +365,7 @@ details.boiler-rules { margin: 0 0 10px; font-size: 13px; }
 .card details.boiler-rules p { margin: 4px 0 0; }
 .boiler-wd .btn { margin-top: 6px; }
 #boiler-guide { margin-top: 8px; }
-.code-box { background: var(--surface-2, rgba(127,127,127,.08)); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+.code-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
   font-size: 12px; overflow-x: auto; white-space: pre; margin: 6px 0; }
 #boiler-guide[hidden] { display: none; }
 ol.boiler-steps { margin: 4px 0 8px; padding-left: 20px; color: var(--text-primary); }
@@ -574,6 +574,18 @@ h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-tran
 .adv-li { padding: 6px 0; border-bottom: 1px solid var(--border); }
 .adv-li summary { cursor: pointer; }
 .ov-save-line { margin: 0 0 12px; font-size: 14px; }
+/* Wetter · 24 Stunden (0.55.2): je Zeile 24 Balken, etwa 1 cm hoch */
+.wx-row { display: grid; grid-template-columns: 8.5em 1fr; gap: var(--s2); align-items: end; margin: 6px 0; }
+.wx-k { display: flex; flex-direction: column; font-size: 12px; line-height: 1.25; }
+.wx-bars { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; height: 38px; align-items: end; }
+.wx-col { position: relative; height: 100%; display: flex; align-items: flex-end; }
+.wx-col i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px 2px 0 0; }
+.wx-bar { min-height: 1px; }
+.wx-back { opacity: .22; }
+.wx-temp i { background: var(--series-2); } .wx-rain i { background: var(--series-1); } .wx-cloud i { background: var(--series-5); }
+.wx-sun i { background: var(--warn); } .wx-wind i { background: var(--series-4); }
+.wx-axis .wx-bars { height: auto; font-size: 11px; color: var(--text-muted); align-items: start; }
+.wx-axis .wx-bars span { white-space: nowrap; }
 .st-none { display: none; } #heat-log-box[hidden] + .st-none { display: block; margin: 0; }
 #ov-valve { border-top: 1px solid var(--border); margin-top: 12px; scroll-margin-top: 12px; }
 #ov-status { scroll-margin-top: 12px; }
@@ -818,6 +830,8 @@ ul.rules li { margin: 3px 0; }
     <h3 class="st-h">Zuletzt geschrieben</h3><div id="ov-last"><p class="muted">Lade …</p></div>
   </div>
   <p class="sub" id="status">Lade …</p>
+  <!-- 0.55.2: Wetter der nächsten 24 h als kleine Balken je Stunde (aus api/weather, renderWeather) -->
+  <div class="card" id="ov-wx" hidden><h2>Wetter · 24 Stunden</h2><div id="ov-wx-chart"></div></div>
   <!-- 0.55: was HeatPilot die nächsten 24 h vorhat (aus api/preview, renderOvPlan) -->
   <div class="card" id="ov-plan"><div class="row mc-head"><h2>Nächste 24 Stunden</h2><a href="#" onclick="ovPage('vorschau');return false">Vorschau ›</a></div><div id="ov-plan-list"><p class="muted">Lade …</p></div></div>
   <div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>
@@ -1547,6 +1561,42 @@ function ovPlanRows(p) {
   }
   return out;
 }
+// 0.55.2: Übersicht → Wetter · 24 Stunden – je Größe eine Zeile mit 24 Balken (eine Stunde je Balken, etwa 1 cm hoch),
+// links Name und Spanne; Regen mit Wahrscheinlichkeit und Wind mit Böen als blasser Balken dahinter. Felder, die die
+// Wetter-Integration nicht liefert, fallen weg.
+const WX_ROWS = [
+  ["temp", "Temperatur", "°C", "wx-temp", null], ["rain", "Regen", "mm", "wx-rain", "rain_prob"],
+  ["cloud", "Wolken", "%", "wx-cloud", null], ["uv", "Sonne (UV)", "", "wx-sun", null], ["wind", "Wind", "m/s", "wx-wind", "gust"]];
+async function loadWeather() {
+  const j = await getJSON("api/weather");
+  renderWeather(j.hours || [], j.rain_unit || "mm");
+}
+function wxRow(hs, [k, name, unit, cls, back], rainUnit) {
+  const vals = hs.map((h) => h[k]), ok = vals.filter((v) => v !== null && v !== undefined);
+  if (!ok.length) return "";
+  const backs = back ? hs.map((h) => h[back]) : [];
+  const lo = k === "temp" ? Math.floor(Math.min(...ok)) - 1 : 0;
+  const hi = k === "cloud" ? 100 : k === "rain" ? Math.max(...ok, 1) : Math.max(...ok, ...backs.filter((v) => v != null), lo + 1);
+  const u = k === "rain" ? rainUnit : unit, pct = (v) => Math.max(0, Math.min(100, ((v - lo) / (hi - lo)) * 100));
+  const bars = hs.map((h, i) => {
+    const v = vals[i], b = backs[i];
+    const tip = `${clock(h.t)} · ${v == null ? "–" : fmt(v, k === "rain" ? 1 : 0) + (u ? " " + u : "")}` +
+      (back === "rain_prob" && b != null ? ` · ${fmt(b, 0)} %` : back === "gust" && b != null ? ` · Böen ${fmt(b, 0)} m/s` : "");
+    const bg = b == null ? "" : `<i class="wx-back" style="height:${back === "rain_prob" ? b : pct(b)}%"></i>`;
+    return `<span class="wx-col" title="${esc(tip)}">${bg}${v == null ? "" : `<i class="wx-bar" style="height:${pct(v)}%"></i>`}</span>`;
+  }).join("");
+  const span = k === "cloud" || k === "rain" || k === "uv" ? `bis ${fmt(Math.max(...ok), k === "rain" ? 1 : 0)}` : `${fmt(Math.min(...ok), 0)} bis ${fmt(Math.max(...ok), 0)}`;
+  const gust = back === "gust" && backs.some((v) => v != null) ? ` · Böen ${fmt(Math.max(...backs.filter((v) => v != null)), 0)}` : "";
+  return `<div class="wx-row ${cls}"><span class="wx-k"><b>${name}</b><span class="muted">${span}${u ? " " + u : ""}${gust}</span></span><span class="wx-bars">${bars}</span></div>`;
+}
+function renderWeather(hs, rainUnit) {
+  const box = $("ov-wx");
+  box.hidden = hs.length < 2;
+  if (box.hidden) return;
+  const axis = hs.map((h, i) => `<span>${i % 3 ? "" : clock(h.t).slice(0, 2)}</span>`).join("");
+  $("ov-wx-chart").innerHTML = WX_ROWS.map((r) => wxRow(hs, r, rainUnit)).join("") +
+    `<div class="wx-row wx-axis"><span class="wx-k"></span><span class="wx-bars">${axis}</span></div>`;
+}
 const planTime = (t) => (new Date(t).toDateString() !== new Date().toDateString() ? "morgen " : "") + clock(t);
 function renderOvPlan(pv) {
   const el = $("ov-plan-list"), p = pv && pv.preview;
@@ -2109,6 +2159,7 @@ async function load() {
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul></details>`;
   renderSchedule(s);
   loadPreview().catch(previewOff);  // Vorschau (Trockenlauf, 0.37): eigene Abfrage, nicht im summary
+  loadWeather().catch(() => { $("ov-wx").hidden = true; });  // 0.55.2: Wetter 24 h
   loadCert().catch((e) => { $("cert").innerHTML = `<h2>Zertifikat über Haus & Heizung</h2><p class="muted">Konnte nicht geladen werden: ${esc(e.message)}</p>`; });
   renderFlowStudy(s.flow_study);
   loadWeek().catch(() => {});

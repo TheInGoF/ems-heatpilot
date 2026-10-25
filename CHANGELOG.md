@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.55.2
+- **Wetter · 24 Stunden in der Übersicht:** unter „Jetzt“ je Größe eine Zeile mit 24 Stundenbalken (etwa 1 cm hoch): Temperatur, Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index), Wind (blass dahinter die Böen), links die Spanne. Aus der stündlichen Vorhersage, die HeatPilot ohnehin abruft; was die Wetter-Integration nicht liefert, fällt weg. Neu: `GET api/weather` (`web_weather.py`)
+- Tests: `tests/test_weather552.py`
+
 ## 0.55.1
 - **Wächter als YAML zum Kopieren:** „Anleitung Wächter“ (Einstellungen → Kessel) zeigt die fertige Automation mit deinen Entitäten, dem Rückfall-Vorlauf und deinen Benachrichtigungszielen (Handy-App direkt, notify-Entität über `notify.send_message`, ohne Ziel eine Meldung in Home Assistant) und einen Knopf „YAML kopieren“; die Klick-Anleitung ist darunter aufklappbar. Ohne gewählte Vorlauf-Entität oder bei Rückfall unter 35 °C gibt es kein YAML
 - Tests: `tests/test_watchdog_yaml55.py`
