@@ -13,7 +13,10 @@ einen Helfer. Darum stellt HeatPilot bereit:
   ``input_text/create``). Die Karte schreibt einen Befehl als JSON hinein, z. B.
   ``{"a": "boost", "rooms": ["climate.wohnzimmer"], "temp": 22, "minutes": 120, "n": 1730000000}`` (``n`` macht
   gleiche Befehle unterscheidbar). HeatPilot führt ihn aus (``heat_actions`` – dieselbe Stelle wie die Seite), leert
-  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, temp, mode.
+  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode (das Soll
+  eines Raums stellt die Karte über das Thermostat-Pop-up von Home Assistant).
+* ``GET api/cards`` (``routes``, seit 0.56.4): Stand für Einstellungen → Erweitert → „Karten für Home Assistant“ –
+  Helfer vorhanden, Raum-Sensoren, Wetter-Entität, Link zum Repository.
 
 Geschrieben wird nur an die eigenen Sensoren und den eigenen Helfer; an Tado und Kessel nur über ``control``.
 """
@@ -36,7 +39,8 @@ log = logging.getLogger(__name__)
 COMMAND = "input_text.heatpilot_befehl"
 BOOST = "sensor.heatpilot_boost"
 ROOM_PREFIX = "sensor.heatpilot_raum_"
-CARD_ACTIONS = ("boost", "schedule", "temp", "mode")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
+CARD_ACTIONS = ("boost", "schedule", "mode")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
+REPO = "https://github.com/TheInGoF/heatpilot-card"
 EVERY_S = 30
 
 
@@ -172,3 +176,18 @@ async def handle(app, value) -> dict | None:
     await app.refresh_rooms()
     await publish(app)
     return app.card_last
+
+
+def routes(app, json_response) -> list:
+    """(Methode, Pfad, Handler) für ``web.make_app``."""
+
+    async def cards(_req):
+        eng = app.eng
+        if eng is None:
+            return json_response({"starting": True})
+        names = room_entities(eng.found.rooms)
+        return json_response({"helper": eng.states.get(COMMAND) is not None, "command": COMMAND, "control": BOOST,
+                              "rooms": [{"entity": names[r.climate], "room": r.name} for r in eng.found.rooms],
+                              "weather": eng.found.weather, "repo": REPO})
+
+    return [("GET", "/api/cards", cards)]

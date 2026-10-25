@@ -5355,7 +5355,7 @@ function boilerGuideHtml(g) {
   if (g.warning) return `<div class="warnbox" id="boiler-guide-warn">${esc(g.warning)}</div>`;  // Rückfall unter 35 °C: kein Wächter
   // 0.55: fertiges YAML zum Kopieren (mit den gewählten Entitäten), die Klick-Anleitung aufklappbar darunter
   const yaml = g.yaml ? `<p class="muted">In Home Assistant: Einstellungen › Automationen & Szenen › „Automation erstellen“ › „Neue Automation erstellen“ › ⋮ › „In YAML bearbeiten“ – alles ersetzen durch:</p>` +
-    `<pre class="code-box" id="boiler-yaml">${esc(g.yaml)}</pre><button class="btn small primary" onclick="copyYaml(this)">YAML kopieren</button>` : "";
+    `<pre class="code-box" id="boiler-yaml">${esc(g.yaml)}</pre><button class="btn small primary" onclick="copyCode('boiler-yaml', this)">YAML kopieren</button>` : "";
   return yaml + `<details class="fold"${g.yaml ? "" : " open"}><summary>Lieber klicken statt YAML</summary><ol class="boiler-steps" id="boiler-steps">${(g.steps || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ol>` +
     `<p class="muted">Werte zum Abtippen:</p><div class="scroll"><table class="ready-t boiler-vals" id="boiler-vals">` +
     row("Auslöser: Entität", v.trigger_entity) + row("„Für“", v.for) +
@@ -5363,9 +5363,9 @@ function boilerGuideHtml(g) {
     row("Vorlauf-Soll: Wert", v.flow_value) + row("Heizbetrieb: Ziel", v.heating_entity) + row("Nachricht", v.message) +
     row("Name", g.name) + "</table></div></details>" + (g.note ? `<p class="muted">${esc(g.note)}</p>` : "");
 }
-async function copyYaml(btn) {
-  try { await navigator.clipboard.writeText($("boiler-yaml").textContent); btn.textContent = "Kopiert"; }
-  catch (e) { getSelection().selectAllChildren($("boiler-yaml")); btn.textContent = "Markiert – Strg+C"; }  // ohne Zwischenablage (http)
+async function copyCode(id, btn) {
+  try { await navigator.clipboard.writeText($(id).textContent); btn.textContent = "Kopiert"; }
+  catch (e) { getSelection().selectAllChildren($(id)); btn.textContent = "Markiert – Strg+C"; }  // ohne Zwischenablage (http)
 }
 function boilerGuide() {
   BOILER_GUIDE = !BOILER_GUIDE;
@@ -5650,6 +5650,7 @@ function setPage(p) {
   SET_PAGE = p;
   if (typeof store !== "undefined") store.set("hp-set-page", SET_PAGE);  // zuletzt offene Unterseite
   for (const k of SET_KEYS) { const d = $("set-" + k); if (d) d.hidden = SET_PAGE !== k; }
+  if (SET_PAGE === "erweitert") loadCards().catch(() => {});  // 0.56.4: Karten für Home Assistant
   for (const r of document.querySelectorAll("#set-menu .nav-row"))
     if (r.dataset.page === SET_PAGE) r.setAttribute("aria-current", "page"); else r.removeAttribute("aria-current");
   const v = $("view-settings"); v.classList.toggle("set-on-menu", SET_PAGE === "menu");
@@ -5948,7 +5949,8 @@ function renderSettings() {
     </div>`) +
     card("Kessel steuern", boilerSectionHtml(s, BOILC) + emInline("kessel_hp"))) +  // Weg B (0.41)
     page("benachrichtigungen", card("Benachrichtigungen", emInline("benachrichtigungen"))) +
-    page("erweitert", card("Erweitert", `<div class="form-grid">
+    page("erweitert", card("Karten für Home Assistant", '<div id="cards-box"><p class="muted">Lade …</p></div>') +
+    card("Erweitert", `<div class="form-grid">
       ${field("Abtastintervall (s)", num("f-sample_interval_s", s.sample_interval_s, "1"))}
       ${field("Historie beim ersten Start (Tage)", num("f-backfill_days", s.backfill_days, "1"), "Einzelwerte aus dem Recorder")}
       ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
@@ -5971,6 +5973,24 @@ function renderSettings() {
   aliasReveal(); advReveal();  // Links aus Übersicht und Diagnose: hinscrollen
   setPage(SET_PAGE);  // Startliste bzw. Seitenleiste, Titel, Speicherleiste
 }
+// Einstellungen → Erweitert → „Karten für Home Assistant“ (0.56.4, GET api/cards): Stand, Einrichtung über HACS,
+// YAML der drei Karten zum Kopieren
+async function loadCards() {
+  const box = $("cards-box"); if (!box) return;
+  const c = await getJSON("api/cards");
+  if (c.starting) { box.innerHTML = '<p class="muted">HeatPilot startet noch …</p>'; return; }
+  const rooms = c.rooms.map((r) => `  - ${r.entity}`).join("\n");
+  const yamls = [["Räume", `type: custom:heatpilot-rooms-card\n# entities:            # weglassen = alle Räume\n${rooms.replace(/^ {2}/gm, "#   ")}`],
+    ["Steuerung (mehrere Räume: Boost, Zeitplan, Aus)", "type: custom:heatpilot-control-card"],
+    ["Wetter", `type: custom:heatpilot-weather-card\nentity: ${c.weather || "weather.…"}`]];
+  box.innerHTML = statusLine(c.helper ? "ok" : "err", c.helper ? `Bereit: Befehls-Helfer <code class="eid">${esc(c.command)}</code> und ${c.rooms.length} Raum-Sensoren`
+      : `Befehls-Helfer <code class="eid">${esc(c.command)}</code> fehlt – die Karten können nur anzeigen. Add-on neu starten; hilft das nicht, Log prüfen.`) +
+    `<p class="muted">Einmal in HACS: ⋮ › Benutzerdefinierte Repositories › <a href="${esc(c.repo)}" target="_blank" rel="noopener">${esc(c.repo)}</a>, Typ „Dashboard“, herunterladen, Seite neu laden. ` +
+    `Dann im Dashboard „Karte hinzufügen“ › „HeatPilot“ suchen – oder „Manuell“ und YAML einfügen:</p>` +
+    yamls.map(([t, y], i) => `<p class="muted" style="margin:8px 0 0"><b>${t}</b></p><pre class="code-box" id="card-yaml-${i}">${esc(y)}</pre>` +
+      `<button class="btn small" onclick="copyCode('card-yaml-${i}', this)">Kopieren</button>`).join("");
+}
+
 
 function addVac() { $("vac-list").insertAdjacentHTML("beforeend", vacRow()); }
 
