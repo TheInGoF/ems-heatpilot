@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.56.4
+- **Einstellungen → Erweitert → „Karten für Home Assistant“:** zeigt, ob der Befehls-Helfer da ist (sonst können die Karten nur anzeigen), die Einrichtung über HACS mit Link und das YAML der drei Karten (Räume mit deinen Raum-Sensoren, Steuerung, Wetter mit deiner Wetter-Entität) zum Kopieren. Neu: `GET api/cards`
+- Klare Aufteilung: das Soll eines Raums stellt die Raumkachel über das Thermostat-Pop-up von Home Assistant; die Karten senden nur noch `boost`, `schedule` und `mode` (der Befehl `temp` entfällt)
+- Tests: `tests/test_cards564.py`
+
 ## 0.56.3
 - **Raum-Sensoren heißen nach dem Raum:** `sensor.heatpilot_raum_<raumname>` nach dem Raumnamen in HeatPilot (z. B. `sensor.heatpilot_raum_kleines_bad`, Umlaute ohne Punkte, gleiche Namen mit _2) statt nach dem Thermostat (`…_tado_smart_thermostat_su…`). Nur die Räume, die HeatPilot nutzt; Sensoren mit altem Namen entfernt HeatPilot von selbst – in Karten die neuen Namen eintragen
 

@@ -1847,6 +1847,11 @@ Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 
 ## Karten für Home Assistant (seit 0.56)
 
+Einrichtung, Stand des Befehls-Helfers und das YAML der Karten zum Kopieren stehen unter Einstellungen → Erweitert →
+„Karten für Home Assistant“. Aufteilung: **Raumkachel antippen** öffnet das Thermostat-Pop-up von Home Assistant (Soll,
+Betriebsart eines Raums); **HeatPilot Steuerung** bedient mehrere Räume auf einmal (Boost, Zeitplan, Aus); Pause und
+Einstellungen bleiben der HeatPilot-Seite vorbehalten.
+
 Für eigene Dashboards (auch für Nicht-Admins und unterwegs in der App) stellt HeatPilot bereit – gedacht für die
 HeatPilot-Karten (Räume, Boost, Wetter) aus https://github.com/TheInGoF/heatpilot-card (HACS → Benutzerdefinierte
 Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
@@ -1857,7 +1862,7 @@ Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
 - **`sensor.heatpilot_boost`**: Zahl der Räume mit Boost; Attribute: laufende Boosts, Grenzen für Soll und Dauer,
   Ergebnis des letzten Befehls (`last`).
 - **`input_text.heatpilot_befehl`**: legt HeatPilot beim Start einmal als Helfer an. Die Karten schreiben Befehle als
-  JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `temp` {room, temp}, `mode` {rooms, mode} –,
+  JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `mode` {rooms, mode} –,
   HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen, leert das Feld und meldet das Ergebnis. Die Pause bleibt
   der HeatPilot-Seite vorbehalten. Die Sensoren werden alle 30 s und direkt nach einem Befehl aktualisiert.
 

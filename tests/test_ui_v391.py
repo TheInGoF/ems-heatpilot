@@ -281,7 +281,7 @@ def test_settings_split_into_general_and_entities():
     assert "emSum();" in rs
     titles = re.findall(r'card\("([^"]+)"', rs)
     assert titles == ["Verbindung", "Haus", "Gas & Kosten", "Räume", "Personen", "Urlaub", "Warmwasser steuern", "Temperaturen",
-                      "Kesseldaten", "Kessel steuern", "Benachrichtigungen", "Erweitert"]  # Steuerung: controlCard
+                      "Kesseldaten", "Kessel steuern", "Benachrichtigungen", "Karten für Home Assistant", "Erweitert"]  # Steuerung: controlCard
     # „Allgemein“ ohne Entitätsfelder – höchstens ein Verweis
     for gone in ("Zuordnungen (Experten)", 'class="ov"', "outdoor-list", "power-list", "f-gas_sensor", "f-weather_entity",
                  "f-demand_sensor", "f-vacation_entity", "list=\"dl-any\"", "ROLES", "DISC."):
