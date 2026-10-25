@@ -33,8 +33,8 @@ def learned_room(name: str = "Wohnzimmer", a: float = 0.03, b: float = 1 / 60, c
                  sun=(0.0, 0.0, 0.0), updates: int = 300) -> RoomModel:
     """Raummodell mit bekannten Parametern und kleiner Unsicherheit – wie nach Wochen Lernen."""
     m = RoomModel(name)
-    m.rls.theta = [a, b, c, *sun]
-    m.rls.P = [[1e-4 if i == j else 0.0 for j in range(6)] for i in range(6)]
+    m.rls.theta = [a, b, c, *sun, 0.0]  # 0.54: + Wind
+    m.rls.P = [[1e-4 if i == j else 0.0 for j in range(7)] for i in range(7)]
     m.rls.updates, m.rls.err_sq_ewma = updates, 0.01
     return m
 

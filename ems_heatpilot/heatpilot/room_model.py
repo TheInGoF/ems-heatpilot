@@ -8,6 +8,10 @@
     b  wie schnell der Raum auskühlt (1/b = Zeitkonstante in h)
     c  Fremdwärme (Personen, Nachbarräume) [K/h]
     + g_Ost/Süd/West * Einstrahlung: Sonnenwärme durch die Fenster je Himmelsrichtung
+    + w * Wind * (T_außen - T_raum): Wind kühlt zusätzlich aus (seit 0.54, je Raum gelernt, nie negativ)
+
+Das Auskühlen ist damit ``b + w · Wind`` (``b`` schließt den Wind von jetzt ein, ``wind_now`` in m/s, von der Engine
+je Takt gesetzt) – bei Sturm kühlt ein zugiger Raum schneller aus, ein geschützter lernt „kaum Wind“.
 
 Bis 0.52 war der Heizkörper linear: (Vorlauf − Raum) · Ventil. An einem Export (7 Tage, 6 Räume, Vorhersage über
 1 h) war das Modell beim Heizen durchweg zu langsam, bei mehr als 50 °C Vorlauf um rund 1 K/h. Zwei Ursachen ließen
@@ -53,7 +57,8 @@ EXCITATION_DECAY = 0.998  # „gesehener Heizbetrieb“ klingt unabhängig vom L
 # Haus), Fremdwärme c, Sonne Ost/Süd/West. Mit gleicher Unsicherheit für alles verschob ein
 # einziger Schritt a um das Zehnfache; an echten Daten nachgerechnet (Export 10/2026).
 # a gilt bei FLOW_REF_K (für steilere Exponenten umgerechnet, siehe ``_prior_rls``).
-ROOM_PRIOR = {"a": (0.02, 0.05), "f": (0.01, 0.02), "b": (0.018, 0.03), "c": (0.0, 0.3), "sun": (0.0, 1.0)}
+ROOM_PRIOR = {"a": (0.02, 0.05), "f": (0.01, 0.02), "b": (0.018, 0.03), "c": (0.0, 0.3), "sun": (0.0, 1.0),
+              "w": (0.0, 0.003)}  # 0.54: Wind – Auskühlen je m/s (1/h); 10 m/s × 0,002 ≈ +100 % bei b = 0,02
 # Fremdwärme-Erkennung (Kamin, Ofen, Gäste): Sonne und Fußboden gelten erst als gelernt, wenn das
 # Modell so viele Schritte hat und die Unsicherheit der gerade angeregten Parameter auf die Hälfte
 # des Startwerts gesunken ist – sonst verwürfe ein junges Modell seine eigene Lernchance als Ereignis
@@ -116,6 +121,7 @@ class RoomModel:
     sel_sse: list = field(default_factory=lambda: [0.0] * len(FORMS))
     sel_w: list = field(default_factory=lambda: [0.0] * len(FORMS))
     migrated: bool = False  # aus einem Modell von vor 0.53 umgerechnet (wird nicht gespeichert)
+    wind_now: float = 0.0   # 0.54: Wind jetzt in m/s – von der Engine je Takt gesetzt (wird nicht gespeichert)
 
     def __post_init__(self) -> None:
         if self.rlss is None:
@@ -124,7 +130,7 @@ class RoomModel:
             r.gate = ROOM_GATE
 
     def _prior_rls(self, n: float) -> RLS:
-        keys = ["a"] + (["f"] if self.floor else []) + ["b", "c"] + ["sun"] * 3
+        keys = ["a"] + (["f"] if self.floor else []) + ["b", "c"] + ["sun"] * 3 + ["w"]
         s = FLOW_REF_K ** (1.0 - n)  # gleiche Wirkung bei FLOW_REF_K
         theta = [ROOM_PRIOR[k][0] * (s if k == "a" else 1.0) for k in keys]
         sd = [ROOM_PRIOR[k][1] * (s if k == "a" else 1.0) for k in keys]
@@ -162,6 +168,12 @@ class RoomModel:
         return tuple(round(max(v, 0.0), 3) for v in th) if len(th) == 3 else (0.0, 0.0, 0.0)
 
     @property
+    def wind_gain(self) -> float:
+        """Zusätzliches Auskühlen je m/s Wind (1/h, nie negativ) – 0, solange nichts gelernt ist."""
+        th = self.rls.theta
+        return max(th[self._base_n + 3], 0.0) if len(th) > self._base_n + 3 else 0.0
+
+    @property
     def a(self) -> float:
         return max(self.rls.theta[0], 1e-4 * FLOW_REF_K ** (1.0 - self.n))
 
@@ -177,7 +189,8 @@ class RoomModel:
 
     @property
     def b(self) -> float:
-        return max(self.rls.theta[2 if self.floor else 1], 1e-3)
+        """Auskühlen jetzt (1/h): gelernte Grundrate plus Wind (``wind_gain`` · ``wind_now``, seit 0.54)."""
+        return max(self.rls.theta[2 if self.floor else 1], 1e-3) + self.wind_gain * max(self.wind_now, 0.0)
 
     @property
     def c(self) -> float:
@@ -212,6 +225,7 @@ class RoomModel:
         update: bool = True,
         solar: tuple[float, float, float] | None = None,
         parts: list[tuple[float, float]] | None = None,
+        wind: float | None = None,
     ) -> float:
         """Lernschritt aller Formen. ``heat_input``: linear (Vorlauf − Raum) · Öffnung wie bis 0.52 – zählt für
         den gesehenen Heizbetrieb; ``parts``: die Messpunkte dazu (Vorlauf − Raum, Öffnung 0…1), ohne gilt
@@ -223,7 +237,7 @@ class RoomModel:
             return 0.0
         parts = parts if parts is not None else [(heat_input, 1.0)]
         rest = ([self.floor_u * dt_h] if self.floor else []) + [(t_out - t_mean) * dt_h, dt_h]
-        rest += [v * dt_h for v in (solar or (0.0, 0.0, 0.0))]
+        rest += [v * dt_h for v in (solar or (0.0, 0.0, 0.0))] + [(wind or 0.0) * (t_out - t_mean) * dt_h]
         heated, err = heat_input * dt_h > 1e-6, 0.0
         for i, (form, r) in enumerate(zip(FORMS, self.rlss)):
             x = [self.heat_input(parts, form) * dt_h] + rest
@@ -253,14 +267,14 @@ class RoomModel:
             self.form_index = best
 
     def _sun_not_negative(self, rls: RLS | None = None) -> None:
-        """Sonne kann nicht kühlen: negative Sonnenwerte auf 0 projizieren (P-gewichtet).
+        """Sonne kann nicht kühlen und Wind nicht wärmen: negative Werte auf 0 projizieren (P-gewichtet).
 
         Die zusammenhängenden Parameter (Fremdwärme, Auskühlen, andere Richtungen) werden
         dabei optimal nachgeführt; P bleibt, damit der Wert später wieder wachsen kann.
         """
         for r in [rls] if rls is not None else self.rlss:
             th, P = r.theta, r.P
-            for i in range(self._base_n, self._base_n + 3):
+            for i in range(self._base_n, self._base_n + 4):
                 if i < len(th) and th[i] < 0 and P[i][i] > 1e-12:
                     ti = th[i]
                     r.theta = th = [th[j] - P[j][i] / P[i][i] * ti for j in range(len(th))]
@@ -386,6 +400,7 @@ class RoomModel:
             "valve_exp": self.p,
             "free_gain_k_h": round(self.c, 3),
             "solar_gain": self.solar,
+            "wind_gain": round(self.wind_gain, 4),  # 0.54: Auskühlen je m/s Wind
             "hours_plus_2k_max_flow": self.time_to_reach(19.0, 21.0, max_flow, t_out),
             "flow_to_hold_21": round(self.required_flow(21.0, t_out), 1),
         }
@@ -420,5 +435,8 @@ class RoomModel:
             if old.n == (4 if floor else 3):
                 old.extend(3)  # Modell von vor 0.20: Sonnen-Parameter ergänzen
             m = cls(**kw, rlss=[_migrated(old, n, p) for n, p in FORMS], migrated=True)
+        for r in m.rlss:  # bis 0.53 ohne Wind: Parameter ergänzen (Startwert 0), Gelerntes bleibt
+            if r.n == m._base_n + 3:
+                r.extend(1, ROOM_PRIOR["w"][1] ** 2)
         m._sun_not_negative()
         return m

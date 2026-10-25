@@ -2091,6 +2091,7 @@ async function load() {
       const name = `<button type="button" class="lnk" onclick="ovRoom('${esc(r.climate)}')">${esc(r.room)} ›</button>`;
       const det = [["Aufheizen +2 K bei max. Vorlauf" + outNote, ok ? (r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min") : learn],
         ["Vorlauf für 21 °C" + outNote, ok ? hold : learn], ["Sonne", ok ? sunText(r.solar_gain, r.updates) : learn],
+        ["Wind", ok ? (r.wind_gain > 0.0002 ? `kühlt bei 10 m/s um ${fmt(r.wind_gain * 10 * (r.tau_h || 1) * 100, 0)} % schneller aus` : "kaum Einfluss gelernt") : learn],  // 0.54
         ["Fehler", r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"], ["Lernschritte", r.updates]]
         .map(([k, v]) => `<span>${k}: <b>${v}</b></span>`).join("");
       return `<tr class="ov-r"><td>${name}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} → ${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td>` +

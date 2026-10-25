@@ -161,8 +161,8 @@ class LearnMixin:
         sys_rows = {
             r["ts"]: r
             for r in self.store.query(
-                "SELECT ts, flow, heating, burner_on, dhw, pump_mod, t_out, vacation, away_long, sun_e, sun_s, sun_w "
-                "FROM samples WHERE ts BETWEEN ? AND ?",
+                "SELECT ts, flow, heating, burner_on, dhw, pump_mod, t_out, vacation, away_long, sun_e, sun_s, sun_w, "
+                "wind FROM samples WHERE ts BETWEEN ? AND ?",
                 (start, end),
             )
         }
@@ -177,7 +177,7 @@ class LearnMixin:
             rows = [r for r in rows if r["temp"] is not None]
             if len(rows) < 3 or rows[-1]["ts"] - rows[0]["ts"] < 0.8 * ROOM_STEP_H * 3600:
                 continue
-            inputs, floor_inputs, outs, suns, overs, valves, parts = [], [], [], [], [], [], []
+            inputs, floor_inputs, outs, suns, overs, valves, parts, winds = [], [], [], [], [], [], [], []
             vacation = False
             for r in rows:
                 s = sys_rows.get(r["ts"])
@@ -201,6 +201,7 @@ class LearnMixin:
                 outs.append(s["t_out"])
                 if s["sun_s"] is not None:
                     suns.append((s["sun_e"], s["sun_s"], s["sun_w"]))
+                winds.append(s["wind"] or 0.0)  # 0.54: ohne Wert kein Wind – der Wind-Parameter lernt dann nicht
             if len(inputs) < 3:
                 continue
             t0, t1 = rows[0]["temp"], rows[-1]["temp"]
@@ -218,7 +219,8 @@ class LearnMixin:
                 ext = climate in self.room_ext
             # Fenster offen o. ä., Urlaub oder alle lange weg, Fremdwärme: Estrich nachführen, aber nicht lernen
             update = abs(t1 - t0) <= 2.0 and not vacation and not ext
-            model.learn(t0, t1, heat, t_out, dt_h, floor_input=floor_in, update=update, solar=solar, parts=parts)
+            model.learn(t0, t1, heat, t_out, dt_h, floor_input=floor_in, update=update, solar=solar, parts=parts,
+                        wind=sum(winds) / len(winds))
 
     def ext_heat_step(self, climate: str, model: RoomModel, start: int, end: int, t0: float, t1: float,
                       dt_h: float, heat_input: float, floor_input: float, t_out: float,

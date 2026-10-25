@@ -209,12 +209,13 @@ class SampleMixin:
         return sample, clean, persons
 
     def add_solar(self, ts: int, sample: dict) -> None:
-        """Sonneneinstrahlung auf Ost/Süd/West zum Zeitpunkt – aus Standort, Uhrzeit und Bewölkung."""
+        """Sonneneinstrahlung auf Ost/Süd/West zum Zeitpunkt – aus Standort, Uhrzeit und Bewölkung; seit 0.54 dazu
+        der Wind in m/s (``wind``, aus der Wetter-Integration)."""
+        attrs = (self.states.get(self.found.weather) or {}).get("attributes", {}) if self.found.weather else {}
+        sample["wind"] = wind_ms(attrs.get("wind_speed"), attrs.get("wind_speed_unit"))
         if not self.found.home_zone:
             return
-        cloud = None
-        if self.found.weather and self.found.weather in self.states:
-            cloud = num(self.states[self.found.weather].get("attributes", {}).get("cloud_coverage"))
+        cloud = num(attrs.get("cloud_coverage"))
         lat, lon = self.found.home_zone
         sample["sun_e"], sample["sun_s"], sample["sun_w"] = solar.facade_inputs(ts, lat, lon, cloud)
 
@@ -233,3 +234,14 @@ class SampleMixin:
         if self._rejected:
             self.store.add_daily(local(ts).date().isoformat(), "ignored_values", len(self._rejected))
             log.debug("Unplausible Werte verworfen: %s", sorted(self._rejected))
+
+
+WIND_UNITS = {"m/s": 1.0, "km/h": 1 / 3.6, "mph": 0.44704, "kn": 0.514444, "ft/s": 0.3048}
+
+
+def wind_ms(value, unit) -> float | None:
+    """Windgeschwindigkeit in m/s (0.54) – Home Assistant meldet sie in der Einheit des Nutzers (Standard km/h)."""
+    v = num(value)
+    if v is None or v < 0 or v > 100 * 3.6:
+        return None
+    return round(v * WIND_UNITS.get(str(unit or "km/h").strip(), 1 / 3.6), 2)
