@@ -57,20 +57,3 @@ def test_hold_ends_after_four_hours_without_burner_signal(tmp_path):
     bc.state["special_ts"] = T0
     eng.states[BURN]["state"] = "on"
     assert bc._special_hold(T0 + 3600) and not bc._special_hold(T0 + 4 * 3600 + 1)
-
-
-def test_short_press_between_two_samples_counts(tmp_path):  # 0.56.6: Desinfektion ist ein Taster
-    eng, ha, bc = _setup(tmp_path)
-    _run(eng, ha, bc, 5, dis=(99, 99), heat=(99, 99))  # vorher normal
-    eng.on_state(DIS, {"state": "on", "attributes": {}})   # kurz gedrückt …
-    eng.on_state(DIS, {"state": "off", "attributes": {}})  # … und gleich wieder aus, bevor HeatPilot abfragt
-    assert bc.charging(time.time()) and "special_ts" in bc.state
-    eng.states[FLOW]["state"] = "75"
-    n = len(calls(ha))
-    bc.plan(time.time())
-    run(bc.apply(time.time()))
-    assert not [c for c in calls(ha)[n:] if c[2] == FLOW]  # Brenner an: nichts geschrieben
-    eng.states[BURN]["state"] = "off"
-    eng.special_pressed_ts = 0
-    later = time.time() + 200  # nach dem kurzen Nachlauf (DHW_AFTER_S)
-    assert not bc.charging(later) and "special_ts" not in bc.state  # Brenner einmal aus: wieder frei

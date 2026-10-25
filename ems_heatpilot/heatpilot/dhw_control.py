@@ -61,21 +61,15 @@ KV = "dhw_control.state"
 K_FAIL, K_PAUSED, K_FOREIGN = "dhw_write_failed", "dhw_paused", "dhw_foreign"
 
 
-PRESSED_S = 120  # 0.56.6: so lange nach einem Druck auf den Desinfektions-/Einmalladungs-Taster gilt er als gedrückt
-
-
 def special_running(eng, sample: dict) -> bool:
     """Sonderladung oder Desinfektion läuft: Kesselschalter im Messpunkt oder in HA (falls EMS-ESP nicht mehr
     antwortet und der Messpunkt dessen letzten Stand zeigt), vom Modell erkannt (samt Nachlauf) oder – seit 0.42 – von
     HeatPilot ausgelöst (``disinfect_control``, vom Einschalten bis zum Ausschalten, auch bevor der Kessel es meldet).
-    Auch für Weg B (0.41): solange fasst HeatPilot das Vorlauf-Soll nicht an. Seit 0.56.6 auch ein kurzer Tastendruck
-    (``special_pressed_ts`` aus ``Engine.on_state``) bis ``PRESSED_S`` danach – der Kessel lädt weiter, wenn der Taster
-    schon wieder aus ist; Weg B hält danach bis „Brenner aus“ (``boiler_control._special_hold``)."""
+    Auch für Weg B (0.41): solange fasst HeatPilot das Vorlauf-Soll nicht an."""
     roles = getattr(eng.found, "boiler", None) or {}
     in_ha = any(flag(eng._val(roles.get(r))) == 1 for r in ("dhw_disinfecting", "dhw_onetime"))
     own = getattr(eng, "disinfect_control", None)
-    pressed = time.time() - (getattr(eng, "special_pressed_ts", None) or 0) < PRESSED_S
-    return bool(sample.get("dhw_special") or sample.get("dhw_disinfecting") or in_ha or pressed
+    return bool(sample.get("dhw_special") or sample.get("dhw_disinfecting") or in_ha
                 or getattr(eng.dhw, "special_running", False) or (own is not None and own.active()))
 
 
