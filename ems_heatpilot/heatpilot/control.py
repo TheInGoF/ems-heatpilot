@@ -492,7 +492,7 @@ class Control(boiler_period.PeriodWrite):
                                      {"temperature": t, "time_period": _hhmmss(minutes)}, reason)
                 else:
                     await self._set(e, t, reason)
-            self.boosts[r] = {"temp": t, "end": end, "local": local, "before": before,
+            self.boosts[r] = {"temp": t, "end": end, "minutes": minutes, "local": local, "before": before,
                               "before_mode": before_mode, "targets": targets}
 
         return await self._each(rooms, f"Boost {t:g} °C für {minutes} min", one)

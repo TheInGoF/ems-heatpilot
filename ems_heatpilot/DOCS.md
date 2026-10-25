@@ -1848,7 +1848,8 @@ Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 ## Karten für Home Assistant (seit 0.56)
 
 Für eigene Dashboards (auch für Nicht-Admins und unterwegs in der App) stellt HeatPilot bereit – gedacht für die
-HeatPilot-Karten aus dem Repository `heatpilot-card` (HACS), nutzbar aber auch mit Standard-Karten:
+HeatPilot-Karten (Räume, Boost, Wetter) aus https://github.com/TheInGoF/heatpilot-card (HACS → Benutzerdefinierte
+Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
 
 - **`sensor.heatpilot_raum_<raum>`** je Raum: Zustand = Ist-Temperatur; Attribute wie die Raumkachel – Soll,
   Betriebsart, heizt, Ventil, Luftfeuchte, Phase und Wunsch-Soll der Steuerung, nächster Wechsel, Boost mit Ende.

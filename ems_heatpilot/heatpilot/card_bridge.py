@@ -46,22 +46,27 @@ def rooms(eng, ctl) -> list[tuple[str, object, dict]]:
     targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
                for r in eng.found.rooms}
     boosts = ctl.active(targets) if ctl else {}
-    loop = eng.control_loop
+    loop, managing = eng.control_loop, eng.cfg.is_managing()
+    vp = getattr(eng, "valve_pid", None)  # ventilgeführte Räume: Wunsch-Öffnung, von Hand gehalten
+    vps = (vp.as_dict().get("rooms") or {}) if vp is not None else {}
     out = []
-    for r in eng.found.rooms:
+    for i, r in enumerate(eng.found.rooms):
         st = eng.states.get(r.climate) or {}
         a, reading = st.get("attributes", {}), eng.room_reading(r)
         c = (loop.rooms if loop else {}).get(r.climate) or {}
-        b = boosts.get(r.climate)
+        b, v = boosts.get(r.climate), vps.get(r.climate) or {}
         temp = reading[1] if reading else a.get("current_temperature")
         out.append((room_entity(r.climate), temp, {
             "friendly_name": f"HeatPilot {r.name}", "icon": "mdi:thermostat", "unit_of_measurement": "°C",
-            "device_class": "temperature", "room": r.name, "climate": r.climate, "mode": st.get("state"),
+            "device_class": "temperature", "room": r.name, "order": i, "climate": r.climate, "mode": st.get("state"),
             "action": a.get("hvac_action"), "target": a.get("temperature"),
             "valve": reading[3] if reading else eng._val(r.heating_power),
             "humidity": eng._val(r.humidity) or num(a.get("current_humidity")), "modes": a.get("hvac_modes") or [],
             "managed": bool(r.managed), "lead": c.get("lead"), "phase": c.get("phase"), "desired": c.get("desired"),
             "next_change": c.get("next_change"), "next_phase": c.get("next_phase"), "ems": bool(r.ems),
+            "managing": managing, "manual": bool(c.get("manual")), "manual_until": c.get("manual_until"),
+            "paused": bool(c.get("paused")), "reach_c": c.get("reach_c"), "preheat_flow": c.get("preheat_flow"),
+            "valve_want": v.get("want"), "valve_hold": bool(v.get("hold")),
             "boost": None if not b else {"temp": b["temp"], "until": int(b["end"]), "left_min": b["left_min"]},
         }))
     return out
@@ -75,7 +80,7 @@ def boost(eng, ctl, last: dict | None) -> tuple[str, int, dict]:
     return BOOST, len(act), {
         "friendly_name": "HeatPilot Boost", "icon": "mdi:fire",
         "rooms": [{"climate": c, "room": names.get(c, c), "temp": b["temp"], "until": int(b["end"]),
-                   "left_min": b["left_min"]} for c, b in act.items()],
+                   "left_min": b["left_min"], "minutes": b.get("minutes")} for c, b in act.items()],
         "temp_min": control_mod.TEMP_MIN, "temp_max": control_mod.TEMP_MAX,
         "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX, "command": COMMAND, "last": last}
 

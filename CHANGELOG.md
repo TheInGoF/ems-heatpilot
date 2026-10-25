@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.56.2
+- **Karten-Sensoren vollständig:** `sensor.heatpilot_raum_*` tragen jetzt alles, was die Raumkachel braucht (HeatPilot steuert, manuell bis, Pause, erreichbares Soll, Vorheizen mit Vorlauf, Wunsch-Öffnung und „von Hand“ bei ventilgeführten Räumen, Reihenfolge wie in HeatPilot); `sensor.heatpilot_boost` nennt je Boost die Gesamtdauer (Fortschrittsbalken). Karten: Repository `heatpilot-card` (HACS, Typ Dashboard)
+
 ## 0.56.1
 - **Wetter jetzt in der Übersicht:** oben in der Karte „Wetter“ wie eine Wetter-Karte in Home Assistant – Symbol nach Zustand, große Temperatur, Zustand auf Deutsch, gefühlt, Spanne der nächsten 24 h, dazu Wind mit Richtung und Böen, Luftfeuchte, Luftdruck, UV und Wolken; darunter wie bisher die Stundenbalken. `api/weather` liefert dafür `now` (aus der Wetter-Entität)
 - Tests: `tests/test_weather552.py` erweitert

@@ -50,7 +50,7 @@ def make_app(helper=True):
         states[cb.COMMAND] = {"state": ""}
     loop = NS(rooms={"climate.wohnzimmer": {"phase": "komfort", "desired": 21.0, "lead": "temp"}})
     eng = NS(found=NS(rooms=[ROOM]), states=states, control_loop=loop, room_reading=lambda r: None,
-             _val=lambda v: None)
+             _val=lambda v: None, cfg=NS(is_managing=lambda: True))
 
     async def refresh():
         return None
@@ -68,6 +68,7 @@ def test_room_and_boost_sensors_like_the_tile(monkeypatch):
     state, a = app.ha.states["sensor.heatpilot_raum_wohnzimmer"]
     assert state == 20.4 and a["target"] == 21 and a["phase"] == "komfort" and a["humidity"] == 48
     assert a["action"] == "heating" and a["boost"]["temp"] == 23.0 and a["boost"]["left_min"] == 60
+    assert a["managing"] is True and a["manual"] is False and a["valve_hold"] is False  # 0.56.2: wie die Kachel
     n, b = app.ha.states[cb.BOOST]
     assert n == 1 and b["rooms"][0]["room"] == "Wohnzimmer" and b["command"] == cb.COMMAND
 
