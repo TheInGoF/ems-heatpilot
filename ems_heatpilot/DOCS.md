@@ -1345,9 +1345,11 @@ in `GET api/boiler`.
 
 **Wächter in Home Assistant.** Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – nachts vielleicht 35 °C. Dafür
 setzt HeatPilot jede Minute den Sensor `sensor.heatpilot_heartbeat` (Zeitstempel). Eine Automation in Home Assistant
-stellt den Kessel auf einen festen Wert, sobald er sich eine Stunde nicht ändert. Du legst sie selbst in der
-Oberfläche von Home Assistant an – kein YAML nötig; der Knopf **„Anleitung Wächter“** im Kessel-Block zeigt die Schritte
-mit deinen Werten zum Abtippen:
+stellt den Kessel auf einen festen Wert, sobald er sich eine Stunde nicht ändert. Du legst sie selbst an. Seit 0.55.1
+zeigt der Knopf **„Anleitung Wächter“** im Kessel-Block die fertige Automation als YAML mit deinen Entitäten, deinem
+Rückfall-Vorlauf und deinen Benachrichtigungszielen (ohne Ziel: Meldung in Home Assistant) – „YAML kopieren“, in Home
+Assistant eine neue Automation erstellen, ⋮ › „In YAML bearbeiten“, alles ersetzen, speichern. Wer lieber klickt, findet
+darunter aufklappbar die Schritte mit den Werten zum Abtippen:
 
 1. In Home Assistant „Einstellungen“ › „Automationen & Szenen“ › „Automation erstellen“ › „Neue Automation erstellen“.
 2. „Auslöser hinzufügen“ › „Entität“ › „Zustand“: Entität „HeatPilot Heartbeat“ (`sensor.heatpilot_heartbeat`), „Von“
