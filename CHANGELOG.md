@@ -1,8 +1,7 @@
 # Changelog
 
-## 0.56.6
-- **Desinfektion als Taster:** Der Schalter „Desinfektion“ bzw. „Einmalladung“ ist am Kessel ein Taster – kurz an, gleich wieder aus, der Kessel lädt trotzdem bis zu seiner Temperatur. Ein Druck zwischen zwei Abfragen (alle 30 s) ging bisher unter. Jetzt zählt jedes „an“ sofort über die Zustandsmeldung von Home Assistant; danach hält Weg B das Vorlauf-Soll still, bis der Brenner einmal aus war (0.56.5), Weg W lässt das Speicher-Soll in Ruhe
-- Tests: `tests/test_disinfect_hold565.py` erweitert
+## 0.56.7
+- Taster-Erkennung aus 0.56.6 wieder entfernt (unnötig). Es bleibt die einfache Regel aus 0.56.5: Während und nach einer Desinfektion schreibt Weg B kein Vorlauf-Soll, bis der Brenner einmal aus war
 
 ## 0.56.5
 - **Desinfektion: Weg B wartet, bis der Brenner einmal aus war.** Beim Halten der Temperatur fällt die Meldung „Desinfektion“ bzw. „lädt“ zwischendurch weg, der Kessel heizt aber mit seinem eigenen Soll weiter. HeatPilot hielt das für fertig, schrieb sein Vorlauf-Soll, der Kessel nahm es nicht an („nicht übernommen“) – und der Brenner ging in die Taktsperre. Jetzt gehört das Vorlauf-Soll nach einer Sonderladung dem Kessel, bis der Brenner einmal aus war (höchstens 4 h); kein Schreiben, keine Prüfung, kein Fehlschlag
