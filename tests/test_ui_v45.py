@@ -12,7 +12,7 @@ from test_ui_v361 import NODE, html, plain, script, source
 ROOT = Path(__file__).resolve().parents[1]
 PKG = ROOT / "ems_heatpilot" / "heatpilot"
 STUBS = """
-const emsLock = () => "", floorCell = () => "", roomStates = () => "", relearnHtml = () => "";
+const emsLock = () => "", floorCell = () => "", relearnHtml = () => "";
 let SET = {}, SUG = {}, ENT = [], CT = {}, CTRL = {};
 """
 

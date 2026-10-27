@@ -679,6 +679,25 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .live-sub { font-size: var(--fs-text); color: var(--text-secondary); margin: 0 0 8px; }
 .live-card .seg-b, #ov-burner .seg-b { margin: 0 0 8px; }
 #live-persons .pres-now { border-top: 1px solid var(--border); padding: 8px 0 0; margin-top: 8px; }
+.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
+.rt-tile { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: var(--s2) var(--s2) var(--s2) 12px; border: 1px solid var(--border);
+  border-radius: var(--r); background: var(--surface-2); color: var(--text-primary); font: inherit; cursor: pointer; min-width: 0; }
+.rt-tile.sel { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
+.rt-tile.off { opacity: .55; }
+.rt-n { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rt-t { font-size: var(--fs-num); font-weight: 600; font-variant-numeric: tabular-nums; }
+.rt-t small { font-size: var(--fs-text); font-weight: 400; color: var(--text-secondary); }
+.rt-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.rt-tags span { font-size: var(--fs-small); color: var(--text-secondary); background: var(--surface-1); border-radius: 99px; padding: 0 var(--s2); }
+.rt-tags span.q-warn { color: var(--warn-text); background: rgba(201, 133, 0, .12); }
+#room-table .room { display: none; }
+#room-table .room.sel { display: block; border: 1px solid var(--border); border-radius: var(--r); padding: var(--s4); }
+.r-devs { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(160px, 42vw), 1fr)); gap: var(--s2); margin: var(--s2) 0; }
+.r-devs:empty { display: none; }
+.dev-card { display: flex; flex-direction: column; gap: 2px; padding: var(--s2) 12px; border-radius: var(--r-s); background: var(--surface-2); min-width: 0; }
+.dev-card .dev-n { font-size: var(--fs-small); color: var(--text-secondary); }
+.dev-card .muted { overflow-wrap: anywhere; }
+.dev-card.bad b { color: var(--err-text); }
 .room-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
 .room-row .r-main { min-width: 0; }
 .room-row .r-main .hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1765,6 +1784,7 @@ async function loadHeat() {
   if (box) {
     if (j.boiler) boilerUpdate(j.boiler, j.readiness && j.readiness.boiler_control, "");
     if (j.dhw) dhwUpdate(j.dhw, j.readiness && j.readiness.dhw, "");
+    roomTiles();  // 0.60: Ist/Soll der Raum-Kacheln
   }
   if (!$("view-heat").hidden || !$("view-overview").hidden || box) heatTimer = setTimeout(() => loadHeat().catch(heatError), 30000);
 }
@@ -3991,7 +4011,7 @@ function roomRows() {
       <div class="r-opts"><label title="${esc(lock || "HeatPilot schreibt das Soll dieses Raums bei „HeatPilot steuert“")}"><input type="checkbox" class="r-managed" ${r.managed && !lock ? "checked" : ""}${lock ? ` disabled title="${esc(lock)}"` : ""} onchange="modeHint()"> macht mit</label>
       <label>Komfort <input type="number" class="r-comfort" step="0.5" min="${lim.temp_min}" max="${lim.temp_max}" value="${esc(comfort)}"> °C</label></div></div>
       ${lock ? `<div class="hint ems-lock">„macht mit“ gesperrt: ${esc(lock)}</div>` : ""}
-      <details class="room-more"><summary>Einzelheiten</summary>${where ? `<div class="hint">${where}</div>` : ""}<div class="form-grid room-grid">
+      <details class="room-more"><summary>Einzelheiten</summary><div class="r-devs"></div>${where ? `<div class="hint">${where}</div>` : ""}<div class="form-grid room-grid">
       ${field("Raum", `<input class="r-group" value="${esc(group)}" placeholder="${esc(area || "z. B. Wohnzimmer")}">`, "gleicher Name = ein Raum: gemessen wird das Mittel, geschrieben auf alle")}
       ${field("Raumregler", `<label class="r-ctl"><input type="checkbox" class="r-controller" ${controller ? "checked" : ""}> misst allein, wird allein beschrieben</label>`, wallHint)}
       ${field("Quelle", esc(c.platform || "–"), noTado ? "kein Tado – wirklich ein Raum?" : "")}
@@ -4003,8 +4023,66 @@ function roomRows() {
       ${field("Feuchte", `<input class="r-hum" list="dl-sensor" value="${esc(humVal)}" placeholder="Feuchte (optional)">`, goneHint("humidity", humVal))}
       ${field("Führung", `<select class="r-lead" onchange="leadSync(this)"><option value="temp"${(r.lead || "temp") !== "ventil" ? " selected" : ""}>Temperatur – Soll ans Thermostat</option><option value="ventil"${r.lead === "ventil" ? " selected" : ""}>Ventil – HeatPilot stellt die Öffnung</option></select>`, "„Ventil“ braucht die Stellgrößen-Entität rechts (z. B. Shelly BLU TRV)")}
       ${field("Ventilstellung (Stellgröße)", `<input class="r-valvepos" list="dl-valvepos" value="${esc(r.valve_pos || "")}" placeholder="number.… (0–100 %)">`, "die number-Entität, mit der sich das Ventil in % stellen lässt")}
-      </div>${roomStates(c.id)}<div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
+      </div><div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
   }).join("");
+}
+// 0.60: Einstellungen → Räume als Kacheln (Konzeptpapier, Abschnitt 5) – je Raum Name, Ist/Soll, Stufe und was
+// fehlt; ein Klick öffnet darunter die Raumansicht: die Geräte als Karten (Wert, Verbindung) und die Einstellungen
+let ROOM_SEL = null;
+const STAGE_NAME = { 1: "Stufe 1 · indirekt", 2: "Stufe 2 · Soll", 3: "Stufe 3 · Ventil" };
+function roomStage(tr) {
+  const plat = (ENT.find((e) => e.id === tr.dataset.climate) || {}).platform;
+  if (tr.querySelector(".r-lead").value === "ventil" && tr.querySelector(".r-valvepos").value.trim()) return 3;
+  return ["tado", "homekit_controller"].includes(plat) ? 1 : 2;
+}
+function roomTiles() {
+  const box = $("room-tiles"); if (!box) return;
+  const rows = [...document.querySelectorAll("#room-table .room")];
+  if (!rows.some((tr) => tr.dataset.climate === ROOM_SEL)) ROOM_SEL = null;
+  box.innerHTML = rows.map((tr) => {
+    const c = tr.dataset.climate, on = tr.querySelector(".r-on").checked, h = ((HEAT || {}).rooms || []).find((r) => r.climate === c) || {};
+    const st = roomStage(tr), ext = !!tr.querySelector(".r-temp").value.trim(), mit = tr.querySelector(".r-managed").checked;
+    const t = h.temp !== null && h.temp !== undefined ? `${fmt(h.temp)}°` : "–", m = roomModel(c);
+    // Qualität (Konzeptpapier 5): Stufe, Raumfühler, Lernfortschritt – gelb, wo sich Nachrüsten bzw. Warten lohnt
+    const tags = on ? [[STAGE_NAME[st], st > 1], [ext ? "Raumfühler" : "kein Raumfühler", ext], [m.text, m.ok],
+      ...(mit ? [["macht mit", true]] : [])] : [["lernt nicht", true]];
+    return `<button type="button" class="rt-tile${on ? "" : " off"}${c === ROOM_SEL ? " sel" : ""}" onclick="roomPick('${esc(c)}')">` +
+      `<span class="rt-n">${esc(tr.querySelector(".r-name").value.trim() || tr.querySelector(".r-name").placeholder)}</span>` +
+      `<span class="rt-t">${t}${on && h.target !== null && h.target !== undefined ? `<small> / ${fmt(h.target)}°</small>` : ""}</span>` +
+      `<span class="rt-tags">${tags.map(([x, ok]) => `<span class="${ok ? "" : "q-warn"}">${esc(x)}</span>`).join("")}</span></button>`;
+  }).join("");
+  for (const tr of rows) {
+    tr.classList.toggle("sel", tr.dataset.climate === ROOM_SEL);
+    const dev = tr.querySelector(".r-devs"); if (tr.dataset.climate === ROOM_SEL && dev) dev.innerHTML = roomDevices(tr);
+  }
+}
+// Lernfortschritt des Raummodells (api/summary: models.rooms) – „Modell plausibel“ bzw. „lernt noch“
+function roomModel(c) {
+  const it = ((((LAST_SUMMARY || {}).models || {}).rooms || {}).items || []).find((x) => x.climate === c);
+  return !it ? { text: "Modell neu", ok: false } : it.ok ? { text: "Modell plausibel", ok: true } : { text: "Modell lernt", ok: false };
+}
+function roomPick(c) {
+  ROOM_SEL = ROOM_SEL === c ? null : c;
+  roomTiles();
+  const tr = document.querySelector(`#room-table .room.sel`);
+  if (tr) { tr.querySelector("details.room-more").open = true; tr.scrollIntoView({ block: "nearest" }); }
+}
+// Gerätekarten der Raumansicht (Styleguide 5): Thermostat, Raumfühler, Feuchte, Ventilstellung – Wert und Verbindung
+function roomDevices(tr) {
+  const c = tr.dataset.climate, h = ((HEAT || {}).rooms || []).find((r) => r.climate === c) || {};
+  const ent = (id) => ENT.find((e) => e.id === id), val = (id) => { const e = ent(id); return e ? e.state : null; };
+  const card = (name, id, value, note = "") => {
+    const v = id ? val(id) : value, bad = id && (!ent(id) || ["unavailable", "unknown"].includes(v));
+    return `<div class="dev-card${bad ? " bad" : ""}"><span class="dev-n">${name}</span><b>${id ? (bad ? "nicht erreichbar" : esc(v) + (ent(id).unit ? " " + esc(ent(id).unit) : "")) : value}</b>` +
+      `<span class="muted">${id ? `<code class="eid" title="${esc(id)}">${esc(id)}</code>` : note}</span></div>`;
+  };
+  const temp = tr.querySelector(".r-temp").value.trim(), hum = tr.querySelector(".r-hum").value.trim();
+  const pos = tr.querySelector(".r-valvepos").value.trim(), valve = tr.querySelector(".r-valve").value.trim();
+  const stat = h.temp !== null && h.temp !== undefined ? `${fmt(h.temp)} °C · Soll ${h.target !== null && h.target !== undefined ? fmt(h.target) + " °C" : "–"}${h.valve !== null && h.valve !== undefined ? ` · Ventil ${fmt(h.valve, 0)} %` : ""}` : "–";
+  const stage = roomStage(tr), lag = stage === 1 ? "indirekte Regelung, träge (ca. 5 min) · " : "";
+  return card("Thermostat", null, stat, `${esc(STAGE_NAME[stage])} · ${lag}<code class="eid">${esc(c)}</code>`) +
+    (temp ? card("Raumfühler", temp) : card("Raumfühler", null, "fehlt", "dringend empfohlen – der Fühler im Thermostat misst am Heizkörper zu hoch")) +
+    (hum ? card("Feuchte", hum) : "") + (valve ? card("Ventil / Heizleistung", valve) : "") + (pos ? card("Ventilstellung", pos) : "");
 }
 // „macht mit“ gesperrt (0.36.3): die Entität ist der Heizkreis von EMS-ESP (api/entities: ems), oder sie steht in
 // den gespeicherten Räumen mit gleichem „Raum“ wie einer – wie group_rooms im Backend nimmt das den ganzen Raum heraus
@@ -5773,13 +5851,6 @@ function emExtra() {
     `<div class="em-edit" id="em-extra">${EM_EXTRA.map((x, i) => `<div class="em-ent"><code>${esc(x.role)}=${esc(x.entity)}</code> <button class="btn small" onclick="emExtraDrop(${i})">entfernen</button></div>`).join("")}</div></div>`;
 }
 // Räume (0.43): Thermostat und Sensoren eines Raums mit Zustand – unter „Einzelheiten“ der Raumliste (Einstellungen → Räume)
-function roomStates(climate) {
-  const es = Object.values(EM_BY).filter((e) => e.room_climate === climate);
-  if (!es.length) return "";
-  return '<div class="room-state">' + es.map((e) => { const st = emStateOf(e.key);
-    return `<div class="em-ent"><span class="em-k">${esc(e.label)}:</span> ${emBadge(st)}` +
-      `${st.items.length ? " " + emEnt(st.items[0]) : e.suggested ? ` <span class="muted">Vorschlag: ${eid(e.suggested)}</span>` : ""}</div>`; }).join("") + "</div>";
-}
 function emPersons() {
   return '<p class="muted">Häkchen = zählt. Fahrzeuge, Haustiere, Gäste oder Dummies, die als Person angelegt sind, abwählen – sonst gilt das Haus ' +
     "z. B. als leer, wenn nur das Auto weg ist.</p>" +
@@ -5945,7 +6016,8 @@ function renderSettings() {
       <details class="adopt alias" id="alias-box" ontoggle="aliasToggle(this)"${ALIAS_OPEN ? " open" : ""}><summary>Alter Temperatursensor je Raum <span class="muted">– Innentemperatur vor einem Wechsel der Thermostate</span></summary><div id="alias-body"></div></details>
       <p class="job-msg" id="rooms-job">${jobHtml(JOB)}</p>
       ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
-      <div class="room-list" id="room-table" oninput="roomsDirty()" onchange="roomsDirty()">${roomRows()}</div>`, true, "em-g-raeume")) +
+      <div class="room-tiles" id="room-tiles"></div>
+      <div class="room-list" id="room-table" oninput="roomsDirty(); roomTiles()" onchange="roomsDirty(); roomTiles()">${roomRows()}</div>`, true, "em-g-raeume")) +
     part("exp-haus", sugBtn("Gaszähler, Wetter und Außenfühler auf Automatik")) +
     part("raeume", controlCard(s)) +
     part("haus", card("Personen", emr("persons"), true, "em-g-personen") +
@@ -5989,7 +6061,7 @@ function renderSettings() {
   loadAdopt();  // 0.42.1: gespeicherte Daten ohne Raum über der Raum-Tabelle (dazu der Hinweis „Hausdaten wiederherstellen“)
   loadSwitch();  // 0.44: offener Thermostatwechsel und „Ventil neu lernen“
   renderRoomRestore(); if (ALIAS_OPEN) loadAliases();  // 0.42.1: letzter Stand sofort, alter Sensor je Raum aufgeklappt
-  aliasReveal(); advReveal();  // Links aus Übersicht und Diagnose: hinscrollen
+  aliasReveal(); advReveal(); roomTiles();  // Links aus Übersicht und Diagnose: hinscrollen; 0.60: Raum-Kacheln
   setPage(SET_PAGE);  // Startliste bzw. Seitenleiste, Titel, Speicherleiste
 }
 // Einstellungen → Haus → „Karten für Home Assistant“ (0.56.4, GET api/cards): Stand, Einrichtung über HACS,

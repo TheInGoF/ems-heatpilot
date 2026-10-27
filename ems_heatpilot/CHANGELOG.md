@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.60.0
+- Räume als Kacheln mit Qualitätsanzeige
+- Klick öffnet die Raumansicht mit Gerätekarten
+- tado: Hinweis „indirekte Regelung, träge“
+
 ## 0.59.2
 - Anonymisierter Fehlerbericht zum Herunterladen
 - Knopf „Fehler auf GitHub melden“ mit Datenschutz-Rückfrage

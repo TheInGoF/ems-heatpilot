@@ -58,7 +58,12 @@ Inhalts. Die Inhalte von „Allgemein“:
   meldet der Kessel erst nach dem ersten Brennerstart bzw. der ersten Warmwasserladung.
   Seit 0.36.1 fragt HeatPilot außerdem beim Start und dann stündlich die Kesselsteuerungen ab
   (ebenfalls nur lesen) – siehe [Bereit für die Steuerung?](#bereit-für-die-steuerung)
-- **Räume:** alle `climate.*` als Tabelle mit Quelle (Integration) – Häkchen, Name,
+- **Räume** (seit 0.60 als **Kacheln**): je Raum Name, Ist/Soll und eine Qualitätsanzeige – Thermostatstufe
+  (Stufe 1 indirekt über das Soll wie tado, träge; Stufe 2 Soll direkt; Stufe 3 Ventil direkt), Raumfühler
+  vorhanden, Lernfortschritt des Raummodells; gelb, wo sich Nachrüsten oder Warten lohnt. Ein Klick öffnet darunter
+  die **Raumansicht**: oben die Geräte als Karten (Thermostat mit Ist, Soll und Ventil, Raumfühler, Feuchte,
+  Ventil/Heizleistung, Ventilstellung – „nicht erreichbar“ rot, ein fehlender Raumfühler als dringende Empfehlung),
+  darunter die Einstellungen des Raums. Je Raum (Thermostate mit Quelle/Integration): Häkchen, Name,
   **„macht mit“** und **Komforttemperatur** (für „HeatPilot steuert“), **Raum** und
   **Raumregler** (mehrere Thermostate als ein Raum), [Fußbodenheizung](#fußbodenheizung-je-raum) mit
   Anschluss und höchstem Vorlauf, **Voreinstellung**

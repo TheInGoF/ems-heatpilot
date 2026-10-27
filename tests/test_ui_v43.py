@@ -123,7 +123,7 @@ def test_settings_contents_per_page_and_entities_at_their_function():
         assert '{ aus: "Aus", trocken: "Beobachten", heatpilot: "HeatPilot steuert" }' in source(js, name)
     # Räume als Liste: .room statt tr.room an allen Lesestellen
     assert "tr.room" not in js and '<div class="room" data-climate="${esc(c.id)}"' in source(js, "roomRows")
-    assert '<details class="room-more"><summary>Einzelheiten</summary>' in source(js, "roomRows") and "${roomStates(c.id)}" in source(js, "roomRows")
+    assert '<details class="room-more"><summary>Einzelheiten</summary>' in source(js, "roomRows") and '<div class="r-devs"></div>' in source(js, "roomRows")
 
 
 def test_diagnose_page_order_and_limits():
