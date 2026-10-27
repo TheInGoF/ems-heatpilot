@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.59.1
+- Klimaanlagen werden nicht mehr als Raum vorgeschlagen
+
 ## 0.59.0
 - Kein Rückfall-Vorlauf mehr
 - Wächter meldet nur noch, schreibt nichts
