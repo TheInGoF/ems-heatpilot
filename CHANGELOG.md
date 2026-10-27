@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.57.1
+- **Antipendelzeit 5 statt 10 min, wenn Räume auf Wärme warten:** Der Kessel zählt die Sperre ab dem Schreiben neu (26.10.: Arbeitszimmer hochgesetzt um 18:41, Sperre auf 10 min gesetzt, Brenner erst 18:53). Mit 5 min springt er deutlich früher an; taktet er (ab 6 Starts je Stunde), gilt weiter die lange Sperre
+
 ## 0.57.0
 - **Warmwasser-Ladung ist keine fremde Änderung mehr:** Der Kessel schaltet beim Laden auch den Heizbetrieb an. Stand er bei HeatPilot auf „aus“, zählte das als fremder Schreiber bzw. Fehlschlag – Meldung „konnte nicht ausschalten“ (26.10. 16:26) und nach zwei solchen Ereignissen Pause „Kessel über HeatPilot“ (27.10. Ladung 03:05 → morgens keine Heizung). Jetzt gilt während einer Ladung wie beim Vorlauf-Soll auch beim Heizbetrieb: keine Prüfung, kein fremder Wert
 - **30-s-Protokoll mit Schreibvorgängen:** neue Spalte `hp_geschrieben` – alles aus dem Protokoll seit dem vorigen Punkt (geschrieben, nicht übernommen, fremde Änderung, Pause, Räume, Warmwasser)
