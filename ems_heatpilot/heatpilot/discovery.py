@@ -20,6 +20,7 @@ log = logging.getLogger(__name__)
 
 # Integrationen, deren climate-Entitäten Räume sind (Tado-Cloud, HomeKit-Bridge von Tado u. a.)
 ROOM_PLATFORMS = ("tado", "homekit_controller")
+AC_MODES = {"cool", "dry", "fan_only", "heat_cool"}  # 0.59.1: Klimaanlage – kein Heizraum
 # EMS-ESP-Heizkreis als climate (climate.thermostat_hc1, climate.ems_esp_thermostat_hc1): kein Raum – gilt nur
 # für fremde Plattformen; eine Tado-Zone „Bad Thermostat“ oder ein HomeKit-Ventil „Wohnzimmer Thermostat“ bleibt Raum.
 # Die Schreibsperre (0.36.3) erkennt ihn am Gerät, siehe ems_lock
@@ -304,12 +305,17 @@ def climate_info(climate: str, idx: RegistryIndex, by_id: dict) -> dict:
     }
 
 
+def is_air_conditioner(state: dict) -> bool:
+    """Klimaanlage (0.59.1): kann kühlen, trocknen oder nur lüften – wird nie als Raum vorgeschlagen."""
+    return bool(AC_MODES & set((state or {}).get("attributes", {}).get("hvac_modes") or []))
+
+
 def room_candidates(ids: list[str], by_id: dict, idx: RegistryIndex) -> list[str]:
     """climate-Entitäten, die Räume sein können: Tado/HomeKit immer (nie über den Namen verworfen), sonst jede
-    mit Gerät außer dem EMS-Heizkreis."""
+    mit Gerät außer dem EMS-Heizkreis; Klimaanlagen nie."""
     out = []
     for e in sorted(ids):
-        if not e.startswith("climate."):
+        if not e.startswith("climate.") or is_air_conditioner(by_id.get(e)):
             continue
         platform = idx.entity.get(e, {}).get("platform")
         if platform in ROOM_PLATFORMS or (idx.device_of(e) and not _EMS_CLIMATE.match(e)
@@ -360,6 +366,7 @@ def _discover_rooms(d: Discovered, ids: list[str], by_id: dict, idx: RegistryInd
             if e.startswith("climate.")
             and "current_temperature" in by_id[e].get("attributes", {})
             and "boiler" not in e and "thermostat" not in e and not is_ems_climate(e, idx)
+            and not is_air_conditioner(by_id[e])
         ]
     if all_rooms:
         d.auto_rooms = _operating(candidates, idx)

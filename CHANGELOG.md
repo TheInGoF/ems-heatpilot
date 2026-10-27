@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.59.1
+- **Klimaanlagen sind keine Räume** (Konzeptpapier, Abschnitt 8 „Automatische Raumerkennung“): climate-Entitäten mit den Betriebsarten `cool`, `dry`, `fan_only` oder `heat_cool` schlägt die Erkennung nie mehr als Raum vor – weder im Betrieb ohne gespeicherte Räume noch in den Einstellungen (`discovery.is_air_conditioner`), auch nicht von Tado oder HomeKit
+- Schon vorhanden und in der Doku klargestellt: Räume kommen automatisch aus den Climate-Entitäten, mehrere Thermostate im selben Home-Assistant-Bereich bilden einen Raum, und abgewählte Räume bleiben abgewählt, sobald Räume gespeichert sind (auch nach Updates und neuer Suche)
+- Tests: `tests/test_rooms_ac591.py`
+
 ## 0.59.0
 - **Rückfall-Vorlauf gestrichen** (Konzeptpapier UI & Rollout, Abschnitt 8): Ohne Wärmeabnahme fällt der Kessel ohnehin zurück, und fällt der Raspberry Pi aus, greift ein Wert aus Home Assistant nicht. Einen festen Vorlauf stellt nur der Drehschalter am Kessel ein. Entfernt: die Einstellung `boiler_fallback_flow` (alte Werte werden ignoriert), das einmalige Schreiben beim Zurückschalten auf Aus/Beobachten (`BoilerControl.fallback`), der Rückfall-Vorlauf ohne rechenbares Ziel (jetzt: nichts schreiben, nach 15 min Meldung), die Erkennung „Eingriff des Wächters“ (`_watchdog_hit`), das Attribut `rueckfall_vorlauf` am Heartbeat und die Zeile in „Bereit für die Steuerung?“
 - **Wächter meldet nur noch:** Die vorgeschlagene Automation (YAML und Klick-Anleitung) schickt nach 60 min ohne Heartbeat nur eine Meldung aufs Handy („Kessel prüfen; wenn es kalt wird, Drehschalter am Kessel auf Festwert stellen“) und schreibt nichts mehr. Bestehende Wächter mit Schreib-Aktionen bitte in Home Assistant durch das neue YAML ersetzen
