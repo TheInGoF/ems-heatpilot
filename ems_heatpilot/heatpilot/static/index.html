@@ -1648,7 +1648,7 @@ function renderWeatherNow(n, hs) {
     chip("Feuchte", n.humidity != null ? `${fmt(n.humidity, 0)} %` : "") +
     chip("Druck", n.pressure != null ? `${fmt(n.pressure, 0)} ${esc(n.pressure_unit || "hPa")}` : "") +
     chip("UV", n.uv != null ? fmt(n.uv, 0) : "") + chip("Wolken", n.cloud != null ? `${fmt(n.cloud, 0)} %` : "") + "</div>" +
-    (hs.length > 1 ? '<p class="muted wx-sub">Nächste 24 Stunden</p>' : "");
+    (hs.length > 1 ? '<p class="muted wx-sub">Stündlich</p>' : "");
 }
 function wxRow(hs, [k, name, unit, cls, back], rainUnit) {
   const vals = hs.map((h) => h[k]), ok = vals.filter((v) => v !== null && v !== undefined);
@@ -3801,7 +3801,7 @@ function ovInfo(k) {
   if (k === "start") return "Status, Empfehlungen";
   if (k === "haus") return s.guards.house.ok ? `${fmt(s.house.heat_loss_w_per_k, 0)} W/K` : "lernt noch";
   if (k === "raeume") return s.rooms.length ? `${s.guards.rooms_ok} von ${s.guards.rooms_total} gelernt` : "keine Räume";
-  if (k === "warmwasser") return s.dhw.temp === null || s.dhw.temp === undefined ? "" : `${fmt(s.dhw.temp, 0)} °C`;
+  if (k === "warmwasser") return s.dhw.charges ? `${fmt(s.dhw.charges, 0)} Ladungen gemessen` : "";  // 0.58: Temperatur steht unter Jetzt
   if (k === "kessel") return `${fmt(s.cycling.starts, 0)} Starts heute`;
   if (k === "anwesenheit") return s.persons.length ? `${s.persons.filter((p) => p.home).length} von ${s.persons.length} zu Hause` : "";
   const w = PV && PV.preview && PV.preview.writes_24h; if (!w) return "";
