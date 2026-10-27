@@ -113,6 +113,8 @@ SAMPLE_COLS = (
     "power_w", "power_ex_w",
     # seit 0.54: Wind in m/s (Wetter-Integration) – das Raummodell lernt, wie stark er auskühlt
     "wind",
+    # seit 0.63: wie viele Entitäten des Sensor-Eimers (Aktivität) gerade an sind
+    "activity_n",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",

@@ -782,8 +782,22 @@ Plans.
 Wann das Haus schlafen geht, verrät der Stromzähler: Abends fällt der Verbrauch auf das Nachtniveau
 (Standby), morgens steigt er wieder (Kaffeemaschine, Licht, Bad). Seit 0.36 lernt HeatPilot daraus
 den Wochenplan der Nachtabsenkung – als Vorschlag oder, mit dem Häkchen, als wirksame Zeiten.
-Die Sensoren wählst du unter Einstellungen → Haus → Experte → Strom; das Häkchen steht unter Einstellungen → Räume,
-unter dem Wochenplan (dort auch, welche Sensoren gewählt sind):
+Die Sensoren wählst du unter Einstellungen → Haus → Experte → Strom & Aktivität; das Häkchen steht unter
+Einstellungen → Räume, unter dem Wochenplan (dort auch, welche Sensoren gewählt sind).
+
+**Sensor-Eimer** (seit 0.63): Unter „Aktivität (Lampen, Bewegungsmelder …)“ lassen sich beliebige Entitäten
+hineinwerfen – Lampen, Schalter, Bewegungs- und Türmelder, Mediaplayer. Jede zählt als „wach“, solange sie an ist (an,
+offen, spielt, Bewegung erkannt); HeatPilot speichert je Messpunkt, wie viele an sind. Ein 10-min-Abschnitt gilt als
+wach, wenn die Hausleistung über der Schwelle liegt **oder** eine Entität an ist; ohne Leistungssensor zählt der Eimer
+allein (dann muss abends etwas an sein, sonst „zu wenig Unterschied“). Die Nacht wird als zusammenhängender Block
+gesucht: Eine kurze, einzelne Aktivität mitten in der Nacht (Licht im Bad um 2 Uhr) ist eine Unterbrechung, kein
+Aufwachen; Beginn und Ende setzt, was länger anhält (2 von 3 Abschnitten) oder was mehrere bestätigen (zwei Entitäten
+bzw. Leistung und Eimer zugleich). So markieren die Lampen grob Beginn (die letzte geht aus) und Ende (die erste geht
+an). Werktage und Wochenende lernt HeatPilot getrennt – sogar je Wochentag. Gelernt wird die **Aufwachzeit**; den
+Heizstart rechnet HeatPilot je Raum selbst zurück (Vorheizen). Unter dem Wochenplan steht z. B. **„Aufwachen werktags
+04:50, sehr sicher · Wochenende 08:10, sicher“**; je Tag „sehr sicher“ (ab 5 Nächten mit höchstens 30 min Streuung),
+„sicher“ (belastbar) oder „unsicher“. Der Eimer wirkt ab den Nächten nach dem Speichern (die Historie von Lampen liest
+HeatPilot nicht nach).
 
 - **Leistungssensoren (Haus, ggf. je Phase):** ein oder mehrere Sensoren in W oder kW; die Summe
   ist die Hausleistung, bei drei Phasen also alle drei eintragen. Gemeint ist der **Verbrauch** des

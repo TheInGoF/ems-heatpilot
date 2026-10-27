@@ -4169,10 +4169,24 @@ function learnedHint(key, show) {
 function learnedCell(d, half, eff) {
   if (!d || !d[half]) return '<span class="muted">–</span>';
   const n = d["n_" + half], sp = d["spread_" + half + "_min"], ok = d["reliable_" + half];
-  const txt = `${esc(d[half])} · ${n} ${n === 1 ? "Nacht" : "Nächte"}${sp !== null && sp !== undefined ? ` ± ${sp} min` : ""}`;
+  const sure = d["sure_" + half];
+  const txt = `${esc(d[half])} · ${n} ${n === 1 ? "Nacht" : "Nächte"}${sp !== null && sp !== undefined ? ` ± ${sp} min` : ""}${sure ? ` · ${esc(sure)}` : ""}`;
   const used = !!eff && eff["source_" + half] === "gelernt (Strom)";
   return `<span class="${ok ? "" : "muted"}" title="${ok ? "verlässlich" : "noch nicht verlässlich: mind. 3 Nächte, Streuung bis 90 min, plausible Uhrzeit"}">${txt}</span>` +
     (used ? ' <span class="badge" style="border-color:var(--good);color:var(--good)">✓ gilt</span>' : "");
+}
+// 0.63: „Aufwachen werktags 04:50, sehr sicher · Wochenende 08:10, unsicher“ – je Gruppe die häufigste Zeit (Median
+// der gelernten Enden) und die schwächste Sicherheitsangabe der Tage, die etwas wissen
+function sleepWake(sl) {
+  const rank = ["unsicher", "sicher", "sehr sicher"], part = (idx, label) => {
+    const ds = idx.map((i) => (sl.plan || [])[i]).filter((d) => d && d.end);
+    if (!ds.length) return "";
+    const mins = ds.map((d) => +d.end.slice(0, 2) * 60 + +d.end.slice(3)).sort((a, b) => a - b), m = mins[Math.floor(mins.length / 2)];
+    const sure = rank[Math.min(...ds.map((d) => Math.max(0, rank.indexOf(d.sure_end))))];
+    return `${label} ${String(Math.floor(m / 60)).padStart(2, "0")}:${String(m % 60).padStart(2, "0")}, ${sure}`;
+  };
+  const t = [part([0, 1, 2, 3, 4], "werktags"), part([5, 6], "Wochenende")].filter(Boolean).join(" · ");
+  return t ? `<p class="sleep-wake" id="sleep-wake"><b>Aufwachen</b> ${esc(t)}</p>` : "";
 }
 // Zeile unter dem Wochenplan: wie viele Nächte zählen, wie viele warum ausgelassen wurden
 function sleepLine(sl) {
@@ -4187,8 +4201,8 @@ function sleepLine(sl) {
 function controlCard(s) {
   const mode = s.control_mode === "heatpilot" ? "heatpilot" : "beobachten";
   const plan = (s.night_plan || []).length === 7 ? s.night_plan : (DEF.night_plan || []);
-  const power = s.power_sensors || [], powerEx = s.power_exclude || [];
-  const learned = power.length && SLEEP && (SLEEP.plan || []).length === 7 ? SLEEP.plan : null;  // Spalten nur mit Sensoren
+  const power = s.power_sensors || [], powerEx = s.power_exclude || [], act = s.activity_sensors || [];
+  const learned = (power.length || act.length) && SLEEP && (SLEEP.plan || []).length === 7 ? SLEEP.plan : null;  // Spalten nur mit Sensoren
   const effPlan = (SCHED && SCHED.effective && SCHED.effective.plan) || [];
   const missing = SLEEP ? power.filter((p) => !(SLEEP.sensors || []).includes(p)) : [];
   return card("Räume steuern", `${more("Was HeatPilot mit den Räumen tut.", "<b>Beobachten</b>: lernen, empfehlen, Tado nur auf Knopfdruck. <b>HeatPilot steuert</b>: HeatPilot schreibt die Solltemperaturen der Räume mit „macht mit“ selbst – Komfort, Nacht nach Wochenplan, Abwesenheit, rechtzeitig vorheizen.")}
@@ -4209,10 +4223,10 @@ function controlCard(s) {
     <p class="muted" style="margin:0 0 6px">Je Wochentag: Beginn am Abend dieses Tages, Ende am Morgen dieses Tages (die Nacht Fr → Sa steht also bei Fr „ab“ und Sa „bis“). Gilt bei „HeatPilot steuert“; nachts bekommen alle Räume mit „macht mit“ die Nachttemperatur.</p>
     <div class="scroll"><table class="form plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th>${learned ? "<th>gelernt ab</th><th>gelernt bis</th>" : ""}</tr>${WEEKDAYS.map((d, i) =>
       `<tr class="np" data-day="${i}"><td>${d}</td><td><input type="time" class="np-start" value="${esc((plan[i] || {}).start || "")}"></td><td><input type="time" class="np-end" value="${esc((plan[i] || {}).end || "")}"></td>${learned ? `<td class="np-learned">${learnedCell(learned[i], "start", effPlan[i])}</td><td class="np-learned">${learnedCell(learned[i], "end", effPlan[i])}</td>` : ""}</tr>`).join("")}</table></div>
-    ${learned ? `<p class="muted" id="sleep-line" style="margin:4px 0 0">${sleepLine(SLEEP)}</p>` : ""}
-    <h3 class="sec">Nachtzeiten aus dem Stromverbrauch</h3>
-    <p class="muted" style="margin:0 0 6px">Abends fällt der Hausverbrauch auf das Nachtniveau, morgens steigt er wieder – daraus lernt HeatPilot je Wochentag Beginn und Ende der Nacht (Median der letzten ${(SLEEP && SLEEP.weeks) || 6} Wochen). Ohne Sensor ist die Funktion aus.</p>
-    ${powerRef(power, powerEx, missing)}
+    ${learned ? `<p class="muted" id="sleep-line" style="margin:4px 0 0">${sleepLine(SLEEP)}</p>${sleepWake(SLEEP)}` : ""}
+    <h3 class="sec">Nachtzeiten aus Stromverbrauch und Aktivität</h3>
+    <p class="muted" style="margin:0 0 6px">Abends fällt der Hausverbrauch auf das Nachtniveau und die Lampen gehen aus, morgens geht es wieder los – daraus lernt HeatPilot je Wochentag Beginn und Ende der Nacht (Median der letzten ${(SLEEP && SLEEP.weeks) || 6} Wochen). Gelernt wird die Aufwachzeit; den Heizstart rechnet HeatPilot je Raum selbst zurück. Ein kurzes Licht nachts weckt nicht. Ohne Sensoren ist die Funktion aus.</p>
+    ${powerRef(power, powerEx, missing, act)}
     <div class="form-grid">
       ${field("Gelernte Zeiten verwenden", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-night_plan_auto" ${s.night_plan_auto ? "checked" : ""}> gelernte Nachtzeiten statt des Wochenplans</label>`, "Sonst nur Vorschlag; wo nichts Belastbares gelernt ist, gilt der Wochenplan oben.")}
     </div>
@@ -4241,10 +4255,10 @@ function valveSwitchHtml(s) {
     `<p class="hint" id="vc-hint" style="margin:4px 0 0"></p>`;
 }
 // Leistungssensoren (0.39.1 auf der Seite „Entitäten“, Gruppe Strom): hier nur, was gewählt ist, und der Weg dorthin
-function powerRef(power, powerEx, missing) {
+function powerRef(power, powerEx, missing, act = []) {
   const list = (ids) => ids.map((p) => `<code class="eid" title="${esc(p)}">${esc(p)}</code>`).join(", ");
-  return `<p class="em-ref" id="power-ref">Leistungssensoren: ${power.length ? list(power) : "keine gewählt – die Funktion ist aus"}` +
-    `${powerEx.length ? ` · nicht zählen: ${list(powerEx)}` : ""}${missing.length ? ` <span class="msg-err">Nicht in Home Assistant gefunden: ${missing.map(esc).join(", ")}</span>` : ""}` +
+  return `<p class="em-ref" id="power-ref">Leistungssensoren: ${power.length ? list(power) : "keine gewählt"}` +
+    `${powerEx.length ? ` · nicht zählen: ${list(powerEx)}` : ""} · Aktivität (Sensor-Eimer): ${act.length ? list(act) : "keine gewählt"}${missing.length ? ` <span class="msg-err">Nicht in Home Assistant gefunden: ${missing.map(esc).join(", ")}</span>` : ""}` +
     ` – <a href="#" onclick="emGo('strom');return false">ändern unter Experte</a></p>`;
 }
 function modeHint() {

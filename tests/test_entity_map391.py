@@ -123,6 +123,7 @@ def test_other_entries_are_saved_in_existing_settings_fields():
             assert s["kind"] == "override" and FIELDS["overrides"] == ("overrides",)
     assert set(em.FIELD_ENTRIES) == {"dhw_set_entity", "outdoor_sensors", "weather_entity", "gas_sensor", "demand_sensor",
                                      "power_sensors", "power_exclude", "persons", "vacation_entity", "notify_targets",
+                                     "activity_sensors",  # 0.63: Sensor-Eimer
                                      "flow_set_entity", "heating_switch_entity",  # Weg B seit 0.41
                                      "disinfect_entity",  # Desinfektion auslösen seit 0.42
                                      "period_set_entity"}  # Antipendelzeit seit 0.48

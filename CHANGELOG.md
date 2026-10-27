@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.63.0
+- **Sensor-Eimer für die Nachtzeiten** (Konzeptpapier, Abschnitt 6): neue Einstellung `activity_sensors` (Einstellungen → Haus → Experte → Strom & Aktivität) – Lampen, Schalter, Bewegungs-/Türmelder, Mediaplayer. Je Messpunkt die Zahl der Entitäten, die an sind (Spalte `activity_n`); ein Abschnitt ist wach, wenn die Hausleistung über der Schwelle liegt oder eine Entität an ist. Geht auch ohne Leistungssensor. Plausibilität: kurze einzelne Aktivität nachts (Toilette) unterbricht nur; Beginn und Ende setzt, was länger anhält (2 von 3 Abschnitten) oder mehrere bestätigen. Je Nacht steht die Quelle (`src`: strom, eimer, beide)
+- **Sicherheitsangabe:** je Wochentag „sehr sicher“ (ab 5 Nächten, Streuung bis 30 min), „sicher“ oder „unsicher“ (`sure_start`, `sure_end` im Plan); unter dem Wochenplan die Zeile „Aufwachen werktags 04:50, sehr sicher · Wochenende 08:10, sicher“
+- Gelernt wird weiter die Aufwachzeit (Nachtende); den Heizstart rechnet das Vorheizen je Raum zurück
+- Tests: `tests/test_sensor_bucket63.py`
+
 ## 0.62.0
 - **Override „nur jetzt“** (Konzeptpapier, Abschnitt 7, `override.py`): **Nacht**, **Anwesend** oder **Abwesend** für das ganze Haus – im Reiter Heizen unter den Kacheln und als Karte `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ 0.4). Eine einzige Art, gedacht für Ausnahmen: setzt Nacht-, Komfort- bzw. Abwesenheitstemperatur für alle Räume mit „macht mit“ (bei „HeatPilot steuert“) und endet von selbst am nächsten Schaltpunkt des normalen Plans (höchstens 24 h), wenn der Plan von selbst dort ist, bei „Abwesend“ wenn jemand heimkommt, bei „Anwesend“ wenn alle weg sind. Noch einmal tippen beendet es. Ein Boost geht vor; gelernt wird weiter wie sonst
 - Neu: Aktion `override` {mode: nacht|anwesend|abwesend|aus} in `POST api/heat/override` und im Befehl der Karten, `sensor.heatpilot_modus` (Zustand auto/nacht/anwesend/abwesend, Ende `until`), `override` in `api/heat` → control

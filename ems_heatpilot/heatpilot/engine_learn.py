@@ -558,18 +558,19 @@ class LearnMixin:
         self.store.put("schedule.learned", learned)
 
     def update_sleep(self, now_ts: int | None = None, max_age_s: int = 3600) -> None:
-        """Schlafenszeiten aus dem Hausstromverbrauch (0.36) nachrechnen – stündlich, nur mit Leistungssensoren.
+        """Schlafenszeiten aus dem Hausstromverbrauch (0.36) und dem Sensor-Eimer (0.63) nachrechnen – stündlich.
 
         Gerechnet werden nur fertige Nächte, die noch nicht gespeichert sind (nach der Datenübernahme beim
         ersten Takt alle). Daraus der Wochenplan in ``cfg.night_plan_learned`` – unabhängig von der
         Steuerung; wirksam nur mit ``night_plan_auto``, sonst Anzeige.
         """
         now_ts = now_ts or int(time.time())
-        if not self.found.power or now_ts - self._sleep_ts < max_age_s:
+        if not (self.found.power or self.found.activity) or now_ts - self._sleep_ts < max_age_s:
             return
         self._sleep_ts = now_ts
         self.sleep_nights = sleep.learn(self.store, now_ts)
-        self._sleep = sleep.summary(self.sleep_nights, now_ts, self.cfg, self.found.power, self.found.power_exclude)
+        self._sleep = sleep.summary(self.sleep_nights, now_ts, self.cfg, self.found.power, self.found.power_exclude,
+                                    self.found.activity)
         learned = sleep.learned_plan(self._sleep["plan"])
         if learned != self.cfg.night_plan_learned:
             log.info("Nachtzeiten aus dem Stromverbrauch (%d Nächte, %s): %s", self._sleep["nights"],

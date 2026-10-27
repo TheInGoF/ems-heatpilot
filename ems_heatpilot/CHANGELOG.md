@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.63.0
+- Sensor-Eimer: Lampen, Bewegungsmelder für die Nachtzeiten
+- Licht nachts kurz an weckt nicht
+- Aufwachzeit mit Sicherheitsangabe
+
 ## 0.62.0
 - Nur jetzt: Nacht, Anwesend, Abwesend fürs ganze Haus
 - Endet von selbst am nächsten Schaltpunkt
