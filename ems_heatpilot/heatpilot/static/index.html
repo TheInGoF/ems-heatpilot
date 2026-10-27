@@ -693,6 +693,8 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .rt-t small { font-size: var(--fs-text); font-weight: 400; color: var(--text-secondary); }
 .rt-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .rt-tags span { font-size: var(--fs-small); color: var(--text-secondary); background: var(--surface-1); border-radius: 99px; padding: 0 var(--s2); }
+.rt-more { grid-column: 1 / -1; justify-self: start; font-size: var(--fs-small); }
+.r-devs .r-hide { grid-column: 1 / -1; gap: var(--s2); }
 .rt-tags span.q-warn { color: var(--warn-text); background: rgba(201, 133, 0, .12); }
 #room-table .room { display: none; }
 #room-table .room.sel { display: block; border: 1px solid var(--border); border-radius: var(--r); padding: var(--s4); }
@@ -4100,7 +4102,7 @@ function glanceCard(e, st) {
 }
 // 0.60: Einstellungen → Räume als Kacheln (Konzeptpapier, Abschnitt 5) – je Raum Name, Ist/Soll, Stufe und was
 // fehlt; ein Klick öffnet darunter die Raumansicht: die Geräte als Karten (Wert, Verbindung) und die Einstellungen
-let ROOM_SEL = null;
+let ROOM_SEL = null, ROOM_HIDE = new Set(), ROOM_SHOW_HIDDEN = false;  // 0.65: ausgeblendet (kein Raum)
 const STAGE_NAME = { 1: "Stufe 1 · indirekt", 2: "Stufe 2 · Soll", 3: "Stufe 3 · Ventil" };
 function roomStage(tr) {
   const plat = (ENT.find((e) => e.id === tr.dataset.climate) || {}).platform;
@@ -4109,29 +4111,43 @@ function roomStage(tr) {
 }
 function roomTiles() {
   const box = $("room-tiles"); if (!box) return;
-  const rows = [...document.querySelectorAll("#room-table .room")];
+  const all = [...document.querySelectorAll("#room-table .room")];
+  const rows = all.filter((tr) => ROOM_SHOW_HIDDEN || !ROOM_HIDE.has(tr.dataset.climate)), nh = all.length - all.filter((tr) => !ROOM_HIDE.has(tr.dataset.climate)).length;
   if (!rows.some((tr) => tr.dataset.climate === ROOM_SEL)) ROOM_SEL = null;
   box.innerHTML = rows.map((tr) => {
     const c = tr.dataset.climate, on = tr.querySelector(".r-on").checked, h = ((HEAT || {}).rooms || []).find((r) => r.climate === c) || {};
     const st = roomStage(tr), ext = !!tr.querySelector(".r-temp").value.trim(), mit = tr.querySelector(".r-managed").checked;
     const t = h.temp !== null && h.temp !== undefined ? `${fmt(h.temp)}°` : "–", m = roomModel(c);
     // Qualität (Konzeptpapier 5): Stufe, Raumfühler, Lernfortschritt – gelb, wo sich Nachrüsten bzw. Warten lohnt
-    const tags = on ? [[STAGE_NAME[st], st > 1], [ext ? "Raumfühler" : "kein Raumfühler", ext], [m.text, m.ok],
+    const tags = ROOM_HIDE.has(c) ? [["ausgeblendet", true]] : on ? [[STAGE_NAME[st], st > 1], [ext ? "Raumfühler" : "kein Raumfühler", ext], [m.text, m.ok],
       ...(mit ? [["macht mit", true]] : [])] : [["lernt nicht", true]];
     return `<button type="button" class="rt-tile${on ? "" : " off"}${c === ROOM_SEL ? " sel" : ""}" onclick="roomPick('${esc(c)}')">` +
       `<span class="rt-n">${esc(tr.querySelector(".r-name").value.trim() || tr.querySelector(".r-name").placeholder)}</span>` +
       `<span class="rt-t">${t}${on && h.target !== null && h.target !== undefined ? `<small> / ${fmt(h.target)}°</small>` : ""}</span>` +
       `<span class="rt-tags">${tags.map(([x, ok]) => `<span class="${ok ? "" : "q-warn"}">${esc(x)}</span>`).join("")}</span></button>`;
-  }).join("");
+  }).join("") + (nh ? `<button type="button" class="lnk rt-more" onclick="ROOM_SHOW_HIDDEN = !ROOM_SHOW_HIDDEN; roomTiles()">` +
+    `${ROOM_SHOW_HIDDEN ? "Ausgeblendete verbergen" : `${nh} ausgeblendet – zeigen`}</button>` : "");
   for (const tr of rows) {
     tr.classList.toggle("sel", tr.dataset.climate === ROOM_SEL);
-    const dev = tr.querySelector(".r-devs"); if (tr.dataset.climate === ROOM_SEL && dev) dev.innerHTML = roomDevices(tr);
+    const dev = tr.querySelector(".r-devs"); if (tr.dataset.climate === ROOM_SEL && dev) dev.innerHTML = roomDevices(tr) + roomHideBtn(tr.dataset.climate);
   }
 }
 // Lernfortschritt des Raummodells (api/summary: models.rooms) – „Modell plausibel“ bzw. „lernt noch“
 function roomModel(c) {
   const it = ((((LAST_SUMMARY || {}).models || {}).rooms || {}).items || []).find((x) => x.climate === c);
   return !it ? { text: "Modell neu", ok: false } : it.ok ? { text: "Modell plausibel", ok: true } : { text: "Modell lernt", ok: false };
+}
+// 0.65: „kein Raum“ (Klimaanlage im Auto, Heizkreis, Warmwasser …) dauerhaft ausblenden – auch nach Updates und neuer
+// Suche (hidden_rooms, die Erkennung übergeht sie); Ausblenden nimmt den Raum aus der Liste der gelernten
+function roomHideBtn(c) {
+  const hid = ROOM_HIDE.has(c);
+  return `<div class="row r-hide"><button type="button" class="btn small" onclick="roomHide('${esc(c)}')">${hid ? "Wieder einblenden" : "Ausblenden – kein Raum"}</button>` +
+    `<span class="muted">${hid ? "ausgeblendet – nach dem Speichern dauerhaft" : "z. B. Klimaanlage, Heizkreis, Auto"}</span></div>`;
+}
+function roomHide(c) {
+  const tr = document.querySelector(`#room-table .room[data-climate="${CSS.escape(c)}"]`);
+  if (ROOM_HIDE.has(c)) ROOM_HIDE.delete(c); else { ROOM_HIDE.add(c); if (tr) tr.querySelector(".r-on").checked = false; ROOM_SEL = null; }
+  roomsDirty(); roomTiles();
 }
 function roomPick(c) {
   ROOM_SEL = ROOM_SEL === c ? null : c;
@@ -6072,7 +6088,7 @@ function emCollect(out) {
 
 function renderSettings() {
   const s = SET;
-  ROOMS_DIRTY = false; ADOPT_MSG = "";  // Tabelle frisch aus dem Gespeicherten (0.42.1: Gelerntes übernehmen wieder frei)
+  ROOMS_DIRTY = false; ADOPT_MSG = ""; ROOM_HIDE = new Set(s.hidden_rooms || []);  // Tabelle frisch aus dem Gespeicherten (0.42.1: Gelerntes übernehmen wieder frei)
   ALIAS = null; ALIAS_MSG = "";  // Räume können sich geändert haben: Aliasse beim Aufklappen frisch
   emInit(EMAP);  // Seite „Entitäten“ (0.39.1): Einträge und Werte aus GET api/entity_map
   SET_DIRTY = false;
@@ -6193,7 +6209,7 @@ function collect() {
   out.control_mode = cm ? cm.value : "beobachten";
   out.night_plan = [...document.querySelectorAll("tr.np")].map((tr) => ({ start: tr.querySelector(".np-start").value, end: tr.querySelector(".np-end").value }));
   // Nachtzeiten aus dem Stromverbrauch (0.36): Häkchen als bool – die Sensoren stehen seit 0.39.1 unter „Entitäten“
-  out.night_plan_auto = $("f-night_plan_auto").checked;
+  out.night_plan_auto = $("f-night_plan_auto").checked; out.hidden_rooms = [...ROOM_HIDE];  // 0.65: ausgeblendet
   if ($("f-valve_control")) out.valve_control = $("f-valve_control").checked;  // Ventile führen (0.40)
   // Personen (seit 0.39.1 unter „Entitäten“): nur, wenn die Tabelle gezeichnet ist – sonst bleibt das Gespeicherte
   if ($("em-persons")) out.persons = [...document.querySelectorAll("tr.person")].filter((tr) => tr.querySelector(".p-on").checked).map((tr) => tr.dataset.id);
