@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.64.0
+- **Ersparnis gegenüber festem Zeitplan** (Konzeptpapier, Abschnitt 8, `savings_compare.time_saving`): Stunden je Woche weniger geheizt als mit dem eingestellten Wochenplan – gelernte Nachtzeiten (nur mit „Gelernte Zeiten verwenden“, sonst „möglich“) und Stunden, in denen niemand zu Hause war (außerhalb der festen Nacht). Immer sichtbar, auch ohne Gasdaten
+- **Ersparnis gegenüber früher, witterungsbereinigt** (`savings_compare.compare`): Heizgas je Gradtag (G 20/15, nur volle Heiztage unter 15 °C, ohne Warmwasser-Anteil) der letzten 30 Tage gegen einen **selbst gewählten Vergleichszeitraum** (kv `savings.ref`, höchstens ein Jahr, je Zeitraum mindestens 7 Heiztage) – so bleiben Zeiten mit früheren Automationen oder Tado-Zeitplänen draußen
+- Übersicht → Haus → Ersparnis zeigt beides unter der Modell-Schätzung; `GET api/savings`, `POST api/savings/ref` {from, to}
+- Tests: `tests/test_savings64.py`
+
 ## 0.63.0
 - **Sensor-Eimer für die Nachtzeiten** (Konzeptpapier, Abschnitt 6): neue Einstellung `activity_sensors` (Einstellungen → Haus → Experte → Strom & Aktivität) – Lampen, Schalter, Bewegungs-/Türmelder, Mediaplayer. Je Messpunkt die Zahl der Entitäten, die an sind (Spalte `activity_n`); ein Abschnitt ist wach, wenn die Hausleistung über der Schwelle liegt oder eine Entität an ist. Geht auch ohne Leistungssensor. Plausibilität: kurze einzelne Aktivität nachts (Toilette) unterbricht nur; Beginn und Ende setzt, was länger anhält (2 von 3 Abschnitten) oder mehrere bestätigen. Je Nacht steht die Quelle (`src`: strom, eimer, beide)
 - **Sicherheitsangabe:** je Wochentag „sehr sicher“ (ab 5 Nächten, Streuung bis 30 min), „sicher“ oder „unsicher“ (`sure_start`, `sure_end` im Plan); unter dem Wochenplan die Zeile „Aufwachen werktags 04:50, sehr sicher · Wochenende 08:10, sicher“

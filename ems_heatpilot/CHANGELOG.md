@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.64.0
+- Ersparnis: Stunden weniger geheizt als fester Zeitplan
+- Vergleich mit früher je Gradtag, Zeitraum wählbar
+
 ## 0.63.0
 - Sensor-Eimer: Lampen, Bewegungsmelder für die Nachtzeiten
 - Licht nachts kurz an weckt nicht
