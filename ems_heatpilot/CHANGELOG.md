@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.57.1
+- Räume warten: Antipendelzeit 5 statt 10 min
+
 ## 0.57.0
 - Warmwasser-Ladung löst keine Pause mehr aus
 - 30-s-Protokoll: Spalte „hp_geschrieben“

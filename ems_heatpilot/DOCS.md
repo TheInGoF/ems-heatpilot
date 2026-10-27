@@ -1325,6 +1325,8 @@ EMS-ESP `burnminperiod`, in Home Assistant z. B. `number.boiler_burner_min_perio
 aus. Fest auf 25 min blockiert sie Starts auch dann, wenn gerade genug Wärme abgenommen wird. Mit dem Schalter führt
 HeatPilot sie im selben 30-s-Schritt wie das Vorlauf-Soll mit:
 
+- **am kürzesten, 5 min** (seit 0.57.1), wenn Räume auf Wärme warten und der Kessel nicht mehr als 6-mal je Stunde
+  startet – der Kessel zählt die Sperre ab dem Schreiben neu, mit 5 min springt er nach einer Anforderung bald an,
 - **kurz, 10 min**, solange die Räume mit offenem Ventil die kleinste Brennerleistung beim Ziel-Vorlauf abnehmen
   (dieselbe Abnahme-Rechnung wie für den Mindest-Vorlauf) und der Kessel nicht taktet – der Brenner kann dann auf
   kleinster Stufe durchlaufen, und geht er doch aus, wartet ein neuer Start nicht 25 min. 10 min lassen auch im

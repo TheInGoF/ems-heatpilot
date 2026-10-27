@@ -30,7 +30,7 @@ def test_waiting_rooms_get_the_short_anti_cycle_time():
     from heatpilot import boiler_period as bp
     t = SimpleNamespace(charging=False, heating=True, idle=False, flow=40, load=None, load_text="Abnahme: 2 Räume …",
                         cycling={"cycling": True, "starts_h": 3}, waiting=["Flur", "Küche"])
-    assert bp.want(t, 25)[0] == bp.SHORT_MIN
+    assert bp.want(t, 25)[0] == bp.WAIT_MIN == 5  # 0.57.1: kürzeste Sperre, der Kessel zählt ab dem Schreiben neu
     t.waiting = []
     assert bp.want(t, 25)[0] == 25
     t.waiting, t.cycling = ["Flur"], {"cycling": True, "starts_h": 8}
