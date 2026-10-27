@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.65.0
+- Räume, die keine sind, dauerhaft ausblenden
+- Neue Karte: Betriebsschalter Räume, Kessel, Warmwasser
+
 ## 0.64.0
 - Ersparnis: Stunden weniger geheizt als fester Zeitplan
 - Vergleich mit früher je Gradtag, Zeitraum wählbar

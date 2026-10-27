@@ -86,7 +86,10 @@ Inhalts. Die Inhalte von „Allgemein“:
   doppelt über beide Wege; ohne Cloud heißen zwei Ventile im selben Bereich „Wohnzimmer VA1“ und
   „Wohnzimmer VA2“, bis sie als ein Raum gespeichert sind); was kein Raum ist
   (Klimaanlage im Auto, Heizkreis, Warmwasser),
-  bleibt abgewählt bzw. lässt sich abwählen. Klimaanlagen (Betriebsarten Kühlen, Trocknen, Lüften oder Heizen/Kühlen)
+  bleibt abgewählt bzw. lässt sich abwählen. Seit 0.65 lässt sich, was kein Raum ist, in der Raumansicht mit
+  **„Ausblenden – kein Raum“** dauerhaft ausblenden (`hidden_rooms`): Die Kachel verschwindet, die Erkennung übergeht
+  die Entität auch nach Updates und neuer Suche; „x ausgeblendet – zeigen“ unter den Kacheln holt sie zum Wieder-
+  einblenden zurück. Klimaanlagen (Betriebsarten Kühlen, Trocknen, Lüften oder Heizen/Kühlen)
   schlägt HeatPilot seit 0.59.1 nie als Raum vor – auch nicht von Tado. Abgewählt bleibt abgewählt: Sind Räume
   gespeichert, gilt nur diese Liste, auch nach Updates oder wenn Home Assistant neue Thermostate meldet. Beim Heizkreis von EMS-ESP ist „macht mit“ gesperrt
   (siehe [Räume und Geräte](#räume-und-geräte)). Ändern sich die Sensoren eines Raums oder kommt ein Raum
@@ -524,6 +527,10 @@ Phasenwechsel.
   wie sonst. Für das Dashboard gibt es dafür die Karte `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ ab 0.4);
   sie liest `sensor.heatpilot_modus` (auto, nacht, anwesend, abwesend; Attribut `until`) und bedient über den Befehl
   `override`.
+- **Betriebsschalter im Dashboard** (seit 0.65): Die Karte `custom:heatpilot-betrieb-card` (HACS „HeatPilot Card“
+  ab 0.5) zeigt die drei Schalter Räume (Beobachten · HeatPilot steuert), Kessel und Warmwasser (Aus · Beobachten ·
+  HeatPilot steuert) und speichert sie wie die Einstellungsseite; „HeatPilot steuert“ fragt einmal nach. Stand in
+  `sensor.heatpilot_betrieb`, Befehl `betrieb` {what: raeume|kessel|warmwasser, mode}.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
   Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
   HeatPilot steuert: „HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell 22° bis 21:00“

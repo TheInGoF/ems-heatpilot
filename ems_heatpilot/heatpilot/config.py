@@ -69,6 +69,7 @@ FIELDS: dict[str, tuple] = {
     "outdoor_sensors": ("entities",),
     "rooms": ("rooms",),
     "persons": ("entities",),
+    "hidden_rooms": ("entities",),  # 0.65: climate-Entitäten, die kein Raum sind – dauerhaft ausgeblendet
     "gas_sensor": ("entity",),
     "demand_sensor": ("entity",),
     "weather_entity": ("entity",),
@@ -289,6 +290,7 @@ class Config:
     rooms: list[dict] = field(default_factory=list)
     # Personen für die Anwesenheit; leer = automatisch (alle person.* mit Gerät/GPS)
     persons: list[str] = field(default_factory=list)
+    hidden_rooms: list[str] = field(default_factory=list)  # 0.65: ausgeblendet, auch für die Erkennung
     gas_sensor: str | None = None
     # Heizungsanforderung der bestehenden Automation (nur aufzeichnen)
     demand_sensor: str | None = None

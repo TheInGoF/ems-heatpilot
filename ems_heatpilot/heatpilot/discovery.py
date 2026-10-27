@@ -499,7 +499,7 @@ def discover(states: list[dict], registry, cfg, all_rooms: bool = False) -> Disc
         info = {r["climate"]: climate_info(r["climate"], idx, by_id) for r in cfg.rooms if r.get("climate")}
         d.rooms = group_rooms(cfg.rooms, by_id, reg, info)
     else:
-        _discover_rooms(d, ids, by_id, idx, all_rooms)
+        _discover_rooms(d, [e for e in ids if e not in set(cfg.hidden_rooms)], by_id, idx, all_rooms)  # 0.65
 
     all_persons = sorted(e for e in ids if e.startswith("person."))
     if cfg.persons:
