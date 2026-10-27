@@ -105,6 +105,7 @@ FIELDS: dict[str, tuple] = {
     # Schlafenszeit aus dem Hausstromverbrauch (0.36)
     "power_sensors": ("entities",),
     "power_exclude": ("entities",),
+    "activity_sensors": ("entities",),  # 0.63: Sensor-Eimer für die Nachtzeiten (Lampen, Bewegungsmelder …)
     "night_plan_auto": ("bool",),
     "preheat_max_h": ("float", 0.5, 6),
     "away_distance_pct": ("float", 0, 50),   # 0.49: Abwesenheit nach Entfernung (controlloop.away_setpoint)
@@ -345,6 +346,7 @@ class Config:
     # werden abgezogen), und ob gelernte Zeiten den Wochenplan ersetzen (sonst nur Vorschlag)
     power_sensors: list[str] = field(default_factory=list)
     power_exclude: list[str] = field(default_factory=list)
+    activity_sensors: list[str] = field(default_factory=list)  # 0.63: Aktivität (an/aus) für die Nachtzeiten
     night_plan_auto: bool = False
     # Laufzeit, nicht gespeichert: gelernte Nachtzeiten Mo..So [{start, end}] mit None, wo nichts
     # Belastbares vorliegt – setzt die Engine (update_sleep), wirkt nur mit night_plan_auto

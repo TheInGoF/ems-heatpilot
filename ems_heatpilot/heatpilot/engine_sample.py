@@ -19,6 +19,7 @@ from .values import flag, local, num
 log = logging.getLogger(f"{__package__}.engine")  # im Protokoll wie vor der Aufteilung: heatpilot.engine
 
 PERSON_UNKNOWN = {None, "", "unknown", "unavailable"}  # Tracker ohne Wert: weder zu Hause noch weg
+ACTIVE_STATES = {"on", "open", "playing", "home", "detected", "occupied"}  # 0.63: Sensor-Eimer „wach“
 
 
 class SampleMixin:
@@ -38,6 +39,13 @@ class SampleMixin:
         if self.found.weather and self.found.weather in self.states:
             return num(self.states[self.found.weather]["attributes"].get("temperature"))
         return None
+
+    def activity_count(self) -> int | None:
+        """Sensor-Eimer (0.63): wie viele der Aktivitäts-Entitäten gerade „an“ sind (an, offen, spielt, Bewegung);
+        ohne Entitäten bzw. wenn keine einen Zustand meldet None."""
+        known = [st.get("state") for e in self.found.activity if (st := self.states.get(e))
+                 and st.get("state") not in (None, "unavailable", "unknown")]
+        return sum(s in ACTIVE_STATES for s in known) if known else None
 
     def power_sum(self, entities: list[str], strict: bool) -> float | None:
         """Summe der Leistungssensoren in W (kW ×1000; Einheit aus dem Zustand, sonst die der Erkennung).
@@ -120,9 +128,9 @@ class SampleMixin:
             "dhw_special": self.dhw_special(),
             "syspress": num(self._boiler("sys_press")),
             # seit 0.36: Hausleistung (Summe der Leistungssensoren; fehlt einer, bleibt sie offen) und
-            # die Verbraucher, die nicht zählen (Waschmaschine, Wallbox …)
+            # die Verbraucher, die nicht zählen (Waschmaschine, Wallbox …); seit 0.63 der Sensor-Eimer (wie viele an)
             "power_w": self.power_sum(self.found.power, strict=True),
-            "power_ex_w": self.power_sum(self.found.power_exclude, strict=False),
+            "power_ex_w": self.power_sum(self.found.power_exclude, strict=False), "activity_n": self.activity_count(),
             # nur fürs Warmwasser-Modell (nicht in der Datenbank, 0.36.3): meldet der Kessel die Desinfektion?
             # Unterscheidet sie von der Einmalladung – nur sie bestätigt den Desinfektionstermin
             "dhw_disinfecting": flag(self._boiler("dhw_disinfecting")),

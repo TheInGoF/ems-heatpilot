@@ -289,7 +289,7 @@ def test_settings_split_into_general_and_entities():
         assert gone not in js, gone
     assert 'card("Gas & Kosten", `${emRef("gas_sensor", "gas", "Gaszähler")}' in rs
     assert '${emr("vacation_entity")}' in rs  # 0.43: Urlaubs-Schalter bei Anwesenheit & Urlaub
-    assert "${powerRef(power, powerEx, missing)}" in between(js, "function controlCard(s)", "function modeHint()")
+    assert "${powerRef(power, powerEx, missing, act)}" in between(js, "function controlCard(s)", "function modeHint()")
     assert 'id="dhw-entity-ref">Entität des Warmwasser-Solls: ${dhwEntityHint(s, x)}' in js
     # Räume bleiben in „Allgemein“ (Name, Gruppe, Komfort, Fußboden …) – die Seite „Entitäten“ springt dorthin
     assert '<input class="r-valve" list="dl-sensor"' in between(js, "function roomRows()", "function applyAreas()")
@@ -414,7 +414,7 @@ def test_collect_sends_overrides_and_fields_through_settings(tmp_path):
     assert s["power_sensors"] == ["sensor.hausleistung"] and s["gas_sensor"] == "" and s["outdoor_sensors"] == []
     assert s["persons"] == ["person.anna"] and "notify_targets" not in s  # eigene Tabellen (collect)
     assert set(s) == {"overrides", "persons", "dhw_set_entity", "outdoor_sensors", "weather_entity", "gas_sensor",
-                      "demand_sensor", "power_sensors", "power_exclude", "vacation_entity",
+                      "demand_sensor", "power_sensors", "power_exclude", "vacation_entity", "activity_sensors",
                       "flow_set_entity", "heating_switch_entity",  # Weg B seit 0.41
                       "disinfect_entity",  # Desinfektion auslösen seit 0.42
                       "period_set_entity"}  # Antipendelzeit seit 0.48

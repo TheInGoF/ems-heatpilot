@@ -204,7 +204,7 @@ def test_plan_reliability_limits():
     # Ende: Nacht So→Mo zählt für Mo; 03:30–09:30 plausibel
     assert sleep.plan(nights_of(6, ends=[4 * 60 + 45] * 3), NOW)[0] == {
         "day": "Mo", "start": None, "end": "04:45", "n_start": 0, "n_end": 3, "spread_start_min": None,
-        "spread_end_min": 0, "reliable_start": False, "reliable_end": True}
+        "spread_end_min": 0, "reliable_start": False, "reliable_end": True, "sure_start": None, "sure_end": "sicher"}
     assert not sleep.plan(nights_of(6, ends=[3 * 60] * 3), NOW)[0]["reliable_end"]
     assert not sleep.plan(nights_of(6, ends=[10 * 60] * 3), NOW)[0]["reliable_end"]
     # Spannweite über 90 min oder unter 3 Nächten: nicht belastbar; Rundung auf 5 min
@@ -220,7 +220,7 @@ def test_plan_reliability_limits():
     assert sleep.plan(old, NOW)[3]["n_start"] == 2
     assert sleep.plan({}, NOW)[0] == {"day": "Mo", "start": None, "end": None, "n_start": 0, "n_end": 0,
                                       "spread_start_min": None, "spread_end_min": None,
-                                      "reliable_start": False, "reliable_end": False}
+                                      "reliable_start": False, "reliable_end": False, "sure_start": None, "sure_end": None}
 
 
 def test_night_across_dst_change(tmp_path, berlin):
@@ -434,7 +434,7 @@ def test_engine_learns_plan_sets_config_and_survives_rebuild(tmp_path, monkeypat
     assert cfg3.night_times(0) == (dtime(21, 0), dtime(4, 30)) and eng3.eff.plan is None
     # Sensoren abgewählt: nichts gelernt, nichts aktiv
     eng4 = Engine(Config(night_plan_auto=True), store, Discovered(rooms=[Room("Wz", "climate.wz")]))
-    assert eng4.sleep_summary() == {"active": False, "auto": True, "sensors": [], "exclude": [], "nights": 0,
+    assert eng4.sleep_summary() == {"active": False, "auto": True, "sensors": [], "exclude": [], "activity": [], "nights": 0,
                                     "invalid": {}, "weeks": 6, "plan": sleep.plan({}, now)}
     assert eng4.cfg.night_plan_learned is None
     eng4.update_sleep(now)  # nichts zu tun

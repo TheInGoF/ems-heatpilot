@@ -1,4 +1,4 @@
-"""Schlafenszeit aus dem Hausstromverbrauch lernen (seit 0.36).
+"""Schlafenszeit aus dem Hausstromverbrauch lernen (seit 0.36), seit 0.63 auch aus dem Sensor-Eimer.
 
 Abends fällt der Verbrauch des Hauses auf das Nachtniveau (Standby) – Schlafenszeit; morgens
 steigt er wieder (Kaffeemaschine, Licht, Bad) – Aufstehen. Gemessen wird die Summe der gewählten
@@ -28,6 +28,14 @@ Wochenplan: Beginn aus den Nächten, deren **Abend** der Wochentag ist, Ende aus
 er ist – wie der Wochenplan der Einstellungen (Nacht Fr→Sa: „Fr ab“, „Sa bis“). Median der letzten
 ``WEEKS`` Wochen, auf 5 min gerundet; belastbar ab ``MIN_NIGHTS`` Nächten mit Spannweite (Q3−Q1) bis
 ``MAX_SPREAD_MIN`` und plausibler Lage (Beginn 19:00–01:30, Ende 03:30–09:30).
+
+**Sensor-Eimer** (seit 0.63, Konzeptpapier Abschnitt 6): beliebige Entitäten (Lampen, Bewegungsmelder, Schalter,
+Mediaplayer – ``activity_sensors``) werden zu einem Aktivitätssignal: je Messpunkt die Zahl der Entitäten, die an
+sind (``activity_n``), je Bin das Maximum. Ein Bin ist „wach“, wenn die Hausleistung über der Schwelle liegt **oder**
+eine Entität an ist; ohne Leistungssensor zählt nur der Eimer (dann braucht es Aktivität am Abend, sonst „zu wenig
+Unterschied“). Eine kurze, einzelne Aktivität mitten in der Nacht (Toilette) ist eine Unterbrechung – Beginn und Ende
+setzt erst, was länger anhält (2 von 3 Bins) oder was mehrere bestätigen (zwei Entitäten bzw. Leistung und Eimer im
+selben Bin, ``_strong``). So markieren Lampen grob Beginn (die letzte geht aus) und Ende (die erste geht an).
 
 Zustand in kv ``KV_NIGHTS`` = {Datum des Abends: Nacht}. Gerechnet wird eine Nacht genau einmal, sobald
 ihr Fenster vorbei ist; Nächte älter als ``KEEP_DAYS`` fallen heraus (``store.reset_learning`` löscht
@@ -130,56 +138,100 @@ def night_bins(rows, day: date) -> dict[int, float]:
     return {m: statistics.median(v) for m, v in by_bin.items()}
 
 
+def activity_bins(rows, day: date) -> dict[int, float]:
+    """Sensor-Eimer (0.63): je 10-min-Bin das Maximum von ``activity_n`` (wie viele Entitäten an waren)."""
+    by_bin: dict[int, float] = {}
+    for r in rows:
+        if "activity_n" not in r.keys() or r["activity_n"] is None:  # sqlite3.Row oder dict
+            continue
+        m = _minute_of(r["ts"], day)
+        b = m - m % BIN_MIN
+        if WINDOW[0] <= b < WINDOW[1]:
+            by_bin[b] = max(by_bin.get(b, 0.0), float(r["activity_n"]))
+    return by_bin
+
+
+def _enough(bins: dict) -> bool:
+    return len(bins) >= (1 - MAX_MISSING) * (WINDOW[1] - WINDOW[0]) // BIN_MIN
+
+
 def learn_night(rows, day: date) -> dict:
     """Eine Nacht (Abend ``day``) aus den Messpunkten ihres Fensters – siehe Modulbeschreibung.
 
-    Gibt {start_min, end_min, base_w, eve_w, thr_w, valid, reason}; start_min zählt ab Mitternacht des
-    Abends (kann über 1440 liegen), end_min am Folgetag.
+    Gibt {start_min, end_min, base_w, eve_w, thr_w, valid, reason, src}; start_min zählt ab Mitternacht des
+    Abends (kann über 1440 liegen), end_min am Folgetag; ``src`` strom, eimer oder beide.
     """
     out: dict = {"start_min": None, "end_min": None, "base_w": None, "eve_w": None, "thr_w": None,
                  "valid": False, "reason": NO_DATA}
-    bins = night_bins(rows, day)
-    if len(bins) < (1 - MAX_MISSING) * (WINDOW[1] - WINDOW[0]) // BIN_MIN:
+    bins, act = night_bins(rows, day), activity_bins(rows, day)
+    power, bucket = _enough(bins), _enough(act)
+    if not power and not bucket:
         return out
     home_22 = [r["home_count"] for r in rows
                if r["home_count"] is not None and HOME_CHECK[0] <= _minute_of(r["ts"], day) <= HOME_CHECK[1]]
     if any(r["vacation"] or r["away_long"] for r in rows) or (home_22 and max(home_22) == 0):
         out["reason"] = NOT_HOME
         return out
-    base_vals = [v for m, v in bins.items() if BASE_SPAN[0] <= m < BASE_SPAN[1]]
-    eve_vals = ([v for m, v in bins.items() if EVE_SPAN[0] <= m < EVE_SPAN[1]]
-                or [v for m, v in bins.items() if EVE_SPAN_WIDE[0] <= m < EVE_SPAN_WIDE[1]])
-    if not base_vals or not eve_vals:
+    thr = _threshold(bins, out) if power else None
+    if power and thr is None:
+        if not bucket:
+            return out  # Leistung ohne Unterschied, kein Eimer: Grund steht in out
+        power = False
+    if not power and not any(v >= 1 for m, v in act.items() if EVE_SPAN_WIDE[0] <= m < EVE_SPAN_WIDE[1]):
+        out["reason"] = LOW_CONTRAST  # nur Eimer, aber abends nichts an: kein Unterschied zwischen wach und Schlaf
         return out
-    base, eve = _percentile(base_vals, 0.10), statistics.median(eve_vals)
-    out.update(base_w=round(base, 1), eve_w=round(eve, 1))
-    if eve - base < MIN_CONTRAST_W:
-        out["reason"] = LOW_CONTRAST
-        return out
-    thr = base + max(THR_MIN_W, THR_SHARE * (eve - base))
-    thr = min(max(thr, _percentile(base_vals, NIGHT_BAND_P) + NIGHT_BAND_W), base + THR_MAX_SHARE * (eve - base))
-    out["thr_w"] = round(thr, 1)
+    grid = sorted(set(bins if power else ()) | set(act if bucket else ()))
+    if not power:
+        bins = {}
+
+    def awake(m: int) -> bool | None:
+        p, a = bins.get(m), act.get(m)
+        if p is None and a is None:
+            return None
+        return (p is not None and thr is not None and p > thr) or (a is not None and a >= 1)
+
+    def strong(m: int) -> bool:  # mehrere bestätigen: zwei Entitäten oder Leistung und Eimer zugleich
+        a, p = act.get(m) or 0, bins.get(m)
+        return a >= 2 or (a >= 1 and p is not None and thr is not None and p > thr)
 
     start = None
     for m in range(START_SPAN[0], START_SPAN[1] + 1, BIN_MIN):
-        run = [bins.get(m + i * BIN_MIN) for i in range(START_RUN)]
-        if any(v is None or v >= thr for v in run):
+        if any(awake(m + i * BIN_MIN) is not False for i in range(START_RUN)):
             continue
-        later = [v for mm, v in bins.items() if m <= mm < QUIET_UNTIL]
-        if later and sum(v < thr for v in later) / len(later) >= QUIET_SHARE:
+        later = [awake(mm) for mm in grid if m <= mm < QUIET_UNTIL]
+        if later and sum(x is False for x in later) / len(later) >= QUIET_SHARE:
             start = m
             break
+    out["src"] = "beide" if power and bucket else "strom" if power else "eimer"
     if start is None:
         out["reason"] = NO_START
         return out
     out.update(start_min=start, valid=True, reason=OK)
 
     for m in range(max(END_EARLIEST, start + END_AFTER_START_MIN), END_LATEST + 1, BIN_MIN):
-        trio = [bins.get(m + i * BIN_MIN) for i in range(3)]
-        if trio[0] is not None and trio[0] > thr and sum(v is not None and v > thr for v in trio) >= END_ABOVE:
+        trio = [awake(m + i * BIN_MIN) for i in range(3)]
+        if trio[0] and (sum(bool(x) for x in trio) >= END_ABOVE or strong(m)):
             out["end_min"] = m - 1440
             break
     return out
+
+
+def _threshold(bins: dict, out: dict) -> float | None:
+    """Schwelle der Hausleistung (Grund, Abend, Kühlschrankband) – None mit Grund in ``out``, wenn sie fehlt."""
+    base_vals = [v for m, v in bins.items() if BASE_SPAN[0] <= m < BASE_SPAN[1]]
+    eve_vals = ([v for m, v in bins.items() if EVE_SPAN[0] <= m < EVE_SPAN[1]]
+                or [v for m, v in bins.items() if EVE_SPAN_WIDE[0] <= m < EVE_SPAN_WIDE[1]])
+    if not base_vals or not eve_vals:
+        return None
+    base, eve = _percentile(base_vals, 0.10), statistics.median(eve_vals)
+    out.update(base_w=round(base, 1), eve_w=round(eve, 1))
+    if eve - base < MIN_CONTRAST_W:
+        out["reason"] = LOW_CONTRAST
+        return None
+    thr = base + max(THR_MIN_W, THR_SHARE * (eve - base))
+    thr = min(max(thr, _percentile(base_vals, NIGHT_BAND_P) + NIGHT_BAND_W), base + THR_MAX_SHARE * (eve - base))
+    out["thr_w"] = round(thr, 1)
+    return thr
 
 
 def learn(store, now_ts: int) -> dict[str, dict]:
@@ -196,7 +248,8 @@ def learn(store, now_ts: int) -> dict[str, dict]:
         del nights[key]
         changed = True
     since = store.get("power.since")  # 0.44: ältere Hausleistung gehört zu früher gewählten Sensoren
-    first = store.query("SELECT MIN(ts) AS t FROM samples WHERE power_w IS NOT NULL AND ts >= ?",
+    first = store.query("SELECT MIN(ts) AS t FROM samples WHERE (power_w IS NOT NULL OR activity_n IS NOT NULL) "
+                        "AND ts >= ?",
                         (int(since) if isinstance(since, (int, float)) else 0,))[0]["t"]
     if first is not None:
         # erste Nacht, deren Fenster ganz nach dem ersten Messwert liegt – angebrochene Nächte nicht zählen
@@ -208,9 +261,9 @@ def learn(store, now_ts: int) -> dict[str, dict]:
             key = day.isoformat()
             if key not in nights:
                 rows = store.query(
-                    "SELECT ts, power_w, power_ex_w, vacation, away_long, home_count FROM samples "
+                    "SELECT ts, power_w, power_ex_w, activity_n, vacation, away_long, home_count FROM samples "
                     "WHERE ts >= ? AND ts < ?", (_at(day, WINDOW[0]), _at(day, WINDOW[1])))
-                if any(r["power_w"] is not None for r in rows):
+                if any(r["power_w"] is not None or r["activity_n"] is not None for r in rows):
                     nights[key] = learn_night(rows, day)
                     changed = True
             day += timedelta(days=1)
@@ -233,6 +286,15 @@ def _half(values: list[float], plausible: tuple[int, int]) -> tuple[str | None, 
     return _hhmm(med), len(values), spread, reliable
 
 
+def confidence(n: int, spread: int | None, reliable: bool) -> str | None:
+    """Sicherheitsangabe für die Oberfläche (0.63): „sehr sicher“ ab 5 Nächten mit höchstens 30 min Streuung,
+    „sicher“ wenn belastbar, sonst „unsicher“; ohne Nacht None."""
+    if not n:
+        return None
+    return "sehr sicher" if reliable and n >= 5 and spread is not None and spread <= 30 else (
+        "sicher" if reliable else "unsicher")
+
+
 def plan(nights: dict[str, dict], now_ts: int, weeks: int = WEEKS) -> list[dict]:
     """Wochenplan Mo..So aus den gültigen Nächten der letzten ``weeks`` Wochen – Beginn nach Abend, Ende nach Morgen."""
     since = _local(now_ts).date() - timedelta(days=7 * weeks)
@@ -251,7 +313,8 @@ def plan(nights: dict[str, dict], now_ts: int, weeks: int = WEEKS) -> list[dict]
         s, e = _half(starts[i], START_PLAUSIBLE), _half(ends[i], END_PLAUSIBLE)
         out.append({"day": day, "start": s[0], "end": e[0], "n_start": s[1], "n_end": e[1],
                     "spread_start_min": s[2], "spread_end_min": e[2],
-                    "reliable_start": s[3], "reliable_end": e[3]})
+                    "reliable_start": s[3], "reliable_end": e[3],
+                    "sure_start": confidence(s[1], s[2], s[3]), "sure_end": confidence(e[1], e[2], e[3])})
     return out
 
 
@@ -261,11 +324,13 @@ def learned_plan(plan_days: list[dict]) -> list[dict]:
              "end": d["end"] if d["reliable_end"] else None} for d in plan_days]
 
 
-def summary(nights: dict[str, dict], now_ts: int, cfg, sensors: list[str], exclude: list[str]) -> dict:
+def summary(nights: dict[str, dict], now_ts: int, cfg, sensors: list[str], exclude: list[str],
+            activity: list[str] = ()) -> dict:
     """Zusammenfassung für Oberfläche und API – ohne Sensoren harmlos (Plan mit None, nichts aktiv)."""
-    days = plan(nights, now_ts) if sensors else plan({}, now_ts)
+    any_src = bool(sensors or activity)
+    days = plan(nights, now_ts) if any_src else plan({}, now_ts)
     since = _local(now_ts).date() - timedelta(days=7 * WEEKS)
-    recent = [n for key, n in nights.items() if sensors and date.fromisoformat(key) >= since]
+    recent = [n for key, n in nights.items() if any_src and date.fromisoformat(key) >= since]
     invalid = Counter(n.get("reason") or NO_DATA for n in recent if not n.get("valid"))
     reliable = any(d["reliable_start"] or d["reliable_end"] for d in days)
     return {
@@ -273,6 +338,7 @@ def summary(nights: dict[str, dict], now_ts: int, cfg, sensors: list[str], exclu
         "auto": bool(cfg.night_plan_auto),
         "sensors": list(sensors),
         "exclude": list(exclude),
+        "activity": list(activity),  # 0.63: Sensor-Eimer
         "plan": days,
         "nights": sum(1 for n in recent if n.get("valid")),
         "invalid": dict(invalid),

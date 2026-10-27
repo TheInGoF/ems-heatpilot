@@ -117,9 +117,9 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         # Schlafenszeit aus dem Stromverbrauch (0.36): gespeicherte Nächte → Wochenplan, damit die
         # Steuerung vom ersten Takt an die richtigen Zeiten hat; wirkt nur mit night_plan_auto
         self._sleep_ts = 0.0
-        self.sleep_nights: dict = (store.get(sleep.KV_NIGHTS) or {}) if found.power else {}
-        self._sleep = sleep.summary(self.sleep_nights, int(time.time()), cfg, found.power, found.power_exclude)
-        cfg.night_plan_learned = sleep.learned_plan(self._sleep["plan"]) if found.power else None
+        self.sleep_nights: dict = (store.get(sleep.KV_NIGHTS) or {}) if (sleepy := found.power or found.activity) else {}
+        self._sleep = sleep.summary(self.sleep_nights, int(time.time()), cfg, found.power, found.power_exclude, found.activity)
+        cfg.night_plan_learned = sleep.learned_plan(self._sleep["plan"]) if sleepy else None
         self.eff = schedule.effective(cfg, self.schedule_learned)
         self._schedule_ts = 0.0
         self.live = LiveBuffer()  # 30-s-Werte der letzten 12 h für den Reiter „Live“

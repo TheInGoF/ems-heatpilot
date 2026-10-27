@@ -50,12 +50,13 @@ def test_power_picker_filters_power_sensors_only():
 def test_control_card_has_power_section_lists_and_checkbox():
     js, markup = script(), html()
     card = between(js, "function controlCard(s)", "function modeHint()")
-    assert "Nachtzeiten aus dem Stromverbrauch</h3>" in card
-    assert "const power = s.power_sensors || [], powerEx = s.power_exclude || [];" in card
+    assert "Nachtzeiten aus Stromverbrauch und Aktivität</h3>" in card  # 0.63: Sensor-Eimer
+    assert "const power = s.power_sensors || [], powerEx = s.power_exclude || [], act = s.activity_sensors || [];" in card
     # Sensoren seit 0.39.1 unter „Entitäten“ → Strom; hier, was gewählt ist (und was fehlt), mit Sprung dorthin
-    assert "${powerRef(power, powerEx, missing)}" in card
-    ref = between(js, "function powerRef(power, powerEx, missing) {", "function modeHint()")
-    assert "Leistungssensoren: ${power.length ? list(power) : \"keine gewählt – die Funktion ist aus\"}" in ref
+    assert "${powerRef(power, powerEx, missing, act)}" in card
+    ref = between(js, "function powerRef(power, powerEx, missing, act = []) {", "function modeHint()")
+    assert "Leistungssensoren: ${power.length ? list(power) : \"keine gewählt\"}" in ref
+    assert "Aktivität (Sensor-Eimer): ${act.length ? list(act) : \"keine gewählt\"}" in ref
     assert "onclick=\"emGo('strom');return false\">ändern unter Experte</a>" in ref
     from heatpilot.entity_map import FIELD_ENTRIES
     assert FIELD_ENTRIES["power_sensors"][1] == "Leistungssensoren (Haus, ggf. je Phase)"
@@ -76,17 +77,17 @@ def test_learned_columns_only_with_sensors_and_mark_used_halves():
     js = script()
     card = between(js, "function controlCard(s)", "function modeHint()")
     # Spalten und Zeile nur, wenn Sensoren gesetzt sind und die Zusammenfassung da ist
-    assert "const learned = power.length && SLEEP && (SLEEP.plan || []).length === 7 ? SLEEP.plan : null;" in card
+    assert "const learned = (power.length || act.length) && SLEEP && (SLEEP.plan || []).length === 7 ? SLEEP.plan : null;" in card
     assert '${learned ? "<th>gelernt ab</th><th>gelernt bis</th>" : ""}' in card
     assert '${learned ? `<td class="np-learned">${learnedCell(learned[i], "start", effPlan[i])}</td><td class="np-learned">${learnedCell(learned[i], "end", effPlan[i])}</td>` : ""}' in card
-    assert '${learned ? `<p class="muted" id="sleep-line" style="margin:4px 0 0">${sleepLine(SLEEP)}</p>` : ""}' in card
+    assert '${learned ? `<p class="muted" id="sleep-line" style="margin:4px 0 0">${sleepLine(SLEEP)}</p>${sleepWake(SLEEP)}` : ""}' in card
     # „gilt“ aus dem wirksamen Wochenplan (api/settings → schedule.effective.plan), nicht aus der Zusammenfassung
     assert "const effPlan = (SCHED && SCHED.effective && SCHED.effective.plan) || [];" in card
     cell = between(js, "function learnedCell(d, half, eff)", "function sleepLine(sl)")
     assert 'const used = !!eff && eff["source_" + half] === "gelernt (Strom)";' in cell
     assert "✓ gilt" in cell
     # Text „21:35 · 5 Nächte ± 20 min“, grau wenn nicht belastbar, Strich ohne Wert
-    assert '`${esc(d[half])} · ${n} ${n === 1 ? "Nacht" : "Nächte"}${sp !== null && sp !== undefined ? ` ± ${sp} min` : ""}`' in cell
+    assert '`${esc(d[half])} · ${n} ${n === 1 ? "Nacht" : "Nächte"}${sp !== null && sp !== undefined ? ` ± ${sp} min` : ""}${sure ? ` · ${esc(sure)}` : ""}`' in cell  # 0.63
     assert '<span class="${ok ? "" : "muted"}"' in cell
     assert "if (!d || !d[half]) return '<span class=\"muted\">–</span>';" in cell
     line = between(js, "function sleepLine(sl)", "// Steuerung (0.34)")

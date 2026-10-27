@@ -62,7 +62,7 @@ GROUPS: dict[str, tuple[str, str]] = {
                                            "Vorlauf-Soll und Heizbetrieb, seit 0.48 die Antipendelzeit."),
     "aussen": ("Außen & Wetter", "Außentemperatur und Vorhersage."),
     "gas": ("Gas & Anforderung", "Verbrauch und Anforderung."),
-    "strom": ("Strom", "Hausleistung für die Nachtzeiten aus dem Stromverbrauch."),
+    "strom": ("Strom & Aktivität", "Hausleistung und Aktivität (Lampen, Bewegungsmelder …) für die Nachtzeiten."),
     "raeume": ("Räume", "Thermostate und Sensoren je Raum – geändert wird unter Einstellungen → Räume."),
     "personen": ("Personen & Urlaub", "Wer für die Anwesenheit zählt, und ein Urlaubs-Schalter."),
     "benachrichtigungen": ("Benachrichtigungen", "Ziele wählen, speichern, dann mit der Testnachricht prüfen."),
@@ -93,6 +93,7 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "gas": (("sensor",), ("m³", "m3", "kWh"), ("gas", "energy")),
     "demand": (("sensor",), ("%",), ()),
     "power": (("sensor",), ("W", "kW"), ("power",)),
+    "activity": (("light", "switch", "binary_sensor", "input_boolean", "media_player"), (), ()),  # 0.63
     "person": (("person",), (), ()),
     "toggle": (("input_boolean", "switch", "binary_sensor"), (), ()),
     "notify": (("notify",), (), ()),
@@ -204,6 +205,9 @@ FIELD_ENTRIES: dict[str, tuple[str, str, str, bool, bool, str]] = {
                       "Nachtzeiten."),
     "power_exclude": ("strom", "Nicht zählen (Waschmaschine, Wallbox …)", "power", True, False,
                       "Verbraucher, die auch nachts laufen – werden von der Hausleistung abgezogen."),
+    "activity_sensors": ("strom", "Aktivität (Lampen, Bewegungsmelder …)", "activity", True, False,
+                         "Sensor-Eimer: jede Entität, die an ist, zählt als „wach“ – daraus lernt HeatPilot mit der "
+                         "Hausleistung Schlafens- und Aufwachzeit. Ein kurzes Licht nachts (Toilette) weckt nicht."),
     "persons": ("personen", "Personen", "person", True, True,
                 "Ohne Häkchen zählen automatisch alle Personen mit Home-Assistant-Benutzer und Gerät."),
     "vacation_entity": ("personen", "Urlaubs-Schalter", "toggle", False, False,
@@ -379,7 +383,7 @@ def _field_values(c: _Ctx) -> dict:
         "weather_entity": (cfg.weather_entity, auto("weather", cfg.weather_entity, f.weather)),
         "gas_sensor": (cfg.gas_sensor, auto("gas", cfg.gas_sensor, f.gas)),
         "demand_sensor": (cfg.demand_sensor, None), "power_sensors": (cfg.power_sensors, None),
-        "power_exclude": (cfg.power_exclude, None),
+        "power_exclude": (cfg.power_exclude, None), "activity_sensors": (cfg.activity_sensors, None),
         "persons": (cfg.persons, auto("persons", cfg.persons, f.persons)),
         "vacation_entity": (cfg.vacation_entity, None), "notify_targets": (cfg.notify_targets, None),
     }
