@@ -115,7 +115,7 @@ def test_card_on_top_of_overview_and_details_under_diagnose():
     assert 'id="guards"' not in start and 'id="ov-save"' not in start  # 0.55: Lernstand und Ersparnis unter Haus
     ov = between(page, '<section id="view-overview" hidden>', "</section>")
     assert ov.index('id="ov-status"') < ov.index('id="models"')
-    diag = between(page, '<section id="view-diag" hidden>', "</section>")
+    diag = between(page, '<div id="view-diag">', "</section>")
     assert diag.index('id="diag-checks"') < diag.index('<div class="card" id="diag-models"') < \
         diag.index('id="heat-log-box"') < diag.index("Diagnose-Datei")  # 0.43: Protokoll aus dem Heizen
     ld = between(js, "async function load() {", "// " + "-" * 64 + " Einstellungen")
@@ -126,7 +126,7 @@ def test_card_on_top_of_overview_and_details_under_diagnose():
     demand = between(page, "Gas gegen Temperaturunterschied", 'id="chart-demand"')  # 0.43: Kurztext
     assert '<p class="muted" id="demand-note" hidden></p>' in demand
     # 0.43: Diagnose ist die letzte Unterseite der Einstellungen – beim Öffnen lädt loadDiagPage auch die Modelle
-    assert 'if (name === "diag") return openSettings("diagnose");' in source(js, "showTab")
+    assert 'if (name === "diag") return openDiag();' in source(js, "showTab")
     assert "exportSize(); loadSensors(); loadModels();" in source(js, "loadDiagPage")
     assert 'showTab("diag");\n  $("diag-models").scrollIntoView' in source(js, "openModels")
     assert 'onclick="openModels()"' in source(js, "modelsHtml")  # Klick auf die Karte → Diagnose
@@ -226,7 +226,7 @@ out({{ bad: modelsDetailHtml(B), ok: modelsDetailHtml(OK) }});
     t = plain(got["bad"])
     assert "Ventile: 0 von 2 belastbar" in t and "lernt nach lernt aus der gespeicherten Historie nach" in t
     assert "Zuletzt" in t and "Aus gespeicherten Daten neu gelernt: Hausmodell " in t and "mit allen Werten gelernt" in t
-    assert 'onclick="openAdvanced();return false">Einstellungen → Erweitert</a>' in got["bad"]
+    assert 'onclick="openAdvanced();return false">Einstellungen → Haus → Experte</a>' in got["bad"]
 
 
 def test_job_states_and_results(tmp_path, real):
@@ -365,7 +365,7 @@ def test_inline_script_is_valid_javascript(tmp_path):
 def test_docs_and_changelog_name_the_places():
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     for text in ("**Karte „Modelle“**", "„Modelle – Einzelheiten“", "**Alter Temperatursensor je Raum**",
-                 "Einstellungen → Erweitert", "„Aus gespeicherten Daten neu lernen“", "Nicht berücksichtigt"):
+                 "Einstellungen → Haus → Experte", "„Aus gespeicherten Daten neu lernen“", "Nicht berücksichtigt"):
         assert text in docs, text
     head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.1")[1].split("\n## ")[0]  # seit 0.43
     ui = next(line for line in head.splitlines() if line.startswith("- **Oberfläche:**"))

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.58.0
+- **Einstellungen nach dem UI-Styleguide (`docs/ui-styleguide.md`):** Startseite mit drei Kacheln **Räume** (Räume, Räume steuern, Nachtzeiten), **Kessel** (Kesseldaten, Kessel steuern, Warmwasser steuern, Temperaturen und Desinfektion) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit & Urlaub, Benachrichtigungen, Karten für Home Assistant) – höchstens zwei Ebenen statt zehn Unterseiten. Seltenes (gelesene Entitäten, Regler, Erweitert) steht am Ende jeder Seite im ausklappbaren Bereich **Experte**; die Zahl fehlender Entitäten steht an der Kachel
+- **Diagnose im Reiter Live:** Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log und Dateien stehen am Ende von Live (geladen beim ersten Öffnen); alle Sprünge („Einzelheiten ›“, Protokoll) führen dorthin
+- **Einheitliche Schrift und Karten:** Schriftgrößen nur noch Titel 16, Text 13, Klein 12 px plus Zahl (24) und große Zahl (40) als CSS-Variablen; Karten mit gleichem Innenabstand 16 px, Eckenradius 12 px (Bedienelemente 8 px)
+- Verweise in Oberfläche, Meldungen, DOCS und README auf die neuen Orte umgestellt („Einstellungen → Kessel“, „→ Haus → Experte“, „Live → Diagnose“); alte Seitennamen ohne Alias entfernt
+
 ## 0.57.1
 - **Antipendelzeit 5 statt 10 min, wenn Räume auf Wärme warten:** Der Kessel zählt die Sperre ab dem Schreiben neu (26.10.: Arbeitszimmer hochgesetzt um 18:41, Sperre auf 10 min gesetzt, Brenner erst 18:53). Mit 5 min springt er deutlich früher an; taktet er (ab 6 Starts je Stunde), gilt weiter die lange Sperre
 

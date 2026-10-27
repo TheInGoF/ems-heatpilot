@@ -1,7 +1,7 @@
 """0.40: Oberfläche zu „Ventile führen“ – statische Prüfung und Texte in Node.
 
 Wie tests/test_ui_v39.py: die Oberfläche ist eine HTML-Datei ohne Build. Geprüft wird der Einbau (Schalter unter
-Einstellungen → Steuerung samt Speichern, Block „Ventile führen“ in „Bereit für die Steuerung?“ vor dem Warmwasser,
+Einstellungen → Räume samt Speichern, Block „Ventile führen“ in „Bereit für die Steuerung?“ vor dem Warmwasser,
 Zeile „Ventil geführt: …“ im Raum-Dialog, „schreibt“ in Übersicht → Vorschau → Ventile), dass die neuen Teile nichts
 schreiben (kein neuer Aufruf an die API) und ältere Antworten ohne die Felder still weglassen, und die Texte – in Node
 mit Antworten des echten Backends (Regelschleife mit Ventilführung an einem künstlichen Haus aus
@@ -203,7 +203,7 @@ def test_docs_name_the_places():
 
     root = Path(__file__).resolve().parents[1]
     docs = re.sub(r"\s+", " ", (root / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8"))
-    for text in ("### Ventile führen", "Einstellungen → Steuerung", "„Bereit für die Steuerung?“",
+    for text in ("### Ventile führen", "Einstellungen → Räume", "„Bereit für die Steuerung?“",
                  "Ventil geführt: 20,5 statt 21 °C – früh drosseln, zurück ≈ 15:40", "„Ventile – HeatPilot schreibt“"):
         assert text in docs, text
     log = (root / "CHANGELOG.md").read_text(encoding="utf-8").split("## 0.39.1")[0]

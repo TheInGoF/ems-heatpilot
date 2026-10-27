@@ -1,6 +1,6 @@
 """Entitäten automatisch finden: EMS-ESP-Therme, Tado-Räume, Personen, Wetter, Gas.
 
-Jede Kessel- und Regler-Rolle lässt sich unter Einstellungen → Entitäten überschreiben (gespeichert als
+Jede Kessel- und Regler-Rolle lässt sich unter Einstellungen → Haus → Experte überschreiben (gespeichert als
 ``overrides``, ``rolle=entity_id``); die übrigen Entitäten stehen dort in ihren Feldern (``entity_map``).
 """
 

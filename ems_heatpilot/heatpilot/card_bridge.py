@@ -15,7 +15,7 @@ einen Helfer. Darum stellt HeatPilot bereit:
   gleiche Befehle unterscheidbar). HeatPilot führt ihn aus (``heat_actions`` – dieselbe Stelle wie die Seite), leert
   das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode (das Soll
   eines Raums stellt die Karte über das Thermostat-Pop-up von Home Assistant).
-* ``GET api/cards`` (``routes``, seit 0.56.4): Stand für Einstellungen → Erweitert → „Karten für Home Assistant“ –
+* ``GET api/cards`` (``routes``, seit 0.56.4): Stand für Einstellungen → Haus → „Karten für Home Assistant“ –
   Helfer vorhanden, Raum-Sensoren, Wetter-Entität, Link zum Repository.
 
 Geschrieben wird nur an die eigenen Sensoren und den eigenen Helfer; an Tado und Kessel nur über ``control``.

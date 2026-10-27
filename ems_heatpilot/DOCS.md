@@ -25,14 +25,16 @@ Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index) und Wind
 stündlichen Vorhersage der Wetter-Integration, Antippen eines Balkens zeigt den Wert; was die Integration nicht liefert,
 fällt weg (Zustand von Haus, Räumen, Ventilen, Warmwasser). Darunter die Empfehlungen je eine Zeile
 (antippen klappt den Beleg auf), die Ersparnis als eine Zeile (Karte und Lernstand stehen unter Haus) und die Unterseiten Haus, Räume, Warmwasser, Kessel, Anwesenheit und
-Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startliste mit den Unterseiten
-Grundlagen, Räume, Entitäten, Steuerung, Anwesenheit & Urlaub, Warmwasser, Kessel, Benachrichtigungen, Erweitert und
-**Diagnose** (früher eigener Reiter: Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien). Die
-Schalter heißen überall **Aus · Beobachten · HeatPilot steuert**; „Beobachten“ (früher „Trockenlauf“) rechnet und
-protokolliert, schreibt aber nichts. Die Entitäten, auf die HeatPilot schreibt (Warmwasser-Soll, Desinfektion,
-Vorlauf-Soll, Heizbetrieb), wählst du bei ihrer Funktion unter Einstellungen → Warmwasser bzw. → Kessel; die Seite
-[Entitäten](#entitäten) zeigt nur, was HeatPilot liest. Wo diese Beschreibung ältere Orte nennt („Allgemein“, „Haus &
-Kessel“, Reiter „Diagnose“), gilt die neue Unterseite gleichen Inhalts. Die Inhalte von „Allgemein“:
+Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startseite mit drei Kacheln: **Räume** (Räume, Steuerung, Nachtzeiten), **Kessel**
+(Warmwasser, Desinfektion, Kessel steuern, Kesseldaten) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit &
+Urlaub, Benachrichtigungen, Karten). Seltenes steht am Ende jeder Seite unter **Experte** (gelesene Entitäten,
+Regler, Erweitert). **Diagnose** (Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien) steht am Ende
+des Reiters **Live**. Die Schalter heißen überall **Aus · Beobachten · HeatPilot steuert**; „Beobachten“ (früher
+„Trockenlauf“) rechnet und protokolliert, schreibt aber nichts. Die Entitäten, auf die HeatPilot schreibt
+(Warmwasser-Soll, Desinfektion, Vorlauf-Soll, Heizbetrieb), wählst du bei ihrer Funktion unter Einstellungen → Kessel;
+was HeatPilot nur liest, steht unter Einstellungen → Haus → Experte ([Entitäten](#entitäten)). Wo diese Beschreibung
+ältere Orte nennt („Allgemein“, „Grundlagen“, „Steuerung“, „Entitäten“, Reiter „Diagnose“), gilt die Seite gleichen
+Inhalts. Die Inhalte von „Allgemein“:
 
 - **Steuerung:** der Hauptschalter **Beobachten** (Standard: lernen, empfehlen, Tado
   nur auf Knopfdruck) oder **HeatPilot steuert** (HeatPilot schreibt die
@@ -100,7 +102,7 @@ erklärt Fehler und übernimmt sofort, ohne Neustart. Die Einstellungen liegen i
 
 ## Entitäten
 
-Seit 0.39.1 steht unter **Einstellungen → Entitäten** geordnet alles, was
+Seit 0.39.1 steht unter **Einstellungen → Haus → Experte** geordnet alles, was
 HeatPilot aus Home Assistant liest – und die Entitäten, die es beschreiben darf (Warmwasser-Soll, seit 0.42 der Schalter
 der Desinfektion, seit 0.41 Vorlauf-Soll und Heizbetrieb). Die Gruppen sind
 aufklappbare Karten mit Zähler („Kessel (EMS-ESP) · 13 von 38 gefunden · 1 nicht verfügbar“): **Kessel (EMS-ESP)**,
@@ -114,7 +116,7 @@ Einheit, Bereich) und ein Status:
 
 - **automatisch gefunden** – die Erkennung hat die Entität gefunden,
 - **gewählt** – von dir gewählt (bis zum Speichern mit „nicht gespeichert“),
-- **über EMS-ESP** – keine Entität, aber EMS-ESP liefert den Wert direkt (Einstellungen → Grundlagen; beim
+- **über EMS-ESP** – keine Entität, aber EMS-ESP liefert den Wert direkt (Einstellungen → Haus; beim
   Außenfühler am Kessel nur zur Anzeige, siehe unten),
 - **Ersatz** – kein eigener Wert, eine andere Rolle genügt (z. B. „Brenner an“ statt der Brennerleistung),
 - **fehlt** (nötig, ohne Ersatz), **nicht verfügbar** (fehlt in Home Assistant oder meldet „unavailable“/„unknown“),
@@ -162,7 +164,7 @@ möglich, steht der Grund da, und Speichern lässt die Zuordnungen, wie sie sind
 
 ## Alle Sensoren
 
-**Einstellungen → Diagnose → Sensoren** listet, was HeatPilot liest: Bereich, Zweck,
+**Live → Diagnose → Sensoren** listet, was HeatPilot liest: Bereich, Zweck,
 Sensor bzw. EMS-ESP-Wert, Name in Home Assistant, aktueller Wert, Stand und
 Zustand (ok, fehlt, veraltet, nicht gefunden). Mit dem Filter findet man schnell
 alles zu einem Raum oder alle fehlenden Werte; optional werden auch die von
@@ -170,7 +172,7 @@ EMS-ESP gelieferten, aber nicht verwendeten Werte gezeigt.
 
 ## Gelernte Werte exportieren
 
-**Einstellungen → Diagnose → Dateien → Gelernte Werte herunterladen** liefert eine JSON-Datei mit allem,
+**Live → Diagnose → Dateien → Gelernte Werte herunterladen** liefert eine JSON-Datei mit allem,
 was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in
 Klartext mit Gütemaß (Fehler, gekappte und verworfene Punkte, plausibel ja/nein),
 dazu Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage (7, 14 oder
@@ -193,7 +195,7 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
 
 ## Diagnose und Fehlersuche
 
-**Einstellungen → Diagnose** auf der HeatPilot-Seite:
+**Live → Diagnose** auf der HeatPilot-Seite:
 
 - **Selbsttest** – laufend: fehlende oder veraltete Sensoren, unmögliche Werte
   (Vorlauf, Raum, Speicher), Gaszähler zählt nicht obwohl der Brenner lief,
@@ -501,7 +503,7 @@ Räume, Temperaturen 5–25 °C. Raumauswahl, Temperatur und Dauer merkt sich da
 
 ## Steuerung: Beobachten oder HeatPilot steuert
 
-Unter **Einstellungen → Steuerung** steht der Hauptschalter. Es gibt genau zwei Stellungen,
+Unter **Einstellungen → Räume** steht der Hauptschalter. Es gibt genau zwei Stellungen,
 keinen Zwischenmodus und keinen automatischen Rückfall:
 
 - **Beobachten** (Standard): wie bisher – lernen, empfehlen, Tado nur auf Knopfdruck.
@@ -726,7 +728,7 @@ heißen solche Räume „akzeptiert“ – sie sind kein Hindernis.
   danach meldet „wieder in Ordnung“).
 - **Protokoll:** jeder Schreibvorgang (Zeit, Raum, Aktion, Wert, Grund; seit 0.38 auch die Zeilen des
   Warmwasser-Solls, seit 0.40 die Schritte der Ventilführung mit „Ventil: …“) wird 90 Tage gespeichert
-  – die letzten 20 unter Einstellungen → Diagnose → Protokoll, 200 in der Diagnose-Datei, alle im Export der gelernten
+  – die letzten 20 unter Live → Diagnose → Protokoll, 200 in der Diagnose-Datei, alle im Export der gelernten
   Werte (`steuerung`), ohne Koordinaten.
 - Der Zustand der Regelschleife überlebt einen Neustart; beim Zurückschalten auf „Beobachten“
   wird er gelöscht.
@@ -746,7 +748,7 @@ Plans.
 Wann das Haus schlafen geht, verrät der Stromzähler: Abends fällt der Verbrauch auf das Nachtniveau
 (Standby), morgens steigt er wieder (Kaffeemaschine, Licht, Bad). Seit 0.36 lernt HeatPilot daraus
 den Wochenplan der Nachtabsenkung – als Vorschlag oder, mit dem Häkchen, als wirksame Zeiten.
-Die Sensoren wählst du unter Einstellungen → Entitäten → Strom; das Häkchen steht unter Einstellungen → Steuerung,
+Die Sensoren wählst du unter Einstellungen → Haus → Experte → Strom; das Häkchen steht unter Einstellungen → Räume,
 unter dem Wochenplan (dort auch, welche Sensoren gewählt sind):
 
 - **Leistungssensoren (Haus, ggf. je Phase):** ein oder mehrere Sensoren in W oder kW; die Summe
@@ -1074,7 +1076,7 @@ Raum nichts mehr. Fällt HeatPilot mitten in einem Schritt aus, bleibt der Schri
 Wunschsoll), bis HeatPilot wieder läuft. Schlägt ein Schreibvorgang fehl, gilt der Schritt nicht – erneut nach 15 min,
 ab drei Fehlschlägen in Folge die Meldung wie bei jedem Raum.
 
-**Protokoll:** jeder Schritt im Schreibprotokoll (Einstellungen → Diagnose → Protokoll, Diagnose-Datei, Export) mit „Ventil: früh drosseln (erreicht
+**Protokoll:** jeder Schritt im Schreibprotokoll (Live → Diagnose → Protokoll, Diagnose-Datei, Export) mit „Ventil: früh drosseln (erreicht
 21,0 °C in ≈ 7 min, Ventil dann noch ≈ 64 % offen)“, „Ventil: gemeinsam anfordern (nur Wohnzimmer fordert an, Kessel
 taktet (5 Starts/h) – Bad würde in 60 min ohnehin heizen)“ bzw. „Ventil: zurück (Soll erreicht)“, dazu als geschriebener
 Eintrag im Ventil-Protokoll. Eine Stunde danach trägt HeatPilot nach, was wirklich geschah – jetzt **mit** dem Eingriff;
@@ -1098,14 +1100,14 @@ Assistant: Dienst `number.set_value` auf die Entität des Speicher-Solls, die EM
 (z. B. `number.boiler_dhw_seltemp`, bei älteren EMS-ESP `number.boiler_wwseltemp`). An EMS-ESP selbst schickt
 HeatPilot weiterhin nur Lese-Anfragen; die Schreibregeln für die Thermostate bleiben, wie sie sind.
 
-**Einstellungen → Warmwasser, Schalter „Warmwasser-Soll“** – unabhängig vom Schalter der Raumsteuerung:
+**Einstellungen → Kessel, Schalter „Warmwasser-Soll“** – unabhängig vom Schalter der Raumsteuerung:
 
 - **Aus** (Standard): wie bisher – nur Empfehlung und Vorschau.
 - **Trockenlauf**: HeatPilot rechnet in jedem Takt und schreibt ins Protokoll, was es schreiben würde
   („Trockenlauf: würde 55 °C schreiben (…)“) – nach denselben Regeln wie unten, am Kessel ändert sich nichts.
 - **HeatPilot setzt**: HeatPilot schreibt nach den Regeln unten.
 
-**Entität** (seit 0.39.1 unter Einstellungen → Entitäten → Warmwasser über HeatPilot; unter Warmwasser steht, welche
+**Entität** (seit 0.39.1 unter Einstellungen → Kessel → Warmwasser steuern; unter Warmwasser steht, welche
 gilt): vorgeschlagen aus der Erkennung (Rolle „Warmwasser-Soll“, nur `number`-Entitäten); eine andere lässt
 sich wählen – die Auswahl bietet nur `number`-Entitäten mit °C an, die nicht zu etwas anderem gehören, den Vorschlag
 und Namen mit Warmwasser-Hinweis zuerst. Geschrieben wird nur auf diese eine Entität, nur ganze Grad zwischen Minimum
@@ -1169,9 +1171,9 @@ schreibt Weg W das Speicher-Soll nicht.
 
 **Anzeige:** Übersicht → Status zeigt eine Statuszeile („HeatPilot setzt · 50 °C seit 15:03 · nächste
 Änderung 17:30 → 55 °C“, bei „Beobachten“ „Beobachten · würde 50 °C seit …“, sonst „pausiert – …“), das Protokoll
-(Einstellungen → Diagnose) auch die Warmwasser-Zeilen (geschrieben, würde schreiben, nicht übernommen, fremde Änderung,
+(Live → Diagnose) auch die Warmwasser-Zeilen (geschrieben, würde schreiben, nicht übernommen, fremde Änderung,
 pausiert, wieder eingeschaltet). Bei „Aus“ steht die Zeile nur, solange ein Hinweis gilt (z. B. nach dem
-Zurückschalten); ist Weg W pausiert, steht dort der Knopf „wieder einschalten“. Einstellungen → Warmwasser zeigt
+Zurückschalten); ist Weg W pausiert, steht dort der Knopf „wieder einschalten“. Einstellungen → Kessel zeigt
 denselben Stand ausführlicher (Kessel-Soll, Empfehlung, letztes Schreiben und Prüfen). Die nächste Änderung kommt
 aus der Vorschau, die nach derselben Regel rechnet. Uhrzeiten stehen überall in der Zeitzone deines Browsers (das
 Add-on schickt sie als Zeitpunkte, einen fremden Schreiber als Abstand, „vor 3 h“). Abfragen: `GET api/dhw` (Status
@@ -1205,7 +1207,7 @@ getrennt von Raumsteuerung und Warmwasser, drei Stellungen:
   seit 30 min nicht mehr gemeldet wurde – nach einem Neustart von EMS-ESP wird der Kessel oft vor dem Regler erkannt. Die Werte des Reglers
   in EMS-ESP deshalb nicht unter „Customizations“ für die API ausschließen.
 
-**Entitäten** (Einstellungen → Entitäten → Kessel über HeatPilot; leer = Vorschlag aus der Erkennung):
+**Entitäten** (Einstellungen → Haus → Experte → Kessel über HeatPilot; leer = Vorschlag aus der Erkennung):
 
 - **Vorlauf-Soll** – die `number`-Entität, die EMS-ESP für `selflowtemp` anlegt (z. B. `number.boiler_selflowtemp`).
   Erlaubt ist nur eine `number`-Entität mit °C, die nicht zu etwas anderem gehört: kein Heizkreis (`…_hc1_…`), keine
@@ -1339,7 +1341,7 @@ HeatPilot sie im selben 30-s-Schritt wie das Vorlauf-Soll mit:
 
 Geschrieben wird nur bei „HeatPilot steuert“ (bei „Beobachten“ steht im Protokoll „würde Antipendelzeit … schreiben“),
 nur über Home Assistant auf **die eine** `number`-Entität der Antipendelzeit (leer = erkannt; nur `number` in Minuten;
-wählbar unter Einstellungen → Entitäten → Kessel über HeatPilot → „Antipendelzeit (Entität)“), **ganze Minuten 5–60** und
+wählbar unter Einstellungen → Haus → Experte → Kessel über HeatPilot → „Antipendelzeit (Entität)“), **ganze Minuten 5–60** und
 innerhalb der Grenzen der Entität – alles andere weist `Control` hart ab. Nur bei Änderung ab **5 min**, höchstens
 **alle 15 min**; **60 s** danach prüft HeatPilot, ob der Kessel den Wert zeigt (3 Fehlschläge in Folge: Pause nur dieser
 Funktion). Ändert jemand anderes den Wert, steht das im Protokoll und als Meldung, der neue Wert gilt als Grundwert und
@@ -1398,7 +1400,7 @@ HeatPilot anhalten und nach einer Stunde nachsehen, ob die Automation lief.
    Kessels) höchstens auf die strengste Fußboden-Grenze stellen.
 
 **Anzeige:** Die Karte in den Einstellungen zeigt unter dem Schalter, welche zwei Entitäten gelten (gewählt unter
-Einstellungen → Entitäten → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die Wahl
+Einstellungen → Haus → Experte → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die Wahl
 **„Wenn kein Raum Wärme braucht“** (Pumpe läuft weiter | Heizbetrieb ganz aus, seit 0.46.5), die
 Warnhinweise (der Warnkasten „Regler am Bus“ nur, solange laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt
 ist – sonst, seit 0.48, nur ein kurzer Hinweis auf Wächter und Rückfall-Vorlauf) und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Zuschlag, Takt-Boost,
@@ -1406,7 +1408,7 @@ Fußboden-Grenze), die letzte Entscheidung, zuletzt geschrieben und geprüft, fr
 Wächter mit dem Knopf „Anleitung Wächter“ und – bei einer Pause – „wieder einschalten“. Heizen und Übersicht zeigen eine
 Statuszeile („Kessel: HeatPilot · Vorlauf 42 °C (Wohnzimmer hält 21,0 °C)
 · Boost +4 K“, bei „Beobachten“ „Kessel: Beobachten · würde Vorlauf 42 °C setzen (…)“, sonst „Kessel: gesperrt – Regler
-am Bus …“ bzw. „Kessel: pausiert – …“), das Protokoll (Einstellungen → Diagnose) auch die Kessel-Zeilen (Vorlauf-Soll, Heizbetrieb
+am Bus …“ bzw. „Kessel: pausiert – …“), das Protokoll (Live → Diagnose) auch die Kessel-Zeilen (Vorlauf-Soll, Heizbetrieb
 an/aus, würde schreiben, nicht übernommen, fremde Änderung, pausiert, wieder eingeschaltet, zurückgeschaltet). Die
 Vorschau sagt bei „HeatPilot setzt“ ohne Pause und Sperre „schreibt“ statt „würde schreiben“ – sie zeigt den Plan aus dem
 Bedarf; Abnahme-Untergrenze, Zuschlag und Takt-Boost rechnet HeatPilot live dazu. Abfragen: `GET api/boiler` (Status und
@@ -1414,7 +1416,7 @@ Bereitschaft), `POST api/boiler/resume` („wieder einschalten“ – ohne Pause
 
 ## Benachrichtigungen
 
-Seit 0.38 meldet HeatPilot Probleme an Ziele in Home Assistant – **Einstellungen → Entitäten → Benachrichtigungen**
+Seit 0.38 meldet HeatPilot Probleme an Ziele in Home Assistant – **Einstellungen → Haus → Benachrichtigungen**
 (bis 0.39 eine eigene Karte), Liste mit Häkchen:
 
 - **notify-Entitäten** (Home Assistant ab 2024.6, z. B. `notify.handy`) – geschickt mit der Aktion
@@ -1456,14 +1458,14 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
 - Ausnahme, nur auf deinen Knopfdruck im Reiter „Heizen“: Tado-Timer, Soll und
   Betriebsart der gewählten Räume (siehe oben). Jeder andere Schreibversuch wird im
   Code hart abgewiesen – auch auf den Heizkreis von EMS-ESP, selbst wenn er als Raum gewählt ist.
-- Erst mit dem Schalter **HeatPilot steuert** (Einstellungen → Steuerung) schreibt es die
+- Erst mit dem Schalter **HeatPilot steuert** (Einstellungen → Räume) schreibt es die
   Raum-Solltemperaturen der Räume mit „macht mit“ selbst – mit denselben drei Diensten,
   denselben Räumen und 5–25 °C (siehe „Steuerung“).
-- Erst mit dem eigenen Schalter **„HeatPilot setzt“** (Einstellungen → Warmwasser, seit 0.38) schreibt es am
+- Erst mit dem eigenen Schalter **„HeatPilot setzt“** (Einstellungen → Kessel, seit 0.38) schreibt es am
   Kessel das Speicher-Soll: `number.set_value` über Home Assistant, nur auf die eine eingestellte Entität des
   Warmwasser-Solls, nur ganze Grad zwischen Minimum und Maximum, nur bei Änderung ab 1 K, mit Haltezeit und Prüfung
   nach 60 s (siehe [Weg W](#warmwasser-über-heatpilot-weg-w)). Jede andere `number`-Entität weist der Code hart ab.
-- Meldungen schickt es nur an die gewählten Ziele (Einstellungen → Entitäten → Benachrichtigungen, siehe dort).
+- Meldungen schickt es nur an die gewählten Ziele (Einstellungen → Haus → Benachrichtigungen, siehe dort).
 - Das Ventilverhalten (seit 0.39) lernt und zeigt es nur; was es mit den Thermostaten als Stellglied tun würde,
   protokolliert es im Trockenlauf – geschrieben wird dafür nichts (siehe [Ventilverhalten](#ventilverhalten)).
 
@@ -1577,11 +1579,11 @@ Sensoren vor – für jedes Thermostat mit Gerät in Home Assistant (Tado-Cloud,
 andere): Name und Raum aus dem Bereich, Temperatur/Feuchte/Heizleistung aus den
 Sensoren desselben Geräts, Raumregler bei Wandthermostaten. Vorschläge füllen nur
 leere Felder („Bereiche übernehmen“ trägt den Bereich in leere Raum-Felder ein);
-„macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Entitäten →
+„macht mit“ setzt nie ein Vorschlag, nur du. Was je Raum gilt und was fehlt, zeigt auch Einstellungen → Haus → Experte →
 Räume.
 
 Ist der Regler abgebaut („Regler ist abgebaut“ angehakt, oder EMS-ESP meldet kein Gerät „thermostat“), stehen
-seine Werte auf Einstellungen → Entitäten und in Diagnose → Alle Sensoren als „Regler abgebaut – nicht gebraucht“ und
+seine Werte auf Einstellungen → Haus → Experte und in Diagnose → Alle Sensoren als „Regler abgebaut – nicht gebraucht“ und
 zählen nicht als Problem (seit 0.52.2).
 
 ## Heizen im Lovelace-Dashboard (Gast-Ansicht, seit 0.52)
@@ -1697,7 +1699,7 @@ verloren:
   Stunden gefüllt hat, ersetzt oder entfernt, fragt HeatPilot nach und nimmt diese Stunden zurück (sie waren vorher
   ohne Innentemperatur); „Hausdaten wiederherstellen“ füllt sie danach mit den übrigen Quellen neu. Gesperrt, solange
   Raumänderungen nicht gespeichert sind.
-- **Hausdaten wiederherstellen** (Einstellungen → Erweitert, bei den Hinweisen in Einstellungen → Räume und in der
+- **Hausdaten wiederherstellen** (Einstellungen → Haus → Experte, bei den Hinweisen in Einstellungen → Räume und in der
   Karte „Modelle“; mit Rückfrage, die die alten Sensoren nennt – auch die, die HeatPilot dabei selbst setzt): Räume
   ohne alten Sensor bekommen ihren eindeutigen Vorschlag, dann liest HeatPilot die Langzeitstatistik mit den alten
   Sensoren neu ein – nur zusammenführend: Es ergänzt fehlende Innentemperaturen (berichtigt wie oben), löscht nichts
@@ -1721,7 +1723,7 @@ verloren:
   im Tooltip), ob es eine Heizleistung gab, und warum ein Raum leer blieb. Seit 0.45.1 ergänzt ein neuer Lauf nur:
   Fehlt die Quelle (alter Sensor, Statistik oder Integration gelöscht, Alias entfernt), bleiben die Stunden von früher
   („… h von früher bleiben“).
-- **Aus gespeicherten Daten neu lernen** (Einstellungen → Erweitert): Haus-, Raum- und Ventilmodelle, Lernkurve und
+- **Aus gespeicherten Daten neu lernen** (Einstellungen → Haus → Experte): Haus-, Raum- und Ventilmodelle, Lernkurve und
   Fremdwärme-Ereignisse aus den gespeicherten Stunden- und Messwerten neu berechnen – ab dem ersten eigenen
   Messpunkt auch die Räume. Holt nichts aus Home Assistant und löscht keine Messwerte; Warmwasser- und
   Personenmodelle bleiben, ebenso die Modelle alter Entitäten ohne Raum (mit ihnen ihr Name für „Gelerntes
@@ -1736,7 +1738,7 @@ Heizperiode, ohne Warmwasser und Fremdwärme; Räume plausibel n von m, Ventile 
 Außentemperatur, aber keine Innentemperatur, steht dort ein Hinweis mit „Hausdaten wiederherstellen“ – das
 Hausmodell lernt solche Stunden nicht; auch die Grafik „Wärmebedarf des Hauses“ sagt dann, wie viele Stunden ihr
 fehlen. Darunter: was zuletzt neu gelernt bzw. übernommen wurde. Ein Klick auf die Karte führt zu „Modelle –
-Einzelheiten“ (Einstellungen → Diagnose). Die Kacheln mit Wärmeverlust, Heizlast und Trägheit erscheinen wie bisher erst mit
+Einzelheiten“ (Live → Diagnose). Die Kacheln mit Wärmeverlust, Heizlast und Trägheit erscheinen wie bisher erst mit
 plausiblem Hausmodell – die Karte steht immer da. Plausibel ist ein Raummodell u. a. nur, wenn Heizwirkung/Auskühlen bei
 Heizkörpern zwischen 0,3 und 6 liegt (seit 0.46.5, vorher 3 – große Heizkörper bei kleiner Heizlast), bei Räumen mit
 Fußbodenheizung (seit 0.45) ebenfalls zwischen 0,3 und 6 – große Heizfläche, niedriger Vorlauf.
@@ -1777,7 +1779,7 @@ das Ventil lernt ab jetzt. Alle Wechsel und was verlernt wurde stehen unter Räu
 Seit 0.45.1 braucht HeatPilot eine alte Integration (z. B. Tado-Cloud nach dem Wechsel auf HomeKit) bzw. alte
 Thermostate nicht auf Dauer – was es einmal gelesen hat, gehört HeatPilot:
 
-1. **Hausdaten wiederherstellen** (Einstellungen → Erweitert): liest Temperatur und Heizleistung der alten Sensoren
+1. **Hausdaten wiederherstellen** (Einstellungen → Haus → Experte): liest Temperatur und Heizleistung der alten Sensoren
    ein (Langzeitstatistik, Historie).
 2. **Integration löschen** – nichts weiter nötig. Eingelesene Raum- und Stundenwerte, alte Sensoren (Aliasse) und
    Protokolle bleiben; ein späteres Wiederherstellen ohne die alten Quellen ergänzt nur und löscht nichts.
@@ -1789,13 +1791,13 @@ Einstellungen → Räume steht beim Feld „gibt es in Home Assistant nicht mehr
 
 ### Home Assistant füllt nur Lücken
 
-Die eigene Datenbank ist die Wahrheit. **„Lücken aus Home Assistant füllen“** (Einstellungen → Erweitert, bis 0.43
+Die eigene Datenbank ist die Wahrheit. **„Lücken aus Home Assistant füllen“** (Einstellungen → Haus → Experte, bis 0.43
 „Historie neu einlesen“) liest Langzeitstatistik und Recorder-Historie und ergänzt nur fehlende Zeitpunkte und leere
 Werte; gespeicherte Werte gewinnen, nichts wird gelöscht. Danach lernen Haus-, Raum- und Ventilmodelle neu.
 
 ### Daten aufbewahren
 
-Einstellungen → Erweitert → **Daten aufbewahren (Tage)** (`keep_days`, Standard 720, erlaubt 365–3650): Einmal am Tag
+Einstellungen → Haus → Experte → Erweitert → **Daten aufbewahren (Tage)** (`keep_days`, Standard 720, erlaubt 365–3650): Einmal am Tag
 löscht HeatPilot eigene Rohdaten, die älter sind – Messpunkte, Raum- und Personenwerte, Brennerereignisse,
 Ventil-Ersatzwerte, Fremdwärme-Ereignisse, Stundenwerte und Raumwerte aus der Stundenstatistik. Tageswerte und Gelerntes bleiben. Home Assistant hält seine
 Historie meist nur wenige Tage; HeatPilot hebt seine eigenen Werte also deutlich länger auf. Die Grenze zählt vom neuesten
@@ -1851,7 +1853,7 @@ Der Status steht auf der HeatPilot-Seite im Feld „Leitplanken“.
 
 ## Karten für Home Assistant (seit 0.56)
 
-Einrichtung, Stand des Befehls-Helfers und das YAML der Karten zum Kopieren stehen unter Einstellungen → Erweitert →
+Einrichtung, Stand des Befehls-Helfers und das YAML der Karten zum Kopieren stehen unter Einstellungen → Haus → Experte →
 „Karten für Home Assistant“. Aufteilung: **Raumkachel antippen** öffnet das Thermostat-Pop-up von Home Assistant (Soll,
 Betriebsart eines Raums); **HeatPilot Steuerung** bedient mehrere Räume auf einmal (Boost, Zeitplan, Aus); Pause und
 Einstellungen bleiben der HeatPilot-Seite vorbehalten.
@@ -1977,7 +1979,7 @@ Schichten halten sie vom Lernen fern:
    nur langsamer.
 
 Was ignoriert wurde, steht in der Übersicht unter „Leitplanken“, im Selbsttest
-(Einstellungen → Diagnose) und im Log. Beim Update auf 0.14 wird der Lernstand einmal
+(Live → Diagnose) und im Log. Beim Update auf 0.14 wird der Lernstand einmal
 mit diesem Schutz aus den gespeicherten und den Home-Assistant-Daten neu
 berechnet; „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu einlesen“) macht dasselbe auf Knopfdruck. Seit
 0.44 gewinnen dabei immer die gespeicherten Werte – Home Assistant ergänzt nur, was fehlt –, und Warmwasser- und
@@ -2030,7 +2032,7 @@ solange sie Wärme brauchen. Ein anderer Anschluss bei bleibender Fußbodenheizu
 In Einstellungen → **Urlaub** Zeiträume mit „+ Urlaub“ anlegen: Beginn und Ende
 als Datum, Uhrzeiten optional. Ohne Uhrzeit beim Ende gilt die
 **Standard-Rückkehrzeit** (Vorgabe 18:00). Optional ein **Urlaubs-Schalter**
-(z. B. `input_boolean.urlaub`, an = Urlaub) – zu wählen unter Einstellungen → Entitäten → Personen & Urlaub.
+(z. B. `input_boolean.urlaub`, an = Urlaub) – zu wählen unter Einstellungen → Haus → Experte → Personen & Urlaub.
 
 **Rückkehr – das Live-Signal schlägt den Plan:**
 
@@ -2181,7 +2183,7 @@ alles zutrifft:
 - der Schalter taugt: eine `switch`-Entität, deren Name bzw. Anzeigename nach der Desinfektion aussieht, nie die
   Einmalladung, die Zirkulation, der Heizbetrieb oder ein anderer Kesselschalter; verfügbar, an oder aus; EMS-ESP lässt
   ihn schreiben. Vorgeschlagen aus der Erkennung, wählbar unter
-  **Einstellungen → Entitäten → Warmwasser über HeatPilot → „Desinfektion auslösen (Schalter)“** (die Auswahl bietet
+  **Einstellungen → Kessel → Warmwasser steuern → „Desinfektion auslösen (Schalter)“** (die Auswahl bietet
   nur passende Schalter an).
 
 Geschrieben wird über Home Assistant – `switch.turn_on`/`turn_off` nur auf diese eine Entität, alles andere weist
@@ -2215,11 +2217,11 @@ nächsten Woche (Protokoll „übersprungen“) – außer der Ablauf schlug feh
 schreibt Weg W das Speicher-Soll nicht und Weg B lässt das Vorlauf-Soll in Ruhe (wie bei einer Sonderladung). Wird das
 Warmwasser-Soll mitten im Ablauf umgestellt, bricht er ab – der Kessel beendet die Desinfektion selbst.
 
-**Anzeige:** Einstellungen → Warmwasser zeigt unter dem Termin die Zeile **Auslösen** – „löst HeatPilot aus (So 13:00)“,
+**Anzeige:** Einstellungen → Kessel zeigt unter dem Termin die Zeile **Auslösen** – „löst HeatPilot aus (So 13:00)“,
 „macht der Regler“, „Trockenlauf – würde … auslösen“ oder „aus“ mit Grund –, den Schalter (mit „ändern unter
 Entitäten“), was gerade läuft, wartet oder sperrt, und die letzte Desinfektion mit Ergebnis („zuletzt So., 13.10.,
 13:00: gelungen – 68 °C erreicht“). Dieselbe Zeile steht im Block „Warmwasser über HeatPilot“ von „Bereit für die
-Steuerung?“, die Schritte im Protokoll (Einstellungen → Diagnose) (Desinfektion: eingeschaltet, läuft, gelungen bzw. nicht
+Steuerung?“, die Schritte im Protokoll (Live → Diagnose) (Desinfektion: eingeschaltet, läuft, gelungen bzw. nicht
 gelaufen, verpasst, übersprungen, ausgeschaltet). Geschaltet wird nie aus der Oberfläche – nur zum Termin. Abfrage: `GET api/dhw` →
 `disinfect` (mit Protokoll).
 
@@ -2260,4 +2262,4 @@ Steuerung?“ eine nötige Kesselsteuerung.
 EMS-ESP-Entitäten werden in beiden Schreibweisen erkannt: Kurzname
 (`binary_sensor.boiler_burngas`) und langer Name (`binary_sensor.boiler_gas`),
 auch mit Präfix (`number.ems_esp_thermostat_hc1_remotetemp`). Was gefunden wurde, und eine eigene Wahl je
-Rolle: Einstellungen → [Entitäten](#entitäten).
+Rolle: Einstellungen → Haus → Experte ([Entitäten](#entitäten)).

@@ -1,4 +1,4 @@
-"""0.56.4: Einstellungen → Erweitert → „Karten für Home Assistant“ – api/cards liefert Stand und Entitäten, die Seite
+"""0.56.4: Einstellungen → Haus → Experte → „Karten für Home Assistant“ – api/cards liefert Stand und Entitäten, die Seite
 zeigt Einrichtung und YAML der drei Karten; die Karten bedienen nur noch boost, schedule, mode."""
 
 import asyncio
@@ -28,4 +28,4 @@ def test_settings_page_shows_cards_section():
     page = (Path(__file__).parents[1] / "ems_heatpilot/heatpilot/static/index.html").read_text()
     assert 'card("Karten für Home Assistant"' in page and 'getJSON("api/cards")' in page
     assert "custom:heatpilot-control-card" in page and "custom:heatpilot-boost-card" not in page
-    assert 'if (SET_PAGE === "erweitert") loadCards()' in page
+    assert 'if (SET_PAGE === "haus") loadCards()' in page

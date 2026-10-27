@@ -224,9 +224,9 @@ def test_collect_reads_only_the_choice():
 def _targets() -> tuple[set[str], set[str]]:
     js = script()
     cards = set(re.findall(r'card\("([^"]+)"', between(js, "function renderSettings()", "\nfunction ")))
-    # 0.43: zehn Unterseiten der Einstellungen (Startliste SET_PAGES), „Diagnose“ die letzte
-    pages = set(re.findall(r'\["\w+", "([^"]+)", "\w+"\]', source(js, "SET_PAGES")))
-    assert {"Grundlagen", "Räume", "Entitäten", "Steuerung", "Warmwasser", "Kessel", "Diagnose"} <= pages
+    # 0.58: drei Seiten der Einstellungen (Startseite SET_PAGES)
+    pages = set(re.findall(r'\["\w+", "([^"]+)"\]', source(js, "SET_PAGES")))
+    assert pages == {"Räume", "Kessel", "Haus"}
     return cards | pages, {title for title, _ in em.GROUPS.values()}
 
 
@@ -237,7 +237,7 @@ def _refs(text: str):
 
 def test_settings_references_name_existing_cards():
     cards, groups = _targets()
-    assert {"Steuerung", "Verbindung", "Räume", "Warmwasser", "Kessel", "Grundlagen", "Diagnose"} <= cards  # 0.43: Unterseiten
+    assert {"Verbindung", "Räume", "Kessel", "Haus"} <= cards  # 0.58: Seiten
     assert "Messwerte" not in cards
     files = [*sorted(PKG.glob("*.py")), PKG / "static" / "index.html", ROOT / "ems_heatpilot" / "DOCS.md",
              ROOT / "README.md"]
@@ -249,22 +249,22 @@ def test_settings_references_name_existing_cards():
             name = next((c for c in sorted(cards, key=len, reverse=True) if ref.startswith(c)), None)
             if name is None:
                 bad_refs.append((f.name, ref[:40]))
-            elif name == "Entitäten" and ref.startswith("Entitäten → "):
-                if not any(ref[len("Entitäten → "):].lstrip("*„").startswith(g) for g in groups):
+            elif ref.startswith("Haus → Experte → "):
+                if not any(ref[len("Haus → Experte → "):].lstrip("*„").startswith(g) for g in groups | cards):
                     bad_refs.append((f.name, ref[:40]))
-    assert bad_refs == []
+    assert bad_refs == [], bad_refs
 
 
 def test_fixed_references(tmp_path):
     js = script()
-    assert 'off("keine Wetter-Entität", "Einstellungen → Entitäten → Außen & Wetter")' in js
-    assert "Schalter und Entität unter Einstellungen → Warmwasser." in js  # 0.43: Schreib-Entität bei ihrer Funktion
+    assert 'off("keine Wetter-Entität", "Einstellungen → Haus → Experte → Außen & Wetter")' in js
+    assert "Schalter und Entität unter Einstellungen → Kessel." in js  # 0.43: Schreib-Entität bei ihrer Funktion
     eng, _, _, _ = make(tmp_path, cfg=Config.from_raw({"control_mode": "heatpilot",
                                                         "rooms": [{"climate": "climate.wz", "managed": True}]}),
                         rooms=[wz()], outdoor=["sensor.out"])
     eng.found.persons = []
     notes = readiness.assess(eng, ts_of(MON, 12))["notes"]
-    assert "Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Anwesenheit & Urlaub)" in notes
+    assert "Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Haus)" in notes
 
 
 # ------------------------------------------------------------------ 6. Außenfühler am Kessel nur über EMS-ESP

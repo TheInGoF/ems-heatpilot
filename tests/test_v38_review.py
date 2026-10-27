@@ -418,7 +418,7 @@ def test_r9_low_minimum_is_visible(tmp_path):
     assert rd["level"] == "eingeschränkt" and rd["limits"] == [
         "Minimum 30 °C liegt unter 50 °C – HeatPilot schreibt so tiefe Werte wirklich an den Kessel, und bei einem "
         "Ausfall bleiben sie stehen (Legionellen) – nur mit regelmäßiger Desinfektion (Termin unter Einstellungen → "
-        "Warmwasser)"]
+        "Kessel)"]
     eng2, _, _ = make(tmp_path / "b", dhw_min_temp=40, dhw_disinfect_day="So")
     rd2 = readiness.dhw(eng2, t)
     assert rd2["level"] == "bereit" and any("die wöchentliche Desinfektion ist eingetragen" in n for n in rd2["notes"])

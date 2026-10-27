@@ -133,7 +133,7 @@ def test_card_status_lines_log_ready_and_save_are_wired():
     rs = between(js, "function renderSettings()", "function addVac()")
     # 0.43: Unterseite „Kessel“ – erst Kesseldaten, dann der Schalter mit seinen zwei Entitäten (E3)
     assert re.findall(r'card\("([^"]+)"', rs).index("Kessel steuern") == re.findall(r'card\("([^"]+)"', rs).index("Kesseldaten") + 1
-    assert 'card("Kessel steuern", boilerSectionHtml(s, BOILC) + emInline("kessel_hp"))) +' in rs
+    assert 'card("Kessel steuern", boilerSectionHtml(s, BOILC) + emInline("kessel_hp")), true) +' in rs  # 0.58: oben auf „Kessel“
     assert "boilerModeHint(); boilerScroll();" in rs
     assert "BOILC = j.boiler_control || null;" in between(js, "async function loadSettings()", "let OV_STALE")
     # Statuszeile unter der des Warmwassers – seit 0.43 nur in Übersicht → Status; heatPost behält den Kessel-Status
@@ -309,7 +309,7 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
     assert rows[9:] == ["letzte Prüfung noch keine", "pausiert nein", "fremder Schreiber in den letzten 24 h keiner"]
     assert 'id="ready-boiler-hp-details" open' in g["ready"] and 'id="ready-boiler-hp-details" open' not in g["closed"]
     assert plain(g["ready"]).endswith("Schalter und „Anleitung Wächter“ unter Einstellungen → Kessel über HeatPilot, "
-                                      "Entitäten unter Einstellungen → Entitäten → Kessel über HeatPilot.")
+                                      "Entitäten unter Einstellungen → Haus → Experte → Kessel über HeatPilot.")
     # Trockenlauf: „würde …“, ohne Knopf und Link
     t, tb = r["trocken"], out["trocken"][0]
     assert tb["status_text"].startswith("Kessel: Beobachten · würde Vorlauf 46 °C setzen (Wz")
@@ -362,7 +362,7 @@ def test_mode_hint_confirm_and_old_answers(tmp_path):
                                      status_text: "Kessel: aus – Regler bzw. Kessel regeln selbst" }}),
             old: boilerSectionHtml({{ boiler_control: "kaputt" }}, null) }});""")
     assert r["aus"] == "Wie bisher: Regler bzw. Kessel regeln selbst – HeatPilot rechnet den Kessel nicht und schreibt nichts."
-    assert r["trocken"].startswith("HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Einstellungen → Diagnose)")
+    assert r["trocken"].startswith("HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Live → Diagnose)")
     assert "Geht auch mit Regler am Bus" in r["trocken"]
     assert plain(r["hp"]) == f"HeatPilot schreibt das Vorlauf-Soll auf {FLOW} und schaltet den Heizbetrieb über {HEAT} – nur ohne Regler am Bus."
     assert r["back"].endswith("Beim Zurückschalten schreibt HeatPilot einmal 45 °C Vorlauf und Heizbetrieb an – danach den Regler "
@@ -371,7 +371,7 @@ def test_mode_hint_confirm_and_old_answers(tmp_path):
     assert "schreibt HeatPilot nichts zurück – der Rückfall-Vorlauf läge unter 35 °C" in r["backNone"]
     assert "Zurzeit gesperrt: EMS-ESP meldet einen Regler." in plain(r["reg"])
     assert "Zurzeit gesperrt: ob ein Regler am Bus ist, ist unbekannt." in plain(r["unknown"])
-    assert plain(r["noHeat"]) == "Keine Entität für den Heizbetrieb – unter Entitäten wählen, sonst schreibt HeatPilot nichts."
+    assert plain(r["noHeat"]) == "Keine Entität für den Heizbetrieb – unter Experte wählen, sonst schreibt HeatPilot nichts."
     assert "über switch.neu" in plain(r["picked"])  # die Wahl unter „Entitäten“ zählt sofort
     assert r["asks"] == [True, True, True] and len(r["asked"]) == 1  # nur beim Umschalten auf „HeatPilot setzt“
     assert r["asked"][0].startswith("Ab jetzt schreibt HeatPilot Vorlauf-Soll und Heizbetrieb des Kessels – aber nur, solange "
@@ -459,7 +459,7 @@ def test_preview_says_writes_for_the_boiler(tmp_path):
     assert "würde schreiben: " in plain(r["dTip"]) and "schreibt: " not in plain(r["dTip"])
     assert "Kessel über HeatPilot ist gesperrt (Regler am Bus) – Vorlauf und Heizbetrieb sind hier nur Vorschau." in r["blocked"]
     assert "Kessel über HeatPilot ist pausiert – Vorlauf und Heizbetrieb sind hier nur Vorschau." in r["paused"]
-    assert "Kessel steuern steht auf „Beobachten“ – was es live schreiben würde, steht im Protokoll (Einstellungen → Diagnose)." in r["dry"]
+    assert "Kessel steuern steht auf „Beobachten“ – was es live schreiben würde, steht im Protokoll (Live → Diagnose)." in r["dry"]
 
 
 def test_notify_recommends_the_phone_app(tmp_path):

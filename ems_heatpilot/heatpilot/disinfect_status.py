@@ -1,6 +1,6 @@
 """Anzeige des Auslösens der Desinfektion (seit 0.42): wer sie macht, Stand, letztes Ergebnis – nur lesen.
 
-``info`` sagt für Einstellungen → Warmwasser, Übersicht und „Bereit für die Steuerung?“, wer die Desinfektion zum Termin
+``info`` sagt für Einstellungen → Kessel, Übersicht und „Bereit für die Steuerung?“, wer die Desinfektion zum Termin
 auslöst – „Desinfektion: löst HeatPilot aus (So 17:30)“, „macht der Regler“ (Regler am Bus), „Trockenlauf“ oder „aus“ –,
 ob gerade etwas sperrt, ob ein Ablauf läuft und wie die letzte ausging. ``ready`` macht daraus Einschränkungen und
 Hinweise für den Block „Warmwasser über HeatPilot“ (ändert die Stufe der Raumsteuerung nicht). ``DisinfectStatus`` ist
@@ -30,7 +30,7 @@ ACT_DRY, ACT_RUN, ACT_DONE, ACT_FAIL, ACT_MISSED, ACT_ABORT, ACT_SWITCH, ACT_SKI
 ACTIONS = (ACT_ON, ACT_OFF, ACT_DRY, ACT_RUN, ACT_DONE, ACT_FAIL, ACT_MISSED, ACT_ABORT, ACT_SWITCH, ACT_SKIP)
 LOG_ROOM, LOG_NAME = "disinfect", "Desinfektion"
 
-# Hinweis je Stand (Einstellungen → Warmwasser; die Kachel der Übersicht zeigt den Teil vor „ – “)
+# Hinweis je Stand (Einstellungen → Kessel; die Kachel der Übersicht zeigt den Teil vor „ – “)
 HINT_HEATPILOT = ("HeatPilot löst sie aus – zum Termin schaltet es den Schalter „Desinfizieren“ und prüft, ob der "
                   "Speicher die Desinfektionstemperatur erreicht")
 HINT_REGULATOR = ("Der Regler macht sie – er ist am Bus und desinfiziert selbst, seinen Termin hier eintragen; "

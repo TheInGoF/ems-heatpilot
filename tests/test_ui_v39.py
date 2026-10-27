@@ -348,9 +348,9 @@ def test_css_rules_and_theme_tokens():
     # neue Regeln nutzen nur Farben, die es in beiden Themen gibt (dunkel umdefiniert bzw. gleich: --good)
     new = between(css, "/* Ventile (0.39)", "/* Warmwasser über HeatPilot (0.38)")
     used = set(re.findall(r"var\((--[\w-]+)\)", new))
-    assert used <= {"--border", "--text-primary", "--text-secondary", "--good", "--surface-1"}, used
+    assert used <= {"--border", "--text-primary", "--text-secondary", "--good", "--surface-1", "--fs-text", "--fs-small"}, used
     dark = between(css, ':root[data-theme="dark"] {', "}")
-    assert all(f"{t}:" in dark for t in used - {"--good"})
+    assert all(f"{t}:" in dark for t in used - {"--good", "--fs-text", "--fs-small"})
 
 
 def test_inline_script_is_valid_javascript(tmp_path):

@@ -1,6 +1,6 @@
 """Weg W (seit 0.38): HeatPilot setzt das Warmwasser-Soll des Kessels – der einzige Schreibweg zum Kessel.
 
-Schalter ``dhw_control`` (Einstellungen → Warmwasser), unabhängig von der Raumsteuerung (``control_mode``):
+Schalter ``dhw_control`` (Einstellungen → Kessel), unabhängig von der Raumsteuerung (``control_mode``):
 
 * ``aus`` (Standard) – wie bisher: nur Empfehlung und Vorschau,
 * ``trocken`` – rechnet im Takt und protokolliert „würde schreiben X °C (Grund)“ (``control_log``, Aktion

@@ -56,7 +56,7 @@ def test_control_card_has_power_section_lists_and_checkbox():
     assert "${powerRef(power, powerEx, missing)}" in card
     ref = between(js, "function powerRef(power, powerEx, missing) {", "function modeHint()")
     assert "Leistungssensoren: ${power.length ? list(power) : \"keine gewählt – die Funktion ist aus\"}" in ref
-    assert "onclick=\"emGo('strom');return false\">ändern unter Entitäten</a>" in ref
+    assert "onclick=\"emGo('strom');return false\">ändern unter Experte</a>" in ref
     from heatpilot.entity_map import FIELD_ENTRIES
     assert FIELD_ENTRIES["power_sensors"][1] == "Leistungssensoren (Haus, ggf. je Phase)"
     assert "bei drei Phasen alle drei" in FIELD_ENTRIES["power_sensors"][5]
@@ -123,7 +123,7 @@ def test_overview_schedule_marks_learned_source():
     assert "const sl = s.sleep || {}, powered = (sl.sensors || []).length > 0;" in box
     assert "aus dem Hausstromverbrauch gelernt (${sl.nights || 0} Nächte, Median der letzten ${sl.weeks || 6} Wochen)" in box
     # Beobachten: nur Hinweis auf den Vorschlag
-    assert "Vorschlag unter Einstellungen → Steuerung, wirksam erst bei „HeatPilot steuert“" in box
+    assert "Vorschlag unter Einstellungen → Räume, wirksam erst bei „HeatPilot steuert“" in box
 
 
 def test_docs_describe_power_settings():

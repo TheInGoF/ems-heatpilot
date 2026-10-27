@@ -1,7 +1,7 @@
 """0.42: Oberfläche zu „Desinfektion auslösen“ und „Mindestleistung“ – statische Prüfung und Texte in Node.
 
 Wie tests/test_ui_v41.py: die Oberfläche ist eine HTML-Datei ohne Build. Geprüft wird der Einbau (Zeile „Auslösen“ in
-Einstellungen → Warmwasser mit Zustand und letzter Desinfektion; Zeile im Block „Warmwasser über HeatPilot“ von „Bereit
+Einstellungen → Kessel mit Zustand und letzter Desinfektion; Zeile im Block „Warmwasser über HeatPilot“ von „Bereit
 für die Steuerung?“; neue Rolle „Desinfektion auslösen (Schalter)“ auf der Seite „Entitäten“ mit Auswahl nur passender
 Schalter; Vorschlag der kleinsten Leistung mit Knopf „übernehmen“ in Haus & Kessel; Desinfektions-Zeilen im Protokoll),
 dass die Oberfläche nichts schaltet und nichts speichert (der Knopf füllt nur das Feld) und die Texte – in Node mit
@@ -283,7 +283,7 @@ def test_entities_page_offers_only_the_disinfect_switch(tmp_path):
 
 def test_docs_and_changelog_name_the_places():
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
-    for text in ("Einstellungen → Warmwasser", "**Auslösen**", "Einstellungen → Entitäten → Warmwasser über HeatPilot",
+    for text in ("Einstellungen → Kessel", "**Auslösen**", "Einstellungen → Kessel → Warmwasser steuern",
                  "„Desinfektion auslösen (Schalter)“", "Einstellungen → Kessel"):  # 0.43: Unterseite Kessel
         assert text in docs, text
     head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.42.0")[1].split("\n## ")[0]  # seit 0.42.1
