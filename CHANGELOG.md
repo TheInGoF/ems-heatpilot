@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.59.2
+- **Fehlerbericht** (Konzeptpapier, Abschnitt 8 „Diagnose und Logs“): neuer Knopf oben in Live → Diagnose → Dateien, `GET api/report?hours=12|24` (`report.py`). ZIP mit `info.json` (Version, Kesselmodell aus der Geräteregistry von Home Assistant, Thermostatstufe 1–3 je Raum, Schalter, Selbsttest), `langzeit_30_tage.json` (das Gelernte mit Stundenwerten, `diagnostics.export`) und `kurzzeit_<h>h.csv` (30-s-Werte). **Anonymisiert:** Raum-, Bereichs-, Personen- und Ortsnamen, Gerätenamen, Raumkennungen und Entitäten ersetzt („Raum 1“, `climate.raum_1`, `sensor.e1` …), Koordinaten, EMS-ESP-Adresse und Benachrichtigungsziele entfernt; EMS-ESP-Entitäten bleiben lesbar
+- **„Fehler auf GitHub melden“:** öffnet das neue Issue-Formular `.github/ISSUE_TEMPLATE/fehler.yml` – vorher eine ausdrückliche Rückfrage zum Datenschutz (auch anonymisiert zeigen die 30-s-Werte, wann jemand zu Hause ist und schläft); das Formular verlangt dieselbe Bestätigung als Pflicht-Häkchen
+- **Volle Daten eingeklappt:** Diagnose-Datei, Gelerntes und 30-s-Werte stehen jetzt unter „Volle Daten – Achtung, sensible Daten“
+- Tests: `tests/test_report592.py`
+
 ## 0.59.1
 - **Klimaanlagen sind keine Räume** (Konzeptpapier, Abschnitt 8 „Automatische Raumerkennung“): climate-Entitäten mit den Betriebsarten `cool`, `dry`, `fan_only` oder `heat_cool` schlägt die Erkennung nie mehr als Raum vor – weder im Betrieb ohne gespeicherte Räume noch in den Einstellungen (`discovery.is_air_conditioner`), auch nicht von Tado oder HomeKit
 - Schon vorhanden und in der Doku klargestellt: Räume kommen automatisch aus den Climate-Entitäten, mehrere Thermostate im selben Home-Assistant-Bereich bilden einen Raum, und abgewählte Räume bleiben abgewählt, sobald Räume gespeichert sind (auch nach Updates und neuer Suche)

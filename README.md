@@ -129,7 +129,8 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 
 HeatPilot ist ein Hobbyprojekt. Getestet ist es an **einer** Anlage – der des Entwicklers. Alles andere gilt als
 „Community / ungetestet“: Es kann funktionieren, einen Anspruch auf Hilfe für fremde Anlagen gibt es nicht. Fehler
-bitte mit Export als Issue melden (Live → Diagnose); Wünsche für andere Hardware nur mit eigenem Test.
+bitte mit dem anonymisierten **Fehlerbericht** als Issue melden (Live → Diagnose → Dateien → „Fehler auf GitHub
+melden“); Wünsche für andere Hardware nur mit eigenem Test.
 
 **Kessel:** ausschließlich mit **EMS-Bus über EMS-ESP**. Andere Kessel (OpenTherm, eBUS, Wärmepumpen) werden nicht
 unterstützt. Ohne Kesselsteuerung bleibt HeatPilot eine lernende Raumsteuerung nach Anwesenheit und gelernten Zeiten.

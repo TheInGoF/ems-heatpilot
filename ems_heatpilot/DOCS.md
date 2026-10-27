@@ -222,6 +222,16 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   Erweitert) schreibt zusätzlich jeden Takt mit allen Messwerten.
 - **Log-Datei** – rotierend (5 × 2 MB) unter `/addon_configs/<slug>/logs/heatpilot.log`,
   erreichbar über Samba oder den File-Editor.
+- **Fehlerbericht herunterladen** (seit 0.59.2, oben in „Dateien“) – eine ZIP-Datei für ein Issue auf GitHub,
+  **anonymisiert**: Raum-, Bereichs-, Personen- und Ortsnamen, Gerätenamen und Entitäten sind durch „Raum 1“,
+  „Person 1“, „Ort 1“, `climate.raum_1`, `sensor.e1` … ersetzt, Koordinaten, EMS-ESP-Adresse und
+  Benachrichtigungsziele fehlen; die Entitäten von EMS-ESP (`boiler_…`, `thermostat_…`) bleiben lesbar. Drin:
+  `info.json` (Version, Kesselmodell aus der Geräteregistry, Thermostatstufe je Raum, die drei Schalter, Selbsttest),
+  `langzeit_30_tage.json` (das Gelernte mit den Stundenwerten der letzten 30 Tage) und `kurzzeit_12h.csv` bzw.
+  `kurzzeit_24h.csv` (die 30-s-Werte). **„Fehler auf GitHub melden“** öffnet das vorbereitete Issue-Formular – vorher
+  fragt HeatPilot nach: Auch anonymisiert zeigt der Bericht, besonders mit den 30-s-Werten, wann jemand zu Hause ist
+  und schläft; das Formular verlangt dieselbe Bestätigung. Die folgenden Dateien stehen darunter eingeklappt unter
+  **„Volle Daten – Achtung, sensible Daten“**: nicht anonymisiert, nur für die Entwicklung, nie öffentlich posten.
 - **Diagnose-Datei herunterladen** – Log, Selbsttest, Einstellungen, erkannte
   Entitäten und deren Zustände, gelernte Modelle, Datenbank-Übersicht und die
   Messwerte der letzten 48 Stunden als JSON. **Ohne GPS-Koordinaten** (weder

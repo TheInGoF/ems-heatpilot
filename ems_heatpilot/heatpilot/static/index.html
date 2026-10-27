@@ -810,8 +810,16 @@ ul.rules li { margin: 3px 0; }
     </div>
     <div class="card diag-files" id="diag-files">
       <h2>Dateien</h2>
+      <p>Fehlerbericht für ein Issue auf GitHub – anonymisiert: Raum-, Personen- und Ortsnamen und Entitäten ersetzt, ohne GPS. Drin: Langzeit (30 Tage, stündlich, mit dem Gelernten), Kurzzeit (30-s-Werte) und Version, Thermostatstufen, Kesselmodell.</p>
+      <div class="row"><select id="report-hours" class="sel" onchange="$('report-btn').href = 'api/report?hours=' + this.value">
+        <option value="12">Kurzzeit 12 h</option><option value="24" selected>Kurzzeit 24 h</option></select>
+        <a class="btn primary" id="report-btn" href="api/report?hours=24" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-report')">Fehlerbericht herunterladen</a>
+        <a class="btn" id="issue-btn" href="https://github.com/TheInGoF/ems-heatpilot/issues/new?template=fehler.yml" target="_blank" rel="noopener" style="text-decoration:none" onclick="return issueConfirm()">Fehler auf GitHub melden</a></div><div class="dl-msg muted" id="dl-report"></div>
+      <p class="hint" id="report-privacy">Auch anonymisiert zeigt der Bericht – besonders die 30-s-Werte –, wann jemand zu Hause ist und schläft. Erst ansehen, dann hochladen.</p>
+      <details class="fold sensitive" id="diag-full"><summary>Volle Daten <span class="msg-warn">– Achtung, sensible Daten</span></summary>
+      <p class="warnbox">Nicht anonymisiert: echte Namen, Entitäten, Log und Anwesenheit. Nur weitergeben, wem du vertraust – nicht öffentlich posten.</p>
       <p>Für die Fehlersuche: Log, Einstellungen, Modelle und 48 h Messwerte – ohne GPS und Zugangsdaten.</p>
-      <div class="row"><a class="btn primary" href="api/diagnostics/bundle" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-diag')">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div><div class="dl-msg muted" id="dl-diag"></div>
+      <div class="row"><a class="btn" href="api/diagnostics/bundle" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-diag')">Diagnose-Datei herunterladen</a><span class="muted" id="diag-logfile"></span></div><div class="dl-msg muted" id="dl-diag"></div>
       <p>Alles Gelernte als Klartext zum Nachrechnen – ohne GPS.</p>
       <div class="row"><select id="export-days" class="sel">
         <option value="7">7 Tage</option><option value="14" selected>14 Tage</option><option value="30">30 Tage</option></select>
@@ -821,7 +829,8 @@ ul.rules li { margin: 3px 0; }
       <div class="row"><select id="live-export-hours" class="sel" onchange="$('live-export-btn').href = 'api/live/export?hours=' + this.value">
         <option value="12">12 h</option><option value="24" selected>24 h</option><option value="48">48 h</option></select>
         <a class="btn" id="live-export-btn" href="api/live/export?hours=24" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-live')">30-s-Werte herunterladen</a></div><div class="dl-msg muted" id="dl-live"></div>
-      <details class="more" style="margin-top:8px"><summary>Was steht drin? <span class="m"></span></summary><div>Diagnose-Datei: Log, Selbsttest, Einstellungen, erkannte Entitäten, gelernte Modelle und die Messwerte der letzten 48 Stunden – ohne GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten; du kannst sie zur Fehlersuche weitergeben. Gelernte Werte: alles, was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in Klartext mit Gütemaß, dazu die Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage. Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. 30-s-Werte (seit 0.49.2): je Zeile Zeit, Kesselwerte (Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Starts, Druck) und je Raum Ist, Soll, Ventil und Feuchte – ohne Personen und GPS.</div></details>
+      <details class="more"><summary>Was steht drin? <span class="m"></span></summary><div>Diagnose-Datei: Log, Selbsttest, Einstellungen, erkannte Entitäten, gelernte Modelle und die Messwerte der letzten 48 Stunden – ohne GPS-Koordinaten (nur Entfernungen) und ohne Zugangsdaten; du kannst sie zur Fehlersuche weitergeben. Gelernte Werte: alles, was HeatPilot gelernt hat – Haus, Räume, Warmwasser, Zeiten, Gewohnheiten – in Klartext mit Gütemaß, dazu die Lernkurve, alle Stundenwerte und die Messwerte der gewählten Tage. Damit lässt sich nachrechnen, ob ein Modell etwas falsch verstanden hat. 30-s-Werte (seit 0.49.2): je Zeile Zeit, Kesselwerte (Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Starts, Druck) und je Raum Ist, Soll, Ventil und Feuchte – ohne Personen und GPS.</div></details>
+      </details>
     </div>
     <div class="card">
       <details class="fold" style="border-top:0;margin-top:0;padding-top:0"><summary>Gefundene Entitäten <span class="muted">– Rohdaten der Erkennung</span></summary><pre id="disc"></pre></details>
@@ -4495,6 +4504,11 @@ async function valveRelearn(btn) {
 // Deshalb holt die Seite die Datei selbst (wie die übrigen Abfragen) und bietet danach Speichern, Teilen und Kopieren an –
 // jeder Knopf ist ein eigener Klick, so lässt auch iOS das Teilen zu.
 let DL = null;  // {blob, name}
+// 0.59.2: vor dem Melden auf GitHub ausdrücklich bestätigen – auch anonymisiert verraten die Daten den Tagesablauf
+function issueConfirm() {
+  return confirm("Fehler auf GitHub melden\n\nAlles, was du dort hochlädst, ist öffentlich. Auch der anonymisierte Fehlerbericht zeigt – " +
+    "besonders mit den 30-s-Werten –, wann jemand zu Hause ist und schläft.\n\nNur den Fehlerbericht anhängen, nie die vollen Daten. Weiter?");
+}
 async function dlClick(ev, link, msgId) {
   ev.preventDefault();
   const msg = $(msgId);
