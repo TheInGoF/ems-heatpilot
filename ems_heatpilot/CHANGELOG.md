@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.58.1
+- Doku: was unterstützt wird, Thermostatstufen
+- Doku: externe Regler wie ES73 vorher abbauen
+
 ## 0.58.0
 - Einstellungen: drei Kacheln Räume, Kessel, Haus
 - Seltenes unter „Experte“ am Seitenende

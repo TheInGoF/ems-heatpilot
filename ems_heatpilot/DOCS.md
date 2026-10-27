@@ -4,9 +4,13 @@ Lokale, selbstlernende Heizungsoptimierung für Kessel mit
 [EMS-ESP](https://github.com/emsesp/EMS-ESP32) ([Doku](https://emsesp.org)),
 Tado und Anwesenheit.
 
-> **Beta (0.x): Raumregelung mit Tado** – über die Tado-Cloud-Integration oder lokal
-> über die Tado-Bridge in HomeKit (`homekit_controller`). Andere, direkt mit Home
-> Assistant verbundene Thermostate sollen später unterstützt werden.
+> **Beta (0.x).** Getestet an einer Anlage: EMS-Kessel über EMS-ESP mit Tado V3 (Stufe 1, indirekt über das Soll)
+> und Shelly TRV (Stufe 3, Ventil direkt). Andere EMS-Kessel und Thermostate gelten als „Community / ungetestet“,
+> ohne Anspruch auf Hilfe. Kessel ohne EMS-Bus werden nicht unterstützt.
+
+> **Voraussetzung, bevor HeatPilot den Kessel steuert:** Externe Heizungsregler, die Vorlauf-Soll oder Heizbetrieb
+> selbst schreiben (z. B. **ES73**, RC310, RC35 am EMS-Bus), abbauen oder abschalten – sie überschreiben sonst
+> regelmäßig die Werte von HeatPilot. Zum Beobachten und Lernen dürfen sie bleiben.
 
 ## Einrichten
 
