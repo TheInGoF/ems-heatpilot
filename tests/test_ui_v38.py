@@ -117,7 +117,7 @@ def test_status_lines_log_and_settings_are_wired():
     page, js = html(), script()
     # 0.43: keine Warmwasser-Zeile mehr im Heizen – sie steht in Übersicht → Status (erster Abschnitt), aus api/heat
     # (renderOvStatus aus renderHeat) und aus api/summary (load)
-    assert 'id="heat-dhw"' not in page and '<h3 class="st-h">Warmwasser</h3><p class="sub dhw-line" id="ov-dhw" hidden></p>' in page
+    assert 'id="heat-dhw"' not in page and '<p class="sub dhw-line" id="ov-dhw" hidden></p>' in page
     assert page.index('id="ov-status"') < page.index('<p class="sub" id="status">Lade …</p>')
     render = between(js, "function renderHeat()", "function act(")
     assert "renderOvStatus();" in render and "renderHeatLog(c, j.dhw);" in render

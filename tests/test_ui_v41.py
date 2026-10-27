@@ -138,7 +138,7 @@ def test_card_status_lines_log_ready_and_save_are_wired():
     assert "BOILC = j.boiler_control || null;" in between(js, "async function loadSettings()", "let OV_STALE")
     # Statuszeile unter der des Warmwassers – seit 0.43 nur in Übersicht → Status; heatPost behält den Kessel-Status
     assert 'id="heat-boiler"' not in page
-    assert '<h3 class="st-h">Kessel</h3><p class="sub dhw-line" id="ov-boiler" hidden></p>' in page
+    assert '<p class="sub dhw-line" id="ov-boiler" hidden></p>' in page
     assert page.index('id="ov-dhw"') < page.index('id="ov-boiler"') < page.index('id="ov-last"')
     assert 'renderBoilerLine("ov-boiler", j.boiler);' in between(js, "function renderOvStatus(lines = true) {", "\n}\n")
     assert 'renderBoilerLine("ov-boiler", s.boiler_control);' in between(js, "async function load() {", '$("tiles").innerHTML')

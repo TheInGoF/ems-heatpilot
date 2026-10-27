@@ -130,7 +130,7 @@ def test_diagnose_page_order_and_limits():
     page, js = html(), script()
     diag = between(page, '<div id="view-diag">', "\n  </div>\n")
     titles = re.findall(r"<h2>([^<]+)</h2>", diag)
-    assert titles == ["Selbsttest", "Bereit für die Steuerung?", "Modelle – Einzelheiten", "Protokoll", "Alle Sensoren", "Log", "Dateien"]
+    assert titles == ["Selbsttest", "Bereit für die Steuerung?", "Modelle", "Modelle – Einzelheiten", "Protokoll", "Alle Sensoren", "Log", "Dateien"]
     assert diag.count("Nur Anzeige") == 1 and '<pre id="disc"></pre>' in diag  # Gefundene Entitäten zugeklappt hier
     assert "Nur Anzeige" not in source(js, "dhwReadyHtml") and "docs/planung" not in source(js, "boilerHtml")
     assert "const LOG_MAX = 5, LOG_CUT = 200;" in js and "const SENSOR_MAX = 50" in js
@@ -236,7 +236,9 @@ def test_overview_status_section_is_first_and_complete():
     ov = between(page, '<section id="view-overview" hidden>', "</section>")
     assert between(ov, '<div id="ov-start">', "</div>").lstrip().startswith('<div class="card ov-status" id="ov-status">')
     heads = re.findall(r'<h3 class="st-h">([^<]+)</h3>', between(ov, 'id="ov-status"', '<p class="sub" id="status">'))
-    assert heads == ["Räume", "Wetter", "Warmwasser", "Kessel", "Zuletzt geschrieben"]  # 0.55: Wetter
+    assert heads == ["Räume", "Kessel und Warmwasser", "Zuletzt geschrieben"]  # 0.58: Wetter nur in der Wetter-Karte
+    assert '$("ov-bars").innerHTML = ovBarsHtml(j);' in source(js, "renderOvStatus")
+    assert 'if (!$("view-overview").hidden) loadOvNow()' in source(js, "loadHeat")
     st = source(js, "renderOvStatus")
     assert 'renderDhwLine("ov-dhw", j.dhw); renderBoilerLine("ov-boiler", j.boiler);' in st  # „wieder einschalten“ dort
     assert "ovRoomsHtml(c, j.readiness || (sum && sum.readiness), sum)" in st and "ovLastHtml(c, d)" in st
@@ -366,7 +368,6 @@ def test_jumps_go_through_open_settings_and_open_overview():
     oo = source(js, "openOverview")
     assert "const [p, a0] = OV_ANCHOR[page] || [page, anchor];" in oo and "ovPage(p);" in oo
     assert 'const OV_ANCHOR = { status: ["start", "ov-status"], raeume: ["raeume", "ov-rooms"], ersparnis: ["haus", "ov-save"] };' in js
-    assert 'showTab("diag");' in source(js, "openModels")  # alter Sprung, landet über showTab in der Unterseite
 
 
 # ---------------------------------------------------------------- Schritte 8–10: Begriffe, Kurztexte, Abnahme (7.2)
