@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.57.0
+- Warmwasser-Ladung löst keine Pause mehr aus
+- 30-s-Protokoll: Spalte „hp_geschrieben“
+
 ## 0.56.9
 - Vorheizen: alle Räume beginnen gemeinsam
 - Vorheizen nie kürzer als das Raummodell

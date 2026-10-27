@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.57.0
+- **Warmwasser-Ladung ist keine fremde Änderung mehr:** Der Kessel schaltet beim Laden auch den Heizbetrieb an. Stand er bei HeatPilot auf „aus“, zählte das als fremder Schreiber bzw. Fehlschlag – Meldung „konnte nicht ausschalten“ (26.10. 16:26) und nach zwei solchen Ereignissen Pause „Kessel über HeatPilot“ (27.10. Ladung 03:05 → morgens keine Heizung). Jetzt gilt während einer Ladung wie beim Vorlauf-Soll auch beim Heizbetrieb: keine Prüfung, kein fremder Wert
+- **30-s-Protokoll mit Schreibvorgängen:** neue Spalte `hp_geschrieben` – alles aus dem Protokoll seit dem vorigen Punkt (geschrieben, nicht übernommen, fremde Änderung, Pause, Räume, Warmwasser)
+- Tests: `tests/test_dhw_heating57.py`
+
 ## 0.56.9
 - **Vorheizen gemeinsam beginnen:** Heizt ein Raum schon vor, fangen die Räume, die zum selben Ziel binnen 45 min selbst anfingen, gleich mit an (`heatup.start_together`) – der Kessel heizt ja schon, und nur offene Thermostate holen die Wärme ab. Fall 25.10.: Vorlauf 55 °C ab 17:25, die Thermostate erst ab 18:30 offen, bei der Ankunft 18:45 alle Räume 0,4–1,4 K zu kalt
 - **Vorheizdauer nie kürzer als das Raummodell:** die gelernte Geschwindigkeit (0.50.5) darf das Vorheizen nur noch verlängern, nicht mehr verkürzen – so beginnen Räume und Kessel zur selben Zeit
