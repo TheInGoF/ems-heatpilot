@@ -6176,8 +6176,7 @@ async function loadCards() {
   const yamls = [["Räume", `type: custom:heatpilot-rooms-card\n# entities:            # weglassen = alle Räume\n${rooms.replace(/^ {2}/gm, "#   ")}`],
     ["Steuerung (mehrere Räume: Boost, Zeitplan, Aus)", "type: custom:heatpilot-control-card"],
     ["Wetter", `type: custom:heatpilot-weather-card\nentity: ${c.weather || "weather.…"}`],
-    ["Nur jetzt (Nacht, Anwesend, Abwesend)", "type: custom:heatpilot-mode-card"],
-    ["Betrieb (Räume, Kessel, Warmwasser)", "type: custom:heatpilot-betrieb-card"]];
+    ["Nur jetzt (Nacht, Anwesend, Abwesend)", "type: custom:heatpilot-mode-card"]];
   box.innerHTML = statusLine(c.helper ? "ok" : "err", c.helper ? `Bereit: Befehls-Helfer <code class="eid">${esc(c.command)}</code> und ${c.rooms.length} Raum-Sensoren`
       : `Befehls-Helfer <code class="eid">${esc(c.command)}</code> fehlt – die Karten können nur anzeigen. Add-on neu starten; hilft das nicht, Log prüfen.`) +
     `<p class="muted">Einmal in HACS: ⋮ › Benutzerdefinierte Repositories › <a href="${esc(c.repo)}" target="_blank" rel="noopener">${esc(c.repo)}</a>, Typ „Dashboard“, herunterladen, Seite neu laden. ` +

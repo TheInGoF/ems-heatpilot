@@ -527,10 +527,6 @@ Phasenwechsel.
   wie sonst. Für das Dashboard gibt es dafür die Karte `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ ab 0.4);
   sie liest `sensor.heatpilot_modus` (auto, nacht, anwesend, abwesend; Attribut `until`) und bedient über den Befehl
   `override`.
-- **Betriebsschalter im Dashboard** (seit 0.65): Die Karte `custom:heatpilot-betrieb-card` (HACS „HeatPilot Card“
-  ab 0.5) zeigt die drei Schalter Räume (Beobachten · HeatPilot steuert), Kessel und Warmwasser (Aus · Beobachten ·
-  HeatPilot steuert) und speichert sie wie die Einstellungsseite; „HeatPilot steuert“ fragt einmal nach. Stand in
-  `sensor.heatpilot_betrieb`, Befehl `betrieb` {what: raeume|kessel|warmwasser, mode}.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
   Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
   HeatPilot steuert: „HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell 22° bis 21:00“
