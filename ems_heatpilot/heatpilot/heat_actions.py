@@ -2,7 +2,7 @@
 Karten in Home Assistant (``card_bridge``, seit 0.56).
 
 Aktionen: ``boost`` {rooms, temp, minutes} · ``schedule`` {rooms} · ``temp`` {room, temp} · ``mode`` {rooms|room,
-mode} · ``pause`` {hours}. Fehler als ``control.ControlError`` (Text für die Oberfläche).
+mode} · ``pause`` {hours} · ``override`` {mode: nacht|anwesend|abwesend|aus} (0.62, ``override``). Fehler als ``control.ControlError`` (Text für die Oberfläche).
 """
 
 from __future__ import annotations
@@ -10,8 +10,9 @@ from __future__ import annotations
 from datetime import datetime
 
 from . import control as control_mod
+from . import override as override_mod
 
-ACTIONS = ("boost", "schedule", "temp", "mode", "pause")
+ACTIONS = ("boost", "schedule", "temp", "mode", "pause", "override")
 
 
 async def run(app, action: str, body: dict) -> dict:
@@ -38,6 +39,14 @@ async def run(app, action: str, body: dict) -> dict:
         if until:  # Ventile führen (0.40): laufende Schritte vorher einmal zurück aufs Wunschsoll
             await loop.release(set(), "Pause")
         return {"ok": True, "paused_until": until and datetime.fromtimestamp(until).astimezone().isoformat()}
+    if action == "override":  # 0.62: „nur jetzt“ – wirkt beim nächsten Takt des Regelkreises
+        if loop is None:
+            raise control_mod.ControlError("Steuerung noch nicht bereit")
+        try:
+            ov = override_mod.set_mode(loop.store, body.get("mode"))
+        except ValueError as err:
+            raise control_mod.ControlError(str(err)) from None
+        return {"ok": True, "override": ov}
     if action == "temp":
         return await ctl.set_temp(body.get("room"), body.get("temp"))
     if action == "mode":

@@ -679,7 +679,11 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .live-sub { font-size: var(--fs-text); color: var(--text-secondary); margin: 0 0 8px; }
 .live-card .seg-b, #ov-burner .seg-b { margin: 0 0 8px; }
 #live-persons .pres-now { border-top: 1px solid var(--border); padding: 8px 0 0; margin-top: 8px; }
-.room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
+.now-row { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; margin: 0 0 var(--s4); }
+.now-row .chip.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
+.now-row .chip[disabled] { opacity: .5; cursor: default; }
+.now-row .now-n { flex-basis: 100%; }
+.rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
 .rt-tile { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: var(--s2) var(--s2) var(--s2) 12px; border: 1px solid var(--border);
   border-radius: var(--r); background: var(--surface-2); color: var(--text-primary); font: inherit; cursor: pointer; min-width: 0; }
 .rt-tile.sel { border-color: var(--series-1); box-shadow: 0 0 0 1px var(--series-1) inset; }
@@ -860,6 +864,7 @@ ul.rules li { margin: 3px 0; }
   <section id="view-heat">
     <button type="button" class="heat-line" id="heat-status" onclick="openOverview('status')"></button>
     <div class="acts four" id="heat-acts"></div>
+    <div class="now-row" id="heat-now"></div>
     <div class="room-tiles" id="heat-rooms"></div>
     <p class="muted" id="heat-foot">Antippen zum Bedienen.</p>
     <dialog class="hp" id="heat-dlg" onclose="DLG=null" onclick="if(event.target===this)closeDlg()"><div id="heat-dlg-body"></div></dialog>
@@ -1825,12 +1830,24 @@ function renderHeat() {
     act("sched", "Zeitplan", autoN === n ? "alle Räume" : `${autoN} von ${n} Räumen`, false) +
     act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false) +
     (GUEST ? "" : act("pause", "Pause", !pil ? "nur bei HeatPilot steuert" : c.paused_until ? `noch ${leftText(c.pause_left_min || 1)}` : "HeatPilot anhalten", !!c.paused_until, !pil));
+  $("heat-now").innerHTML = GUEST ? "" : nowHtml(c, pil);  // 0.62: Override „nur jetzt“
   const tiles = $("heat-rooms"), k = j.rooms.length;
   tiles.innerHTML = j.rooms.map(roomTile).join("");
   tiles.style.setProperty("--cols", k <= 4 ? Math.max(k, 1) : k <= 6 ? 3 : 4);  // breit: kein einzelner Rest in der letzten Reihe
   renderHeatLog(c, j.dhw);  // Protokoll unter Live → Diagnose
   renderOvStatus();  // Übersicht → Status: Räume, Warmwasser (0.38), Kessel (0.41), zuletzt geschrieben
   if (DLG) renderDlg();  // offener Dialog zeigt den neuen Stand
+}
+// 0.62: „nur jetzt“ (Konzeptpapier, Abschnitt 7) – Nacht, Anwesend, Abwesend für das ganze Haus bis zum nächsten
+// Schaltpunkt; der aktive Knopf beendet ihn. Wirkt nur bei „HeatPilot steuert“
+const NOW_MODES = [["nacht", "Nacht"], ["anwesend", "Anwesend"], ["abwesend", "Abwesend"]];
+function nowHtml(c, pil) {
+  const ov = c.override || {};
+  const btn = ([k, t]) => `<button type="button" class="chip${ov.mode === k ? " on" : ""}"${pil ? "" : " disabled"} ` +
+    `onclick="heatPost('override', { mode: '${ov.mode === k ? "aus" : k}' }, 'Stelle um …')">${t}</button>`;
+  const note = !pil ? "wirkt bei „HeatPilot steuert“" : ov.mode ? `bis ${ov.until ? tclock(ov.until) : "zum nächsten Schaltpunkt"} · noch einmal tippen beendet`
+    : "bis zum nächsten Schaltpunkt";
+  return `<span class="now-l">Nur jetzt:</span>${NOW_MODES.map(btn).join("")}<span class="muted now-n">${esc(note)}</span>`;
 }
 function act(kind, title, sub, on, off = false) {
   return `<button class="act${on ? " on" : ""}" onclick="openDlg('${kind}')"${off ? " disabled" : ""}>${ICON[kind]}<span><b>${title}</b><span class="muted">${sub}</span></span></button>`;
@@ -6042,7 +6059,7 @@ function renderSettings() {
       <details class="adopt alias" id="alias-box" ontoggle="aliasToggle(this)"${ALIAS_OPEN ? " open" : ""}><summary>Alter Temperatursensor je Raum <span class="muted">– Innentemperatur vor einem Wechsel der Thermostate</span></summary><div id="alias-body"></div></details>
       <p class="job-msg" id="rooms-job">${jobHtml(JOB)}</p>
       ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
-      <div class="room-tiles" id="room-tiles"></div>
+      <div class="rt-grid" id="room-tiles"></div>
       <div class="room-list" id="room-table" oninput="roomsDirty(); roomTiles()" onchange="roomsDirty(); roomTiles()">${roomRows()}</div>`, true, "em-g-raeume")) +
     part("exp-haus", sugBtn("Gaszähler, Wetter und Außenfühler auf Automatik")) +
     part("raeume", controlCard(s)) +
@@ -6099,7 +6116,8 @@ async function loadCards() {
   const rooms = c.rooms.map((r) => `  - ${r.entity}`).join("\n");
   const yamls = [["Räume", `type: custom:heatpilot-rooms-card\n# entities:            # weglassen = alle Räume\n${rooms.replace(/^ {2}/gm, "#   ")}`],
     ["Steuerung (mehrere Räume: Boost, Zeitplan, Aus)", "type: custom:heatpilot-control-card"],
-    ["Wetter", `type: custom:heatpilot-weather-card\nentity: ${c.weather || "weather.…"}`]];
+    ["Wetter", `type: custom:heatpilot-weather-card\nentity: ${c.weather || "weather.…"}`],
+    ["Nur jetzt (Nacht, Anwesend, Abwesend)", "type: custom:heatpilot-mode-card"]];
   box.innerHTML = statusLine(c.helper ? "ok" : "err", c.helper ? `Bereit: Befehls-Helfer <code class="eid">${esc(c.command)}</code> und ${c.rooms.length} Raum-Sensoren`
       : `Befehls-Helfer <code class="eid">${esc(c.command)}</code> fehlt – die Karten können nur anzeigen. Add-on neu starten; hilft das nicht, Log prüfen.`) +
     `<p class="muted">Einmal in HACS: ⋮ › Benutzerdefinierte Repositories › <a href="${esc(c.repo)}" target="_blank" rel="noopener">${esc(c.repo)}</a>, Typ „Dashboard“, herunterladen, Seite neu laden. ` +

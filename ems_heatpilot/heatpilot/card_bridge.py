@@ -9,11 +9,13 @@ einen Helfer. Darum stellt HeatPilot bereit:
   Wechsel, Boost (Soll, Ende, Restzeit), Klima-Entität, Heizkreis von EMS-ESP (nur Anzeige).
 * ``sensor.heatpilot_boost`` (``boost``): Zahl der Räume mit Boost; Attribute: die laufenden Boosts, die Grenzen für
   Soll und Dauer, das Ergebnis des letzten Befehls (``last``).
+* ``sensor.heatpilot_modus`` (seit 0.62, ``override.sensor``): Override „nur jetzt“ – nacht, anwesend, abwesend
+  oder auto, mit Ende (``until``).
 * ``input_text.heatpilot_befehl`` (``ensure_command``): legt HeatPilot einmal als Helfer an (WebSocket
   ``input_text/create``). Die Karte schreibt einen Befehl als JSON hinein, z. B.
   ``{"a": "boost", "rooms": ["climate.wohnzimmer"], "temp": 22, "minutes": 120, "n": 1730000000}`` (``n`` macht
   gleiche Befehle unterscheidbar). HeatPilot führt ihn aus (``heat_actions`` – dieselbe Stelle wie die Seite), leert
-  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode (das Soll
+  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode, override (das Soll
   eines Raums stellt die Karte über das Thermostat-Pop-up von Home Assistant).
 * ``GET api/cards`` (``routes``, seit 0.56.4): Stand für Einstellungen → Haus → „Karten für Home Assistant“ –
   Helfer vorhanden, Raum-Sensoren, Wetter-Entität, Link zum Repository.
@@ -31,7 +33,7 @@ import time
 import unicodedata
 
 from . import control as control_mod
-from . import heat_actions
+from . import heat_actions, override
 from .values import num
 
 log = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ log = logging.getLogger(__name__)
 COMMAND = "input_text.heatpilot_befehl"
 BOOST = "sensor.heatpilot_boost"
 ROOM_PREFIX = "sensor.heatpilot_raum_"
-CARD_ACTIONS = ("boost", "schedule", "mode")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
+CARD_ACTIONS = ("boost", "schedule", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
 REPO = "https://github.com/TheInGoF/heatpilot-card"
 EVERY_S = 30
 
@@ -110,7 +112,8 @@ def boost(eng, ctl, last: dict | None) -> tuple[str, int, dict]:
 async def publish(app) -> int:
     """Raum- und Boost-Sensoren setzen; Zahl der gesetzten Sensoren."""
     eng = app.eng
-    items = [*rooms(eng, app.control), boost(eng, app.control, getattr(app, "card_last", None))]
+    items = [*rooms(eng, app.control), boost(eng, app.control, getattr(app, "card_last", None)),
+             override.sensor(eng.store)]  # 0.62: Modus „nur jetzt“
     for entity, state, attrs in items:
         await app.ha.set_state(entity, state, attrs)
     keep = {e for e, _s, _a in items}  # Raum umbenannt oder entfernt, alte Namen (bis 0.56.2: nach Thermostat)

@@ -510,6 +510,15 @@ Phasenwechsel.
   Tado hält dann nur den Frostschutz. **Pause** (nur bei „HeatPilot steuert“) – 1 h, 2 h, 4 h
   oder bis morgen früh (06:00) schreibt HeatPilot nichts (außer dem Zurück eines Schritts von
   [Ventile führen](#ventile-führen) aufs Wunschsoll); „Weiter“ hebt die Pause auf.
+- **Nur jetzt** (seit 0.62, unter den Kacheln, wirkt bei „HeatPilot steuert“): **Nacht**, **Anwesend** oder
+  **Abwesend** für das ganze Haus – für Ausnahmen wie früh ins Bett, nachts um 3 Uhr zur Arbeit oder spät heimkommen.
+  Alle Räume mit „macht mit“ bekommen die Nacht-, Komfort- bzw. Abwesenheitstemperatur, bis zum nächsten
+  Schaltpunkt des normalen Plans (höchstens 24 h). Früher endet es, wenn der Plan von selbst so weit ist (abends
+  beginnt die Nacht), bei „Abwesend“ jemand heimkommt bzw. bei „Anwesend“ alle weg sind. Danach gilt wieder der
+  normale Plan; noch einmal auf den aktiven Knopf tippen beendet es sofort. Ein Boost geht vor. Gelernt wird weiter
+  wie sonst. Für das Dashboard gibt es dafür die Karte `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ ab 0.4);
+  sie liest `sensor.heatpilot_modus` (auto, nacht, anwesend, abwesend; Attribut `until`) und bedient über den Befehl
+  `override`.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
   Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
   HeatPilot steuert: „HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell 22° bis 21:00“

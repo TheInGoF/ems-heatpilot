@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import guards, room_lead, valve_control
+from . import guards, override, room_lead, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
@@ -300,6 +300,7 @@ class ControlLoop:
         first = {r.climate: want(r, now, local(h) if (h := self.state.get(r.climate, {}).get("preheat")) else None)
                  for r in eng.found.rooms}  # 0.46.5: begonnenes Vorheizen bleibt
         first = heatup.start_together(first, lambda c, at: want(eng.found.room_of(c), at), now)  # 0.56.9
+        first = override.apply(self, ts, first, presence, eng.found.rooms)  # 0.62: „nur jetzt“
         for room in eng.found.rooms:
             reading = readings.get(room.climate)
             temp = reading[1] if reading else None
@@ -569,7 +570,7 @@ class ControlLoop:
             "active": managing and not paused,
             "paused_until": _iso(local(self.pause_until)) if paused else None,
             "pause_left_min": max(1, round((self.pause_until - now_ts) / 60)) if paused else None,
-            "pause_max_h": PAUSE_MAX_H,
+            "pause_max_h": PAUSE_MAX_H, "override": override.get(self.store),  # 0.62: „nur jetzt“
             "next_change": nxt["next_change"] if nxt else None,
             "next_phase": nxt["next_phase"] if nxt else None,
             "status_text": text,
