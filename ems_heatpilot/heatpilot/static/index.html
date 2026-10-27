@@ -5132,7 +5132,7 @@ function dhwOpenReady() {
 }
 
 // ---------------------------------------------------------------- Kessel über HeatPilot (Weg B, 0.41)
-// Schalter „Kessel über HeatPilot“ (Aus / Trockenlauf / HeatPilot setzt) mit Rückfall-Vorlauf, Warnhinweisen, Statusbox
+// Schalter „Kessel über HeatPilot“ (Aus / Trockenlauf / HeatPilot setzt) mit Warnhinweisen, Statusbox
 // und Knopf „Anleitung Wächter“ in der eigenen Karte der Einstellungen (GET api/settings → boiler_control), Statuszeile in
 // Heizen (api/heat → boiler) und Übersicht (api/summary → boiler_control), „wieder einschalten“ (POST api/boiler/resume –
 // schreibt selbst nichts), Block in „Bereit für die Steuerung?“ (readiness.boiler_control), Kessel-Zeilen im Protokoll.
@@ -5142,7 +5142,7 @@ const BOILER_LABEL = { aus: "Aus", trocken: "Beobachten", heatpilot: "HeatPilot 
 const BOILER_WHAT = { flow: "Vorlauf-Soll", heating: "Heizbetrieb" };
 const BOILER_ACTION = { flow_set: "Vorlauf-Soll gesetzt", heating_on: "Heizbetrieb an", heating_off: "Heizbetrieb aus",
   boiler_dry: "würde schreiben", boiler_check_failed: "nicht übernommen", boiler_foreign: "fremde Änderung",
-  boiler_paused: "pausiert", boiler_resumed: "wieder eingeschaltet", boiler_fallback: "zurückgeschaltet",
+  boiler_paused: "pausiert", boiler_resumed: "wieder eingeschaltet",
   // Antipendelzeit anpassen (boiler_period): Wert in Minuten
   boiler_period: "Antipendelzeit gesetzt", boiler_period_dry: "Antipendelzeit: würde schreiben",
   boiler_period_failed: "Antipendelzeit nicht übernommen", boiler_period_foreign: "Antipendelzeit fremd geändert",
@@ -5207,14 +5207,11 @@ function boilerScroll() {
 }
 
 // Karte „Kessel über HeatPilot“ in den Einstellungen: was geschrieben wird, Schalter, die zwei Entitäten (gewählt unter
-// Entitäten), Rückfall-Vorlauf, Warnhinweise, Statusbox mit Wächter
+// Entitäten), Warnhinweise, Statusbox mit Wächter
 function boilerSectionHtml(s, x) {
   x = x || {};
   const mode = BOILER_LABEL[s.boiler_control] ? s.boiler_control : "aus", st = x.status || {};
-  const [lo, hi] = x.fallback_range || [35, 75], fb = (st.fallback || {}).value, set = s.boiler_fallback_flow ?? 45;
   const radio = (m) => `<label><input type="radio" name="boiler_control" value="${m}" ${m === mode ? "checked" : ""} onchange="boilerModeHint()"> ${BOILER_LABEL[m]}</label>`;
-  const eff = !st.fallback ? "" : fb === null || fb === undefined ? " – liegt jetzt unter 35 °C (Fußboden-Grenze): beim Zurückschalten schreibt HeatPilot nichts"
-    : fb !== set ? ` – wirksam jetzt ${fb} °C (höchstens maximale Vorlauftemperatur und Fußboden-Grenze)` : "";
   return `<p class="muted" id="boiler-intro" style="margin:0 0 6px">HeatPilot kann den Kessel selbst führen – Vorlauf-Soll live und Heizbetrieb ` +
     "an/aus, unabhängig vom Schalter unter „Steuerung“ und vom Warmwasser. Geschrieben wird nur über Home Assistant, nur auf die zwei " +
     `Entitäten unten und nie, solange ein Regler am Bus ist.</p><details class="boiler-rules" id="boiler-rules"><summary>Nach welchen Regeln</summary>` +
@@ -5222,17 +5219,15 @@ function boilerSectionHtml(s, x) {
     `<div class="seg seg3" id="f-boiler_control">${Object.keys(BOILER_LABEL).map(radio).join("")}</div>` +
     `<p class="hint" id="boiler-mode-hint" style="margin:6px 0 0"></p>` +
     boilerEntityRef("flow", s, x) + boilerEntityRef("heating", s, x) +
-    `<div class="form-grid">${field("Rückfall-Vorlauf (°C)", `<input id="f-boiler_fallback_flow" type="number" step="1" min="${lo}" max="${hi}" value="${esc(set)}">`,
-      `${lo}–${hi} °C, ganze Grad. Schreibt HeatPilot einmal beim Zurückschalten auf „Aus“ oder „Beobachten“; denselben Wert setzt der Wächter${eff}.`)}` +
-    field("Wenn kein Raum Wärme braucht", `<select id="f-boiler_idle">${[["pumpe", "Pumpe läuft weiter"], ["aus", "Heizbetrieb ganz aus"]].map(([k, l]) =>
+    '<div class="form-grid">' + field("Wenn kein Raum Wärme braucht", `<select id="f-boiler_idle">${[["pumpe", "Pumpe läuft weiter"], ["aus", "Heizbetrieb ganz aus"]].map(([k, l]) =>
       `<option${(s.boiler_idle || "pumpe") === k ? " selected" : ""} value="${k}">${l}</option>`).join("")}</select>`,
       "Pumpe läuft weiter (Standard): Heizbetrieb bleibt an, Vorlauf-Soll 20 °C – der Brenner springt nicht an. Heizbetrieb ganz aus: wie früher, z. B. im Sommer.") +
     field("Regler", `<label class="switch"><input id="f-regulator_removed" type="checkbox"${s.regulator_removed ? " checked" : ""}> Regler ist abgebaut</label>`,
       "Angehakt: HeatPilot wartet nicht auf die Regler-Prüfung. Meldet EMS-ESP doch Werte eines Reglers, sperrt es trotzdem; die Prüfung nach jedem Schreiben bleibt.") +
     field("Antipendelzeit", `<label class="switch"><input id="f-boiler_period" type="checkbox"${s.boiler_period ? " checked" : ""}> Antipendelzeit anpassen</label>`,
       boilerPeriodRule((st.period || {}).rules)) + `</div>` + boilerPeriodRef(s, x) +
-    (boilerRegWarn(s, st) ? `<div class="warnbox" id="boiler-warn"><details class="more"><summary>Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. <span class="m"></span></summary><div>${boilerWarnText(fb)}</div></details></div>`
-      : `<div class="hint" id="boiler-failsafe"><details class="more"><summary>Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür den Wächter anlegen. <span class="m"></span></summary><div>${boilerWarnText(fb, false)}</div></details></div>`) +
+    (boilerRegWarn(s, st) ? `<div class="warnbox" id="boiler-warn"><details class="more"><summary>Ein Regler am Bus überschreibt das Vorlauf-Soll – „HeatPilot steuert“ bleibt dann gesperrt. <span class="m"></span></summary><div>${boilerWarnText()}</div></details></div>`
+      : `<div class="hint" id="boiler-failsafe"><details class="more"><summary>Fällt HeatPilot aus, meldet der Wächter es – dann den Drehschalter am Kessel auf Festwert. <span class="m"></span></summary><div>${boilerWarnText(false)}</div></details></div>`) +
     `<div class="dhw-box" id="boiler-box">${boilerBoxHtml(x.status, x.readiness)}</div>`;
 }
 function boilerIntro(r) {
@@ -5248,7 +5243,7 @@ function boilerIntro(r) {
     `${r.flow_down_min} min niedriger bleibt und der Brenner nicht erst seit weniger als ${r.burn_hold_min ?? 10} min läuft; den Heizbetrieb mit ${r.heat_hold_min} min Haltezeit, aus erst nach ` +
     `${r.heat_off_min} min ohne Bedarf, an nur mit bekanntem Vorlauf-Soll bis zur Grenze. Steht das Vorlauf-Soll am Kessel ` +
     "über der Grenze, senkt HeatPilot es sofort (Schutz). Ist kein Ziel rechenbar (z. B. Außentemperatur fehlt), gilt nach " +
-    `${r.blind_min} min der Rückfall-Vorlauf mit Heizbetrieb an; ` +
+    `${r.blind_min} min ein Hinweis, HeatPilot schreibt dann nichts; ` +
     `${r.check_s} s später prüft HeatPilot, ob der Kessel den Wert zeigt (${r.max_fails} Fehlschläge in Folge oder ${r.foreign_max} ` +
     "fremde Änderungen in 1 h: Pause). Kommt ein Raum mit offenem Ventil nicht hoch (mindestens " +
     `${fmt(r.stall_gap_k ?? 0.3)} K unter Soll, Ventil ab ${r.stall_valve_pct ?? 80} %, in ${r.stall_window_min ?? 30} min ` +
@@ -5258,18 +5253,18 @@ function boilerIntro(r) {
     "außer mit „Antipendelzeit anpassen“ (unten).";
 }
 // Warnkasten nur, solange laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt ist (ohne Status: Haken „Regler ist
-// abgebaut“); sonst nur der kurze Hinweis zu Wächter und Rückfall-Vorlauf
+// abgebaut“); sonst nur der kurze Hinweis zum Wächter
 const boilerRegWarn = (s, st) => st.regulator ? st.regulator.present !== false : !s.regulator_removed;
-// Warnhinweis: Regler am Bus (nur mit reg), Ausfall, Rückfallwert
-function boilerWarnText(fb, reg = true) {
-  const back = fb === null || fb === undefined ? "den Rückfall-Vorlauf (unten)" : `den Rückfall-Vorlauf (jetzt ${fb} °C)`;
+// Warnhinweis: Regler am Bus (nur mit reg), Ausfall, Zurückschalten
+function boilerWarnText(reg = true) {
   return (reg ? "<b>Regler am Bus:</b> Ein Regler am EMS-Bus überschreibt alle 60 s, was am Kessel gesetzt wird – solange EMS-ESP einen " +
     "Regler meldet (oder es unbekannt ist), schreibt HeatPilot nichts – und erst 30 min, nachdem EMS-ESP ihn zuletzt gemeldet " +
     "hat. Erst einige Tage „Beobachten“ prüfen (Übersicht → " +
     "Vorschau und Vergleich), dann den Regler abbauen und EMS-ESP neu starten.<br>" : "") + "<b>Fällt HeatPilot aus</b> (Add-on gestoppt, " +
-    "Home Assistant neu gestartet), bleibt der letzte Vorlauf stehen – nachts vielleicht 35 °C. Dafür den Wächter in Home " +
-    `Assistant anlegen (Knopf „Anleitung Wächter“ unten).<br><b>Zurück auf „Aus“ oder „Beobachten“:</b> HeatPilot schreibt einmal ${back} ` +
-    "und Heizbetrieb an – mit Regler am Bus nichts. Danach den Regler wieder anschließen bzw. den Kessel selbst stellen.";
+    "Home Assistant neu gestartet), bleibt der letzte Vorlauf stehen; ohne Wärmeabnahme fällt der Kessel zurück. Der Wächter in Home " +
+    "Assistant meldet den Ausfall aufs Handy (Knopf „Anleitung Wächter“ unten) – dann den Drehschalter am Kessel auf Festwert stellen " +
+    "(Notfallanleitung in der Doku).<br><b>Zurück auf „Aus“ oder „Beobachten“:</b> HeatPilot schreibt nichts mehr. Danach den Regler " +
+    "wieder anschließen bzw. den Kessel selbst stellen.";
 }
 // Verweis auf eine der zwei Entitäten: welche gilt (gewählt / erkannt), ihr Wert und ihre Grenzen in Home Assistant,
 // Probleme – gewählt wird unter Entitäten
@@ -5357,7 +5352,7 @@ function boilerDecision(b) {
   return d.flow || d.heating ? `<b>Entscheidung:</b> ${one("flow")} · ${one("heating")}` : "";
 }
 function boilerHistory(b) {
-  const lw = b.last_write || {}, lc = b.last_check, dry = b.dry_last || {}, fl = b.foreign_last, fb = (b.fallback || {}).last;
+  const lw = b.last_write || {}, lc = b.last_check, dry = b.dry_last || {}, fl = b.foreign_last;
   const wrote = ["flow", "heating"].filter((w) => lw[w]).map((w) => `${BOILER_WHAT[w]} ${clock(lw[w].time)}: ` +
     `${w === "flow" && lw[w].from !== null && lw[w].from !== undefined ? fmt(lw[w].from, 0) + " → " : ""}${boilerVal(w, lw[w].value)}`);
   const due = ["flow", "heating"].filter((w) => (b.check_due || {})[w]).map((w) => `${BOILER_WHAT[w]} ${clock(b.check_due[w])}`);
@@ -5366,8 +5361,7 @@ function boilerHistory(b) {
     lc ? `<b>Prüfung ${clock(lc.time)}:</b> ${BOILER_WHAT[lc.what] || esc(lc.what)} ${boilerVal(lc.what, lc.value)} ${lc.ok ? "übernommen" : `nicht übernommen (${esc(lc.shown || "Kessel-Wert unbekannt")})`}` : "",
     due.length ? `<b>nächste Prüfung:</b> ${due.join(" · ")}` : "",
     would.length ? `<b>Beobachten zuletzt:</b> würde schreiben ${would.join(" · ")}` : "",
-    fl ? `<b>fremde Änderung ${timeOf(fl.time)}:</b> ${BOILER_WHAT[fl.what] || esc(fl.what)} ${boilerVal(fl.what, fl.from)} → ${boilerVal(fl.what, fl.to)} · ${b.foreign_1h || 0}× in 1 h, ${b.foreign_24h || 0}× in 24 h` : "",
-    fb ? `<b>zurückgeschaltet ${timeOf(fb.time)}:</b> ${esc(fb.text || "")}` : ""];
+    fl ? `<b>fremde Änderung ${timeOf(fl.time)}:</b> ${BOILER_WHAT[fl.what] || esc(fl.what)} ${boilerVal(fl.what, fl.from)} → ${boilerVal(fl.what, fl.to)} · ${b.foreign_1h || 0}× in 1 h, ${b.foreign_24h || 0}× in 24 h` : ""];
 }
 // Wächter in Home Assistant: Stand, Heartbeat, Knopf „Anleitung Wächter“ (Schritte in der HA-Oberfläche, Werte zum Abtippen)
 function boilerWatchHtml(b) {
@@ -5376,22 +5370,20 @@ function boilerWatchHtml(b) {
   return `<div class="boiler-wd" id="boiler-wd"><div class="ready-head">${readyDot(WD_DOT[w.state] || "")}<span><b>Wächter in Home Assistant:</b> ` +
     `${esc(w.text)}${w.time ? ` <span class="muted">· gelesen ${clock(w.time)}</span>` : ""}</span></div>` +
     `<p class="muted">Heartbeat <code class="eid" title="${esc(hb.entity || w.entity || "sensor.heatpilot_heartbeat")}">${esc(hb.entity || w.entity || "sensor.heatpilot_heartbeat")}</code> ${hb.last ? `zuletzt ${clock(hb.last)}` : "noch nicht gesetzt"} – ` +
-    "ändert sich jede Minute. Eine Automation stellt den Kessel auf den Rückfall-Vorlauf, wenn er sich eine Stunde nicht ändert.</p>" +
+    "ändert sich jede Minute. Eine Automation meldet aufs Handy, wenn er sich eine Stunde nicht ändert.</p>" +
     `<button class="btn small" id="boiler-guide-btn" aria-expanded="${BOILER_GUIDE}" onclick="boilerGuide()">Anleitung Wächter</button>` +
     `<div id="boiler-guide"${BOILER_GUIDE ? "" : " hidden"}>${boilerGuideHtml(w.guide)}</div></div>`;
 }
 function boilerGuideHtml(g) {
   if (!g) return '<p class="muted">Anleitung nicht verfügbar – startet das Add-on noch?</p>';
   const v = g.values || {}, row = (k, x) => `<tr><td>${k}</td><td>${x === null || x === undefined || x === "" ? '<span class="muted">– erst wählen bzw. eintragen</span>' : `<code>${esc(x)}</code>`}</td></tr>`;
-  if (g.warning) return `<div class="warnbox" id="boiler-guide-warn">${esc(g.warning)}</div>`;  // Rückfall unter 35 °C: kein Wächter
-  // 0.55: fertiges YAML zum Kopieren (mit den gewählten Entitäten), die Klick-Anleitung aufklappbar darunter
+  // 0.55: fertiges YAML zum Kopieren, die Klick-Anleitung aufklappbar darunter
   const yaml = g.yaml ? `<p class="muted">In Home Assistant: Einstellungen › Automationen & Szenen › „Automation erstellen“ › „Neue Automation erstellen“ › ⋮ › „In YAML bearbeiten“ – alles ersetzen durch:</p>` +
     `<pre class="code-box" id="boiler-yaml">${esc(g.yaml)}</pre><button class="btn small primary" onclick="copyCode('boiler-yaml', this)">YAML kopieren</button>` : "";
   return yaml + `<details class="fold"${g.yaml ? "" : " open"}><summary>Lieber klicken statt YAML</summary><ol class="boiler-steps" id="boiler-steps">${(g.steps || []).map((t) => `<li>${esc(t)}</li>`).join("")}</ol>` +
     `<p class="muted">Werte zum Abtippen:</p><div class="scroll"><table class="ready-t boiler-vals" id="boiler-vals">` +
     row("Auslöser: Entität", v.trigger_entity) + row("„Für“", v.for) +
-    (v.condition ? row("Bedingung", v.condition) : "") + row("Vorlauf-Soll: Ziel", v.flow_entity) +
-    row("Vorlauf-Soll: Wert", v.flow_value) + row("Heizbetrieb: Ziel", v.heating_entity) + row("Nachricht", v.message) +
+    (v.condition ? row("Bedingung", v.condition) : "") + row("Nachricht", v.message) +
     row("Name", g.name) + "</table></div></details>" + (g.note ? `<p class="muted">${esc(g.note)}</p>` : "");
 }
 async function copyCode(id, btn) {
@@ -5404,7 +5396,7 @@ function boilerGuide() {
   if (box) box.hidden = !BOILER_GUIDE;
   if (btn) btn.setAttribute("aria-expanded", String(BOILER_GUIDE));
 }
-// Hinweis unter dem Schalter je Stellung; beim Zurückschalten von „HeatPilot setzt“: einmal der Rückfall-Vorlauf
+// Hinweis unter dem Schalter je Stellung; beim Zurückschalten von „HeatPilot setzt“: HeatPilot schreibt nichts mehr
 function boilerModeHint() {
   const m = document.querySelector('input[name="boiler_control"]:checked'), box = $("boiler-mode-hint");
   if (!m || !box) return;
@@ -5414,10 +5406,9 @@ function boilerModeHint() {
     { flow: pick("flow_set_entity", "flow"), heating: pick("heating_switch_entity", "heating") }, x.status || {});
 }
 function boilerModeText(mode, saved, ents, st) {
-  const fb = (st.fallback || {}).value, reg = st.regulator || {};
+  const reg = st.regulator || {};
   const back = saved !== "heatpilot" || mode === "heatpilot" ? ""
-    : fb === null || fb === undefined ? " Beim Zurückschalten schreibt HeatPilot nichts zurück – der Rückfall-Vorlauf läge unter 35 °C (Fußboden-Grenze); den Kessel selbst stellen."
-    : ` Beim Zurückschalten schreibt HeatPilot einmal ${fb} °C Vorlauf und Heizbetrieb an${reg.present === false ? "" : " (mit Regler am Bus nichts)"} – danach den Regler wieder anschließen bzw. den Kessel selbst stellen.`;
+    : " Beim Zurückschalten schreibt HeatPilot nichts mehr – danach den Regler wieder anschließen bzw. den Kessel selbst stellen.";
   if (mode === "aus") return "Wie bisher: Regler bzw. Kessel regeln selbst – HeatPilot rechnet den Kessel nicht und schreibt nichts." + back;
   if (mode === "trocken") return "HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Live → Diagnose), was es " +
     "schreiben würde – am Kessel ändert sich nichts. Geht auch mit Regler am Bus: So zeigt der Vergleich in der Übersicht, was HeatPilot statt des Reglers setzen würde." + back;
@@ -5449,7 +5440,6 @@ function boilerReadyHtml(x, open) {
     ["Heizen abschalten", x.heating_off ? `<span class="msg-err">an</span> – ${esc(x.heating_off)}` : "aus"],
     ["Wächter", `${readyDot(WD_DOT[wd.state] || "")} ${esc(wd.text || "–")}`],
     ["Mindestleistung", has(x.min_power_kw) ? `${fmt(x.min_power_kw, 1)} kW` : '<span class="muted">unbekannt – Abnahme-Regel aus</span>'],
-    ["Rückfall-Vorlauf", has(x.fallback) ? degC(x.fallback) : '<span class="muted">läge unter 35 °C – wird nicht geschrieben</span>'],
     ["letzte Prüfung", lc ? `${clock(lc.time)}: ${BOILER_WHAT[lc.what] || esc(lc.what)} ${boilerVal(lc.what, lc.value)} ${ok(lc.ok, "übernommen", "nicht übernommen")}` : '<span class="muted">noch keine</span>'],
     ["pausiert", x.paused ? `<span class="msg-err">ja</span> – ${esc(x.pause_reason || "")}${x.paused_since ? ` · seit ${esc(timeOf(x.paused_since))}` : ""}` : "nein"],
     ["fremder Schreiber", fl ? `zuletzt ${esc(timeOf(fl.time))}: ${BOILER_WHAT[fl.what] || esc(fl.what)} ${boilerVal(fl.what, fl.from)} → ${boilerVal(fl.what, fl.to)} · ${x.foreign_24h || 0}× in 24 h` : "in den letzten 24 h keiner"]];
@@ -5476,7 +5466,7 @@ function boilerOpenReady() {
 function boilerLogValue(l) {
   if (/^boiler_period/.test(l.action)) return l.value === null || l.value === undefined ? "" : `${fmt(l.value, 0)} min`;
   if (l.action === "heating_on" || l.action === "heating_off") return l.action === "heating_on" ? "an" : "aus";
-  const heat = !["flow_set", "boiler_fallback"].includes(l.action) && /^(?:(?:Trockenlauf|Beobachten): würde )?Heizbetrieb/.test(l.reason || "");
+  const heat = l.action !== "flow_set" && /^(?:(?:Trockenlauf|Beobachten): würde )?Heizbetrieb/.test(l.reason || "");
   return boilerVal(heat ? "heating" : "flow", l.value);
 }
 
@@ -6019,8 +6009,7 @@ function collect() {
   for (const k of ["gas_calorific_value", "gas_z_number", "gas_price_eur_per_kwh", "gas_base_fee_eur_per_year",
                    "away_temp", "night_temp", "max_flow_temp", "design_outdoor_temp", "dhw_min_temp", "preheat_max_h",
                    "away_distance_pct", "arrival_margin_k",  // 0.49: Abwesenheit nach Entfernung, Ankunft knapp unter Komfort
-                   "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days", "keep_days",
-                   "boiler_fallback_flow"]) out[k] = v("f-" + k);  // Rückfall-Vorlauf (0.41)
+                   "dhw_comfort_temp", "dhw_max_temp", "dhw_disinfect_temp", "living_area_m2", "boiler_nominal_kw", "boiler_min_power_pct", "sample_interval_s", "backfill_days", "statistics_backfill_days", "keep_days"]) out[k] = v("f-" + k);
   if ($("f-boiler_idle")) out.boiler_idle = $("f-boiler_idle").value;  // 0.46.5: wenn kein Raum Wärme braucht
   if ($("f-regulator_removed")) out.regulator_removed = $("f-regulator_removed").checked;  // 0.46.9: Regler abgebaut
   if ($("f-boiler_period")) out.boiler_period = $("f-boiler_period").checked;  // 0.48: Antipendelzeit anpassen

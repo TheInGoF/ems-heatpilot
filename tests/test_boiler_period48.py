@@ -163,15 +163,15 @@ def test_back_writes_base_once_when_switched_off(tmp_path):
     assert per_calls(ha) == [10] and bc.period.state["base"] == 40
     shows(eng, 10)
     new = SimpleNamespace(cfg=Config(boiler_control="heatpilot", boiler_period=False))
-    run(main_mod.App._boiler_back(new, eng, eng))  # wie App.build: über die alte Schreibstelle
+    run(main_mod.App._boiler_back(new, eng))  # wie App.build: über die alte Schreibstelle
     assert per_calls(ha) == [10, 40] and acts(eng)[-1] == "boiler_period_back" and bc.period.state["back"]["ok"]
     assert calls(ha)[-1][2] == PER  # „Kessel über HeatPilot“ bleibt: kein Rückfall-Vorlauf
-    # „Kessel über HeatPilot“ aus: Grundwert und Rückfall-Vorlauf
+    # „Kessel über HeatPilot“ aus: nur der Grundwert (seit 0.59 kein Rückfall-Vorlauf)
     eng2, ha2, bc2 = setup(tmp_path / "b")
     step(bc2, T0)
     shows(eng2, 10)
-    run(main_mod.App._boiler_back(SimpleNamespace(cfg=Config(boiler_control="aus", boiler_period=True)), eng2, eng2))
-    assert per_calls(ha2) == [10, 25] and calls(ha2)[-2][2] == FLOW
+    run(main_mod.App._boiler_back(SimpleNamespace(cfg=Config(boiler_control="aus", boiler_period=True)), eng2))
+    assert per_calls(ha2) == [10, 25] and calls(ha2)[-1][2] == PER
     # nichts geschrieben (Beobachten): nichts zurück
     _, ha3, bc3 = setup(tmp_path / "c", mode="trocken")
     step(bc3, T0)

@@ -27,28 +27,11 @@ from .values import local, num
 
 # Protokoll (control_log): Schreibvorgänge von Control (flow_set, heating_on/off) und die Zeilen des Ablaufs
 ACT_FLOW, ACT_ON, ACT_OFF = "flow_set", "heating_on", "heating_off"
-ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, ACT_FALLBACK = (
-    "boiler_dry", "boiler_check_failed", "boiler_foreign", "boiler_paused", "boiler_resumed", "boiler_fallback")
-ACTIONS = (ACT_FLOW, ACT_ON, ACT_OFF, ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, ACT_FALLBACK,
+ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME = (
+    "boiler_dry", "boiler_check_failed", "boiler_foreign", "boiler_paused", "boiler_resumed")
+ACTIONS = (ACT_FLOW, ACT_ON, ACT_OFF, ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME,
            *PERIOD_ACTIONS)  # 0.48: Antipendelzeit (boiler_period)
 LOG_ROOM, LOG_NAME = "boiler", "Kessel"
-
-
-def worst_cap(eng) -> float | None:
-    """Strengste Fußboden-Grenze (gilt ohne HeatPilot immer – für Rückfallwert und Wächter)."""
-    return floor_limit.cap_of(floor_limit.floor_rooms(eng.cfg, eng.found.rooms), {})[0]
-
-
-def _flow_entity(eng) -> str | None:
-    ctl = getattr(eng, "boiler_control", None)
-    return ctl.entities["flow"] if ctl is not None else be.flow_target(eng.cfg, eng.found, eng.states)[0]
-
-
-def fallback(eng) -> int | None:
-    """Rückfall-Vorlauf, wie HeatPilot ihn beim Zurückschalten (und ohne rechenbares Ziel) schreibt und der Wächter ihn
-    setzen soll – höchstens die strengste Fußboden-Grenze und der Höchstwert der Entität."""
-    eid = _flow_entity(eng)
-    return br.fallback_value(eng.cfg, worst_cap(eng), be.bounds(eng.states.get(eid) if eid else None))
 
 
 def _times(d: dict | None) -> dict | None:
@@ -89,8 +72,7 @@ class BoilerStatus:
                        "Automation?")
         stop = st.get("stopped")
         if mode != "heatpilot" and stop and now_ts - stop["ts"] < HINT_S:
-            fb = (st.get("fallback") or {}).get("text") or "nichts zurückgeschrieben"
-            out.append(f"HeatPilot schreibt den Kessel nicht mehr ({fb}) – {br.HINT_BACK}")
+            out.append(f"HeatPilot schreibt den Kessel nicht mehr – {br.HINT_BACK}")
         if mode != "aus":
             w = watchdog.status(self.eng, mode)
             if w["state"] in ("fehlt", "aus"):
@@ -98,7 +80,7 @@ class BoilerStatus:
         return out
 
     def _extra_warnings(self, now_ts: int) -> list[str]:
-        """Hinweise seit der Prüfung von 0.41: abgewiesen (Control), kein Ziel rechenbar, Eingriff des Wächters."""
+        """Hinweise seit der Prüfung von 0.41: abgewiesen (Control), kein Ziel rechenbar."""
         st, out = self.state, []
         rej = st.get("rejected")
         if self.mode == "heatpilot" and rej:
@@ -106,17 +88,8 @@ class BoilerStatus:
                        f"({rej['text']}, zuerst {_ago(now_ts - rej['ts'])})")
         blind = st.get("blind")
         if blind:
-            fb = fallback(self.eng)
-            late = now_ts - blind["since"] >= br.BLIND_S
-            dry = " (Beobachten: nur im Protokoll)" if self.mode != "heatpilot" else ""
-            out.append(f"Kein Vorlauf-Soll rechenbar ({blind.get('why')}) – " + (
-                (f"Kessel auf Rückfall-Vorlauf {fb} °C und Heizbetrieb an{dry}" if fb is not None else
-                 "Rückfall-Vorlauf läge unter 35 °C, HeatPilot schreibt nichts") if late else
-                f"nach {br.BLIND_S // 60} min stellt HeatPilot den Rückfall-Vorlauf ein{dry}"))
-        hit = st.get("watchdog_hit")
-        if self.mode == "heatpilot" and hit and now_ts - hit["ts"] < HINT_S:
-            out.append(f"Der Wächter in Home Assistant hat {_ago(now_ts - hit['ts'])} eingegriffen (HeatPilot lief "
-                       f"{hit['gap_min']} min nicht) – HeatPilot führt den Kessel wieder")
+            out.append(f"Kein Vorlauf-Soll rechenbar ({blind.get('why')}) – HeatPilot schreibt nichts, der Kessel bleibt "
+                       "auf dem letzten Wert")
         return out
 
     def _status(self) -> str:
@@ -175,7 +148,6 @@ class BoilerStatus:
         foreign = st.get("foreign") or []
         lo, hi = br.flow_limits(self.eng.cfg, None, be.bounds(self.eng.states.get(self.entities["flow"] or "")))
         flow_ent, heat_ent = self.entities["flow"], self.entities["heating"]
-        fb = fallback(self.eng)
         return {
             "mode": mode, "modes": list(br.BOILER_MODES), "writes": mode == "heatpilot",
             "active": mode == "heatpilot" and not paused and not v.get("blocked") and bool(flow_ent and heat_ent),
@@ -192,11 +164,10 @@ class BoilerStatus:
             "foreign_last": _times(fl), "foreign_1h": sum(1 for t in foreign if t > now_ts - FOREIGN_WINDOW_S),
             "foreign_24h": sum(1 for t in foreign if t > now_ts - HINT_S),
             "dry_last": {w: _times(self._ch(w).get("dry")) for w in ("flow", "heating")},
-            "fallback": {"setting": self.eng.cfg.boiler_fallback_flow, "value": fb, "last": _times(st.get("fallback"))},
             "rejected": _times(st.get("rejected")), "blind": _times(st.get("blind") and {
-                **st["blind"], "ts": st["blind"]["since"]}), "watchdog_hit": _times(st.get("watchdog_hit")),
+                **st["blind"], "ts": st["blind"]["since"]}),
             "watchdog": {**watchdog.status(self.eng, mode),
-                         "guide": watchdog.guide(flow_ent, heat_ent, fb, self.eng.cfg.notify_targets, worst_cap(self.eng))},
+                         "guide": watchdog.guide(self.eng.cfg.notify_targets)},
             "heartbeat": {"entity": watchdog.HEARTBEAT, "last": _iso(getattr(self.eng, "heartbeat_ts", None))},
             "status_text": self._status(), "warnings": self.warnings(now_ts),
             "notes": [br.HINT_FAILSAFE, self.period.note()],
@@ -275,9 +246,6 @@ def ready(eng, now_ts: int) -> dict:
             notes.append(f"Ob EMS-ESP {ent['ems_key']} schreiben lässt, ist unbekannt – die Prüfung nach 60 s zeigt es")
     floor = floor_limit.status(cfg, eng.found.rooms, eng.states)
     notes += floor["notes"][:1]
-    fb = fallback(eng)
-    notes.append(f"Rückfall-Vorlauf {fb} °C (Zurückschalten, Wächter)" if fb is not None else
-                 "Rückfall-Vorlauf läge unter 35 °C (Fußboden-Grenze) – beim Zurückschalten schreibt HeatPilot nichts")
     notes.append(br.HINT_FAILSAFE)
     mode, writes = cfg.boiler_control, cfg.writes_boiler()
     level = "nicht bereit" if blockers else ("eingeschränkt" if limits else "bereit")
@@ -290,7 +258,7 @@ def ready(eng, now_ts: int) -> dict:
                     "am Bus.")
     fl = st.get("foreign_last")
     return {"level": level, "headline": headline, "mode": mode, "writes": writes, "flow": flow, "heating": heat,
-            "regulator": reg, "heating_off": off, "watchdog": w, "fallback": fb,
+            "regulator": reg, "heating_off": off, "watchdog": w,
             "last_check": _times(lc), "paused": bool(paused), "pause_reason": (paused or {}).get("reason"),
             "paused_since": _iso(paused["ts"]) if paused else None, "foreign_last": _times(fl),
             "foreign_24h": len(foreign), "min_power_kw": None if kw is None else round(kw, 1),

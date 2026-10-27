@@ -2,8 +2,8 @@
 
 Seit 0.41 läuft im 30-s-Takt der Live-Werte auch Weg B (``boiler_step``: Kessel über HeatPilot rechnen, prüfen,
 schreiben), der Heartbeat ``sensor.heatpilot_heartbeat`` (jede Minute) und das Lesen der Wächter-Automationen
-(alle 10 min, nur lesen). Beim Zurückschalten von „heatpilot“ schreibt die alte Schreibstelle einmal den
-Rückfall-Vorlauf (``App._boiler_back``). Seit 0.42 läuft im selben Takt das Auslösen der Desinfektion zum Termin
+(alle 10 min, nur lesen). Beim Zurückschalten von „heatpilot“ setzt die alte Schreibstelle die Antipendelzeit
+zurück (``App._boiler_back``). Seit 0.42 läuft im selben Takt das Auslösen der Desinfektion zum Termin
 (``disinfect_step``: nur mit Warmwasser-Soll „HeatPilot setzt“, ohne Regler am Bus). Seit 0.42.1 übernimmt
 ``App.adopt_room`` auf Rückfrage Gelerntes von alten Raum-Entitäten (``room_adopt``) – ohne Neueinlesen der Historie –
 und merkt sich deren alten Temperatursensor (``room_alias``). ``App.restore_house`` stellt Hausdaten wieder her
@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from aiohttp import web
 
 from . import __version__
-from . import boiler_period, boiler_status, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
+from . import boiler_period, disinfect_entity, disinfect_rule, floor_limit, house_restore, watchdog
 from . import card_bridge, room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel; 0.56: Karten
 from . import live_log  # 0.50: Entscheidung von Weg B ins 30-s-Protokoll
 from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
@@ -178,7 +178,7 @@ class App(JobsMixin):
                 eng.ems, eng.ems_ts = old.ems, old.ems_ts  # letzte Werte mit ihrer Zeit (Weg B: Regler am Bus)
                 eng.regulator_watch = old.regulator_watch  # Regler zuletzt gesehen, Folge „kein Gerät“ (0.41)
             await self._release_valves(old, found)
-            await self._boiler_back(old, eng)
+            await self._boiler_back(old)
         self.eng = eng
         await room_switch.follow(eng, renames)  # HA hat nur umbenannt: Daten ziehen ohne Rückfrage um
         await room_switch.resume(eng)  # Neulernen nach einem Wechsel, das ein Neustart unterbrach
@@ -225,19 +225,12 @@ class App(JobsMixin):
         except Exception:  # noqa: BLE001
             log.exception("Ventile führen: Zurückschreiben vor dem Neuaufbau fehlgeschlagen")
 
-    async def _boiler_back(self, old: Engine, eng: Engine) -> None:
-        """Weg B (0.41): von „heatpilot“ auf aus/trocken umgestellt – einmal den Rückfall-Vorlauf und Heizbetrieb an
-        schreiben, noch über die alte Schreibstelle (``BoilerControl.fallback``), damit der Kessel nicht auf einem
-        Nacht-Wert stehen bleibt. Ein Fehler hält den Aufbau nicht auf."""
+    async def _boiler_back(self, old: Engine) -> None:
+        """Weg B (0.41): Antipendelzeit nicht mehr geführt – einmal den Grundwert zurück, noch über die alte
+        Schreibstelle (0.48, nie ein Fehler). Einen Rückfall-Vorlauf schreibt HeatPilot seit 0.59 nicht mehr."""
         ctl = old.boiler_control
-        if ctl is not None:  # 0.48: Antipendelzeit nicht mehr geführt – einmal den Grundwert zurück (nie ein Fehler)
+        if ctl is not None:
             await ctl.period.back(self.cfg)
-        if ctl is None or old.cfg.boiler_control != "heatpilot" or self.cfg.boiler_control == "heatpilot":
-            return
-        try:
-            await ctl.fallback(boiler_status.fallback(eng))
-        except Exception:  # noqa: BLE001
-            log.exception("Kessel über HeatPilot: Rückfallwert beim Zurückschalten nicht geschrieben")
 
     def _build_control(self, eng: Engine, found, old: Engine | None) -> None:
         """Schreibstellen neu aufbauen: Control (Gruppen, HA-Zustände; seit 0.38 die eine Entität des
@@ -462,7 +455,7 @@ async def heartbeat(app: App, now: float | None = None) -> bool:
     eng, now = app.eng, time.time() if now is None else now
     if eng is None or (eng.heartbeat_ts is not None and now - eng.heartbeat_ts < watchdog.EVERY_S - 1):
         return False
-    await watchdog.publish(app.ha, now, eng.cfg.boiler_control, boiler_status.fallback(eng))
+    await watchdog.publish(app.ha, now, eng.cfg.boiler_control)
     eng.heartbeat_ts = now
     return True
 
@@ -474,9 +467,8 @@ async def scan_watchdog(app: App, now: float | None = None) -> bool:
         return False
     if eng.watchdog and now - eng.watchdog.get("ts", 0) < watchdog.SCAN_EVERY_S:
         return False
-    flow = eng.boiler_control.entities["flow"] if eng.boiler_control is not None else None
     try:  # viele Automationen bzw. HA langsam: höchstens eine Minute, der Live-Takt wartet sonst
-        eng.watchdog = await asyncio.wait_for(watchdog.scan(app.ha, eng.states, flow), timeout=watchdog.SCAN_MAX_S)
+        eng.watchdog = await asyncio.wait_for(watchdog.scan(app.ha, eng.states), timeout=watchdog.SCAN_MAX_S)
     except asyncio.TimeoutError:
         eng.watchdog = {"found": [], "error": "Automationen nicht lesbar (Zeitüberlauf)", "checked": 0}
     eng.watchdog["ts"] = int(now)

@@ -21,11 +21,10 @@ Ablauf je Schritt (``plan`` im 30-s-Takt der Live-Werte, danach ``apply``; ``mai
    „wieder einschalten“. Während einer Warmwasser-Ladung wartet die Prüfung des Vorlaufs, bis sie vorbei ist.
 2. Ziel rechnen (``boiler_flow.compute``: Bedarf, Abnahme, Zuschlag „Raum kommt nicht hoch“, Takt-Boost,
    Fußboden-Grenze, Obergrenze, Grenzen der Entität). Ist es länger als ``BLIND_S`` nicht rechenbar (Außentemperatur
-   fehlt, kein Raummodell), gilt der Rückfall-Vorlauf mit Heizbetrieb an (``_blind``) – mit Hinweis und Meldung;
-   danach geht es normal weiter.
+   fehlt, kein Raummodell), schreibt HeatPilot nichts (``_blind``) – mit Hinweis und Meldung; danach geht es normal
+   weiter.
 3. Fremde Änderungen erkennen (nur „heatpilot“, nicht gesperrt, ``boiler_watch``): ändert sich ein Wert ohne
-   HeatPilot, Hinweis und Meldung („Regler noch dran? Automation?“); 2 fremde Änderungen in 1 h → Pause. Ein Eingriff
-   des Wächters in Home Assistant wird erkannt und gemeldet, aber nicht gezählt.
+   HeatPilot, Hinweis und Meldung („Regler noch dran? Automation?“); 2 fremde Änderungen in 1 h → Pause.
 4. Entscheiden (``boiler_rule``): Vorlauf-Soll nur ab 1 K Änderung, höchstens ein Schreiben je 60 s, anheben sofort,
    senken erst nach 10 min niedrigerem Ziel und nicht in den ersten 10 min eines Brennerlaufs (seit 0.50), nicht
    während einer Warmwasser-Ladung; Heizbetrieb mit 5 min Haltezeit,
@@ -35,11 +34,9 @@ Ablauf je Schritt (``plan`` im 30-s-Takt der Live-Werte, danach ``apply``; ``mai
    (``blocker``: dieselben Hindernisse wie in „Bereit für die Steuerung?“). Weist ``Control`` einen Schreibvorgang ab,
    steht das als Hinweis da und wird nach 15 min gemeldet.
 
-**Zurückschalten** auf aus/trocken: einmal den Rückfall-Vorlauf (``boiler_fallback_flow``, Standard 45 °C, höchstens
-die strengste Fußboden-Grenze) und Heizbetrieb an schreiben – noch über die alte Schreibstelle (``fallback``, von
-``main.App.build`` aufgerufen), damit der Kessel nicht auf einem Nacht-Wert stehen bleibt; Hinweis, den Regler wieder
-anzuschließen bzw. den Kessel selbst zu stellen. Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür der
-Wächter in Home Assistant (``watchdog``). Der Zustand überlebt Neustarts (kv ``boiler_control.state``); die Anzeige
+**Zurückschalten** auf aus/trocken: HeatPilot schreibt nichts mehr (seit 0.59 kein Rückfall-Vorlauf); Hinweis, den
+Regler wieder anzuschließen bzw. den Kessel selbst zu stellen. Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen –
+ohne Wärmeabnahme fällt der Kessel zurück; der Wächter in Home Assistant (``watchdog``) meldet den Ausfall. Der Zustand überlebt Neustarts (kv ``boiler_control.state``); die Anzeige
 steht in ``boiler_status``, Überwachung und Meldungen in ``boiler_watch``.
 """
 
@@ -54,11 +51,10 @@ from . import boiler_entity as be
 from . import boiler_flow, plausibility
 from . import boiler_rule as br
 from .boiler_rule import CHECK_MAX_S, CHECK_S, EMS_FRESH_S, MAX_FAILS, Decision, _c, decide_flow, decide_heating, shown
-from .boiler_status import (ACT_DRY, ACT_FAIL, ACT_FALLBACK, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME,  # noqa: F401
+from .boiler_status import (ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME,  # noqa: F401
                             ACTIONS, LOG_ROOM, BoilerStatus)
-from .boiler_status import fallback as fallback_flow
 from .boiler_watch import (BLOCKED_NOTE_S, K_BLIND, K_BLOCKED, K_FAIL, K_FOREIGN, K_PAUSED,  # noqa: F401
-                           K_REJECTED, K_WATCHDOG, BoilerWatch, forget_rest_drops, same)
+                           K_REJECTED, BoilerWatch, forget_rest_drops, same)
 from .dhw_control import special_running
 from .period_control import PeriodControl
 from .discovery_roles import BOILER_ROLES
@@ -361,9 +357,9 @@ class BoilerControl(BoilerStatus, BoilerWatch):
                               unsafe, protect, resting=_resting(ref["flow"][0]))
 
     def _blind(self, ts: int, target):
-        """Kein Vorlauf-Soll rechenbar (Außentemperatur fehlt, kein Raummodell …): nach ``BLIND_S`` gilt der
-        Rückfall-Vorlauf mit Heizbetrieb an – nach denselben Regeln (Grenzen, Schwelle, Warmwasser-Ladung, Prüfung) –
-        mit Hinweis und Meldung. Ist das Ziel wieder rechenbar, geht es normal weiter."""
+        """Kein Vorlauf-Soll rechenbar (Außentemperatur fehlt, kein Raummodell …): HeatPilot schreibt nichts, der Kessel
+        bleibt auf dem letzten Wert; nach ``BLIND_S`` Hinweis und Meldung. Ist das Ziel wieder rechenbar, geht es normal
+        weiter."""
         st = self.state
         if target.heating is not None:
             if st.pop("blind", None) is not None and self.notifier is not None:
@@ -371,17 +367,10 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             return target
         blind = st.setdefault("blind", {"since": ts})
         blind["why"] = target.reason
-        if ts - blind["since"] < br.BLIND_S:
-            return target
-        fb = fallback_flow(self.eng)
-        if fb is None or target.hi is None or fb > target.hi:
-            return dataclasses.replace(target, reason=f"{target.reason} – Rückfall-Vorlauf läge unter 35 °C bzw. über "
-                                                      "der Grenze, HeatPilot schreibt nichts")
-        why = f"kein Vorlauf-Soll rechenbar seit {(ts - blind['since']) // 60} min – Rückfall-Vorlauf {fb} °C"
-        if self.mode == "heatpilot":
-            self._notify(K_BLIND, f"Kessel: kein Vorlauf-Soll rechenbar ({target.reason}) – Kessel auf Rückfallwert "
-                                  f"{fb} °C und Heizbetrieb an", ts)
-        return dataclasses.replace(target, heating=True, flow=fb, reason=f"{why} ({target.reason})", base=fb)
+        if ts - blind["since"] >= br.BLIND_S and self.mode == "heatpilot":
+            self._notify(K_BLIND, f"Kessel: kein Vorlauf-Soll rechenbar ({target.reason}) – HeatPilot schreibt nichts, "
+                                  "der Kessel bleibt auf dem letzten Wert", ts)
+        return target
 
     def _reference(self, mode: str, what: str, current) -> tuple:
         """Womit verglichen wird: bei „heatpilot“ der Wert am Kessel und das letzte Schreiben; im Trockenlauf der
@@ -398,8 +387,8 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         return None if mode == "aus" else {w: self._reference(mode, w, self.current(w))[0] for w in WHATS}
 
     def _switch(self, mode: str, ts: int) -> None:
-        """Schalter umgestellt: weg von „heatpilot“ Prüfungen verwerfen und den Stand für den Hinweis merken (den
-        Rückfallwert schreibt ``fallback`` vorher über die alte Schreibstelle); Trockenlauf neu beginnen; bei
+        """Schalter umgestellt: weg von „heatpilot“ Prüfungen verwerfen und den Stand für den Hinweis merken; Trockenlauf
+        neu beginnen; bei
         „heatpilot“ Fehlschläge und fremde Werte ab jetzt zählen. Zuschlag und Takt-Boost beginnen immer neu."""
         st = self.state
         prev = st.get("mode")
@@ -478,34 +467,6 @@ class BoilerControl(BoilerStatus, BoilerWatch):
                  CHECK_S)
         return True
 
-    async def fallback(self, value: int | None, now: float | None = None) -> dict:
-        """Zurückschalten (heatpilot → aus/trocken, ``main.App.build`` mit der alten Schreibstelle): einmal den
-        Rückfall-Vorlauf ``value`` und Heizbetrieb an schreiben – nur ohne Hindernis (ein Regler am Bus regelt ohnehin).
-        Ergebnis im Zustand (``fallback``) und im Protokoll."""
-        ts = int(time.time() if now is None else now)
-        res: dict = {"ts": ts, "value": value, "ok": False}
-        problem = self.blocker(now)
-        if self.control is None:
-            res["text"] = "nichts zurückgeschrieben – keine Verbindung"
-        elif value is None:
-            res["text"] = "nichts zurückgeschrieben – der Rückfall-Vorlauf läge unter 35 °C (Fußboden-Grenze)"
-        elif problem:
-            res["text"] = f"nichts zurückgeschrieben – {problem}"
-        else:
-            try:
-                await self.control.set_flow(value, "Zurückschalten: Rückfall-Vorlauf")
-                await self.control.set_heating(True, "Zurückschalten: Heizbetrieb an")
-                res.update(ok=True, text=f"Vorlauf-Soll {value} °C und Heizbetrieb an geschrieben")
-            except Exception as err:  # noqa: BLE001 – nur melden, der Neuaufbau geht weiter
-                res["text"] = f"Rückfallwert nicht geschrieben ({err})"
-        self.state["fallback"] = res
-        self.pending = []
-        self._log(ts, ACT_FALLBACK, value, f"Kessel über HeatPilot zurückgeschaltet: {res['text']} – {br.HINT_BACK}")
-        log.info("Kessel über HeatPilot zurückgeschaltet: %s", res["text"])
-        self._save()
-        return res
-
-    # -------------------------------------------------------------- Prüfen
     def verify(self, now: float | None = None) -> bool:
         """Prüfung 60 s nach dem Schreiben: Zeigt der Kessel den Wert (Vorlauf ±0,5 K, Heizbetrieb gleich)? Unbekannt
         oder unklar: bis 5 min danach weiter prüfen. Während einer Warmwasser-Ladung wartet die Prüfung des Vorlaufs.

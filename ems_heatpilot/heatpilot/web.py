@@ -192,7 +192,6 @@ def make_app(app) -> web.Application:
                                "suggested": {"flow": boiler_entity.suggest_flow(app.eng.found, app.eng.states),
                                              "heating": boiler_entity.suggest_heat(app.eng.found, app.eng.states),
                                              "period": boiler_period.suggest(app.eng.found, app.eng.states)},
-                               "fallback_range": [boiler_rule.FALLBACK_MIN, boiler_rule.FALLBACK_MAX],
                                "status": boiler_state(), "readiness": boiler_status.ready(app.eng, int(time.time()))},
             # 0.42: Mindestleistung – wirksamer Wert, Herkunft, Vorschlag (nie automatisch übernommen)
             "boiler_power": boiler_power.info(app.eng),

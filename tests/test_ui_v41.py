@@ -1,8 +1,8 @@
 """0.41: Oberfläche zu „Kessel über HeatPilot“ (Weg B) – statische Prüfung und Texte in Node.
 
 Wie tests/test_ui_v40.py: die Oberfläche ist eine HTML-Datei ohne Build. Geprüft wird der Einbau (eigene Karte
-„Kessel über HeatPilot“ nach „Haus & Kessel“ mit Schalter, Rückfall-Vorlauf, Warnhinweisen, Statusbox und Knopf
-„Anleitung Wächter“; Speichern schickt Schalter und Rückfall-Vorlauf und fragt beim Umschalten auf „HeatPilot setzt“
+„Kessel über HeatPilot“ nach „Haus & Kessel“ mit Schalter, Warnhinweisen, Statusbox und Knopf
+„Anleitung Wächter“; Speichern schickt den Schalter und fragt beim Umschalten auf „HeatPilot setzt“
 einmal nach; Statuszeile in Heizen und Übersicht; Kessel-Zeilen im Protokoll; Block in „Bereit für die Steuerung?“;
 „schreibt“ in der Vorschau; Auswahl der zwei Entitäten; „empfohlen“ bei den Benachrichtigungen), dass die Oberfläche
 selbst nichts an den Kessel schreibt (einziger Aufruf: „wieder einschalten“ mit leerem Inhalt) und ältere Antworten ohne
@@ -102,10 +102,10 @@ def scene(tmp_path, kind: str):
             t += 60
             step(bc, t)
         now = t + 30
-    elif kind == "zurueck":  # von „HeatPilot setzt“ zurück auf „Aus“: einmal 45 °C und Heizbetrieb an
+    elif kind == "zurueck":  # von „HeatPilot setzt“ zurück auf „Aus“: seit 0.59 schreibt HeatPilot nichts
         eng, ha, bc = house(tmp_path)
         step(bc, T0)
-        run(main_mod.App._boiler_back(SimpleNamespace(cfg=Config(boiler_control="aus")), eng, eng))
+        run(main_mod.App._boiler_back(SimpleNamespace(cfg=Config(boiler_control="aus")), eng))
         eng.cfg.boiler_control = "aus"
         bc.plan(T0 + 30)
         now = T0 + 60
@@ -123,7 +123,7 @@ def settings_x(eng, bc, now):
 
     x = {"modes": list(br.BOILER_MODES), "suggested": {"flow": be.suggest_flow(eng.found, eng.states),
                                                        "heating": be.suggest_heat(eng.found, eng.states)},
-         "fallback_range": [br.FALLBACK_MIN, br.FALLBACK_MAX], "status": bc.as_dict(now), "readiness": ready(eng, now)}
+         "status": bc.as_dict(now), "readiness": ready(eng, now)}
     return as_json(x), as_json(eng.cfg.to_raw())
 
 
@@ -149,9 +149,9 @@ def test_card_status_lines_log_ready_and_save_are_wired():
     box = between(js, "function renderReadyBox(r, err = \"\") {", "function readyBoxHtml(")
     assert box.index("boilerReadyHtml(r.boiler_control, READY_SHOW.boiler_hp)") < box.index("valveReadyHtml(r.valves")
     assert "if (r && r.boiler_control)" in box  # ältere Version ohne Block: nichts
-    # Speichern: Schalter und Rückfall-Vorlauf; vor dem Umschalten auf „HeatPilot setzt“ einmal nachfragen
+    # Speichern: Schalter; vor dem Umschalten auf „HeatPilot setzt“ einmal nachfragen
     coll = between(js, "function collect()", "async function saveSettings")
-    assert '"boiler_fallback_flow"]) out[k] = v("f-" + k);' in coll and "if (bc) out.boiler_control = bc.value;" in coll
+    assert "boiler_fallback_flow" not in coll and "if (bc) out.boiler_control = bc.value;" in coll
     save = between(js, "async function saveSettings()", "function saveNote(j)")
     assert save.index("if (!boilerConfirm(body))") < save.index('await fetch("api/settings"')
     # Entitäten: Auswahl nur passender Entitäten (api/entities: flow.fits, heating.fits), Hinweis folgt der Wahl
@@ -241,11 +241,11 @@ def test_status_line_and_box_when_writing(tmp_path):
     assert steps == g["steps"] and not any("yaml" in t.lower() for t in steps)
     vals = [plain(x) for x in re.findall(r"<tr>(.*?)</tr>", r["box"].split('id="boiler-vals">')[1].split("</table>")[0])]
     assert vals == ["Auslöser: Entität sensor.heatpilot_heartbeat", "„Für“ 01:00:00",
-                    "Bedingung Attribut „kessel“ von sensor.heatpilot_heartbeat ist „heatpilot“", f"Vorlauf-Soll: Ziel {FLOW}",
-                    "Vorlauf-Soll: Wert 45", f"Heizbetrieb: Ziel {HEAT}", f"Nachricht {g['values']['message']}",
+                    "Bedingung Attribut „kessel“ von sensor.heatpilot_heartbeat ist „heatpilot“",
+                    f"Nachricht {g['values']['message']}",
                     "Name HeatPilot-Wächter"]
     assert r["guideOpen"] is False  # Knopf öffnet die Anleitung
-    # Karte: Schalter, Entitäten mit Wert und Grenzen, Rückfall-Vorlauf, Warnhinweise
+    # Karte: Schalter, Entitäten mit Wert und Grenzen, Warnhinweise (seit 0.59 ohne Rückfall-Vorlauf)
     sec = r["sec"]
     assert re.findall(r'value="(\w+)" (checked|)', sec) == [("aus", ""), ("trocken", ""), ("heatpilot", "checked")]
     assert [plain(x) for x in re.findall(r"<label>(.*?)</label>", sec)][:3] == ["Aus", "Beobachten", "HeatPilot steuert"]
@@ -254,7 +254,7 @@ def test_status_line_and_box_when_writing(tmp_path):
                     "Assistant 0–90 °C",  # 0.43: die Zeilen zum Ändern stehen darunter (emInline)
                     f"Heizbetrieb: {HEAT} (automatisch erkannt). Boiler Heizbetrieb aktiviert: jetzt an"]
     assert "emGo('kessel_hp')" not in sec  # 0.43: die zwei Entitäten stehen darunter (emInline("kessel_hp"))
-    assert '<input id="f-boiler_fallback_flow" type="number" step="1" min="35" max="75" value="45">' in sec
+    assert "f-boiler_fallback_flow" not in sec
     intro = plain(re.search(r'id="boiler-intro"[^>]*>(.*?)</p>', sec).group(1))
     assert intro == ("HeatPilot kann den Kessel selbst führen – Vorlauf-Soll live und Heizbetrieb an/aus, unabhängig vom Schalter "
                      "unter „Steuerung“ und vom Warmwasser. Geschrieben wird nur über Home Assistant, nur auf die zwei Entitäten "
@@ -271,10 +271,10 @@ def test_status_line_and_box_when_writing(tmp_path):
     # 0.48: kein Regler am Bus (EMS-ESP meldet keinen) – statt des Warnkastens nur der kurze Hinweis (Kurztext + mehr)
     assert 'id="boiler-warn"' not in sec
     warn = plain(re.search(r'<div class="hint" id="boiler-failsafe">(.*?)</div></details>', sec).group(1))
-    assert warn.startswith("Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür den Wächter anlegen. Fällt "
-                           "HeatPilot aus (Add-on gestoppt") and "Regler am Bus:" not in warn
+    assert warn.startswith("Fällt HeatPilot aus, meldet der Wächter es – dann den Drehschalter am Kessel auf Festwert. "
+                           "Fällt HeatPilot aus (Add-on gestoppt") and "Regler am Bus:" not in warn
     assert "Fällt HeatPilot aus (Add-on gestoppt, Home Assistant neu gestartet), bleibt der letzte Vorlauf stehen" in warn
-    assert "Zurück auf „Aus“ oder „Beobachten“: HeatPilot schreibt einmal den Rückfall-Vorlauf (jetzt 45 °C) und Heizbetrieb an" in warn
+    assert "Zurück auf „Aus“ oder „Beobachten“: HeatPilot schreibt nichts mehr" in warn and "Rückfall" not in warn
 
 
 @pytest.mark.usefixtures("berlin")
@@ -305,8 +305,8 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
     assert rows[1] == f"Vorlauf-Soll {FLOW} erkannt · 30 °C (0–90 °C)" and rows[2] == f"Heizbetrieb {HEAT} erkannt · an"
     assert rows[3] == "schreibbar laut EMS-ESP selflowtemp unbekannt · heatingactivated unbekannt"
     assert rows[4].startswith("Regler am Bus ja – EMS-ESP meldet einen Regler") and rows[5] == "Heizen abschalten aus"
-    assert rows[7] == "Mindestleistung unbekannt – Abnahme-Regel aus" and rows[8] == "Rückfall-Vorlauf 45 °C"
-    assert rows[9:] == ["letzte Prüfung noch keine", "pausiert nein", "fremder Schreiber in den letzten 24 h keiner"]
+    assert rows[7] == "Mindestleistung unbekannt – Abnahme-Regel aus"
+    assert rows[8:] == ["letzte Prüfung noch keine", "pausiert nein", "fremder Schreiber in den letzten 24 h keiner"]
     assert 'id="ready-boiler-hp-details" open' in g["ready"] and 'id="ready-boiler-hp-details" open' not in g["closed"]
     assert plain(g["ready"]).endswith("Schalter und „Anleitung Wächter“ unter Einstellungen → Kessel über HeatPilot, "
                                       "Entitäten unter Einstellungen → Haus → Experte → Kessel über HeatPilot.")
@@ -328,10 +328,9 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
     # zurückgeschaltet: bei „Aus“ steht die Zeile, solange der Hinweis gilt
     z, zb = r["zurueck"], out["zurueck"][0]
     assert zb["mode"] == "aus" and zb["status_text"] == "Kessel: aus – Regler bzw. Kessel regeln selbst"
-    assert plain(z["line"]) == (f"{zb['status_text']} ⚠ HeatPilot schreibt den Kessel nicht mehr (Vorlauf-Soll 45 °C und "
-                                "Heizbetrieb an geschrieben) – Regler wieder anschließen bzw. den Kessel selbst stellen "
-                                "Einstellungen → Kessel über HeatPilot")
-    assert "zurückgeschaltet " in plain(z["box"]) and "Vorlauf-Soll 45 °C und Heizbetrieb an geschrieben" in plain(z["box"])
+    assert plain(z["line"]) == (f"{zb['status_text']} ⚠ HeatPilot schreibt den Kessel nicht mehr – Regler wieder "
+                                "anschließen bzw. den Kessel selbst stellen Einstellungen → Kessel über HeatPilot")
+    assert "zurückgeschaltet " not in plain(z["box"])  # 0.59: nichts zurückgeschrieben
     # aus: keine Zeile, die Box nennt nur den Stand
     a, ab = r["aus"], out["aus"][0]
     assert a["line"] == "" and plain(a["box"]).startswith("Kessel: aus – Regler bzw. Kessel regeln selbst Kessel jetzt:")
@@ -340,7 +339,7 @@ def test_blocked_dry_paused_back_and_off(tmp_path):
 
 
 def test_mode_hint_confirm_and_old_answers(tmp_path):
-    st = {"fallback": {"value": 45}, "regulator": {"present": False}}
+    st = {"regulator": {"present": False}}
     r = js_run(tmp_path, f"""const ST = {json.dumps(st)}, E = {{ flow: "{FLOW}", heating: "{HEAT}" }};
       const t = (m, saved, e = E, s = ST) => boilerModeText(m, saved, e, s);
       SET = {{ boiler_control: "aus", flow_set_entity: "", heating_switch_entity: "" }};
@@ -351,8 +350,6 @@ def test_mode_hint_confirm_and_old_answers(tmp_path):
       const asks = [boilerConfirm({{ boiler_control: "heatpilot" }}), boilerConfirm({{ boiler_control: "trocken" }})];
       SET.boiler_control = "heatpilot"; asks.push(boilerConfirm({{ boiler_control: "heatpilot" }}));
       out({{ aus: t("aus", "aus"), trocken: t("trocken", "aus"), hp: t("heatpilot", "aus"), back: t("aus", "heatpilot"),
-            backReg: t("trocken", "heatpilot", E, {{ fallback: {{ value: 45 }}, regulator: {{ present: true }} }}),
-            backNone: t("aus", "heatpilot", E, {{ fallback: {{ value: null }} }}),
             reg: t("heatpilot", "aus", E, {{ regulator: {{ present: true }} }}), unknown: t("heatpilot", "aus", E, {{ regulator: {{ present: null }} }}),
             noHeat, picked, asks, asked: ASKED,
             none: [boilerLine(undefined), boilerLine(null), boilerReadyHtml(undefined), boilerBoxHtml(null)],
@@ -365,10 +362,8 @@ def test_mode_hint_confirm_and_old_answers(tmp_path):
     assert r["trocken"].startswith("HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Live → Diagnose)")
     assert "Geht auch mit Regler am Bus" in r["trocken"]
     assert plain(r["hp"]) == f"HeatPilot schreibt das Vorlauf-Soll auf {FLOW} und schaltet den Heizbetrieb über {HEAT} – nur ohne Regler am Bus."
-    assert r["back"].endswith("Beim Zurückschalten schreibt HeatPilot einmal 45 °C Vorlauf und Heizbetrieb an – danach den Regler "
-                              "wieder anschließen bzw. den Kessel selbst stellen.")
-    assert "einmal 45 °C Vorlauf und Heizbetrieb an (mit Regler am Bus nichts)" in r["backReg"]
-    assert "schreibt HeatPilot nichts zurück – der Rückfall-Vorlauf läge unter 35 °C" in r["backNone"]
+    assert r["back"].endswith("Beim Zurückschalten schreibt HeatPilot nichts mehr – danach den Regler "
+                              "wieder anschließen bzw. den Kessel selbst stellen.")  # 0.59: kein Rückfall-Vorlauf
     assert "Zurzeit gesperrt: EMS-ESP meldet einen Regler." in plain(r["reg"])
     assert "Zurzeit gesperrt: ob ein Regler am Bus ist, ist unbekannt." in plain(r["unknown"])
     assert plain(r["noHeat"]) == "Keine Entität für den Heizbetrieb – unter Experte wählen, sonst schreibt HeatPilot nichts."
@@ -381,7 +376,7 @@ def test_mode_hint_confirm_and_old_answers(tmp_path):
     assert plain(r["startBox"]) == "Kessel: aus – Regler bzw. Kessel regeln selbst"
     old = r["old"]
     assert re.findall(r'value="(\w+)" (checked|)', old) == [("aus", "checked"), ("trocken", ""), ("heatpilot", "")]
-    assert 'value="45"' in old and "keine number-Entität mit °C erkannt – bitte wählen." in plain(old)
+    assert "keine number-Entität mit °C erkannt – bitte wählen." in plain(old)
     assert "Status nicht verfügbar" in old
 
 
@@ -512,7 +507,7 @@ def test_entity_page_offers_only_fitting_entities(tmp_path):
 def test_docs_and_changelog_name_the_places():
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     for text in ("Einstellungen → Kessel über HeatPilot", "**HeatPilot setzt**", "„Anleitung Wächter“",
-                 "„Vorschau – Kessel über HeatPilot schreibt“", "**Rückfall-Vorlauf**", "„wieder einschalten“"):
+                 "„Vorschau – Kessel über HeatPilot schreibt“", "„wieder einschalten“", "**Notfall: HeatPilot fällt aus.**"):
         assert text in docs, text
     head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.41.0")[1].split("\n## ")[0]  # seit 0.42
     assert "**Oberfläche:** neue Karte **Einstellungen → Kessel über HeatPilot**" in head

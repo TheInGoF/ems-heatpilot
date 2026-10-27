@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.59.0
+- **Rückfall-Vorlauf gestrichen** (Konzeptpapier UI & Rollout, Abschnitt 8): Ohne Wärmeabnahme fällt der Kessel ohnehin zurück, und fällt der Raspberry Pi aus, greift ein Wert aus Home Assistant nicht. Einen festen Vorlauf stellt nur der Drehschalter am Kessel ein. Entfernt: die Einstellung `boiler_fallback_flow` (alte Werte werden ignoriert), das einmalige Schreiben beim Zurückschalten auf Aus/Beobachten (`BoilerControl.fallback`), der Rückfall-Vorlauf ohne rechenbares Ziel (jetzt: nichts schreiben, nach 15 min Meldung), die Erkennung „Eingriff des Wächters“ (`_watchdog_hit`), das Attribut `rueckfall_vorlauf` am Heartbeat und die Zeile in „Bereit für die Steuerung?“
+- **Wächter meldet nur noch:** Die vorgeschlagene Automation (YAML und Klick-Anleitung) schickt nach 60 min ohne Heartbeat nur eine Meldung aufs Handy („Kessel prüfen; wenn es kalt wird, Drehschalter am Kessel auf Festwert stellen“) und schreibt nichts mehr. Bestehende Wächter mit Schreib-Aktionen bitte in Home Assistant durch das neue YAML ersetzen
+- **Doku: Notfallanleitung** „Notfall: HeatPilot fällt aus“ – Add-on neu starten, sonst Drehschalter am Kessel auf Festwert
+- Tests angepasst (`test_boiler41`, `test_v41_review`, `test_watchdog_yaml55`, `test_ui_v41`, `test_ui_v44`, `test_ui_v48`, `test_boiler_period48`)
+
 ## 0.58.1
 - **README und DOCS: Support-Umfang** (Konzeptpapier UI & Rollout, Abschnitt 8): getestet an einer Anlage, alles andere „Community / ungetestet“ ohne Anspruch auf Hilfe; Kessel nur mit EMS-Bus über EMS-ESP; Thermostate in drei Stufen (1 tado V3 indirekt und träge, 2 Zigbee mit Soll, 3 Ventil direkt per PID wie Shelly TRV), tado X ungetestet; externer Raumfühler dringend empfohlen
 - **Voraussetzung am Kessel gut sichtbar:** externe Regler, die Vorlauf-Soll oder Heizbetrieb schreiben (z. B. ES73), vor dem Steuern abbauen oder abschalten

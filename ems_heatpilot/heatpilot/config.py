@@ -323,7 +323,6 @@ class Config:
     boiler_control: str = "aus"
     flow_set_entity: str | None = None
     heating_switch_entity: str | None = None
-    boiler_fallback_flow: int = boiler_rule.FALLBACK_DEFAULT
     regulator_removed: bool = False  # 0.46.9: Nutzer bestätigt „Regler abgebaut“ (regulator.regulator)
     boiler_keepalive: bool = True  # 0.48.1: Vorlauf-Soll jede Minute erneuern (boiler_rule.decide_flow)
     boiler_idle: str = "pumpe"  # 0.46.5: kein Wärmebedarf – Pumpe läuft weiter (Vorlauf-Soll 20 °C) | aus

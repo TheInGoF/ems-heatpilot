@@ -612,7 +612,7 @@ Entitäten des Vorlauf-Solls und des Heizbetriebs gefunden und tauglich, schreib
 (Hindernis), Vorlauf-Soll und Warmwasser-Soll auf derselben Entität (Hindernis), **Wächter** in Home Assistant (nicht
 erkannt bzw. ausgeschaltet ist eine Einschränkung), Mindestleistung für die Abnahme (fehlt sie, ist die Abnahme-Regel
 aus – eine Einschränkung, seit 0.42 mit dem Vorschlag aus dem Bereich der maximalen Brennerleistung),
-letzte Prüfung, Pause, fremder Schreiber, Rückfall-Vorlauf. Was dort ein Hindernis ist, verhindert auch das Schreiben. Siehe [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b).
+letzte Prüfung, Pause, fremder Schreiber. Was dort ein Hindernis ist, verhindert auch das Schreiben. Siehe [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b).
 
 Seit 0.38 kommt der Block **„Warmwasser über HeatPilot“** dazu (Weg W, nur Anzeige, ändert die Stufe der
 Raumsteuerung ebenfalls nicht): Entität des Speicher-Solls gefunden und tauglich (number mit °C, mit ihren
@@ -1306,10 +1306,9 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   der Speicher unter seinem Soll ist), und noch 3 min nach der Meldung – ein Kessel ohne Regler setzt sein Soll für die
   Ladung selbst (z. B. 75 °C). Das ist dann weder ein Fehlschlag noch ein Anlass für das Schutz-Schreiben noch ein
   fremder Schreiber. Erneuert wird nur das eigene Soll, nie ein Lade-Soll, das noch steht.
-- **Kein Ziel rechenbar** (z. B. Außentemperatur fehlt, noch kein Raummodell): Hinweis; hält das 15 min an, stellt
-  HeatPilot den **Rückfall-Vorlauf** und **Heizbetrieb an** ein – nach denselben Regeln wie sonst – und meldet es
-  („kein Vorlauf-Soll rechenbar – Kessel auf Rückfallwert“). Ist das Ziel wieder rechenbar, geht es normal weiter. So
-  kühlt das Haus nicht aus, während HeatPilot zwar läuft (der Wächter greift dann nicht), aber blind ist.
+- **Kein Ziel rechenbar** (z. B. Außentemperatur fehlt, noch kein Raummodell): HeatPilot schreibt nichts, der Kessel
+  bleibt auf dem letzten Wert; hält das 15 min an, kommt eine Meldung („kein Vorlauf-Soll rechenbar“). Ist das Ziel
+  wieder rechenbar, geht es normal weiter. Einen Rückfall-Vorlauf gibt es seit 0.59 nicht mehr.
 - **Prüfung nach 60 s:** Zeigt der Kessel den Wert (Vorlauf ±0,5 K, Heizbetrieb gleich)? Gelesen wird die Entität in
   Home Assistant bzw. EMS-ESP direkt (höchstens 90 s alt); widersprechen sich beide, ist der Wert unklar – geprüft
   wird bis 5 min nach dem Schreiben weiter. Nicht übernommen: Fehlschlag im Protokoll, Hinweis, Meldung und
@@ -1317,17 +1316,13 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
 - **Fremder Schreiber:** Ändert sich Vorlauf-Soll oder Heizbetrieb, ohne dass HeatPilot geschrieben hat, stehen
   Hinweis und Meldung da („Regler noch am Bus oder eine Automation?“); nach **2 fremden Änderungen in 1 h pausiert**
   Weg B – zwei Schreiber sollen nicht gegeneinander schreiben. Ändern sich Vorlauf-Soll und Heizbetrieb zugleich, zählt
-  das als eine Änderung. **Eingriff des Wächters:** Lief HeatPilot mindestens 55 min nicht und steht der Kessel danach
-  auf genau dem Rückfall-Vorlauf mit Heizbetrieb an, war es der Wächter – HeatPilot meldet das, zählt es nicht als
-  fremden Schreiber (keine Pause) und führt den Kessel danach wieder.
+  das als eine Änderung.
 - **Gesperrt nach dem Schreiben:** Antwortet EMS-ESP länger nicht (oder ist der Regler wieder angeschlossen), schreibt
   HeatPilot nichts; nach 15 min kommt eine Meldung – der Kessel behält solange den letzten Wert.
 - **„Heizen abschalten“ an:** EMS-ESP hält die Heizung dann selbst aus und überschreibt das Vorlauf-Soll – HeatPilot
   schreibt nicht (Hindernis), bis du es in EMS-ESP bzw. Home Assistant ausschaltest. HeatPilot schaltet es nicht.
-- **Zurückschalten** auf Aus oder Trockenlauf: HeatPilot schreibt **einmal den Rückfall-Vorlauf** (Einstellung,
-  Standard 45 °C, höchstens die strengste Fußboden-Grenze) und **Heizbetrieb an** – damit der Kessel nicht auf einem
-  Nacht-Wert stehen bleibt – und erinnert daran, den Regler wieder anzuschließen bzw. den Kessel selbst zu stellen. Mit
-  Regler am Bus wird nichts zurückgeschrieben.
+- **Zurückschalten** auf Aus oder Trockenlauf: HeatPilot schreibt nichts mehr (seit 0.59 kein Rückfall-Vorlauf) und
+  erinnert daran, den Regler wieder anzuschließen bzw. den Kessel selbst zu stellen.
 
 **Antipendelzeit anpassen** (seit 0.48, Schalter in der Karte, Standard **aus**). Die Antipendelzeit (Taktsperre,
 EMS-ESP `burnminperiod`, in Home Assistant z. B. `number.boiler_burner_min_period`) hält den Brenner nach dem Abschalten
@@ -1361,31 +1356,33 @@ reicht: …)“ bzw. „würde …“ bei „Beobachten“, Übersicht → Statu
 die Zeilen „Antipendelzeit gesetzt/würde schreiben/nicht übernommen/fremd geändert/pausiert/zurück“. Abfrage: `period`
 in `GET api/boiler`.
 
-**Wächter in Home Assistant.** Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – nachts vielleicht 35 °C. Dafür
-setzt HeatPilot jede Minute den Sensor `sensor.heatpilot_heartbeat` (Zeitstempel). Eine Automation in Home Assistant
-stellt den Kessel auf einen festen Wert, sobald er sich eine Stunde nicht ändert. Du legst sie selbst an. Seit 0.55.1
-zeigt der Knopf **„Anleitung Wächter“** im Kessel-Block die fertige Automation als YAML mit deinen Entitäten, deinem
-Rückfall-Vorlauf und deinen Benachrichtigungszielen (ohne Ziel: Meldung in Home Assistant) – „YAML kopieren“, in Home
-Assistant eine neue Automation erstellen, ⋮ › „In YAML bearbeiten“, alles ersetzen, speichern. Wer lieber klickt, findet
-darunter aufklappbar die Schritte mit den Werten zum Abtippen:
+**Wächter in Home Assistant.** Fällt HeatPilot aus, bleibt der letzte Vorlauf am Kessel stehen; ohne Wärmeabnahme
+fällt der Kessel zurück und bekommt keine neue Anforderung. Einen festen Vorlauf stellt nur der Drehschalter am Kessel
+ein, nicht Home Assistant – deshalb **meldet** der Wächter seit 0.59 nur noch (bis 0.58 setzte er einen
+Rückfall-Vorlauf). HeatPilot setzt jede Minute den Sensor `sensor.heatpilot_heartbeat` (Zeitstempel); eine Automation
+in Home Assistant schickt eine Meldung aufs Handy, sobald er sich eine Stunde nicht ändert. Du legst sie selbst an: Der
+Knopf **„Anleitung Wächter“** im Kessel-Block zeigt sie als YAML mit deinen Benachrichtigungszielen (ohne Ziel: Meldung
+in Home Assistant) – „YAML kopieren“, in Home Assistant eine neue Automation erstellen, ⋮ › „In YAML bearbeiten“, alles
+ersetzen, speichern. Wer lieber klickt, findet darunter aufklappbar die Schritte:
 
 1. In Home Assistant „Einstellungen“ › „Automationen & Szenen“ › „Automation erstellen“ › „Neue Automation erstellen“.
 2. „Auslöser hinzufügen“ › „Entität“ › „Zustand“: Entität „HeatPilot Heartbeat“ (`sensor.heatpilot_heartbeat`), „Von“
    und „Nach“ leer lassen, „Für“ `01:00:00`.
 3. „Bedingung hinzufügen“ › „Entität“ › „Zustand“: Entität „HeatPilot Heartbeat“, Attribut „kessel“, Zustand
-   „heatpilot“ – der Wächter greift nur, solange HeatPilot den Kessel führt; hast du zurückgeschaltet und stellst den
-   Kessel selbst, lässt er ihn in Ruhe.
-4. „Aktion hinzufügen“ › „Number“ › „Wert festlegen“: Ziel die Entität des Vorlauf-Solls, Wert der Rückfall-Vorlauf
-   (Standard 45).
-5. „Aktion hinzufügen“ › „Schalter“ › „Einschalten“: Ziel die Entität des Heizbetriebs.
-6. „Aktion hinzufügen“ › „Benachrichtigungen“: an dein Handy, z. B. „HeatPilot antwortet seit 60 min nicht – Kessel auf
-   45 °C Vorlauf und Heizbetrieb an gestellt“.
-7. Speichern (Name z. B. „HeatPilot-Wächter“).
+   „heatpilot“ – der Wächter meldet nur, solange HeatPilot den Kessel führt.
+4. „Aktion hinzufügen“ › „Benachrichtigungen“: an dein Handy, z. B. „HeatPilot antwortet seit 60 min nicht – Kessel
+   prüfen; wenn es kalt wird, Drehschalter am Kessel auf Festwert stellen“.
+5. Speichern (Name z. B. „HeatPilot-Wächter“). Fehlt der erkannten Automation die Bedingung auf „kessel“, sagt
+   „Bereit für die Steuerung?“ das dazu.
 
-Liegt der Rückfall-Vorlauf unter 35 °C (strengste Fußboden-Grenze darunter, ohne Mischer), schlägt die Anleitung keinen
-Wert und keinen Wächter vor – ein fester Vorlauf darunter heizt nicht sinnvoll; dann die Fußbodenheizung über einen
-Mischer anschließen bzw. den Kessel selbst stellen. Fehlt der erkannten Automation die Bedingung auf „kessel“, sagt
-„Bereit für die Steuerung?“ das dazu.
+**Notfall: HeatPilot fällt aus.** Kommt die Meldung des Wächters (oder wird es kalt, und die HeatPilot-Seite antwortet
+nicht):
+
+1. Add-on neu starten (Einstellungen › Add-ons › EMS HeatPilot › Neu starten) bzw. den Raspberry Pi neu starten.
+2. Hilft das nicht: am Kessel den **Drehschalter für die Vorlauftemperatur auf einen festen Wert** stellen (z. B. die
+   Stellung für 50–55 °C; bei Fußbodenheizung ohne Mischer höchstens deren Grenze). Der Kessel heizt dann selbst, die
+   Thermostate regeln die Räume.
+3. Läuft HeatPilot wieder, den Drehschalter zurückstellen – HeatPilot übernimmt das Vorlauf-Soll wieder.
 
 HeatPilot liest die Automationsliste alle 10 min (nur lesen) und erkennt den Wächter am Auslöser; bis dahin zeigt
 „Bereit für die Steuerung?“ „Wächter nicht erkannt“ als Einschränkung, eine ausgeschaltete Automation ebenso. Nach
@@ -1407,10 +1404,10 @@ HeatPilot anhalten und nach einer Stunde nachsehen, ob die Automation lief.
    Kessels) höchstens auf die strengste Fußboden-Grenze stellen.
 
 **Anzeige:** Die Karte in den Einstellungen zeigt unter dem Schalter, welche zwei Entitäten gelten (gewählt unter
-Einstellungen → Haus → Experte → Kessel über HeatPilot), das Feld **Rückfall-Vorlauf** (35–75 °C, Standard 45), die Wahl
+Einstellungen → Haus → Experte → Kessel über HeatPilot), die Wahl
 **„Wenn kein Raum Wärme braucht“** (Pumpe läuft weiter | Heizbetrieb ganz aus, seit 0.46.5), die
 Warnhinweise (der Warnkasten „Regler am Bus“ nur, solange laut Regler-Prüfung ein Regler am Bus ist oder es unbekannt
-ist – sonst, seit 0.48, nur ein kurzer Hinweis auf Wächter und Rückfall-Vorlauf) und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Zuschlag, Takt-Boost,
+ist – sonst, seit 0.48, nur ein kurzer Hinweis auf den Wächter) und eine Statusbox: was der Kessel gerade zeigt, was HeatPilot will und warum (Bedarf, Abnahme, Zuschlag, Takt-Boost,
 Fußboden-Grenze), die letzte Entscheidung, zuletzt geschrieben und geprüft, fremde Änderungen, Regler am Bus, den
 Wächter mit dem Knopf „Anleitung Wächter“ und – bei einer Pause – „wieder einschalten“. Heizen und Übersicht zeigen eine
 Statuszeile („Kessel: HeatPilot · Vorlauf 42 °C (Wohnzimmer hält 21,0 °C)
@@ -1447,8 +1444,7 @@ Gewählte Ziele, die es in Home Assistant nicht mehr gibt, stehen mit „fehlt�
 Was gemeldet wird: Warmwasser-Soll nicht übernommen, Weg W pausiert (3 Fehlschläge oder 2 fremde Änderungen in 1 h),
 anderer Schreiber am Speicher-Soll, Thermostat-Schreibfehler der Raumsteuerung ab drei
 in Folge und seit 0.41 dasselbe für den Kessel (Weg B: Vorlauf-Soll bzw. Heizbetrieb nicht übernommen, pausiert, fremde
-Änderung, seit 15 min gesperrt bzw. abgewiesen, kein Vorlauf-Soll rechenbar – Kessel auf Rückfallwert, Eingriff des
-Wächters). Titel „HeatPilot“, Text kurz und konkret. Je
+Änderung, seit 15 min gesperrt bzw. abgewiesen, kein Vorlauf-Soll rechenbar). Titel „HeatPilot“, Text kurz und konkret. Je
 Ereignis eine Meldung – nicht bei jedem Takt – und einmal „wieder in Ordnung“; höchstens eine Meldung je Art in
 6 h.
 
