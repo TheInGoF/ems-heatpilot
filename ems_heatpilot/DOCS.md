@@ -32,7 +32,8 @@ Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index) und Wind
 stündlichen Vorhersage der Wetter-Integration, Antippen eines Balkens zeigt den Wert; was die Integration nicht liefert,
 fällt weg (Zustand von Haus, Räumen, Ventilen, Warmwasser). Darunter die Empfehlungen je eine Zeile
 (antippen klappt den Beleg auf), die Ersparnis als eine Zeile (Karte und Lernstand stehen unter Haus) und die Unterseiten Haus, Räume, Warmwasser, Kessel, Anwesenheit und
-Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startseite mit drei Kacheln: **Räume** (Räume, Steuerung, Nachtzeiten), **Kessel**
+Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startseite mit drei Kacheln (seit 0.61 oben auf Kessel und Haus „auf einen Blick“:
+die eingestellten Aktoren und Sensoren als Gerätekarten mit Wert und Verbindung): **Räume** (Räume, Steuerung, Nachtzeiten), **Kessel**
 (Warmwasser, Desinfektion, Kessel steuern, Kesseldaten) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit &
 Urlaub, Benachrichtigungen, Karten). Seltenes steht am Ende jeder Seite unter **Experte** (gelesene Entitäten,
 Regler, Erweitert). **Diagnose** (Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien) steht am Ende

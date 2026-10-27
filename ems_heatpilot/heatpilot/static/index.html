@@ -698,6 +698,7 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .dev-card .dev-n { font-size: var(--fs-small); color: var(--text-secondary); }
 .dev-card .muted { overflow-wrap: anywhere; }
 .dev-card.bad b { color: var(--err-text); }
+.dev-card.none b { color: var(--text-muted); font-weight: 500; }
 .room-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
 .room-row .r-main { min-width: 0; }
 .room-row .r-main .hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -4026,6 +4027,31 @@ function roomRows() {
       </div><div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
   }).join("");
 }
+// 0.61: Kessel und Haus auf einen Blick (Konzeptpapier, Abschnitt 5) – die eingestellten Aktoren und Sensoren als
+// Gerätekarten (Wert, Einheit, Verbindung) aus der Zuordnung der Entitäten; geändert wird weiter unten bzw. unter Experte
+const GLANCE = {
+  kessel: ["Kessel auf einen Blick", [["Schreibt HeatPilot", ["flow_set_entity", "heating_switch_entity", "period_set_entity", "dhw_set_entity", "disinfect_entity"]],
+    ["Liest HeatPilot", ["flow_temp", "sel_flow_temp", "return_temp", "burner_on", "burner_power", "dhw_temp", "dhw_active"]]]],
+  haus: ["Haus auf einen Blick", [["Außen", ["outdoor_sensors", "weather_entity"]], ["Verbrauch", ["gas_sensor", "demand_sensor", "power_sensors"]],
+    ["Anwesenheit", ["persons", "vacation_entity"]]]],
+};
+function glance(k) {
+  const g = GLANCE[k]; if (!g || !EMAP || EMAP.error) return "";
+  const rows = g[1].map(([title, keys]) => {
+    const cards = keys.filter((key) => EM_BY[key]).map((key) => glanceCard(EM_BY[key], emStateOf(key))).join("");
+    return cards ? `<h3 class="st-h">${title}</h3><div class="r-devs">${cards}</div>` : "";
+  }).join("");
+  return rows ? card(g[0], rows) : "";
+}
+function glanceCard(e, st) {
+  const it = st.items[0], more = st.items.length > 1 ? ` <span class="muted">+${st.items.length - 1}</span>` : "";
+  const bad = st.issue && st.issue !== "nicht gewählt";
+  const word = { on: "an", off: "aus", home: "zu Hause", not_home: "weg", ...WX_COND };
+  const val = it ? (it.available === false ? "nicht erreichbar" : `${esc(word[it.state] ?? it.state ?? "–")}${it.unit ? " " + esc(it.unit) : ""}`)
+    : st.source === "EMS-ESP" ? "über EMS-ESP" : st.issue === "nicht gewählt" ? "nicht gewählt" : esc(st.issue || "–");
+  return `<div class="dev-card${bad || (it && it.available === false) ? " bad" : ""}${it ? "" : " none"}"><span class="dev-n">${esc(e.label)}</span>` +
+    `<b>${val}${more}</b><span class="muted">${it ? `<code class="eid" title="${esc(it.id)}">${esc(it.id)}</code>` : ""}</span></div>`;
+}
 // 0.60: Einstellungen → Räume als Kacheln (Konzeptpapier, Abschnitt 5) – je Raum Name, Ist/Soll, Stufe und was
 // fehlt; ein Klick öffnet darunter die Raumansicht: die Geräte als Karten (Wert, Verbindung) und die Einstellungen
 let ROOM_SEL = null;
@@ -6047,7 +6073,7 @@ function renderSettings() {
       ${field("Daten aufbewahren (Tage)", num("f-keep_days", s.keep_days, "1"), "365–3650, Standard 720. Ältere Messwerte löscht HeatPilot einmal am Tag; Tageswerte und Gelerntes bleiben.")}
       ${field("Ausführliches Log", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-debug_logging" ${s.debug_logging ? "checked" : ""}> jeden Takt protokollieren</label>`, "Für die Fehlersuche – das Log wird dann deutlich größer")}
     </div>${advHouseHtml()}`, false)) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen; 0.44: Lücken füllen
-    SET_KEYS.map((k) => page(k, (P[k] || "") + expert(k, P["exp-" + k]))).join("") +
+    SET_KEYS.map((k) => page(k, glance(k) + (P[k] || "") + expert(k, P["exp-" + k]))).join("") +
     `<div class="savebar sb-clean" id="savebar"${SET_PAGE === "menu" ? " hidden" : ""}><span class="sb-t" id="sb-t"></span>` +
     '<button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="loadSettings()">Verwerfen</button><span id="save-msg"></span></div>';
   $("set-body").oninput = $("set-body").onchange = () => setDirty();  // Speicherleiste erst bei Änderungen (0.43)

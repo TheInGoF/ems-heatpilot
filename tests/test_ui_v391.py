@@ -278,7 +278,7 @@ def test_settings_split_into_general_and_entities():
     assert 'emInit(EMAP);' in rs and '$("set-menu").innerHTML = setNav();' in rs and '$("set-body").innerHTML = datalists() +' in rs
     assert re.findall(r'part\("([\w-]+)"', rs) == ["haus", "raeume", "exp-haus", "raeume", "haus", "kessel", "kessel", "haus",
                                                  "haus", "exp-haus"]
-    assert 'SET_KEYS.map((k) => page(k, (P[k] || "") + expert(k, P["exp-" + k]))).join("")' in rs
+    assert 'SET_KEYS.map((k) => page(k, glance(k) + (P[k] || "") + expert(k, P["exp-" + k]))).join("")' in rs
     assert "emSum();" in rs
     titles = re.findall(r'card\("([^"]+)"', rs)
     assert titles == ["Verbindung", "Haus", "Gas & Kosten", "Räume", "Personen", "Urlaub", "Warmwasser steuern", "Temperaturen",
