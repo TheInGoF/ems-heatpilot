@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.59.2
+- Anonymisierter Fehlerbericht zum Herunterladen
+- Knopf „Fehler auf GitHub melden“ mit Datenschutz-Rückfrage
+- Volle Daten eingeklappt mit Warnung
+
 ## 0.59.1
 - Klimaanlagen werden nicht mehr als Raum vorgeschlagen
 

@@ -50,7 +50,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness, web_guest
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
-from . import boiler_period, boiler_power, disinfect_entity, live_log, room_identity, sensor_gone, web_adopt, web_restore, web_weather
+from . import boiler_period, boiler_power, disinfect_entity, live_log, report, room_identity, sensor_gone, web_adopt, web_restore, web_weather
 from . import card_bridge, heat_actions, web_switch
 from .emsesp import EmsEsp
 
@@ -566,6 +566,7 @@ def make_app(app) -> web.Application:
     # 0.42.1: Gelerntes übernehmen und Aliasse (web_adopt), Hausdaten wiederherstellen, neu lernen, Modelle
     # 0.44: Thermostatwechsel und „Ventil neu lernen“ (web_switch)
     for method, path, handler in sum((m.routes(app, json_response) for m in  # 0.55.2: + web_weather (Wetter 24 h)
-                                      (web_adopt, web_restore, web_switch, live_log, web_weather, card_bridge)), []):
+                                      (web_adopt, web_restore, web_switch, live_log, web_weather, card_bridge,
+                                       report)), []):  # 0.59.2: Fehlerbericht
         web_app.router.add_route(method, path, handler)
     return web_app

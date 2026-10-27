@@ -1,0 +1,56 @@
+name: Fehler melden
+description: Etwas funktioniert nicht – mit dem anonymisierten Fehlerbericht aus HeatPilot.
+title: "[Fehler] "
+labels: ["fehler"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke fürs Melden. HeatPilot ist ein Hobbyprojekt und an einer Anlage getestet – für andere Kessel und
+        Thermostate gibt es keinen Anspruch auf Hilfe (siehe README, „Was unterstützt wird“).
+
+        Den **Fehlerbericht** erzeugst du in HeatPilot unter **Live → Diagnose → Dateien → „Fehlerbericht herunterladen“**.
+        Er ist anonymisiert. Lade **nie** die „vollen Daten“ hoch.
+  - type: checkboxes
+    id: datenschutz
+    attributes:
+      label: Datenschutz
+      options:
+        - label: >-
+            Mir ist klar, dass alles hier öffentlich ist und dass auch der anonymisierte Fehlerbericht – besonders die
+            30-s-Werte – zeigt, wann jemand zu Hause ist und schläft. Ich lade nur den Fehlerbericht hoch.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: HeatPilot-Version
+      placeholder: z. B. 0.59.2 (steht in info.json des Fehlerberichts)
+    validations:
+      required: true
+  - type: input
+    id: kessel
+    attributes:
+      label: Kessel und Regler
+      placeholder: z. B. Buderus GB172 über EMS-ESP 3.7, Regler abgebaut
+  - type: dropdown
+    id: stufe
+    attributes:
+      label: Thermostate
+      multiple: true
+      options:
+        - Stufe 1 – tado V3 (indirekt, träge)
+        - Stufe 2 – Zigbee mit Soll
+        - Stufe 3 – Ventil direkt (z. B. Shelly TRV)
+        - anderes / weiß nicht
+  - type: textarea
+    id: was
+    attributes:
+      label: Was ist passiert, was hast du erwartet?
+      description: Mit Uhrzeit, damit es sich im Bericht finden lässt.
+    validations:
+      required: true
+  - type: textarea
+    id: bericht
+    attributes:
+      label: Fehlerbericht
+      description: Die ZIP-Datei hierher ziehen.
