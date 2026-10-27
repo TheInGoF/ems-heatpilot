@@ -518,7 +518,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             if self.mode != "heatpilot":
                 self._ch(what).pop("check")
                 continue
-            if what == "flow" and self.charging(now):
+            if self.charging(now):  # 0.57: während einer Ladung zeigt der Kessel auch beim Heizbetrieb seinen Wert
                 chk["until"] = max(chk["until"], now + CHECK_MAX_S)
                 continue
             r = self.readings(what)

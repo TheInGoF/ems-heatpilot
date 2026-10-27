@@ -8,8 +8,9 @@ Wassermenge und Abnahme aus Vor- und Rücklauf, Brennerleistung und Pumpe – br
 * ``note_boiler`` (seit 0.50) – gleich danach HeatPilots Entscheidung für den Kessel in dieselbe Zeile (``BOILER_COLS``:
   Ziel, Bedarf, Abnahme, Zuschlag, Boost, Takten, wartende und nicht hochkommende Räume, Grund, Entscheidung) – damit
   eine Auswertung nicht rekonstruieren muss, warum das Vorlauf-Soll so stand.
-* ``csv_text`` – die letzten Stunden als CSV (Komma, Dezimalpunkt): Zeit, Kesselwerte, HeatPilot, je Raum vier
-  Spalten.
+* ``csv_text`` – die letzten Stunden als CSV (Komma, Dezimalpunkt): Zeit, Kesselwerte, HeatPilot, seit 0.57 die
+  Spalte ``hp_geschrieben`` (alles aus dem Protokoll seit dem vorigen Punkt: geschrieben, nicht übernommen, fremde
+  Änderung, Pause …), je Raum vier Spalten.
 * ``routes`` – ``GET /api/live/export?hours=24`` (Download, Einstellungen → Diagnose → Dateien).
 
 Nur lesen und speichern, schreibt nichts an Kessel oder Thermostate.
@@ -17,6 +18,7 @@ Nur lesen und speichern, schreibt nichts an Kessel oder Thermostate.
 
 from __future__ import annotations
 
+import bisect
 import csv
 import io
 import time
@@ -67,6 +69,22 @@ def _cell(value):
     return round(value, 3) if isinstance(value, float) else value
 
 
+def _log_by_row(stamps: list[int], store, names: dict) -> dict[int, str]:
+    """Protokoll-Einträge (``control_log``: Kessel, Warmwasser, Räume) dem 30-s-Punkt zuordnen, in dessen Zeitraum
+    (seit dem vorigen Punkt) sie fielen – je Punkt ein Text, Einträge mit „ · “ getrennt."""
+    if not stamps:
+        return {}
+    out: dict[int, list[str]] = {}
+    for e in reversed(store.control_log(5000, since=stamps[0] - 30)):
+        i = bisect.bisect_left(stamps, e["ts"])
+        if i == len(stamps):
+            continue
+        row = stamps[i]
+        value = "" if e["value"] is None else f" {e['value']:g}" if isinstance(e["value"], float) else f" {e['value']}"
+        out.setdefault(row, []).append(f"{names.get(e['room'], e['room'])}: {e['action']}{value} ({e['reason']})")
+    return {t: " · ".join(x) for t, x in out.items()}
+
+
 def csv_text(eng, hours: float = DEFAULT_H, now_ts: int | None = None) -> str:
     """Die letzten ``hours`` Stunden (höchstens ``KEEP_H``) als CSV; Räume mit Namen, unbekannte mit ihrer Entität."""
     now_ts = int(now_ts or time.time())
@@ -76,12 +94,13 @@ def csv_text(eng, hours: float = DEFAULT_H, now_ts: int | None = None) -> str:
     climates = [c for c in names if c in seen] + sorted(seen - set(names))
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\n")
-    w.writerow(["zeit", "ts", *COLS, *BOILER_COLS,
+    w.writerow(["zeit", "ts", *COLS, *BOILER_COLS, "hp_geschrieben",
                 *(f"{names.get(c, c)} {col}" for c in climates for col in ROOM_COLS)])
+    logs = _log_by_row([ts for ts, _ in rows], eng.store, names)
     for ts, d in rows:
         s, r, b = d.get("s", {}), d.get("r", {}), d.get("b", {})
         w.writerow([local(ts).isoformat(timespec="seconds"), ts, *(_cell(s.get(k)) for k in COLS),
-                    *(_cell(b.get(k)) for k in BOILER_COLS),
+                    *(_cell(b.get(k)) for k in BOILER_COLS), logs.get(ts, ""),
                     *(_cell((r.get(c) or [None] * 4)[i]) for c in climates for i in range(len(ROOM_COLS)))])
     return out.getvalue()
 

@@ -74,7 +74,7 @@ class BoilerWatch:
             if cur[what] is not None:
                 ch["seen"] = cur[what]
             if (cur[what] is None or seen is None or ch.get("check") or self.paused()
-                    or (what == "flow" and charging) or same(what, cur[what], seen)
+                    or charging or same(what, cur[what], seen)  # 0.57: Ladung schaltet auch den Heizbetrieb
                     or (what == "flow" and float(cur[what]) <= PUMP_FLOW + CHECK_TOL_K)):  # 0.48.1: verworfen
                 continue
             last = ch.get("last")
