@@ -11,7 +11,7 @@ Wassermenge und Abnahme aus Vor- und Rücklauf, Brennerleistung und Pumpe – br
 * ``csv_text`` – die letzten Stunden als CSV (Komma, Dezimalpunkt): Zeit, Kesselwerte, HeatPilot, seit 0.57 die
   Spalte ``hp_geschrieben`` (alles aus dem Protokoll seit dem vorigen Punkt: geschrieben, nicht übernommen, fremde
   Änderung, Pause …), je Raum vier Spalten.
-* ``routes`` – ``GET /api/live/export?hours=24`` (Download, Einstellungen → Diagnose → Dateien).
+* ``routes`` – ``GET /api/live/export?hours=24`` (Download, Live → Diagnose → Dateien).
 
 Nur lesen und speichern, schreibt nichts an Kessel oder Thermostate.
 """

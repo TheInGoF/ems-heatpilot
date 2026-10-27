@@ -387,4 +387,4 @@ def _headline(switch: bool, managing: bool, rooms: list, ready: list[str], learn
     if switch:
         return f"Eingeschaltet, wirkt erst mit „HeatPilot steuert“ – {rooms_word} wären bereit{rest}."
     return (f"Aus – {rooms_word} wären bereit ({_names(ready)}){rest}; bis zum Einschalten nur Beobachten "
-            "(Einstellungen → Steuerung).")
+            "(Einstellungen → Räume).")

@@ -109,7 +109,7 @@ def regulator(eng, now: float | None = None) -> dict:
                 "text": f"Frische Regler-Werte in Home Assistant ({eid}) – {REGULATOR_TEXT}"}
     if not eng.cfg.emsesp_host:
         return _unknown("Ob ein Regler am Bus ist, lässt sich ohne EMS-ESP nicht prüfen – EMS-ESP-Adresse eintragen "
-                        "(Einstellungen → Grundlagen); bis dahin schreibt HeatPilot nicht")
+                        "(Einstellungen → Haus); bis dahin schreibt HeatPilot nicht")
     if not fresh:
         return _unknown("EMS-ESP antwortet gerade nicht – ob ein Regler am Bus ist, ist unbekannt; HeatPilot schreibt "
                         "erst wieder, wenn EMS-ESP antwortet")

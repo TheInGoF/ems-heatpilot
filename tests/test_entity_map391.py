@@ -364,7 +364,7 @@ def test_api_entity_map_only_reads(tmp_path):
 def test_docs_and_changelog_name_the_page():
     docs = " ".join((ROOT / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8").split())
     assert "## Entitäten" in docs and "Zuordnungen (Experten)" not in docs
-    for text in ("Einstellungen → Entitäten", "„Automatik“", "nur fehlende und nicht verfügbare", "automatisch gefunden",
+    for text in ("Einstellungen → Haus → Experte", "„Automatik“", "nur fehlende und nicht verfügbare", "automatisch gefunden",
                  "über EMS-ESP", "nicht verfügbar", "`overrides`", "eines genügt", "Rücklauf", "api/entity_map"):
         assert text in docs, text
     head = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8").split("\n## 0.39.1")[1].split("\n## ")[0]  # seit 0.40

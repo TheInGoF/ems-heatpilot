@@ -2,6 +2,12 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.58.0
+- Einstellungen: drei Kacheln Räume, Kessel, Haus
+- Seltenes unter „Experte“ am Seitenende
+- Diagnose jetzt im Reiter Live
+- Einheitliche Schriftgrößen und Karten
+
 ## 0.57.1
 - Räume warten: Antipendelzeit 5 statt 10 min
 

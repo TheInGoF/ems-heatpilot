@@ -137,7 +137,7 @@ def self_check(app) -> list[dict]:
     f = eng.found
     for role in CORE_ROLES:
         if role not in f.boiler and not eng.ems.get("boiler"):
-            add("warn", "Kessel", f"Wert „{role}“ nicht gefunden – ggf. unter Einstellungen → Entitäten festlegen")
+            add("warn", "Kessel", f"Wert „{role}“ nicht gefunden – ggf. unter Einstellungen → Haus → Experte festlegen")
     if not f.rooms:
         add("error", "Räume", "Keine Räume gefunden – im Reiter Einstellungen Thermostate auswählen")
     if not f.gas:
@@ -148,7 +148,7 @@ def self_check(app) -> list[dict]:
         add("error", "Außentemperatur", "Weder Außenfühler noch Wetter gefunden")
     if app.cfg.emsesp_host and not eng.ems:
         add("warn", "EMS-ESP", f"Keine Daten von {app.cfg.emsesp_host} – Adresse prüfen "
-                               "(Einstellungen → Grundlagen → Testen)")
+                               "(Einstellungen → Haus → Testen)")
     elif eng.ems:
         add("ok", "EMS-ESP", "Direkt gelesen: " + ", ".join(f"{d} {len(v)} Werte" for d, v in eng.ems.items()))
         for role in ("nom_power", "min_power"):

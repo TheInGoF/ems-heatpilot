@@ -300,7 +300,7 @@ def assess(eng, now_ts: int) -> dict:
 
     # 5. Anwesenheit
     if not eng.found.persons:
-        notes.append("Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Anwesenheit & Urlaub)")
+        notes.append("Ohne Personen gibt es keine Abwesenheits-Absenkung (Einstellungen → Haus)")
     else:
         unclear, unknown = _presence(eng, now_ts)
         if unclear:
@@ -385,7 +385,7 @@ def _dhw_hygiene(cfg) -> tuple[list[str], list[str]]:
             "wirklich an den Kessel, und bei einem Ausfall bleiben sie stehen (Legionellen)")
     if getattr(cfg, "dhw_disinfect_day", ""):
         return [], [text + "; die wöchentliche Desinfektion ist eingetragen"]
-    return [text + " – nur mit regelmäßiger Desinfektion (Termin unter Einstellungen → Warmwasser)"], []
+    return [text + " – nur mit regelmäßiger Desinfektion (Termin unter Einstellungen → Kessel)"], []
 
 
 def _iso(ts) -> str | None:

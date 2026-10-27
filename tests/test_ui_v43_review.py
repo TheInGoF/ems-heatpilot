@@ -33,7 +33,7 @@ def test_start_list_rooms_falls_back_to_auto_detection(tmp_path):
     auto = {"auto_rooms": ["climate.a", "climate.b", "climate.c", "climate.d", "climate.e"]}
     assert _setinfo(tmp_path, {"rooms": []}, auto) == "5 Räume · automatisch"
     assert _setinfo(tmp_path, {"rooms": []}, None) == "automatisch"
-    assert _setinfo(tmp_path, {"rooms": [{"managed": True}, {"managed": False}]}, auto) == "2 Räume · 1 machen mit"
+    assert _setinfo(tmp_path, {"rooms": [{"managed": True}, {"managed": False}]}, auto) == "2 Räume · Beobachten"
 
 
 def test_entity_hints_without_internal_terms():

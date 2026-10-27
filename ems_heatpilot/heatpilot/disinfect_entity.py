@@ -81,7 +81,7 @@ def name_problem(entity: str, state: dict | None = None, found=None) -> str | No
 def problem(entity: str | None, state: dict | None, found=None) -> str | None:
     """Warum die Entität nicht als Schalter der Desinfektion taugt – None = taugt (siehe Modulbeschreibung)."""
     if not entity:
-        return ("keine Entität für die Desinfektion gefunden – unter Einstellungen → Warmwasser wählen (Schalter "
+        return ("keine Entität für die Desinfektion gefunden – unter Einstellungen → Kessel wählen (Schalter "
                 "„Desinfizieren“)")
     if not entity.startswith("switch."):
         return f"{entity} ist keine switch-Entität"

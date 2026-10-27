@@ -29,8 +29,8 @@ def script() -> str:
 
 def test_settings_card_steuerung_first_with_switch_warning_plan_and_limits():
     js = script()
-    # 0.43: eigene Unterseite „Steuerung“ (erste unter „Steuern“), Schalter mit genau den zwei Stellungen, Warnhinweis
-    assert 'page("steuerung", controlCard(s))' in js and '["steuerung", "Steuerung", "Steuern"]' in js
+    # 0.58: Steuerung auf der Seite „Räume“, Schalter mit genau den zwei Stellungen, Warnhinweis
+    assert 'part("raeume", controlCard(s))' in js and '["raeume", "Räume"]' in js
     assert 'name="control_mode" value="beobachten"' in js and 'name="control_mode" value="heatpilot"' in js
     assert "Zurück zu Tado nur hier" in js and "zuletzt geschriebene Soll stehen" in js
     assert "keinen automatischen Rückfall" in js
@@ -114,7 +114,7 @@ def test_overview_shows_weekly_plan_when_managing():
     assert 's.control_mode === "heatpilot" && e.plan' in rs and "e.plan.map((d) =>" in rs
     assert "Zeitplan – HeatPilot steuert" in rs and "Zeitplan – Beobachten" in rs
     # 0.43: Modus steht nicht mehr in der Übersicht (Ü1 aufgelöst), sondern in der Zeile im Heizen; Wochenplan als Zeile
-    assert "schedLine(`Heute Nacht" in rs and "openSettings('steuerung', 'night-plan')" in js
+    assert "schedLine(`Heute Nacht" in rs and "openSettings('raeume', 'night-plan')" in js
     # Einstellungen: „gelernt“-Hinweis entfällt beim Wochenplan
     assert 'src === "wochenplan") return ""' in js
 

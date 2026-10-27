@@ -1,7 +1,7 @@
 """0.36.3: Oberfläche zu Desinfektion (Legionellen) und Sperre gegen den EMS-ESP-Heizkreis – statische Prüfung.
 
 Wie tests/test_ui_v361.py: die Oberfläche ist eine HTML-Datei ohne Build. Geprüft wird, dass die neuen Teile
-angebunden sind (Abschnitt in Einstellungen → Warmwasser, collect(), Kachel in der Übersicht, Häkchen
+angebunden sind (Abschnitt in Einstellungen → Kessel, collect(), Kachel in der Übersicht, Häkchen
 „macht mit“, Bedienung im Heizen-Reiter, Hinweis im Kessel-Block) und das Inline-Skript gültiges JavaScript
 ist. Die Anzeige-Funktionen laufen in Node mit Antworten der echten Engine – so ist der fertige Text geprüft,
 nicht nur der Quelltext. Die Texte der Oberfläche sind dieselben wie die Konstanten im Backend. Verhalten im
@@ -85,7 +85,7 @@ def test_ui_texts_equal_backend_constants(tmp_path):
     assert readiness.DISINFECT_NOTE == "Desinfektion braucht WWK Desinfizieren (schreibbar)"
 
 
-# ------------------------------------------------------------------ Einstellungen → Warmwasser
+# ------------------------------------------------------------------ Einstellungen → Kessel
 def test_dhw_card_has_disinfect_section_and_collect_saves_fields():
     js = script()
     # Abschnitt am Ende der Karte Warmwasser, Daten aus GET api/settings → disinfect
@@ -197,7 +197,7 @@ def test_overview_tile_next_date_or_last_special(tmp_path):
     assert plain(r["other"]).endswith("eingestellt · 70 °C laut Kessel · Termin noch nicht bestätigt – kein Regler "
                                       "desinfiziert zu dieser Zeit")
     assert plain(r["last"]) == ("Letzte Desinfektion So 13:40 erkannt · kein Desinfektionstermin eingestellt – "
-                                "Einstellungen → Warmwasser")
+                                "Einstellungen → Kessel")
     assert 'class="tile off"' in r["none"] and plain(r["none"]).startswith("Desinfektion kein Termin")
     assert r["old"] == "" and 'class="tile"' in r["plan"]
 

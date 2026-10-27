@@ -204,9 +204,10 @@ function dhwModeHint() {}
 """
 EM_NAMES = ("esc", "isTemp", "isSensor", "PICKERS", "dhwRank", "personRows", "EMAP", "EM_BY", "EM_OPEN", "EM_FOLD",
             "EM_MAX", "EM_PROBLEMS", "EM_BADGE", "EM_CUSTOM", "emInit", "emFits", "emOptions", "emItem", "emState",
-            "emValue", "emHas", "emStateOf", "emSaved", "emCounts", "emRoomCount", "emCountText", "setNav", "emPage",
+            "emValue", "emHas", "emStateOf", "emSaved", "emCounts", "emRoomCount", "emCountText", "setNav", "expert",
             "emGroup", "emReq", "emRow", "emBadge", "GONE_HINT", "emNow", "emEnt", "emEdit", "emExtra", "roomStates", "emPersons",
-            "emRef", "emCollect", "SET_PAGES", "SET_KEYS", "setInfo", "navRow", "EM_PAGE_OF", "emInline", "eid", "more",
+            "emRef", "emCollect", "SET_PAGES", "SET_KEYS", "setInfo", "navRow", "PAGE_GROUPS", "EM_PAGE_OF", "EXPERT_GROUPS",
+            "pageMissing", "emInline", "eid", "more",
             "DHW_LABEL", "BOILER_LABEL")  # 0.43: Startliste der Einstellungen, Entitäten bei ihrer Funktion
 SECTION_B = "// ---------------------------------------------------------------- Entitäten (0.39.1)"
 
@@ -273,11 +274,11 @@ def api_answers(tmp_path, raw=None, drop=(), ems=None) -> dict:
 def test_settings_split_into_general_and_entities():
     js, page = script(), html()
     rs = between(js, "function renderSettings()", "function addVac()")
-    # 0.43: zehn Unterseiten (Startliste) statt „Allgemein | Entitäten“; alle stehen im DOM
+    # 0.58: drei Seiten Räume, Kessel, Haus (Styleguide) – die Teile in ihrer Reihenfolge, „exp-“ = unter „Experte“
     assert 'emInit(EMAP);' in rs and '$("set-menu").innerHTML = setNav();' in rs and '$("set-body").innerHTML = datalists() +' in rs
-    assert re.findall(r'page\("(\w+)"', rs) == ["grundlagen", "raeume", "entitaeten", "steuerung", "anwesenheit", "warmwasser",
-                                             "kessel", "benachrichtigungen", "erweitert"]  # Diagnose: #view-diag
-    assert 'page("entitaeten", sugBtn(' in rs and "emPage(EMAP)" in rs
+    assert re.findall(r'part\("([\w-]+)"', rs) == ["haus", "raeume", "exp-haus", "raeume", "haus", "kessel", "kessel", "haus",
+                                                 "haus", "exp-haus"]
+    assert 'SET_KEYS.map((k) => page(k, (P[k] || "") + expert(k, P["exp-" + k]))).join("")' in rs
     assert "emSum();" in rs
     titles = re.findall(r'card\("([^"]+)"', rs)
     assert titles == ["Verbindung", "Haus", "Gas & Kosten", "Räume", "Personen", "Urlaub", "Warmwasser steuern", "Temperaturen",
@@ -298,7 +299,7 @@ def test_settings_split_into_general_and_entities():
     assert "return emCollect(out);" in between(js, "function collect()", "async function saveSettings")
     assert 'if ($("em-persons")) out.persons =' in between(js, "function collect()", "async function saveSettings")
     assert len(re.findall(r'getJSON\("api/entity_map"\)', page)) == 1  # nur lesen, an einer Stelle
-    assert 'openSettings("diagnose");' in between(js, "function openReadiness() {", "// Daten aus GET api/heat")
+    assert 'openDiag("ready-card");' in between(js, "function openReadiness() {", "// Daten aus GET api/heat")
 
 
 def test_entities_section_knows_no_write_path():
@@ -370,7 +371,9 @@ def test_rows_render_status_and_escape(tmp_path):
     r = run_em(tmp_path, data, """const row = (k) => emRow(EM_BY[k]);
       out({ flow: row("flow_temp"), bp: row("burner_power"), dhw: row("dhw_active"), auto: row("dhw_temp"),
             nav: setNav(), sum: emCountText(emCounts(EMAP.groups[0].entries)), extra: emExtra(),
-            page: emPage(EMAP), inl: emInline("personen") + emInline("benachrichtigungen"), err: emPage({ error: "<b>kaputt" }), none: emPage(null),
+            page: expert("kessel") + expert("haus"), inl: emInline("personen") + emInline("benachrichtigungen"),
+            err: (() => { const m = EMAP; EMAP = { error: "<b>kaputt" }; const h = expert("haus"); EMAP = m; return h; })(),
+            none: (() => { const m = EMAP; EMAP = null; const h = expert("haus"); EMAP = m; return h; })(),
             ref: emRef("gas_sensor", "gas", "Gaszähler"), rooms: emRoomCount(EMAP.groups[7].entries) });""")  # 0.41: Kessel über HeatPilot davor
     flow = plain(r["flow"])
     assert flow.startswith("Vorlauftemperatur (Ist) nötig Daraus lernt HeatPilot") and "nicht verfügbar" in flow
@@ -380,12 +383,9 @@ def test_rows_render_status_and_escape(tmp_path):
     assert "Ersatz kein eigener Wert – Speichertemperatur genügt" in plain(r["dhw"])
     assert "automatisch gefunden sensor.boiler_dhw_curtemp Speicher · 51.5 °C · Keller" in plain(r["auto"])
     assert " disabled>Automatik</button>" in r["auto"]  # schon automatisch
-    # 0.43: dritte Unterseite „Diagnose“ (vier Reiter) – die Zahl bleibt am Reiter „Entitäten“
-    # 0.43: Startliste mit zehn Unterseiten in drei Gruppen – rot nur, wenn Nötiges fehlt (2)
-    assert re.findall(r'<h3 class="nav-h">(\w+)</h3>', r["nav"]) == ["Einrichten", "Steuern", "System"]
-    assert re.findall(r'data-page="(\w+)"', r["nav"]) == ["grundlagen", "raeume", "entitaeten", "steuerung", "anwesenheit",
-                                                         "warmwasser", "kessel", "benachrichtigungen", "erweitert", "diagnose"]
-    assert '<span class="em-alert" id="em-alert">2</span>' in r["nav"] and "Entitäten 15 von 68 gefunden 2" in plain(r["nav"])  # 0.48: + Antipendelzeit
+    # 0.58: Startseite mit drei Kacheln – rot je Seite nur, wenn Nötiges fehlt (2 beim Kessel)
+    assert re.findall(r'data-page="(\w+)"', r["nav"]) == ["raeume", "kessel", "haus"] and 'class="nav-list set-tiles"' in r["nav"]
+    assert '<span class="em-alert" id="em-alert-kessel">2</span>' in r["nav"] and 'id="em-alert-haus" hidden' in r["nav"]
     assert r["sum"] == "6 von 39 gefunden · 2 nötige fehlen · 2 nicht verfügbar"  # 0.41: Heizbetrieb aktiviert
     assert "<i>" not in r["extra"] and "&lt;i>=sensor.z" in r["extra"] and 'x&quot;>&lt;b>=sensor.y' in r["extra"]
     groups = re.findall(r'<details class="card em-group" id="em-g-(\w+)"', r["page"])
@@ -393,10 +393,10 @@ def test_rows_render_status_and_escape(tmp_path):
     assert groups == ["kessel", "regler", "aussen", "gas", "strom"]
     assert 'Weitere Werte, die die Erkennung nicht gefunden hat <span class="muted">(' in r["page"]
     assert 'id="em-persons"' in r["inl"] and '<div id="notify-list">Ziele</div>' in r["inl"]
-    assert "nur fehlende und nicht verfügbare" in r["page"]
+    assert '<details class="expert" id="exp-kessel">' in r["page"] and '<details class="expert" id="exp-haus">' in r["page"]
     assert "<b>kaputt" not in r["err"] and "Nicht lesbar: &lt;b>kaputt" in r["err"] and "Speichern ändert sie nicht" in r["err"]
-    assert "nicht geladen" in r["none"]
-    assert plain(r["ref"]) == "Gaszähler: sensor.gaszaehler automatisch gefunden – ändern unter Entitäten"
+    assert r["none"] == ""  # nichts geladen: kein „Experte“
+    assert plain(r["ref"]) == "Gaszähler: sensor.gaszaehler automatisch gefunden – ändern unter Experte"
     assert r["rooms"] == "1 Raum · 2 Sensoren gewählt"  # automatisch: Feuchte und Heizleistung am Gerät
 
 
@@ -436,7 +436,7 @@ def test_entities_css_tokens_and_small_functions():
     tokens = set(re.findall(r"var\((--[\w-]+)\)", css))
     assert tokens and all(t + ":" in root for t in tokens), tokens  # nur Farben, die es in beiden Themen gibt
     assert "@media (max-width: 760px) { .em-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }" in css
-    assert ".em-only .em-row[data-issue=\"0\"] { display: none; }" in css and ".em-list[hidden] { display: none; }" in css
+    assert ".em-list[hidden] { display: none; }" in css
     part = between(script(), SECTION_B, "function renderSettings()")
     names = re.findall(r"^(?:async )?function (\w+)\(", part, re.M)
     assert {"emInit", "emState", "emOptions", "emRow", "emNow", "emEdit", "emOpen", "emPick", "emAuto", "emCollect",

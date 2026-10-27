@@ -56,15 +56,16 @@ def test_four_tabs_and_diagnose_as_last_settings_page():
     page, js = html(), script()
     tabs = re.findall(r'<button id="tab-(\w+)"[^>]*>([^<]+)</button>', between(page, '<nav class="tabs">', "</nav>"))
     assert tabs == [("heat", "Heizen"), ("overview", "Übersicht"), ("live", "Live"), ("settings", "Einstellungen")]
-    assert 'id="tab-diag"' not in page and '<section id="view-diag" hidden>' in page  # Inhalt bleibt im DOM
+    assert 'id="tab-diag"' not in page and '<div id="view-diag">' in page  # Inhalt bleibt im DOM
     show = source(js, "showTab")
-    assert 'if (name === "diag") return openSettings("diagnose");' in show  # alte Sprünge landen in der Unterseite
-    assert '$("view-diag").hidden = name !== "settings" || SET_PAGE !== "diagnose";' in show
-    # 0.43 Schritt 3: Diagnose ist die letzte der zehn Unterseiten; Speicherleiste dort und auf der Startliste aus
-    assert '["diagnose", "Diagnose", "System"]];' in source(js, "SET_PAGES")
+    assert 'if (name === "diag") return openDiag();' in show  # alte Sprünge landen im Tab Live
+    # 0.58: Diagnose steht im Tab Live, geladen beim ersten Öffnen; Speicherleiste nur auf der Startseite aus
+    assert "if (!DIAG_SEEN) { DIAG_SEEN = true; loadDiagPage(); }" in show
+    live = between(page, '<section id="view-live" hidden>', "\n  </section>\n  <section")
+    assert '<div id="view-diag">' in live and '<h3 class="nav-h">Diagnose</h3>' in live
     sp = source(js, "setPage")
-    assert 'bar.hidden = SET_PAGE === "diagnose" || SET_PAGE === "menu"' in sp and "loadDiagPage();" in sp
-    assert '`<div class="savebar sb-clean" id="savebar"${SET_PAGE === "diagnose" || SET_PAGE === "menu" ? " hidden" : ""}>' in source(js, "renderSettings")
+    assert 'bar.hidden = SET_PAGE === "menu"' in sp and "diagnose" not in sp
+    assert '`<div class="savebar sb-clean" id="savebar"${SET_PAGE === "menu" ? " hidden" : ""}>' in source(js, "renderSettings")
     # alle Unterseiten bleiben im DOM: nur versteckt (collect liest alle)
     assert 'const page = (k, html) => `<div id="set-${k}" class="subpage"${SET_PAGE === k ? "" : " hidden"}>${html}</div>`;' in source(js, "renderSettings")
     assert "for (const k of SET_KEYS) { const d = $(\"set-\" + k); if (d) d.hidden = SET_PAGE !== k; }" in sp
@@ -72,20 +73,18 @@ def test_four_tabs_and_diagnose_as_last_settings_page():
 
 def test_settings_start_list_sidebar_and_save_bar():
     page, js = html(), script()
-    keys = re.findall(r'\["(\w+)", "([^"]+)", "(\w+)"\]', source(js, "SET_PAGES"))
-    assert [k for k, _, _ in keys] == ["grundlagen", "raeume", "entitaeten", "steuerung", "anwesenheit", "warmwasser", "kessel",
-                                     "benachrichtigungen", "erweitert", "diagnose"]
-    assert [g for _, _, g in keys] == ["Einrichten"] * 3 + ["Steuern"] * 4 + ["System"] * 3
-    # Gerüst: Startliste, Kopf „‹ Einstellungen“, Inhalt; Diagnose (#view-diag) steht darin
+    keys = re.findall(r'\["(\w+)", "([^"]+)"\]', source(js, "SET_PAGES"))
+    assert keys == [("raeume", "Räume"), ("kessel", "Kessel"), ("haus", "Haus")]  # 0.58: drei Kacheln (Styleguide)
+    # Gerüst: Startseite, Kopf „‹ Einstellungen“, Inhalt
     sec = between(page, '<section id="view-settings"', "\n  </section>\n  <section")
     assert 'class="set-view set-on-menu" hidden>' in sec and '<nav class="set-menu" id="set-menu"' in sec
     assert "onclick=\"setPage('menu')\">‹ Einstellungen</button>" in sec and '<div id="set-body">' in sec
-    assert sec.index('<div id="set-body">') < sec.index('<section id="view-diag" hidden>')
+    assert '<div id="view-diag">' not in sec
     # ab 900 px Seitenleiste 220 px, Inhalt höchstens 760 px; dort ist immer eine Seite offen
     css = between(page, "<style>", "</style>")
     assert "grid-template-columns: 220px minmax(0, 760px)" in css and ".set-main { max-width: 760px;" in css
-    assert 'if (p === "menu" && setWide()) p = SET_KEYS.includes(was) ? was : "grundlagen";' in source(js, "setPage")
-    assert 'const SET_ALIAS = { general: "grundlagen", entities: "entitaeten" };' in js  # alte Schlüssel
+    assert 'if (p === "menu" && setWide()) p = SET_KEYS.includes(was) ? was : "raeume";' in source(js, "setPage")
+    assert "SET_ALIAS" not in js  # keine Aliasse für alte Schlüssel
     assert 'store.set("hp-set-page", SET_PAGE)' in source(js, "setPage")  # zuletzt offene Unterseite
     # Speicherleiste erst bei Änderungen; „Verwerfen“ lädt das Gespeicherte
     assert ".savebar.sb-clean:has(#save-msg:empty) { display: none; }" in css
@@ -98,18 +97,18 @@ def test_settings_start_list_sidebar_and_save_bar():
 def test_settings_contents_per_page_and_entities_at_their_function():
     js = script()
     rs = source(js, "renderSettings")
-    # Grundlagen: EMS-ESP, Haus (Wohnfläche, Auslegung), Gas & Kosten; Kessel: Kesseldaten mit max. Vorlauf
-    grund = between(rs, 'page("grundlagen"', 'page("raeume"')
-    for f in ("f-emsesp_host", "f-living_area_m2", "f-design_outdoor_temp", "f-gas_calorific_value", "kwh-hint", "sugBtn("):
-        assert f in grund, f
-    kessel = between(rs, 'page("kessel"', 'page("benachrichtigungen"')
+    # Haus: EMS-ESP, Haus (Wohnfläche, Auslegung), Gas & Kosten; Kessel: Kesseldaten mit max. Vorlauf (0.58)
+    haus = between(rs, 'part("haus", sugBtn(', 'part("raeume"')
+    for f in ("f-emsesp_host", "f-living_area_m2", "f-design_outdoor_temp", "f-gas_calorific_value", "kwh-hint"):
+        assert f in haus, f
+    kessel = between(rs, 'part("kessel", card("Kesseldaten"', 'part("haus", card("Benachrichtigungen"')
     for f in ("f-boiler_nominal_kw", "f-boiler_min_power_pct", "f-max_flow_temp", "boilerSectionHtml(s, BOILC)", 'emInline("kessel_hp")'):
         assert f in kessel, f
-    # E3: Schreib-Entitäten bei der Funktion, „Entitäten“ nur gelesene Werte
-    assert 'emInline("warmwasser")' in between(rs, 'page("warmwasser"', 'page("kessel"')
-    assert 'const EM_PAGE_OF = { warmwasser: "warmwasser", kessel_hp: "kessel", personen: "anwesenheit", benachrichtigungen: "benachrichtigungen", raeume: "raeume" };' in js
-    assert "m.groups.filter((g) => !EM_PAGE_OF[g.key]).map(emGroup)" in source(js, "emPage")
-    assert 'openSettings(EM_PAGE_OF[group] || "entitaeten", "em-g-" + group);' in source(js, "emGo")
+    # E3: Schreib-Entitäten bei der Funktion, gelesene Werte unter „Experte“
+    assert 'emInline("warmwasser")' in between(rs, 'part("kessel", card("Warmwasser steuern"', 'part("kessel", card("Kesseldaten"')
+    assert 'const PAGE_GROUPS = { raeume: ["raeume"], kessel: ["kessel_hp", "warmwasser", "kessel", "regler"],' in js
+    assert 'const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas", "strom"] };' in js
+    assert 'openSettings(EM_PAGE_OF[group] || "haus", "em-g-" + group);' in source(js, "emGo")
     # Steuerung in Karten, „Im Modus Beobachten“ zugeklappt mit den alten Feldern aus „Komfort & Strategie“
     cc = source(js, "controlCard")
     assert re.findall(r'card\("([^"]+)"', cc) == ["Räume steuern", "Temperaturen", "Nachtzeiten", "Ventile führen"]
@@ -129,13 +128,13 @@ def test_settings_contents_per_page_and_entities_at_their_function():
 
 def test_diagnose_page_order_and_limits():
     page, js = html(), script()
-    diag = between(page, '<section id="view-diag" hidden>', "</section>")
+    diag = between(page, '<div id="view-diag">', "\n  </div>\n")
     titles = re.findall(r"<h2>([^<]+)</h2>", diag)
     assert titles == ["Selbsttest", "Bereit für die Steuerung?", "Modelle – Einzelheiten", "Protokoll", "Alle Sensoren", "Log", "Dateien"]
     assert diag.count("Nur Anzeige") == 1 and '<pre id="disc"></pre>' in diag  # Gefundene Entitäten zugeklappt hier
     assert "Nur Anzeige" not in source(js, "dhwReadyHtml") and "docs/planung" not in source(js, "boilerHtml")
     assert "const LOG_MAX = 5, LOG_CUT = 200;" in js and "const SENSOR_MAX = 50" in js
-    assert 'openSettings("diagnose");' in source(js, "openReadiness")
+    assert 'openDiag("ready-card");' in source(js, "openReadiness")
 
 
 def test_tokens_in_both_themes_and_no_duplicate_dark_line():
@@ -225,8 +224,8 @@ def test_heat_tab_shows_only_line_actions_and_rooms():
         assert word not in render, word
     assert "renderOvStatus();" in render and "renderHeatLog(c, j.dhw);" in render
     assert 'tiles.style.setProperty("--cols", k <= 4 ? Math.max(k, 1) : k <= 6 ? 3 : 4);' in render
-    # Protokoll unter Einstellungen → Diagnose, die Meldung als Einblendung
-    diag = between(page, '<section id="view-diag" hidden>', "</section>")
+    # Protokoll unter Live → Diagnose, die Meldung als Einblendung
+    diag = between(page, '<div id="view-diag">', "\n  </div>\n")
     assert '<details id="heat-log-box" hidden>' in diag and '<table id="heat-log"' in diag
     assert '<div class="toast" id="heat-msg" role="status" aria-live="polite" hidden></div>' in page
     assert "min-height" not in between(page, '<section id="view-heat">', "</section>")
@@ -314,7 +313,7 @@ def test_overview_status_rooms_warnings_and_last_write(tmp_path):
     assert "was du von Hand einstellst" not in plain(rooms)  # 0.55: ohne Erklärsatz
     assert plain(r["watch"]) == "Beobachten"  # 0.55: ohne Erklärsatz, ohne „machen mit“
     assert plain(r["last"]) == "Di., 03:30 · Wohnzimmer · Soll 18 °C (nacht) Protokoll ›"
-    assert "openSettings('diagnose', 'heat-log-box')" in r["last"] and "st-off" in r["last"]
+    assert "openDiag('heat-log-box')" in r["last"] and "st-off" in r["last"]
     assert "st-err" in r["fail"] and "nicht übernommen 50 °C" in plain(r["fail"])
     assert plain(r["none"]) == "Noch nichts geschrieben. Protokoll ›"
 
@@ -357,11 +356,12 @@ def test_toast_only_in_heat_tab_and_dialog_message_in_dialog(tmp_path):
 def test_jumps_go_through_open_settings_and_open_overview():
     js = script()
     os_ = source(js, "openSettings")
-    assert 'setPage(page || "menu");\n  showTab("settings");' in os_ and "a.scrollIntoView" in os_
-    for fn, call in (("dhwOpenSettings", 'openSettings("warmwasser")'), ("boilerOpenSettings", 'openSettings("kessel")'),
-                     ("openAdvanced", 'openSettings("erweitert")'), ("openAliases", 'openSettings("raeume")'),
-                     ("emRoom", 'openSettings("raeume")'), ("dhwOpenReady", 'openSettings("diagnose", "ready-dhw")'),
-                     ("boilerOpenReady", 'openSettings("diagnose", "ready-boiler-hp")')):
+    assert 'setPage(page || "menu");\n  showTab("settings");\n  reveal(anchor);' in os_
+    assert "a.scrollIntoView" in source(js, "reveal") and 'showTab("live");' in source(js, "openDiag")
+    for fn, call in (("dhwOpenSettings", 'openSettings("kessel")'), ("boilerOpenSettings", 'openSettings("kessel")'),
+                     ("openAdvanced", 'openSettings("haus", "exp-haus")'), ("openAliases", 'openSettings("raeume")'),
+                     ("emRoom", 'openSettings("raeume")'), ("dhwOpenReady", 'openDiag("ready-dhw")'),
+                     ("boilerOpenReady", 'openDiag("ready-boiler-hp")')):
         assert call in source(js, fn), fn
     oo = source(js, "openOverview")
     assert "const [p, a0] = OV_ANCHOR[page] || [page, anchor];" in oo and "ovPage(p);" in oo
@@ -390,7 +390,7 @@ def test_data_ids_exist_exactly_once():
 def test_rendered_texts_without_internals():
     """Sichtbare Texte nennen keine Versionen, Doku-Pfade, „Weg W/B“ oder Dienstaufrufe."""
     js = script()
-    for name in ("boilerHtml", "readyBoxHtml", "notifyHtml", "dhwSectionHtml", "boilerSectionHtml", "emPage"):
+    for name in ("boilerHtml", "readyBoxHtml", "notifyHtml", "dhwSectionHtml", "boilerSectionHtml", "expert"):
         text = _code(source(js, name))
         for pat in (r"seit 0\.\d", r"docs/", r"Weg [WB]", r"number\.set_value", r"switch\.turn_on"):
             assert not re.search(pat, text), (name, pat)

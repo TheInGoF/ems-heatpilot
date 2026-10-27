@@ -264,8 +264,8 @@ def test_boiler_block_table_and_traffic_light(tmp_path):
     assert rows[3] == "Warmwasser-Einmalladung wwonetime nicht gefunden – – nötig"
     assert rows[4] == "Antipendelzeit burnminperiod 10 min 0 – 120 min nein Info"
     assert '<tr class="muted"><td>Warmwasser-Einmalladung' in w
-    assert ("Geschrieben wird nie über EMS-ESP, nur über Home Assistant und nur mit eigenem Schalter: Vorlauf-Soll und "
-            "Heizbetrieb unter Einstellungen → Kessel") in plain(w)  # 0.41: Weg B; 0.43 ohne Planungsdatei und Versionen
+    assert ("Geschrieben wird nie über EMS-ESP, nur über Home Assistant und nur mit eigenem Schalter: Vorlauf-Soll, "
+            "Heizbetrieb und Warmwasser-Soll unter Einstellungen → Kessel") in plain(w)  # 0.41: Weg B; 0.43 ohne Planungsdatei und Versionen
     assert r["none"] == ""
 
 
@@ -276,7 +276,7 @@ def test_heat_status_line_and_overview_badge(tmp_path):
     assert "readyLine" not in between(js, "function heatStatus(c, vac)", "function readyLine")
     assert '$("heat-status").innerHTML = heatStatus(c, LAST_SUMMARY && LAST_SUMMARY.vacation);' in js
     # 0.43 Schritt 6 (Ü1 aufgelöst): kein eigenes Badge mehr in der Übersicht – die Bereitschaft steht einmal im
-    # Status (readyLine mit „Einzelheiten ›“ nach Einstellungen → Diagnose), die Startzeile nur noch beim Start
+    # Status (readyLine mit „Einzelheiten ›“ nach Live → Diagnose), die Startzeile nur noch beim Start
     body = between(js, "async function load() {", "$(\"tiles\").innerHTML")
     assert "readyBadge" not in body and '$("status").hidden = true;' in body
     assert "openReadiness()" in between(js, "function readyLine(r, pil)", "\n}\n")
@@ -304,7 +304,7 @@ def test_heat_status_line_and_overview_badge(tmp_path):
     assert r["none"] == "" and r["words"] == ["bereit", "eingeschränkt", "nicht bereit"]
     # „Einzelheiten“ öffnet die Einstellungen, klappt die Box auf und merkt sich das auch über ein Neuzeichnen
     op = between(js, "function openReadiness() {", "// Daten aus GET api/heat")
-    assert "READY_OPEN = true;" in op and 'openSettings("diagnose");' in op
+    assert "READY_OPEN = true;" in op and 'openDiag("ready-card");' in op
     rb = between(js, "function renderReadyBox(r, err = \"\") {", "function readyBoxHtml(")
     assert "box.innerHTML = readyBoxHtml(r, err, READY_SHOW.details, READY_SHOW.boiler);" in rb
     assert "if (r || err) READY_OPEN = false;" in rb and 'box.closest("details.card")' in rb

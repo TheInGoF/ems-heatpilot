@@ -21,6 +21,8 @@
   /* 0.43: Bausteine – Fehler-, Hinweis- und Linkfarben als Text, zweite Fläche, Abstände 4/8/12/16/24 */
   --err: #e34948; --err-text: #b42323; --warn-text: #7e5300; --good-text: #106b1e; --accent-text: #1c5cab;
   --surface-2: #f0efec;
+  --fs-small: 12px; --fs-text: 13px; --fs-title: 16px; --fs-num: 24px; --fs-big: 40px;  /* Styleguide 0.58 */
+  --r: 12px; --r-s: 8px;
   --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
   --nx-w: auto;  /* 0.46.3: Breite eines Zeitstrahl-Abschnitts, je Abschnitt gesetzt */
 }
@@ -52,29 +54,28 @@
 body { margin: 0; background: var(--bg); color: var(--text-primary);
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 main { max-width: 1200px; margin: 0 auto; padding: 16px; overflow-x: clip; }
-h1 { font-size: 20px; margin: 4px 0 2px; }
-h2 { font-size: 16px; margin: 0 0 4px; }
+h1 { font-size: var(--fs-title); margin: 4px 0 2px; }
+h2 { font-size: var(--fs-title); margin: 0 0 4px; }
 .sub { color: var(--text-secondary); margin: 0 0 16px; }
-.muted { color: var(--text-muted); font-size: 12px; }
-.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 40vw), 1fr)); gap: 12px; margin-bottom: 16px; }
-.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
-.card { padding: 14px 16px; }
-.tile .label { color: var(--text-secondary); font-size: 12px; }
-.tile .value { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
-.tile .unit { font-size: 13px; color: var(--text-secondary); font-weight: 400; }
+.muted { color: var(--text-muted); font-size: var(--fs-small); }
+.tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 40vw), 1fr)); gap: var(--s4); margin-bottom: var(--s4); }
+.tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r); padding: var(--s4); }
+.tile .label { color: var(--text-secondary); font-size: var(--fs-small); }
+.tile .value { font-size: var(--fs-num); font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile .unit { font-size: var(--fs-text); color: var(--text-secondary); font-weight: 400; }
 .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr)); gap: 12px; margin-bottom: 12px; }
-.card p { margin: 0 0 8px; color: var(--text-secondary); font-size: 13px; }
+.card p { margin: 0 0 8px; color: var(--text-secondary); font-size: var(--fs-text); }
 svg { display: block; width: 100%; height: auto; }  /* 0.43: Zeichenfläche beschnitten (frame), nichts ragt hinaus */
-svg text { fill: var(--text-muted); font-size: 11px; }
-.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--text-secondary); margin: 4px 0; }
+svg text { fill: var(--text-muted); font-size: var(--fs-small); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--fs-small); color: var(--text-secondary); margin: 4px 0; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
-table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+table { width: 100%; border-collapse: collapse; font-size: var(--fs-text); font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); }
 th { color: var(--text-secondary); font-weight: 500; }
 .scroll { overflow-x: auto; }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid var(--border); color: var(--text-secondary); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: var(--fs-small); border: 1px solid var(--border); color: var(--text-secondary); }
 #tip { position: fixed; pointer-events: none; background: var(--surface-1); border: 1px solid var(--border);
-  color: var(--text-primary); padding: 6px 8px; border-radius: 6px; font-size: 12px; display: none; z-index: 10;
+  color: var(--text-primary); padding: 6px 8px; border-radius: var(--r-s); font-size: var(--fs-small); display: none; z-index: 10;
   box-shadow: 0 2px 8px rgba(0,0,0,.12); white-space: nowrap; }
 details summary { cursor: pointer; color: var(--text-secondary); }
 a { color: var(--accent-text); text-underline-offset: 2px; }  /* 0.43: Links blau in beiden Themen */
@@ -84,18 +85,18 @@ a { color: var(--accent-text); text-underline-offset: 2px; }  /* 0.43: Links bla
 .tabs button { background: none; border: 0; border-bottom: 2px solid transparent; padding: 8px 12px; font: inherit;
   color: var(--text-secondary); cursor: pointer; }
 .tabs button.active { color: var(--text-primary); border-bottom-color: var(--series-1); font-weight: 600; }
-.banner { background: var(--surface-1); border: 1px solid var(--series-1); border-radius: 10px; padding: 10px 14px; margin-bottom: 12px; }
+.banner { background: var(--surface-1); border: 1px solid var(--series-1); border-radius: var(--r); padding: 10px 14px; margin-bottom: 12px; }
 .form-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 10px 16px; }
-.field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 3px; }
-.field .hint { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.field label { display: block; font-size: var(--fs-small); color: var(--text-secondary); margin-bottom: 3px; }
+.field .hint { font-size: var(--fs-small); color: var(--text-muted); margin-top: 2px; }
 input[type=text], input[type=number], input[type=date], input[type=time], input:not([type]) {
-  width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px;
-  background: var(--bg); color: var(--text-primary); font: inherit; font-size: 13px; }
+  width: 100%; padding: 6px 8px; border: 1px solid var(--border); border-radius: var(--r-s);
+  background: var(--bg); color: var(--text-primary); font: inherit; font-size: var(--fs-text); }
 input[type=checkbox] { width: 16px; height: 16px; }
-.btn { padding: 7px 14px; border-radius: 6px; border: 1px solid var(--border); background: var(--surface-1);
+.btn { padding: 7px 14px; border-radius: var(--r-s); border: 1px solid var(--border); background: var(--surface-1);
   color: var(--text-primary); font: inherit; cursor: pointer; }
 .btn.primary { background: var(--series-1); border-color: var(--series-1); color: #fff; font-weight: 600; }
-.btn.small { padding: 3px 9px; font-size: 12px; }
+.btn.small { padding: 3px 9px; font-size: var(--fs-small); }
 .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .msg-ok { color: var(--good); } .msg-err { color: #e34948; }
 .savebar { position: sticky; bottom: 0; background: var(--bg); padding: 10px 0; border-top: 1px solid var(--border);
@@ -103,18 +104,18 @@ input[type=checkbox] { width: 16px; height: 16px; }
 .savebar[hidden] { display: none; }  /* 0.43: unter Diagnose gibt es nichts zu speichern */
 table.form td { padding: 4px 6px; vertical-align: middle; }
 table.form input { min-width: 140px; }
-pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(--text-secondary); }
+pre { white-space: pre-wrap; word-break: break-all; font-size: var(--fs-small); color: var(--text-secondary); }
 .card[hidden], .tile[hidden] { display: none; }
 #cert-print { position: fixed; inset: 0; z-index: 50; background: rgba(0,0,0,.45); overflow: auto; padding: 16px; }
 #cert-print .sheet { background: #fff; color: #10233a; max-width: 760px; margin: 0 auto; padding: 28px 30px; border: 3px solid #1f3a5f;
-  outline: 1px solid #eb6834; outline-offset: -9px; border-radius: 4px; font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  outline: 1px solid #eb6834; outline-offset: -9px; border-radius: var(--r-s); font: 13px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
 #cert-print .sheet h1 { font-size: 30px; margin: 0; color: #0f1f33; } #cert-print .sheet h3 { margin: 16px 0 6px; color: #1f3a5f; font-size: 16px; }
 #cert-print .sheet table { font-size: 13px; } #cert-print .sheet td { border-bottom: 1px solid #eee; padding: 4px 6px; color: #222; }
 #cert-print .sheet .sub { color: #5f6b7a; } #cert-print .pill { display: inline-block; color: #fff; border-radius: 99px; padding: 1px 9px; font-weight: 600; font-size: 12px; }
 #cert-print .scale { display: flex; gap: 2px; margin: 6px 0 2px; } #cert-print .scale span { flex: 1; text-align: center; font-weight: 700; font-size: 11px; border-radius: 3px; padding: 2px 0; color: #333; }
 #cert-print .verdict { background: #fff4ea; border-radius: 8px; padding: 10px 14px; margin-top: 14px; }
 #cert-print .stamp { float: right; width: 92px; height: 92px; border: 3px solid; border-radius: 50%; text-align: center; transform: rotate(-12deg);
-  display: flex; flex-direction: column; justify-content: center; font-weight: 800; font-size: 13px; margin: 0 0 8px 12px; }
+  display: flex; flex-direction: column; justify-content: center; font-weight: 800; font-size: var(--fs-text); margin: 0 0 8px 12px; }
 #cert-print .bar { height: 12px; border-radius: 2px; display: inline-block; vertical-align: middle; }
 @media print {
   body > *:not(#cert-print) { display: none !important; }
@@ -123,86 +124,86 @@ pre { white-space: pre-wrap; word-break: break-all; font-size: 12px; color: var(
   #cert-print .sheet { max-width: none; border-width: 2px; }
 }
 .grid2:not(:has(> .card:not([hidden]))) { display: none; }
-select.sel { padding: 5px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); max-width: 100%; }
-#live-persons h3 { font-size: 13px; margin: 10px 0 4px; }
+select.sel { padding: 5px; border-radius: var(--r-s); border: 1px solid var(--border); background: var(--bg); color: var(--text-primary); max-width: 100%; }
+#live-persons h3 { font-size: var(--fs-text); margin: 10px 0 4px; }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 10px; }
-.chip { cursor: pointer; user-select: none; padding: 6px 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg); font-weight: 600; font-size: 14px; }
+.chip { cursor: pointer; user-select: none; padding: 6px 12px; border-radius: var(--r); border: 1px solid var(--border); background: var(--bg); font-weight: 600; font-size: var(--fs-text); }
 .chip.on { background: var(--series-1); border-color: transparent; color: #fff; }  /* 0.43: Auswahl blau, keine Temperaturfarbe */
 .boost-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; align-items: end; }
 @media (max-width: 520px) { .boost-grid { grid-template-columns: 1fr; } }
 .stepper { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-.stepper b { font-size: 24px; min-width: 76px; text-align: center; }
-.stepper .btn, .tile-ctl .btn { min-width: 40px; min-height: 36px; font-size: 16px; padding: 4px 10px; }
-.btn.big { padding: 10px 18px; font-size: 15px; }
+.stepper b { font-size: var(--fs-num); min-width: 76px; text-align: center; }
+.stepper .btn, .tile-ctl .btn { min-width: 40px; min-height: 36px; font-size: var(--fs-title); padding: 4px 10px; }
+.btn.big { padding: 10px 18px; font-size: var(--fs-text); }
 #boost-start:disabled { opacity: .45; cursor: default; }
 .boost-sum { font-weight: 700; color: var(--text-primary); }
 /* Heizen: kleine Aktionskacheln oben (wie in der Tado-App), Räume als quadratische Kacheln, Bedienung im Dialog */
 .acts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 12px; }
-.act { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);
+.act { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-1);
   cursor: pointer; user-select: none; text-align: left; color: var(--text-primary); font: inherit; min-width: 0; }
 .act svg { width: 22px; height: 22px; flex: none; }
 .act > span { min-width: 0; }
-.act b { display: block; font-size: 14px; }
-.act .muted { display: block; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.act b { display: block; font-size: var(--fs-text); }
+.act .muted { display: block; font-size: var(--fs-small); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .act.on { color: var(--accent-text); border-color: var(--series-1); }  /* 0.43: läuft = gewählt (blau) */
 @media (max-width: 440px) { .act { flex-direction: column; align-items: flex-start; gap: 6px; padding: 10px; } .act .muted { white-space: normal; } }
 .room-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, calc(50% - 6px)), 1fr)); gap: 12px; }
-.rtile { position: relative; display: flex; flex-direction: column; justify-content: space-between; aspect-ratio: 1 / 1; padding: 12px 14px; border-radius: 16px;
+.rtile { position: relative; display: flex; flex-direction: column; justify-content: space-between; aspect-ratio: 1 / 1; padding: 12px 14px; border-radius: var(--r);
   border: 1px solid var(--border); background: var(--surface-1); cursor: pointer; user-select: none; text-align: left; color: var(--text-primary); font: inherit; min-width: 0; }
 .rtile .top { display: flex; justify-content: space-between; align-items: flex-start; min-height: 30px; }
-.rtile .hum { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 10px; background: rgba(127,127,127,.16); color: var(--text-secondary); }
+.rtile .hum { display: inline-flex; align-items: center; gap: 3px; white-space: nowrap; font-size: var(--fs-small); font-weight: 600; padding: 3px 8px; border-radius: var(--r); background: rgba(127,127,127,.16); color: var(--text-secondary); }
 .rtile .pw { color: var(--text-muted); opacity: .6; } .rtile .pw svg { width: 30px; height: 30px; }
-.rtile .big { font-size: 40px; font-weight: 700; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
-.rtile .big small { font-size: 16px; font-weight: 600; }
-.rtile h3 { margin: 6px 0 0; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rtile .state { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.rtile .big { font-size: var(--fs-big); font-weight: 700; line-height: 1; letter-spacing: -1px; font-variant-numeric: tabular-nums; }
+.rtile .big small { font-size: var(--fs-title); font-weight: 600; }
+.rtile h3 { margin: 6px 0 0; font-size: var(--fs-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rtile .state { font-size: var(--fs-small); color: var(--text-secondary); margin-top: 2px; }
 .rtile.heating { background: var(--heat-bg); border-color: transparent; color: var(--heat-fg); }
 .rtile.heating h3, .rtile.heating .state { color: var(--heat-fg); }
 .rtile.heating .hum { background: rgba(255,255,255,.16); color: var(--heat-fg); }
 .rtile.off { background: var(--off-bg); color: var(--text-secondary); }
 .rtile.off h3 { color: var(--text-secondary); }
-.rtile .left { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 10px; background: var(--heat-fg); color: #111; }
-dialog.hp { border: 1px solid var(--border); border-radius: 16px; background: var(--surface-1); color: var(--text-primary); padding: 0; width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
+.rtile .left { font-size: var(--fs-small); font-weight: 700; padding: 3px 9px; border-radius: var(--r); background: var(--heat-fg); color: #111; }
+dialog.hp { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-1); color: var(--text-primary); padding: 0; width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
 dialog.hp::backdrop { background: rgba(0,0,0,.55); }
 dialog.hp #heat-dlg-body { position: relative; padding: 16px; }
-dialog.hp h2 { margin: 0 32px 10px 0; font-size: 16px; }
-dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: 13px; }
+dialog.hp h2 { margin: 0 32px 10px 0; font-size: var(--fs-title); }
+dialog.hp p { margin: 0 0 10px; color: var(--text-secondary); font-size: var(--fs-text); }
 .dlg-x { position: absolute; top: 10px; right: 10px; padding: 3px 9px; }
 .tile-ctl { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 8px; }
-.tile-ctl b { font-size: 16px; }
+.tile-ctl b { font-size: var(--fs-title); }
 .seg.modes { margin-top: 10px; max-width: none; }  /* 0.43: Betriebsart als Umschalter (.seg-b) */
-.room-legend span { white-space: nowrap; cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: 12px; }
+.room-legend span { white-space: nowrap; cursor: pointer; user-select: none; padding: 2px 8px; border: 1px solid var(--border); border-radius: var(--r); }
 .room-legend span.off { opacity: .4; text-decoration: line-through; }
 /* Steuerung (0.34): Schalter, Warnhinweis und Nachtplan in den Einstellungen; Statuszeile, Pause und Protokoll im Heizen-Reiter */
-.seg { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; max-width: 420px; }
+.seg { display: flex; border: 1px solid var(--border); border-radius: var(--r-s); overflow: hidden; max-width: 420px; }
 .seg label { flex: 1; text-align: center; padding: 8px 6px; cursor: pointer; font-weight: 600; color: var(--text-secondary); user-select: none; }
 .seg label:has(input:checked) { background: var(--series-1); color: #fff; }
 .seg input { position: absolute; opacity: 0; width: 0; height: 0; }
-.warnbox { border-left: 3px solid var(--warn); background: rgba(201, 133, 0, .09); border-radius: 6px; padding: 8px 10px; font-size: 13px; margin: 10px 0; color: var(--text-primary); }
+.warnbox { border-left: 3px solid var(--warn); background: rgba(201, 133, 0, .09); border-radius: var(--r-s); padding: 8px 10px; font-size: var(--fs-text); margin: 10px 0; color: var(--text-primary); }
 table.plan { width: auto; } table.plan td, table.plan th { padding: 3px 6px; } table.form.plan input { min-width: 0; width: 108px; }
-table.plan td.np-learned { white-space: nowrap; font-size: 12px; } table.plan .badge { font-size: 11px; padding: 0 6px; }
+table.plan td.np-learned { white-space: nowrap; font-size: var(--fs-small); } table.plan .badge { font-size: var(--fs-small); padding: 0 6px; }
 table.form input[type=checkbox] { min-width: 0; } table.form input.r-comfort { min-width: 72px; width: 72px; }
 /* Räume (0.35): Voreinstellung/Stufen klein; Empfehlungen: Erwartung je Raum als Chips, Wirkungszeile abgesetzt */
 table.form input.r-preset, table.form input.r-preset-max { min-width: 60px; width: 60px; }
 /* Fußboden (0.39.1): Anschluss als Auswahl, darunter der höchste Vorlauf – schmal, damit die Tabelle nicht wächst */
 table.form select.r-floor { min-width: 132px; } table.form input.r-floor-max { min-width: 64px; width: 64px; }
-.r-floor-box { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+.r-floor-box { display: flex; gap: 6px; align-items: center; margin-top: 4px; font-size: var(--fs-small); color: var(--text-secondary); white-space: nowrap; }
 .r-floor-box[hidden] { display: none; }
-.adv-exp { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0 2px; font-size: 12px; color: var(--text-secondary); align-items: center; }
+.adv-exp { display: flex; flex-wrap: wrap; gap: 4px 6px; margin: 4px 0 2px; font-size: var(--fs-small); color: var(--text-secondary); align-items: center; }
 .adv-exp span { padding: 1px 7px; border-radius: 99px; border: 1px solid var(--border); white-space: nowrap; }
 .adv-exp span.down { border-color: var(--good); color: var(--good); }
-.adv-effect { margin: 4px 0 2px; font-size: 13px; color: var(--text-primary); }
+.adv-effect { margin: 4px 0 2px; font-size: var(--fs-text); color: var(--text-primary); }
 .acts.four { grid-template-columns: repeat(4, 1fr); }
 @media (max-width: 520px) { .acts.four { grid-template-columns: repeat(2, 1fr); } }
 .pause-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 6px 0 10px; }
-.ctl-info { font-size: 13px; color: var(--text-secondary); margin: 8px 0 0; } .ctl-info b { color: var(--text-primary); }
-/* Bereit für die Steuerung? (0.36.1): Zustandsbox in Einstellungen → Steuerung mit Ampel, Kessel über EMS-ESP;
+.ctl-info { font-size: var(--fs-text); color: var(--text-secondary); margin: 8px 0 0; } .ctl-info b { color: var(--text-primary); }
+/* Bereit für die Steuerung? (0.36.1): Zustandsbox in Einstellungen → Räume mit Ampel, Kessel über EMS-ESP;
    Statuszeile im Heizen-Reiter; Kachel „Vorhersage“ grau ohne Daten */
-.ready-box { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px 12px; margin: 10px 0; }
-.ready-box h3 { font-size: 13px; margin: 0 0 6px; }
-.ready-head { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; color: var(--text-primary); }
+.ready-box { border: 1px solid var(--border); border-radius: var(--r-s); background: var(--bg); padding: 10px 12px; margin: 10px 0; }
+.ready-box h3 { font-size: var(--fs-text); margin: 0 0 6px; }
+.ready-head { display: flex; gap: 8px; align-items: flex-start; font-size: var(--fs-text); color: var(--text-primary); }
 .ready-head .dot { margin-top: 4px; }
-.ready-box details { margin-top: 6px; font-size: 13px; }
+.ready-box details { margin-top: 6px; font-size: var(--fs-text); }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: var(--text-muted); flex: none; }
 .dot.dot-ok { background: var(--good); } .dot.dot-warn { background: var(--warn); }  /* nicht .warn: #heat-status .warn ist eine Zeile */
 .ready-list { margin: 6px 0; padding-left: 0; list-style: none; }
@@ -210,7 +211,7 @@ table.form select.r-floor { min-width: 132px; } table.form input.r-floor-max { m
 .ready-list li.block { border-color: #e34948; color: var(--text-primary); }
 .ready-list li.limit { border-color: var(--warn); color: var(--text-primary); }
 .ready-boiler { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 10px; }
-table.ready-t th, table.ready-t td { padding: 4px 6px; font-size: 12px; vertical-align: top; }
+table.ready-t th, table.ready-t td { padding: 4px 6px; font-size: var(--fs-small); vertical-align: top; }
 table.ready-t td:last-child { color: var(--text-secondary); }
 table.ready-t tr.muted td { color: var(--text-muted); }
 table.ready-t .badge { white-space: nowrap; }
@@ -219,16 +220,16 @@ table.ready-t .rt-narrow { display: none; }
 @media (max-width: 520px) { table.ready-t th, table.ready-t td { padding: 4px 4px; }
   table.ready-t .rt-wide { display: none; } table.ready-t .rt-narrow { display: block; } }
 .tile.off { background: var(--off-bg); }
-.tile.off .value { font-size: 15px; font-weight: 500; color: var(--text-muted); padding: 5px 0 3px; }
-/* Desinfektion (0.36.3): Termin, gelesene Temperatur und Vorschlag in Einstellungen → Warmwasser;
+.tile.off .value { font-size: var(--fs-text); font-weight: 500; color: var(--text-muted); padding: 5px 0 3px; }
+/* Desinfektion (0.36.3): Termin, gelesene Temperatur und Vorschlag in Einstellungen → Kessel;
    Heizkreis von EMS-ESP: „macht mit“ und Bedienung gesperrt */
-.field select.sel { width: 100%; padding: 6px 8px; font: inherit; font-size: 13px; }
-.dis-read { padding: 6px 0 2px; font-size: 13px; color: var(--text-primary); }
-.card p.dis-state { margin: 14px 0 0; font-size: 13px; color: var(--text-secondary); }  /* vor .card p */
+.field select.sel { width: 100%; padding: 6px 8px; font: inherit; font-size: var(--fs-text); }
+.dis-read { padding: 6px 0 2px; font-size: var(--fs-text); color: var(--text-primary); }
+.card p.dis-state { margin: 14px 0 0; font-size: var(--fs-text); color: var(--text-secondary); }  /* vor .card p */
 .card p.dis-state + p.dis-state { margin-top: 6px; }
 .dis-state b { color: var(--text-primary); }
-.dis-sug { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 6px; padding: 8px 10px;
-  margin: 10px 0; font-size: 13px; color: var(--text-primary); background: var(--bg); }
+.dis-sug { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: var(--r-s); padding: 8px 10px;
+  margin: 10px 0; font-size: var(--fs-text); color: var(--text-primary); background: var(--bg); }
 .dis-sug.off { border-left-color: var(--border); color: var(--text-secondary); }
 .dis-sug .row { justify-content: space-between; margin-bottom: 4px; }
 .dis-sug .muted { display: block; margin-top: 3px; }
@@ -238,10 +239,10 @@ table.ready-t .rt-narrow { display: none; }
 .field input:disabled, table.form input:disabled { opacity: .5; cursor: not-allowed; }
 /* Vorschau (0.37): Trockenlauf-Hinweis, Legende mit Linien/Bändern/Ring, zwei kleine Grafen übereinander,
    Stundentabelle mit Gründen in einer zweiten Zeile; Vergleich 7 Tage mit Satz und Kennzahlen */
-.card p.pv-note { border-left: 3px solid var(--series-1); background: var(--bg); border-radius: 6px; padding: 7px 10px; color: var(--text-primary); }
+.card p.pv-note { border-left: 3px solid var(--series-1); background: var(--bg); border-radius: var(--r-s); padding: 7px 10px; color: var(--text-primary); }
 .card p.pv-miss { border-left: 3px solid var(--warn); padding-left: 8px; }
-.card p.cmp-text { color: var(--text-primary); font-size: 14px; }
-.pv-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; color: var(--text-secondary); margin: 12px 0 0; }
+.card p.cmp-text { color: var(--text-primary); font-size: var(--fs-text); }
+.pv-title { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--fs-small); color: var(--text-secondary); margin: 12px 0 0; }
 .legend i.lk, .pv-title i.lk { width: 14px; height: 0; border-radius: 0; border-top: 2px solid; vertical-align: 3px; background: none; }
 .legend i.lk.dash { border-top-style: dashed; }
 .legend i.strip { height: 4px; vertical-align: 2px; border-radius: 1px; opacity: .6; }
@@ -251,19 +252,19 @@ table.ready-t .rt-narrow { display: none; }
 .tip-why { display: inline-block; white-space: normal; max-width: min(280px, 70vw); color: var(--text-secondary); padding-left: 17px; }
 table.pv-t th, table.pv-t td { padding: 4px 6px; }
 table.pv-t tr.pv-h td { border-bottom: 0; padding-bottom: 1px; white-space: nowrap; }
-table.pv-t tr.pv-why td { font-size: 12px; color: var(--text-secondary); padding-top: 0; }
-table.pv-t .muted { font-size: 11px; }
+table.pv-t tr.pv-why td { font-size: var(--fs-small); color: var(--text-secondary); padding-top: 0; }
+table.pv-t .muted { font-size: var(--fs-small); }
 #cmp-mode[hidden] { display: none; }  /* .row setzt display: flex */
-ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: 13px; color: var(--text-secondary); }
+ul.cmp-facts { margin: 0 0 8px; padding-left: 18px; font-size: var(--fs-text); color: var(--text-secondary); }
 /* Ventile (0.39): Abschnitt „Ventilverhalten“ im Raum-Dialog (Graf, Satz, Einzelheiten), Tabelle in Übersicht → Räume,
    Abschnitt „Ventile (Trockenlauf)“ am Ende der Vorschau */
 .valve { border-top: 1px solid var(--border); margin-top: 12px; }
 .valve h3.sec-h { margin-top: 10px; }
 dialog.hp p.valve-text { color: var(--text-primary); margin: 6px 0 4px; }
-.valve-more { font-size: 12px; margin-top: 4px; }
+.valve-more { font-size: var(--fs-small); margin-top: 4px; }
 .valve-more .valve-more { margin-top: 6px; }
 table.valve-t { margin-top: 4px; }
-table.valve-t th, table.valve-t td { padding: 3px 6px; font-size: 12px; vertical-align: top; }
+table.valve-t th, table.valve-t td { padding: 3px 6px; font-size: var(--fs-small); vertical-align: top; }
 table.valve-t td:first-child { color: var(--text-secondary); white-space: nowrap; }
 #valve-rooms td { vertical-align: top; white-space: nowrap; }
 #valve-rooms td:last-child { white-space: normal; min-width: 300px; }
@@ -271,17 +272,17 @@ svg text.halo { paint-order: stroke; stroke: var(--surface-1); stroke-width: 3px
 .badge.vb-ok { border-color: var(--good); color: var(--good); }
 .badge.vd-w { border-color: var(--good); color: var(--good); }  /* 0.40: Eingriff wirklich geschrieben */
 #vd { border-top: 1px solid var(--border); margin-top: 14px; }
-#vd h3 { font-size: 14px; margin: 12px 0 6px; }
+#vd h3 { font-size: var(--fs-text); margin: 12px 0 6px; }
 #lg-vd[hidden] { display: none; }  /* .legend setzt display: flex */
 #vd details { margin-top: 8px; }
 #vd-days { margin-top: 8px; }
 #vd-rooms td:first-child, #vd-days td:first-child { white-space: nowrap; }
-ul.vd-ex { margin: 6px 0 0; padding-left: 18px; font-size: 13px; color: var(--text-primary); }
+ul.vd-ex { margin: 6px 0 0; padding-left: 18px; font-size: var(--fs-text); color: var(--text-primary); }
 ul.vd-ex li { margin-bottom: 8px; }
 ul.vd-ex .muted { margin-top: 1px; }
 .card p#vd-rules { margin: 6px 0 0; }
 /* Warmwasser über HeatPilot (0.38): Statuszeile in Heizen/Übersicht, Schalter mit drei Stellungen und Statusbox in
-   Einstellungen → Warmwasser, Block in „Bereit für die Steuerung?“, Ring „schreibt“ in der Vorschau;
+   Einstellungen → Kessel, Block in „Bereit für die Steuerung?“, Ring „schreibt“ in der Vorschau;
    Benachrichtigungen: Zielliste mit Häkchen */
 #ov-dhw { margin: 0; }  /* 0.43: Zeile in Übersicht → Status (im Heizen gibt es sie nicht mehr) */
 .dhw-line .dot, .dhw-box .dot { margin-right: 6px; vertical-align: 0; }
@@ -290,33 +291,40 @@ ul.vd-ex .muted { margin-top: 1px; }
 .dhw-note { display: block; margin-top: 4px; color: var(--text-primary); }
 .dhw-ico svg { display: inline-block; width: 11px; height: 11px; margin-right: 4px; vertical-align: -1px; color: var(--series-4); }
 .seg.seg3 { max-width: 480px; }
-@media (max-width: 440px) { .seg.seg3 label { padding: 8px 2px; font-size: 13px; } }
-h3.sec-h { font-size: 13px; margin: 14px 0 4px; }
-.dhw-box { border: 1px solid var(--border); border-radius: 8px; background: var(--bg); padding: 10px 12px; margin: 10px 0; font-size: 13px; }
-.card .dhw-box p { margin: 6px 0 0; font-size: 13px; }
+@media (max-width: 440px) { .seg.seg3 label { padding: 8px 2px; font-size: var(--fs-text); } }
+h3.sec-h { font-size: var(--fs-text); margin: 14px 0 4px; }
+.dhw-box { border: 1px solid var(--border); border-radius: var(--r-s); background: var(--bg); padding: 10px 12px; margin: 10px 0; font-size: var(--fs-text); }
+.card .dhw-box p { margin: 6px 0 0; font-size: var(--fs-text); }
 .card .dhw-box p.dhw-ready { color: var(--text-primary); }
 .legend i.ring.own { background: var(--series-4); border-color: var(--series-4); }
 table.notify-t td { vertical-align: middle; overflow-wrap: anywhere; }
 .msg-warn { color: var(--warn); }
 .card .notify-state p { margin: 8px 0 0; } .notify-state ul.cmp-facts { margin: 4px 0 0; }
-code { font-size: 12px; overflow-wrap: anywhere; }
+code { font-size: var(--fs-small); overflow-wrap: anywhere; }
 /* Entitäten (0.39.1): Umschalter „Allgemein | Entitäten“ oben in den Einstellungen; Gruppen als aufklappbare Karten mit
    Zähler, je Rolle eine Zeile (Name und Zweck · was gilt · ändern) mit Auswahl und Suche; am Handy untereinander */
 .set-nav { margin: 0 0 14px; max-width: 360px; }
 .em-alert { display: inline-block; min-width: 18px; padding: 0 5px; margin-left: 6px; border-radius: 99px; background: #e34948;
-  color: #fff; font-size: 11px; line-height: 18px; font-weight: 700; }
+  color: #fff; font-size: var(--fs-small); line-height: 18px; font-weight: 700; }
 .em-alert[hidden] { display: none; }
-.em-top { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; justify-content: space-between; margin: 0 0 12px;
-  font-size: 13px; color: var(--text-secondary); }
-.em-filter { display: flex; gap: 6px; align-items: center; cursor: pointer; color: var(--text-primary); }
+/* Einstellungen (0.58, Styleguide): Startseite mit drei Kacheln, „Experte“ ausklappbar am Seitenende */
+.set-on-menu .set-tiles { display: grid; grid-template-columns: 1fr; gap: var(--s2);
+  background: none; border: 0; overflow: visible; }
+.set-on-menu .set-tiles .nav-row { min-height: 72px; align-items: center; border: 1px solid var(--border); border-radius: var(--r);
+  background: var(--surface-1); padding: var(--s4); }
+.set-on-menu .set-tiles .nav-row b { font-size: var(--fs-title); }
+.set-on-menu .set-tiles .nav-row small { white-space: normal; }
+details.expert { margin: var(--s4) 0 0; }
+details.expert > summary { cursor: pointer; font-weight: 600; font-size: var(--fs-text); color: var(--text-secondary); padding: var(--s2) 0; }
+details.expert[open] > summary { margin-bottom: var(--s2); }
 details.em-group { margin-bottom: 12px; }
 details.em-group > summary h2 { display: inline; }
-.em-count { margin-left: 8px; font-size: 12px; color: var(--text-muted); }
+.em-count { margin-left: 8px; font-size: var(--fs-small); color: var(--text-muted); }
 .card p.em-gtext { margin: 8px 0 2px; }
 .em-row { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1.25fr) minmax(0, 1fr); gap: 4px 16px;
-  padding: 9px 0; border-top: 1px solid var(--border); font-size: 13px; }
+  padding: 9px 0; border-top: 1px solid var(--border); font-size: var(--fs-text); }
 .em-name b { color: var(--text-primary); }
-.em-why { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+.em-why { font-size: var(--fs-small); color: var(--text-muted); margin-top: 2px; }
 .em-now { color: var(--text-secondary); min-width: 0; }
 .em-ent { margin-top: 3px; overflow-wrap: anywhere; }
 .em-ent b { color: var(--text-primary); font-weight: 600; }
@@ -324,15 +332,15 @@ details.em-group > summary h2 { display: inline; }
 .em-x { padding: 0 7px; margin-left: 4px; }
 .em-pick { display: flex; gap: 6px; align-items: center; }
 .em-pick input { flex: 1; width: auto; min-width: 0; }
-.em-list { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); max-height: 320px;
+.em-list { grid-column: 1 / -1; border: 1px solid var(--border); border-radius: var(--r-s); background: var(--bg); max-height: 320px;
   overflow-y: auto; margin-top: 4px; }
 .em-list[hidden] { display: none; }
 .em-opt { display: block; width: 100%; text-align: left; padding: 6px 10px; border: 0; border-bottom: 1px solid var(--border);
-  background: none; color: var(--text-primary); font: inherit; font-size: 13px; cursor: pointer; }
+  background: none; color: var(--text-primary); font: inherit; font-size: var(--fs-text); cursor: pointer; }
 .em-opt:hover, .em-opt.on { background: var(--surface-1); box-shadow: inset 3px 0 0 var(--series-1); }
 .em-opt code, .em-opt .muted { display: block; }
 .em-opt.unfit > span:first-child { color: var(--text-secondary); }
-.em-more { padding: 6px 10px; font-size: 12px; color: var(--text-muted); }
+.em-more { padding: 6px 10px; font-size: var(--fs-small); color: var(--text-muted); }
 .badge.em-req { border-color: var(--series-1); color: var(--series-1); }
 .badge.em-badge { margin-right: 4px; }
 .badge.em-s-auto { border-color: var(--good); color: var(--good); }
@@ -343,12 +351,9 @@ details.em-group > summary h2 { display: inline; }
 .em-row.em-wide table.form { margin-top: 4px; }
 .em-changed .em-name b::after { content: " •"; color: var(--series-1); }
 .em-none { display: none; }
-.em-only .em-row[data-issue="0"] { display: none; }
-.em-only details.em-clean .em-none { display: block; margin: 8px 0 0; }
-details.em-fold { border-top: 1px solid var(--border); padding: 8px 0 0; font-size: 13px; }
+details.em-fold { border-top: 1px solid var(--border); padding: 8px 0 0; font-size: var(--fs-text); }
 details.em-fold > summary { padding: 2px 0 6px; }
-.em-only details.em-fold:not(:has(.em-row[data-issue="1"])) { display: none; }
-.card p.em-ref { font-size: 13px; color: var(--text-secondary); margin: 8px 0; }
+.card p.em-ref { font-size: var(--fs-text); color: var(--text-secondary); margin: 8px 0; }
 .card p.em-ref code { color: var(--text-primary); }
 .room.room-flash { background: rgba(42, 120, 214, .14); }
 @media (max-width: 760px) { .em-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
@@ -361,12 +366,12 @@ ul.boiler-facts { margin: 6px 0 0; padding-left: 18px; color: var(--text-seconda
 ul.boiler-facts li { margin: 2px 0; }
 ul.boiler-facts b { color: var(--text-primary); font-weight: 600; }
 .boiler-wd { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; }
-details.boiler-rules { margin: 0 0 10px; font-size: 13px; }
+details.boiler-rules { margin: 0 0 10px; font-size: var(--fs-text); }
 .card details.boiler-rules p { margin: 4px 0 0; }
 .boiler-wd .btn { margin-top: 6px; }
 #boiler-guide { margin-top: 8px; }
-.code-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
-  font-size: 12px; overflow-x: auto; white-space: pre; margin: 6px 0; }
+.code-box { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--r-s); padding: 8px 10px;
+  font-size: var(--fs-small); overflow-x: auto; white-space: pre; margin: 6px 0; }
 #boiler-guide[hidden] { display: none; }
 ol.boiler-steps { margin: 4px 0 8px; padding-left: 20px; color: var(--text-primary); }
 ol.boiler-steps li { margin: 3px 0; }
@@ -375,13 +380,13 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
 .boiler-ico svg { display: inline-block; width: 12px; height: 12px; margin-right: 4px; vertical-align: -1px; color: var(--series-2); }
 .legend i.ring.own.flow { background: var(--series-2); border-color: var(--series-2); }
 .badge.n-rec { border-color: var(--good); color: var(--good); margin-left: 4px; }
-/* Desinfektion auslösen, Mindestleistung (0.42): Zeile „Auslösen“ in Einstellungen → Warmwasser, Zeile im Block
+/* Desinfektion auslösen, Mindestleistung (0.42): Zeile „Auslösen“ in Einstellungen → Kessel, Zeile im Block
    „Warmwasser über HeatPilot“, Vorschlag der kleinsten Leistung mit Knopf „übernehmen“ in Haus & Kessel */
-.dis-trig { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 6px; padding: 8px 10px;
-  margin: 10px 0; font-size: 13px; color: var(--text-primary); background: var(--bg); }
-.card .dis-trig p { margin: 4px 0 0; font-size: 13px; }
+.dis-trig { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: var(--r-s); padding: 8px 10px;
+  margin: 10px 0; font-size: var(--fs-text); color: var(--text-primary); background: var(--bg); }
+.card .dis-trig p { margin: 4px 0 0; font-size: var(--fs-text); }
 .dis-trig code { color: var(--text-primary); overflow-wrap: anywhere; }
-.card p.ready-dis { margin: 6px 0 0; font-size: 13px; color: var(--text-secondary); }
+.card p.ready-dis { margin: 6px 0 0; font-size: var(--fs-text); color: var(--text-secondary); }
 .ready-dis .dot { margin-right: 4px; }
 .minpow, .minpow-off { display: block; margin-top: 4px; }
 .minpow b { color: var(--text-primary); }
@@ -389,9 +394,9 @@ table.boiler-vals td:last-child { color: var(--text-primary); overflow-wrap: any
 .minpow-off { color: var(--warn); }
 /* Gelerntes übernehmen (0.42.1): Kasten über der Raum-Tabelle – Daten ohne Raum, Vorschläge mit Knopf, Auswahl je alter
    Entität („Selbst zuordnen“); gesperrt mit Hinweis, solange Raumänderungen nicht gespeichert sind */
-.adopt { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: 6px; padding: 8px 10px;
-  margin: 0 0 10px; font-size: 13px; color: var(--text-primary); background: var(--bg); }
-.card .adopt p { margin: 4px 0 0; font-size: 13px; }
+.adopt { border: 1px solid var(--border); border-left: 3px solid var(--series-1); border-radius: var(--r-s); padding: 8px 10px;
+  margin: 0 0 10px; font-size: var(--fs-text); color: var(--text-primary); background: var(--bg); }
+.card .adopt p { margin: 4px 0 0; font-size: var(--fs-text); }
 .card .adopt p.adopt-head { margin: 0; color: var(--text-primary); }
 .card .adopt p.adopt-lock { color: var(--warn); font-weight: 600; }
 .card .adopt p.adopt-msg { color: var(--text-primary); }
@@ -410,12 +415,12 @@ details.adopt-more > summary { padding: 2px 0 4px; }
    Hinweis mit „Hausdaten wiederherstellen“, Stand der Abläufe (.job-msg) auch in Erweitert, Räume und Diagnose */
 .mc-head { justify-content: space-between; margin-bottom: 6px; }
 .mc-head h2 { margin: 0; }
-.mc-head a, .mc-warn a { font-size: 12px; }
-.mc-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: 13px; cursor: pointer; }
+.mc-head a, .mc-warn a { font-size: var(--fs-small); }
+.mc-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: var(--fs-text); cursor: pointer; }
 .mc-k { display: flex; gap: 6px; align-items: center; align-self: start; color: var(--text-secondary); white-space: nowrap; line-height: 19px; }
 .mc-v { color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
-.mc-v .muted { font-size: 12px; }
-.mc-warn { border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: 6px; background: var(--bg);
+.mc-v .muted { font-size: var(--fs-small); }
+.mc-warn { border: 1px solid var(--border); border-left: 3px solid var(--warn); border-radius: var(--r-s); background: var(--bg);
   padding: 8px 10px; margin: 10px 0 0; }
 .card .mc-warn p { margin: 0 0 6px; color: var(--text-primary); }
 .card p.job-msg { margin: 8px 0 0; color: var(--text-primary); }
@@ -435,42 +440,42 @@ details.alias > summary { color: var(--text-primary); }
 .alias-row .row .btn { flex: none; white-space: nowrap; }
 /* 0.43 Roundup – Bausteine (eine Form je Zweck): Abschnitt, Kennzahl, Mehr-Text, Experten-Block, Statuszeile, Hinweis,
    Abzeichen, Umschalter, Schalter, Listenzeile, Tabelle als Liste, Entitäts-ID. Farben nur über Tokens (hell und dunkel) */
-h3.sec { font-size: 14px; margin: var(--s4) 0 var(--s1); }
+h3.sec { font-size: var(--fs-text); margin: var(--s4) 0 var(--s1); }
 .card p { max-width: 70ch; }
-.kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; min-width: 0; }
-.kpi .label { color: var(--text-secondary); font-size: 12px; }
-.kpi .value { font-size: 24px; font-weight: 600; }
-.kpi .unit { font-size: 14px; color: var(--text-secondary); font-weight: 400; }
-.kpi .note { font-size: 12px; color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical;
+.kpi { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; min-width: 0; }
+.kpi .label { color: var(--text-secondary); font-size: var(--fs-small); }
+.kpi .value { font-size: var(--fs-num); font-weight: 600; }
+.kpi .unit { font-size: var(--fs-text); color: var(--text-secondary); font-weight: 400; }
+.kpi .note { font-size: var(--fs-small); color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical;
   -webkit-line-clamp: 2; line-clamp: 2; }  /* 0.48.3: zwei Zeilen statt abgeschnitten */
 .kpi.off .value { color: var(--text-muted); }
-details.more { margin: 0 0 var(--s2); font-size: 13px; color: var(--text-secondary); }
+details.more { margin: 0 0 var(--s2); font-size: var(--fs-text); color: var(--text-secondary); }
 details.more > summary { list-style: none; color: var(--text-secondary); }
 details.more > summary::-webkit-details-marker { display: none; }
 details.more .m { color: var(--accent-text); white-space: nowrap; }
 details.more .m::before { content: "mehr"; }
 details.more[open] .m::before { content: "weniger"; }
 details.more > div { margin-top: 6px; padding-left: 10px; border-left: 2px solid var(--border); }
-p.more-p { margin: 0 0 var(--s2); font-size: 13px; color: var(--text-secondary); }
-details.fold { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; font-size: 13px; }
+p.more-p { margin: 0 0 var(--s2); font-size: var(--fs-text); color: var(--text-secondary); }
+details.fold { border-top: 1px solid var(--border); margin-top: 10px; padding-top: 8px; font-size: var(--fs-text); }
 details.fold > summary { color: var(--text-primary); font-weight: 500; }
-.st { display: flex; gap: var(--s2); align-items: flex-start; font-size: 13px; margin: var(--s1) 0; color: var(--text-primary); }
+.st { display: flex; gap: var(--s2); align-items: flex-start; font-size: var(--fs-text); margin: var(--s1) 0; color: var(--text-primary); }
 .st > .dot { margin-top: 5px; }
 .st-t { flex: 1; min-width: 0; }
 .st-a a, .st-a .btn { white-space: nowrap; }
 .st.st-err { color: var(--err-text); }
 .dot.dot-err { background: var(--err); }
-.callout { border-radius: 8px; padding: 8px 12px; margin: var(--s2) 0; font-size: 13px; background: var(--surface-2); color: var(--text-primary); }
+.callout { border-radius: var(--r-s); padding: 8px 12px; margin: var(--s2) 0; font-size: var(--fs-text); background: var(--surface-2); color: var(--text-primary); }
 .callout.warn { background: rgba(201, 133, 0, .13); } .callout.err { background: rgba(227, 73, 72, .12); color: var(--err-text); }
 .badge.ok { border-color: var(--good); color: var(--good-text); } .badge.warn { border-color: var(--warn); color: var(--warn-text); }
 .badge.err { border-color: var(--err); color: var(--err-text); } .badge.info { border-color: var(--series-1); color: var(--accent-text); }
-.seg.seg-b { padding: 3px; gap: 3px; background: var(--surface-2); border: 0; border-radius: 10px; }
-.seg-b button { flex: 1; min-width: 0; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--text-secondary);
-  font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.seg.seg-b { padding: 3px; gap: 3px; background: var(--surface-2); border: 0; border-radius: var(--r); }
+.seg-b button { flex: 1; min-width: 0; padding: 6px 8px; border: 0; border-radius: var(--r-s); background: none; color: var(--text-secondary);
+  font: inherit; font-size: var(--fs-text); cursor: pointer; white-space: nowrap; }
 .seg-b button.on { background: var(--series-1); color: #fff; font-weight: 600; }
 .seg-b button:disabled { opacity: .5; cursor: not-allowed; }
 label.switch { display: inline-flex; align-items: center; gap: var(--s2); cursor: pointer; color: var(--text-primary); }
-label.switch input { appearance: none; -webkit-appearance: none; width: 40px; height: 24px; border-radius: 12px; margin: 0;
+label.switch input { appearance: none; -webkit-appearance: none; width: 40px; height: 24px; border-radius: var(--r); margin: 0;
   background: var(--border); position: relative; cursor: pointer; flex: none; transition: background .15s; }
 label.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%;
   background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, .3); transition: left .15s; }
@@ -478,18 +483,18 @@ label.switch input:checked { background: var(--series-1); } label.switch input:c
 .nav-row { display: flex; align-items: center; gap: var(--s3); width: 100%; padding: 10px 12px; border: 0; border-top: 1px solid var(--border);
   background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
 .nav-row:first-child { border-top: 0; }
-.nr-ic { width: 30px; height: 30px; border-radius: 8px; background: var(--surface-2); display: grid; place-items: center; color: var(--text-secondary); flex: none; }
+.nr-ic { width: 30px; height: 30px; border-radius: var(--r-s); background: var(--surface-2); display: grid; place-items: center; color: var(--text-secondary); flex: none; }
 .nr-ic svg { width: 18px; height: 18px; }
 .nr-t { flex: 1; min-width: 0; } .nr-t b { display: block; font-weight: 500; }
-.nr-t small { display: block; font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.nr-v { font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.nr-t small { display: block; font-size: var(--fs-small); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nr-v { font-size: var(--fs-text); color: var(--text-secondary); white-space: nowrap; }
 .nr-chev { color: var(--text-muted); }
 @media (max-width: 520px) {
   table.tbl.stack, table.tbl.stack tbody, table.tbl.stack tr, table.tbl.stack td { display: block; width: 100%; }
   table.tbl.stack tr:first-child:has(th) { display: none; }
   table.tbl.stack tr { padding: 6px 0; border-bottom: 1px solid var(--border); }
   table.tbl.stack td { border: 0; padding: 1px 0; }
-  table.tbl.stack td[data-l]::before { content: attr(data-l) " "; color: var(--text-muted); font-size: 12px; }
+  table.tbl.stack td[data-l]::before { content: attr(data-l) " "; color: var(--text-muted); font-size: var(--fs-small); }
 }
 code.eid { display: inline-block; max-width: 100%; vertical-align: bottom; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; overflow-wrap: normal; }
@@ -499,14 +504,14 @@ p.empty { margin: 4px 0; }
 .nx-tl { container-type: inline-size; margin-top: var(--s2); }
 .nx-bar { display: flex; flex-direction: column; gap: 2px; position: relative; }
 .nx-seg { display: grid; grid-template-columns: 7.5em minmax(0, 1fr) auto; gap: var(--s2); align-items: baseline; padding: 6px var(--s2);
-  border-radius: 6px; border-left: 3px solid transparent; font-size: 13px; color: var(--text-primary); background: var(--surface-2);
+  border-radius: var(--r-s); border-left: 3px solid transparent; font-size: var(--fs-text); color: var(--text-primary); background: var(--surface-2);
   cursor: default; outline: none; min-width: 0; }
 .nx-seg:first-child { border-left-color: var(--text-primary); }
 .nx-seg:hover, .nx-seg:focus-visible, .nx-seg.on { box-shadow: inset 0 0 0 2px var(--text-primary); }
 .nx-t { color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .nx-a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nx-v { text-align: right; font-weight: 600; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.nx-v small { display: block; font-weight: 400; font-size: 12px; color: var(--text-secondary); }
+.nx-v small { display: block; font-weight: 400; font-size: var(--fs-small); color: var(--text-secondary); }
 .nx-k-night { background: var(--band-night); } .nx-k-home { background: var(--band-home); }
 .nx-k-away, .nx-k-vac { background: var(--band-away); } .nx-k-heat, .nx-k-pre { background: var(--band-burner); }
 .nx-k-draw { background: var(--band-dhw); } .nx-k-dis { background: var(--heat-bg); } .nx-k-off { background: var(--off-bg); }
@@ -520,26 +525,26 @@ p.empty { margin: 4px 0; }
   .nx-seg:first-child { border-radius: 6px 0 0 6px; border-left: 0; }
   .nx-seg:last-child { border-radius: 0 6px 6px 0; }
   .nx-seg > span, .nx-v small { display: block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
-  .nx-t { font-size: 12px; }
-  .nx-ticks { display: block; position: relative; height: 18px; margin-top: 6px; font-size: 11px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .nx-t { font-size: var(--fs-small); }
+  .nx-ticks { display: block; position: relative; height: 18px; margin-top: 6px; font-size: var(--fs-small); color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .nx-ticks span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
   .nx-ticks span::before { content: ""; position: absolute; left: 50%; top: -6px; height: 4px; border-left: 1px solid var(--border); }
   .nx-ticks .nx-now { left: 0; transform: none; color: var(--text-primary); font-weight: 600; }
   .nx-ticks .nx-now::before { display: none; }
 }
-.nx-note { margin: 6px 0 0; font-size: 12px; }
+.nx-note { margin: 6px 0 0; font-size: var(--fs-small); }
 .nx-note:empty { display: none; }
 /* Heizen (0.43): eine Zeile zum Raumbetrieb (Antippen → Übersicht → Status), vier Kacheln immer, Meldung als Einblendung,
    breit höchstens 760 px mit Raumkacheln in --cols Spalten */
 .heat-line { display: flex; align-items: center; gap: var(--s2); width: 100%; margin: 0 0 var(--s3); padding: 2px 0; border: 0;
   background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
 .heat-line .hl-t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.heat-line .hl-chev { color: var(--text-muted); font-size: 16px; line-height: 1; }
+.heat-line .hl-chev { color: var(--text-muted); font-size: var(--fs-title); line-height: 1; }
 .act:disabled { opacity: .5; cursor: default; }
 #heat-foot { margin: 10px 0 0; }
 .toast { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30; width: max-content;
-  max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1);
-  color: var(--text-primary); box-shadow: 0 4px 16px rgba(0, 0, 0, .18); font-size: 13px; }
+  max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-1);
+  color: var(--text-primary); box-shadow: 0 4px 16px rgba(0, 0, 0, .18); font-size: var(--fs-text); }
 .toast[hidden] { display: none; }
 .toast .msg-ok { color: var(--good-text); } .toast .msg-err { color: var(--err-text); }
 @media (min-width: 700px) {
@@ -547,47 +552,47 @@ p.empty { margin: 4px 0; }
   .room-tiles { grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); max-width: calc(var(--cols, 4) * 260px); }
 }
 .dlg-temp { display: flex; align-items: baseline; gap: var(--s3); flex-wrap: wrap; }
-.dlg-temp b { font-size: 40px; font-weight: 700; line-height: 1.1; }  /* Schriftgrößen 0.43: 12/14/16/24/40 */
+.dlg-temp b { font-size: var(--fs-big); font-weight: 700; line-height: 1.1; }  /* Schriftgrößen 0.43: 12/14/16/24/40 */
 .pause-grid .btn { min-height: 40px; }
 dialog.hp p.dlg-note { margin: 8px 0 0; }
 dialog.hp #dlg-msg { margin: 10px 0 0; } dialog.hp #dlg-msg:empty { display: none; }
 .link-row { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: var(--s3); padding: 10px 0 0;
   border: 0; border-top: 1px solid var(--border); background: none; color: var(--text-primary); font: inherit; text-align: left; cursor: pointer; }
-.link-row span { color: var(--text-muted); font-size: 16px; line-height: 1; }
+.link-row span { color: var(--text-muted); font-size: var(--fs-title); line-height: 1; }
 details.dlg-dev { margin-top: 8px; } details.dlg-dev .ctl-info { margin-top: 4px; }
 #boost-note { margin: 8px 0 0; }
 /* Übersicht → Status (0.43): Räume, Warmwasser, Kessel, zuletzt geschrieben – Warnungen rot; ohne Zeile „Aus“ */
 .ov-status { margin-bottom: 12px; }
-h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 2px; }
+h3.st-h { font-size: var(--fs-small); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 2px; }
 .ov-status h2 + h3.st-h { margin-top: 6px; }
-.ov-status .dhw-line { margin: var(--s1) 0; font-size: 13px; color: var(--text-primary); }
+.ov-status .dhw-line { margin: var(--s1) 0; font-size: var(--fs-text); color: var(--text-primary); }
 .ov-status .boiler-acts { margin-top: 4px; }
 .ov-status .boiler-acts .btn { margin: 0 8px 0 0; }
 .st-fallback { display: none; } [hidden] + .st-fallback { display: block; }
 .ov-status .ready-line { display: flex; gap: var(--s2); align-items: flex-start; }
 .ov-status .ready-line > .dot { margin-top: 5px; }
-.card p.st-note { margin: 6px 0 0; font-size: 12px; }
+.card p.st-note { margin: 6px 0 0; font-size: var(--fs-small); }
 /* Übersicht (0.55): Zeitleiste „Nächste 24 Stunden“, Empfehlungen einzeilig, Ersparnis als Zeile */
-.plan-list { list-style: none; margin: 0; padding: 0; font-size: 13px; }
+.plan-list { list-style: none; margin: 0; padding: 0; font-size: var(--fs-text); }
 .plan-list li { display: grid; grid-template-columns: 7.5em 18px 1fr; gap: var(--s1); align-items: baseline; padding: 3px 0; }
 .plan-t { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .adv-li { padding: 6px 0; border-bottom: 1px solid var(--border); }
 .adv-li summary { cursor: pointer; }
-.ov-save-line { margin: 0 0 12px; font-size: 14px; }
+.ov-save-line { margin: 0 0 12px; font-size: var(--fs-text); }
 /* Wetter jetzt (0.55.3): Symbol, große Temperatur, Zustand, Werte als Chips */
 .wx-now { display: flex; align-items: center; gap: var(--s3); }
 .wx-icon svg { width: 56px; height: 56px; display: block; }
-.wx-temp-now { font-size: 40px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
-.wx-temp-now small { font-size: 18px; font-weight: 500; color: var(--text-secondary); }
-.wx-cond { display: flex; flex-direction: column; font-size: 14px; gap: 2px; }
-.wx-cond .muted { font-size: 12px; }
-.wx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--s3) 0 var(--s1); font-size: 12px; }
+.wx-temp-now { font-size: var(--fs-big); font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+.wx-temp-now small { font-size: var(--fs-title); font-weight: 500; color: var(--text-secondary); }
+.wx-cond { display: flex; flex-direction: column; font-size: var(--fs-text); gap: 2px; }
+.wx-cond .muted { font-size: var(--fs-small); }
+.wx-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: var(--s3) 0 var(--s1); font-size: var(--fs-small); }
 .wx-chip { background: var(--surface-2); border: 1px solid var(--border); border-radius: 999px; padding: 3px 9px; }
 .wx-arrow { display: inline-block; margin-right: 3px; }
-.card p.wx-sub { margin: var(--s3) 0 0; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.card p.wx-sub { margin: var(--s3) 0 0; font-size: var(--fs-small); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 /* Wetter · 24 Stunden (0.55.2): je Zeile 24 Balken, etwa 1 cm hoch */
 .wx-row { display: grid; grid-template-columns: 8.5em 1fr; gap: var(--s2); align-items: end; margin: 6px 0; }
-.wx-k { display: flex; flex-direction: column; font-size: 12px; line-height: 1.25; }
+.wx-k { display: flex; flex-direction: column; font-size: var(--fs-small); line-height: 1.25; }
 .wx-bars { display: grid; grid-template-columns: repeat(24, 1fr); gap: 2px; height: 38px; align-items: end; }
 .wx-col { position: relative; height: 100%; display: flex; align-items: flex-end; }
 .wx-col i { position: absolute; left: 0; right: 0; bottom: 0; border-radius: 2px 2px 0 0; }
@@ -595,7 +600,7 @@ h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-tran
 .wx-back { opacity: .22; }
 .wx-temp i { background: var(--series-2); } .wx-rain i { background: var(--series-1); } .wx-cloud i { background: var(--series-5); }
 .wx-sun i { background: var(--warn); } .wx-wind i { background: var(--series-4); }
-.wx-axis .wx-bars { height: auto; font-size: 11px; color: var(--text-muted); align-items: start; }
+.wx-axis .wx-bars { height: auto; font-size: var(--fs-small); color: var(--text-muted); align-items: start; }
 .wx-axis .wx-bars span { white-space: nowrap; }
 .st-none { display: none; } #heat-log-box[hidden] + .st-none { display: block; margin: 0; }
 #ov-valve { border-top: 1px solid var(--border); margin-top: 12px; scroll-margin-top: 12px; }
@@ -607,13 +612,13 @@ h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-tran
 /* Einstellungen (0.43): Startliste in drei Gruppen, Unterseiten mit Kopf „‹ Einstellungen“; ab 900 px Liste als Seitenleiste
    (220 px) und Inhalt höchstens 760 px breit. Alle Unterseiten bleiben im DOM (hidden) – „Speichern“ sammelt alles ein */
 .set-menu { max-width: 760px; }
-.nav-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: var(--s4) 0 var(--s2) 4px; }
+.nav-h { font-size: var(--fs-small); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: var(--s4) 0 var(--s2) 4px; }
 .nav-h:first-child { margin-top: 0; }
-.nav-list { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.nav-list { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
 .nav-row[aria-current="page"] { background: var(--surface-2); box-shadow: inset 3px 0 0 var(--series-1); }
 .nav-row .em-alert { margin-left: 0; }
 .set-head { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; margin: 0 0 var(--s3); }
-.set-head h2 { font-size: 20px; margin: 0; }
+.set-head h2 { font-size: var(--fs-title); margin: 0; }
 .set-back { padding: 4px 0; border: 0; background: none; color: var(--accent-text); font: inherit; cursor: pointer; }
 .set-view.set-on-menu .set-main, .set-view:not(.set-on-menu) .set-menu { display: none; }
 .set-main { max-width: 760px; min-width: 0; }
@@ -622,7 +627,7 @@ h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-tran
 .set-acts { margin: 0 0 var(--s3); }
 .set-acts .muted { flex: 1 1 200px; }
 #view-diag > .card { margin-bottom: 12px; scroll-margin-top: 12px; }
-.savebar .sb-t { flex: 1 1 0; min-width: 0; color: var(--text-secondary); font-size: 13px; }
+.savebar .sb-t { flex: 1 1 0; min-width: 0; color: var(--text-secondary); font-size: var(--fs-text); }
 .savebar.sb-clean .btn { display: none; }
 .savebar.sb-clean:has(#save-msg:empty) { display: none; }  /* ohne Änderung und ohne Meldung unsichtbar */
 .em-inline { margin-top: var(--s2); }
@@ -643,35 +648,35 @@ h3.st-h { font-size: 12px; font-weight: 600; color: var(--text-muted); text-tran
 .ov-kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 40vw), 1fr)); gap: 10px; margin-bottom: 12px; }
 .ov-kpis.k3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .ov-kpis.k3 .kpi { padding: 10px; }
-.ov-kpis.k3 .kpi .value { font-size: 20px; }
+.ov-kpis.k3 .kpi .value { font-size: var(--fs-num); }
 .card .ov-kpis .tile, .card .ov-kpis .kpi { background: var(--surface-2); border-color: transparent; }
-.ov-kpis .tile .muted { font-size: 12px; }
+.ov-kpis .tile .muted { font-size: var(--fs-small); }
 .ov-areas { margin-bottom: 12px; }
 .ov-sched { margin: 0 0 12px; }
 .set-head[hidden] { display: none; }
 #rooms tr.ov-r > td:nth-child(2) { white-space: nowrap; }
 @media (min-width: 900px) { .ov-areas { display: none; } }  /* dort steht die Liste als Seitenleiste */
 details:has(> #flowstudy[hidden]), details:has(> #cmp[hidden]) { display: none; }
-details.ov-fold { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 12px; }
+details.ov-fold { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 16px; margin-bottom: 12px; }
 details.ov-fold > summary { font-weight: 600; cursor: pointer; }
 details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: none; }
-#rooms tr.ov-rd > td { background: var(--surface-2); white-space: normal; font-size: 13px; }
+#rooms tr.ov-rd > td { background: var(--surface-2); white-space: normal; font-size: var(--fs-text); }
 #rooms .ov-rd-g { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 2px 0 6px; }
 .lnk { border: 0; background: none; padding: 0; font: inherit; color: var(--accent-text); cursor: pointer; text-align: left; }
 .live-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 4px; }
 .live-head .sub { margin: 0; }
 #live-range .seg { min-width: 220px; }
-.live-sub { font-size: 13px; color: var(--text-secondary); margin: 0 0 8px; }
+.live-sub { font-size: var(--fs-text); color: var(--text-secondary); margin: 0 0 8px; }
 .live-card .seg-b, #ov-burner .seg-b { margin: 0 0 8px; }
 #live-persons .pres-now { border-top: 1px solid var(--border); padding: 8px 0 0; margin-top: 8px; }
 .room-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; }
 .room-row .r-main { min-width: 0; }
 .room-row .r-main .hint { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .room-row .r-opts { display: flex; gap: var(--s3); align-items: center; }
-.room-row label { display: inline-flex; gap: 6px; align-items: center; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.room-row label { display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-text); color: var(--text-secondary); white-space: nowrap; }
 .room-row input.r-comfort { width: 72px; }
 .room:has(.r-on:not(:checked)) .r-main input.r-name { color: var(--text-muted); }
-details.room-more { margin: 6px 0 0 32px; font-size: 13px; }
+details.room-more { margin: 6px 0 0 32px; font-size: var(--fs-text); }
 details.room-more > summary { color: var(--text-secondary); }
 .room-grid { margin-top: 8px; }
 .room .r-floor-box { display: flex; }
@@ -688,16 +693,16 @@ details.ready-blk > summary { display: flex; flex-wrap: wrap; gap: 2px 8px; alig
 .rb-h .dot { align-self: center; }
 details.ready-blk .ready-boiler { border-top: 0; margin-top: 6px; padding-top: 0; }
 .st-box { margin: var(--s2) 0; }
-.st-box > p { margin: 6px 0 0; font-size: 13px; }
+.st-box > p { margin: 6px 0 0; font-size: var(--fs-text); }
 .st-box .warn { color: var(--err-text); display: block; margin-top: 3px; }
 .callout[hidden] { display: none; }
-.sw-item p { margin: 0 0 4px; } .sw-acts { flex-wrap: wrap; gap: 6px; margin-top: 6px; } .sw-log { margin: 4px 0; padding-left: 18px; font-size: 13px; }
+.sw-item p { margin: 0 0 4px; } .sw-acts { flex-wrap: wrap; gap: 6px; margin-top: 6px; } .sw-log { margin: 4px 0; padding-left: 18px; font-size: var(--fs-text); }
 .r-relearn-row { margin-top: 8px; flex-wrap: wrap; gap: 6px; }
 .callout details.more { margin: 0; color: var(--text-primary); }
 .callout details.more > summary { color: var(--text-primary); }
 ul.rules { margin: 6px 0 0; padding-left: 18px; color: var(--text-secondary); }
 ul.rules li { margin: 3px 0; }
-.diag-checks { margin: 0; padding-left: 0; list-style: none; font-size: 13px; }
+.diag-checks { margin: 0; padding-left: 0; list-style: none; font-size: var(--fs-text); }
 .diag-checks li { padding: 5px 0; border-bottom: 1px solid var(--border); }
 .diag-more { margin-top: 8px; }
 .log-msg summary { color: var(--text-primary); }
@@ -755,21 +760,8 @@ ul.rules li { margin: 3px 0; }
       <div id="live-persons"></div>
       <p class="muted" style="margin:8px 0 0">Gewohnheit und Heimkehr-Kontrolle: <a href="#" onclick="openOverview('anwesenheit');return false">Übersicht → Anwesenheit ›</a></p>
     </div>
-  </section>
-  <section id="view-heat">
-    <button type="button" class="heat-line" id="heat-status" onclick="openOverview('status')"></button>
-    <div class="acts four" id="heat-acts"></div>
-    <div class="room-tiles" id="heat-rooms"></div>
-    <p class="muted" id="heat-foot">Antippen zum Bedienen.</p>
-    <dialog class="hp" id="heat-dlg" onclose="DLG=null" onclick="if(event.target===this)closeDlg()"><div id="heat-dlg-body"></div></dialog>
-  </section>
-  <div class="toast" id="heat-msg" role="status" aria-live="polite" hidden></div>
-  <section id="view-settings" class="set-view set-on-menu" hidden>
-    <nav class="set-menu" id="set-menu" aria-label="Einstellungen"></nav>
-    <div class="set-main">
-      <div class="set-head" id="set-head"><button type="button" class="set-back" onclick="setPage('menu')">‹ Einstellungen</button><h2 id="set-title">Einstellungen</h2></div>
-      <div id="set-body"><p class="muted">Lade …</p></div>
-  <section id="view-diag" hidden>
+  <div id="view-diag">
+    <h3 class="nav-h">Diagnose</h3>
     <div class="card">
       <h2>Selbsttest</h2>
       <p>Das Add-on prüft sich laufend selbst: fehlende oder veraltete Sensoren, unmögliche Werte, Gaszähler, Aufzeichnungslücken, Programmfehler.</p>
@@ -784,7 +776,7 @@ ul.rules li { margin: 3px 0; }
     <div class="card" id="diag-log-card">
       <h2>Protokoll</h2>
       <details id="heat-log-box" hidden><summary>Die letzten Schreibvorgänge – Räume, Warmwasser, Kessel</summary>
-        <table id="heat-log" class="tbl stack" style="font-size:12px"></table></details>
+        <table id="heat-log" class="tbl stack" style="font-size:var(--fs-small)"></table></details>
       <p class="muted st-none">Noch nichts geschrieben.</p>
     </div>
     <div class="card" id="sensor-card">
@@ -794,7 +786,7 @@ ul.rules li { margin: 3px 0; }
         <label class="muted"><input type="checkbox" id="sensor-unused" onchange="renderSensors()"> auch nicht verwendete EMS-ESP-Werte</label>
         <button class="btn small" onclick="loadSensors()">Aktualisieren</button></div>
       <p class="muted" id="sensor-sum"></p>
-      <table id="sensor-table" class="tbl stack" style="font-size:12px"></table>
+      <table id="sensor-table" class="tbl stack" style="font-size:var(--fs-small)"></table>
       <div class="row diag-more" id="sensor-more"></div>
     </div>
     <div class="card" id="log-card">
@@ -802,7 +794,7 @@ ul.rules li { margin: 3px 0; }
         <div class="row"><select id="diag-level" class="sel" onchange="loadDiag()">
           <option value="DEBUG">alles (Debug)</option><option value="INFO" selected>Info und wichtiger</option><option value="WARNING">Warnungen und Fehler</option><option value="ERROR">nur Fehler</option></select>
           <button class="btn small" onclick="loadDiag()">Aktualisieren</button></div></div>
-      <table id="diag-log" class="tbl stack" style="font-size:12px"></table>
+      <table id="diag-log" class="tbl stack" style="font-size:var(--fs-small)"></table>
       <div class="row diag-more" id="diag-log-more"></div>
     </div>
     <div class="card diag-files" id="diag-files">
@@ -823,7 +815,21 @@ ul.rules li { margin: 3px 0; }
     <div class="card">
       <details class="fold" style="border-top:0;margin-top:0;padding-top:0"><summary>Gefundene Entitäten <span class="muted">– Rohdaten der Erkennung</span></summary><pre id="disc"></pre></details>
     </div>
+  </div>
   </section>
+  <section id="view-heat">
+    <button type="button" class="heat-line" id="heat-status" onclick="openOverview('status')"></button>
+    <div class="acts four" id="heat-acts"></div>
+    <div class="room-tiles" id="heat-rooms"></div>
+    <p class="muted" id="heat-foot">Antippen zum Bedienen.</p>
+    <dialog class="hp" id="heat-dlg" onclose="DLG=null" onclick="if(event.target===this)closeDlg()"><div id="heat-dlg-body"></div></dialog>
+  </section>
+  <div class="toast" id="heat-msg" role="status" aria-live="polite" hidden></div>
+  <section id="view-settings" class="set-view set-on-menu" hidden>
+    <nav class="set-menu" id="set-menu" aria-label="Einstellungen"></nav>
+    <div class="set-main">
+      <div class="set-head" id="set-head"><button type="button" class="set-back" onclick="setPage('menu')">‹ Einstellungen</button><h2 id="set-title">Einstellungen</h2></div>
+      <div id="set-body"><p class="muted">Lade …</p></div>
     </div>
   </section>
   <section id="view-overview" hidden>
@@ -877,7 +883,7 @@ ul.rules li { margin: 3px 0; }
         <select id="week-days" onchange="loadWeek()" class="sel"><option value="28">4 Wochen</option><option value="56" selected>8 Wochen</option><option value="91">13 Wochen</option><option value="365">1 Jahr</option></select></div></div>
     <p id="week-text">Montag bis Sonntag, je Stunde gemittelt – wann im Haus was passiert. Urlaub zählt nicht, Zählersprünge sind herausgerechnet.</p>
     <div id="chart-week"></div>
-    <ul id="week-findings" style="margin:6px 0 0;padding-left:18px;font-size:13px;color:var(--text-secondary)"></ul>
+    <ul id="week-findings" style="margin:6px 0 0;padding-left:18px;font-size:var(--fs-text);color:var(--text-secondary)"></ul>
   </div>
   <div class="card" id="ov-save">
     <h2>Ersparnis</h2>
@@ -1365,7 +1371,7 @@ async function loadLive() {
     `<span title="${esc(SERVICE_CODES[n.service_code] || "Servicecode des Kessels")}">Status ${n.service_code ? esc(n.service_code) : "–"}</span>`,
     `Kessel ${fmt(n.boiler_temp)} °C`,
     `Wärme angefordert: <b>${n.setpoint_demand === null ? "–" : n.setpoint_demand ? "ja" : "nein"}</b>` + (n.hc_mode !== null && n.hc_mode !== undefined ? ` · Regler ${esc(n.hc_mode)}` : "") + (n.overrun ? " · Brenner läuft ohne Bedarf" : ""),
-  ].join(" · ") + (n.pump_on === null && n.pump_mod === null ? '<br><span class="muted">Pumpe fehlt – unter Einstellungen → Entitäten „Heizungspumpe“/„Pumpenmodulation“ prüfen</span>' : "");
+  ].join(" · ") + (n.pump_on === null && n.pump_mod === null ? '<br><span class="muted">Pumpe fehlt – unter Einstellungen → Haus → Experte „Heizungspumpe“/„Pumpenmodulation“ prüfen</span>' : "");
   $("live-dhw-head").textContent = `Speicher ${fmt(n.dhw_temp)} °C · Soll ${fmt(n.dhw_set, 0)} °C` + (n.dhw ? " · lädt" : "");
   $("live-rooms-head").innerHTML = `Innen Ø ${fmt(n.t_in)} °C · Luftfeuchte Ø ${fmt(n.humidity, 0)} %` + (humidityNote(n.rooms) ? ` · ${humidityNote(n.rooms)}` : "");
   LIVE = j;
@@ -1664,7 +1670,7 @@ function renderOvPlan(pv) {
 // Block „Zuletzt geschrieben“: die neueste Zeile des Protokolls (Diagnose → Protokoll) mit Link dorthin
 function ovLastHtml(c, d) {
   const l = heatLogRows(c || {}, d)[0];
-  const link = `<a href="#" onclick="openSettings('diagnose', 'heat-log-box');return false">Protokoll ›</a>`;
+  const link = `<a href="#" onclick="openDiag('heat-log-box');return false">Protokoll ›</a>`;
   if (!l) return statusLine("off", "Noch nichts geschrieben.", link);
   const w = l.kind === "dhw", k = l.kind === "boiler";
   const who = w ? esc(l.name || "Warmwasser-Soll") : k ? esc(l.name || "Kessel") : esc(shortName(l.name || l.room));
@@ -1730,9 +1736,9 @@ async function loadHeat() {
   }
   if (!$("view-heat").hidden || !$("view-overview").hidden || box) heatTimer = setTimeout(() => loadHeat().catch(heatError), 30000);
 }
-// Einstellungen → Kessel/Warmwasser/Steuerung offen? Dann holt loadHeat alle 30 s den Status (0.47.1)
+// Einstellungen → Kessel oder Räume offen? Dann holt loadHeat alle 30 s den Status (0.47.1)
 const statusPage = () => typeof SET_PAGE !== "undefined" && !$("view-settings").hidden
-  && ["kessel", "warmwasser", "steuerung", "diagnose"].includes(SET_PAGE);  // Diagnose: Protokoll
+  && ["kessel", "raeume"].includes(SET_PAGE);
 function heatError(e) { heatMsg(`<span class="msg-err">${esc(e.message || e)}</span>`); }
 // Meldung nach einer Aktion (0.43): im offenen Dialog unter den Knöpfen (#dlg-msg), sonst als Einblendung unten im
 // Reiter Heizen – 3 s, Fehler 6 s. Kein freigehaltener Platz mehr über den Raumkacheln.
@@ -1769,7 +1775,7 @@ function renderHeat() {
   const tiles = $("heat-rooms"), k = j.rooms.length;
   tiles.innerHTML = j.rooms.map(roomTile).join("");
   tiles.style.setProperty("--cols", k <= 4 ? Math.max(k, 1) : k <= 6 ? 3 : 4);  // breit: kein einzelner Rest in der letzten Reihe
-  renderHeatLog(c, j.dhw);  // Protokoll unter Einstellungen → Diagnose
+  renderHeatLog(c, j.dhw);  // Protokoll unter Live → Diagnose
   renderOvStatus();  // Übersicht → Status: Räume, Warmwasser (0.38), Kessel (0.41), zuletzt geschrieben
   if (DLG) renderDlg();  // offener Dialog zeigt den neuen Stand
 }
@@ -2102,7 +2108,7 @@ const trendK = (d) => d === 0 ? "±0 K" : `${d < 0 ? "−" : "+"}${fmt(Math.abs(
 function forecastTile(f, weather) {
   const off = (value, note) => `<div class="tile off" id="tile-forecast"><div class="label">Vorhersage</div><div class="value">${value}</div><div class="muted">${note}</div></div>`;
   if (!f) return weather ? off("keine Daten", `${esc(weather)} liefert keine stündliche Vorhersage – HeatPilot fragt stündlich nach`)
-    : off("keine Wetter-Entität", "Einstellungen → Entitäten → Außen & Wetter");
+    : off("keine Wetter-Entität", "Einstellungen → Haus → Experte → Außen & Wetter");
   const m = f.age_min, age = m === null || m === undefined ? "" : ` · Stand vor ${m < 120 ? `${m} min` : m < 2880 ? `${Math.round(m / 60)} h` : `${Math.round(m / 1440)} Tagen`}`;
   const n = f.next12;
   if (!n) return off("keine Daten", `keine Werte für die nächsten 12 h${age}`);
@@ -2137,9 +2143,9 @@ function disinfectTile(p) {
   }
   if (p.last_special_text) {
     const [v, how] = splitWhen(p.last_special_text);
-    return box("Letzte Desinfektion", v, [esc(how), "kein Desinfektionstermin eingestellt – Einstellungen → Warmwasser"]);
+    return box("Letzte Desinfektion", v, [esc(how), "kein Desinfektionstermin eingestellt – Einstellungen → Kessel"]);
   }
-  return box("Desinfektion", "kein Termin", ["keine Desinfektion erkannt – Termin unter Einstellungen → Warmwasser"], true);
+  return box("Desinfektion", "kein Termin", ["keine Desinfektion erkannt – Termin unter Einstellungen → Kessel"], true);
 }
 const timeOf = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "–";
 
@@ -2203,7 +2209,7 @@ async function load() {
     `<p class="muted" style="margin:6px 0 0">${h.updates} Stunden gelernt · unplausible oder zu junge Modelle geben keine Empfehlung.</p>` +
     `<details class="fold"><summary>Lernstand – Einzelheiten</summary><p>Gespart wird nur bei gleichem Komfort und gemessen am Gaszähler für das ganze Haus. Feste Untergrenzen: Räume ${fmt(s.limits.away_floor)} °C bei Abwesenheit, ${fmt(s.limits.night_floor)} °C nachts, Warmwasser ${fmt(s.limits.dhw_min_temp)} °C` +
     (s.limits.away_temp !== s.limits.away_floor || s.limits.night_temp !== s.limits.night_floor ? ` (die Ersparnis rechnet mit den aus Tado gelernten ${fmt(s.limits.away_temp)} / ${fmt(s.limits.night_temp)} °C)` : "") + `.</p>` +
-    `<ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary)">${status("Hausmodell", g.house)}${status("Warmwasser", g.dhw)}<li><b>Räume:</b> ${g.rooms_ok} von ${g.rooms_total} verlässlich</li>` +
+    `<ul style="margin:0;padding-left:18px;font-size:var(--fs-text);color:var(--text-secondary)">${status("Hausmodell", g.house)}${status("Warmwasser", g.dhw)}<li><b>Räume:</b> ${g.rooms_ok} von ${g.rooms_total} verlässlich</li>` +
     `<li><b>Komfort-Kontrolle:</b> Heizen ${sv.cold_hours} Stunden zu kalt (Haus) · Warmwasser ${s.dhw.cold_draws}× zu kalt (Reserve aktuell +${fmt(s.dhw.comfort_margin)} K)</li>` +
     `<li><b>Je Raum geprüft:</b> ${roomCheckText(sv)}</li>` +
     `<li><b>Ausreißer (7 Tage):</b> ${ignoredText(s.ignored)}</li></ul></details>`;
@@ -2279,7 +2285,7 @@ async function load() {
     planOutdoor(plan);
   else $("plan").innerHTML = `<p>Ankunft erwartet <b>${timeOf(s.arrival.eta)}</b> (${esc(src[plan.arrival_source || s.arrival.source] || plan.arrival_source || s.arrival.source || "")}` +
     `${(plan.arrival_confidence ?? s.arrival.confidence) ? `, Konfidenz ${fmt((plan.arrival_confidence ?? s.arrival.confidence) * 100, 0)} %` : ""}).</p>${planOutdoor(plan)}<p>Start <b>${timeOf(plan.best.start)}</b>` +
-    (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:13px">` +
+    (plan.best.late_min > 0 ? ` – <b>${fmt(plan.best.late_min, 0)} min zu spät</b>, sofort los` : "") + `:</p><ol style="margin:0 0 8px;padding-left:18px;font-size:var(--fs-text)">` +
     plan.best.steps.map((st) => st.what === "Warmwasser"
       ? `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Warmwasser ${fmt(st.from, 0)} → ${fmt(st.to, 0)} °C</li>`
       : `<li>${timeOf(st.start)}–${timeOf(st.end).split(" ").pop()}: Räume heizen, Vorlauf ${st.flow} °C</li>`).join("") +
@@ -2336,7 +2342,7 @@ function renderFlowStudy(fs) {
   const kindCol = { lohnt: "var(--good)", verschwendung: "#e34948", unklar: "var(--warn)", zu_wenig: "var(--text-muted)" };
   const tables = fs.bands.map((b) => {
     const ok = b.cells.filter((c) => c.enough), base = ok.length ? ok[0].gas_per_kh : null;
-    return `<h3 style="font-size:13px;margin:10px 0 4px">Außen ${esc(b.band)}</h3><div class="scroll"><table><tr><th>Vorlauf</th><th>Stunden</th><th>Starts/h</th><th>Laufzeit je Start</th><th>Rücklauf</th><th>Gas je K·h</th></tr>` +
+    return `<h3 style="font-size:var(--fs-text);margin:10px 0 4px">Außen ${esc(b.band)}</h3><div class="scroll"><table><tr><th>Vorlauf</th><th>Stunden</th><th>Starts/h</th><th>Laufzeit je Start</th><th>Rücklauf</th><th>Gas je K·h</th></tr>` +
       b.cells.map((c) => `<tr style="${c.enough ? "" : "color:var(--text-muted)"}"><td>${esc(c.flow)} °C</td><td>${c.hours}${c.enough ? "" : " (zu wenig)"}</td><td>${fmt(c.starts_per_h, 1)}</td>` +
         `<td>${c.run_per_start_min === null ? "–" : fmt(c.run_per_start_min, 0) + " min"}</td><td>${c.ret === null ? "–" : fmt(c.ret, 0) + " °C" + (c.ret > 55 ? " ⚠" : "")}</td>` +
         `<td>${fmt(c.gas_per_kh * 1000, 0)} Wh${base && c.enough && c !== ok[0] ? ` (${c.gas_per_kh / base - 1 >= 0 ? "+" : ""}${fmt((c.gas_per_kh / base - 1) * 100, 0)} %)` : ""}</td></tr>`).join("") + "</table></div>";
@@ -2584,13 +2590,13 @@ function renderPreview(p) {
 function pvNote(p) {
   const own = p.dhw_writes === "schreibt", boil = p.flow_writes === "schreibt";
   if (boil) return `<b>${esc(p.note || PV_NOTE)}.</b> Schreibvorgänge an Vorlauf-Soll und Heizbetrieb heißen hier „schreibt“ – ` +
-    "nach den Regeln unter Einstellungen → Kessel über HeatPilot" + (own ? "; das Warmwasser-Soll setzt HeatPilot ebenfalls selbst (Einstellungen → Warmwasser: „HeatPilot setzt“)."
+    "nach den Regeln unter Einstellungen → Kessel über HeatPilot" + (own ? "; das Warmwasser-Soll setzt HeatPilot ebenfalls selbst (Einstellungen → Kessel: „HeatPilot setzt“)."
       : "; das Warmwasser-Soll ist hier nur Vorschau.") + " Der Vergleich darunter zeigt weiter Plan gegen Ist.";
-  const dhw = own ? " Das Warmwasser-Soll setzt HeatPilot selbst (Einstellungen → Warmwasser: „HeatPilot setzt“) – seine Schreibvorgänge heißen hier „schreibt“."
+  const dhw = own ? " Das Warmwasser-Soll setzt HeatPilot selbst (Einstellungen → Kessel: „HeatPilot setzt“) – seine Schreibvorgänge heißen hier „schreibt“."
     : p.dhw_paused ? " Warmwasser über HeatPilot ist pausiert – auch das Warmwasser-Soll ist hier nur Vorschau." : "";
   const kessel = p.boiler_paused ? " Kessel über HeatPilot ist pausiert – Vorlauf und Heizbetrieb sind hier nur Vorschau."
     : p.boiler_blocked ? ` Kessel über HeatPilot ist gesperrt (${esc(p.boiler_blocked)}) – Vorlauf und Heizbetrieb sind hier nur Vorschau.`
-    : p.boiler_mode === "trocken" ? " Kessel steuern steht auf „Beobachten“ – was es live schreiben würde, steht im Protokoll (Einstellungen → Diagnose)." : "";
+    : p.boiler_mode === "trocken" ? " Kessel steuern steht auf „Beobachten“ – was es live schreiben würde, steht im Protokoll (Live → Diagnose)." : "";
   return `<b>${esc(p.note || PV_NOTE)}${own ? " – außer dem Warmwasser-Soll" : ""}.</b>${dhw}${kessel} Die Vorschau ist ein Vorschlag zum Vergleichen – wann und ob umgestellt wird, entscheidest du.`;
 }
 // Satz über der Grafik: Schreibvorgänge in 24 h nach den Regeln, dazu was heute am Kessel steht (Startwert der Zählung);
@@ -3461,7 +3467,7 @@ function renderPresenceNow(j) {
     const st = p.status || {};
     return `<div class="pres-now"><div class="row" style="justify-content:space-between"><b>${esc(p.name)}</b>` +
       `<span class="badge" style="border-color:${STATE_COL[st.state]};color:${STATE_COL[st.state]}">${STATE_LABEL[st.state] || "–"}</span></div>` +
-      `<p style="margin:2px 0 6px;font-size:13px">${esc(st.text || "")}${p.dist_km !== null && !p.home ? ` · <b>${fmt(p.dist_km)} km</b> entfernt` : ""}` +
+      `<p style="margin:2px 0 6px;font-size:var(--fs-text)">${esc(st.text || "")}${p.dist_km !== null && !p.home ? ` · <b>${fmt(p.dist_km)} km</b> entfernt` : ""}` +
       `${!p.home && p.eta ? ` · erwartet <b>${timeOf(p.eta)}</b> (${esc(SRC[p.source] || p.source)}${p.confidence ? `, ${fmt(p.confidence * 100, 0)} %` : ""})` : ""}</p>` +
       `<div class="legend"><span><i style="background:var(--series-1)"></i>Entfernung (km)</span><span><i style="background:var(--band-home)"></i>zu Hause</span></div>` +
       `<div id="ch-pers-${i}"></div></div>`;
@@ -3476,7 +3482,7 @@ function renderPresenceNow(j) {
 }
 // Übersicht → Anwesenheit (0.43): was HeatPilot gelernt hat – Gewohnheit je Person, Heimkehr-Kontrolle zugeklappt
 function renderPresenceLearned(j) {
-  if (!j.persons.length) { $("ov-pres").innerHTML = '<p class="muted">Keine Personen eingerichtet – Einstellungen → Anwesenheit & Urlaub.</p>'; return; }
+  if (!j.persons.length) { $("ov-pres").innerHTML = '<p class="muted">Keine Personen eingerichtet – Einstellungen → Haus.</p>'; return; }
   const err = (c) => c ? `${c.error_min > 0 ? "+" : c.error_min < 0 ? "−" : "±"}${Math.abs(c.error_min)}′ <span class="muted">${c.source === "gps" ? "GPS" : c.source === "gewohnheit" ? "Gew." : esc(c.source || "")}</span>` : "–";
   const dt = (iso) => iso ? new Date(iso).toLocaleString("de-DE", { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "–";
   const dur = (a) => { if (!a.left) return "–"; const m = (new Date(a.ts) - new Date(a.left)) / 60000; return m < 120 ? `${fmt(m, 0)} min` : `${fmt(m / 60, 1)} h`; };
@@ -3544,10 +3550,10 @@ function renderSchedule(s) {
     const anyStrom = e.plan.some((d) => strom(d, "start") || strom(d, "end"));
     const note = anyStrom ? `„Strom“: aus dem Hausstromverbrauch gelernt (${sl.nights || 0} Nächte, Median der letzten ${sl.weeks || 6} Wochen) – die übrigen Zeiten sind eingestellt.`
       : !powered ? "" : sl.auto ? "„Gelernte Zeiten verwenden“ ist an, aber noch nichts ist verlässlich – es gilt der eingestellte Wochenplan."
-      : "Aus dem Stromverbrauch gelernte Zeiten stehen als Vorschlag unter Einstellungen → Steuerung.";
+      : "Aus dem Stromverbrauch gelernte Zeiten stehen als Vorschlag unter Einstellungen → Räume.";
     const i = (new Date().getDay() + 6) % 7, today = e.plan[i] || {}, next = e.plan[(i + 1) % 7] || {};
     box.innerHTML = schedLine(`Heute Nacht ${esc(today.start || "–")}–${esc(next.end || "–")} · ${fmt(e.night_temp)} °C`) +
-      `<details class="fold"><summary>Zeitplan – HeatPilot steuert</summary><p>Nachtabsenkung nach Wochenplan (Einstellungen → Steuerung): nachts ${fmt(e.night_temp)} °C, bei Abwesenheit und im Urlaub ${fmt(e.away_temp)} °C, sonst die Komforttemperatur des Raums; vorgeheizt wird so früh, wie der Raum laut Modell braucht. Aus Tado wird dabei nichts gelernt.</p>` +
+      `<details class="fold"><summary>Zeitplan – HeatPilot steuert</summary><p>Nachtabsenkung nach Wochenplan (Einstellungen → Räume): nachts ${fmt(e.night_temp)} °C, bei Abwesenheit und im Urlaub ${fmt(e.away_temp)} °C, sonst die Komforttemperatur des Raums; vorgeheizt wird so früh, wie der Raum laut Modell braucht. Aus Tado wird dabei nichts gelernt.</p>` +
       `<div class="scroll"><table class="plan"><tr><th>Tag</th><th>Nacht ab (abends)</th><th>bis (morgens)</th></tr>${e.plan.map((d) => `<tr><td>${esc(d.day)}</td><td>${cell(d, "start")}</td><td>${cell(d, "end")}</td></tr>`).join("")}</table></div>` +
       (note ? `<p class="muted" style="margin:6px 0 0">${note}</p>` : "") + "</details>";
     return;
@@ -3556,10 +3562,10 @@ function renderSchedule(s) {
   box.innerHTML = schedLine(`Nacht ${esc(e.night_start)}–${esc(e.night_end)} · ${fmt(e.night_temp)} °C`) +
     `<details class="fold"><summary>Zeitplan – Beobachten</summary><p>Nacht ab <b>${esc(e.night_start)}</b> (${how("night_start")}) bis <b>${esc(e.night_end)}</b> (${how("night_end")}) · Nachttemperatur ${fmt(e.night_temp)} °C (${how("night_temp")}) · Abwesenheit ${fmt(e.away_temp)} °C (${how("away_temp")})` +
     `${l.nights ? ` · ${l.nights} Nächte aus Tado erkannt` : ""}. Damit rechnet die Ersparnis-Schätzung – geschaltet wird nichts.` +
-    `${powered ? ` Aus dem Stromverbrauch: ${sl.nights || 0} Nächte gelernt – Vorschlag unter Einstellungen → Steuerung, wirksam erst bei „HeatPilot steuert“.` : ""}</p></details>`;
+    `${powered ? ` Aus dem Stromverbrauch: ${sl.nights || 0} Nächte gelernt – Vorschlag unter Einstellungen → Räume, wirksam erst bei „HeatPilot steuert“.` : ""}</p></details>`;
 }
-// Vorschau (0.43): eine Zeile statt der Karte „Zeitplan“ – der Wochenplan steht unter Einstellungen → Steuerung
-const schedLine = (t) => statusLine("off", t, `<a href="#" onclick="openSettings('steuerung', 'night-plan');return false">Wochenplan ändern ›</a>`);
+// Vorschau (0.43): eine Zeile statt der Karte „Zeitplan“ – der Wochenplan steht unter Einstellungen → Räume
+const schedLine = (t) => statusLine("off", t, `<a href="#" onclick="openSettings('raeume', 'night-plan');return false">Wochenplan ändern ›</a>`);
 function roomCheckText(sv) {
   if (!sv.rooms_checked) return sv.rooms_ok_floor ? "kein plausibles Heizkörper-Raummodell (Fußbodenräume werden nicht je Raum geprüft) – nur das ganze Haus geprüft" : "noch kein Raummodell verlässlich – nur das ganze Haus geprüft";
   const cold = sv.room_cold.length ? "zu kalt wäre: " + sv.room_cold.map((r) => `${esc(r.name)} ${r.hours} h`).join(", ") : "alle Räume wären rechtzeitig warm gewesen";
@@ -3637,7 +3643,7 @@ async function certPdf(inline) {
   if (!r.ok || !type.includes("pdf")) {
     let text = `Fehler ${r.status}`;
     try { const j = await r.json(); text = j.error || text; } catch (e) { try { text += ": " + (await r.text()).slice(0, 200); } catch (e2) {} }
-    msg.textContent = text + " – Details unter Einstellungen → Diagnose → Log.";
+    msg.textContent = text + " – Details unter Live → Diagnose → Log.";
     return;
   }
   const blob = await r.blob();
@@ -3684,10 +3690,10 @@ async function loadCert() {
     `<p class="muted" id="cert-msg"></p>` +
     `<p>Gemessen statt geschätzt, bezogen auf die letzten 12 Monate – z. B. für den Heizungsbauer. Ohne Namen, Adressen oder Standortdaten. Kein Energieausweis.</p>` +
     certBasisHtml(c.basis) +  // 0.42.1: über welchen Zeitraum es rechnet, woraus das Hausmodell lernte, was fehlt
-    (c.overall ? `<div class="row" style="margin:4px 0 8px"><span style="display:inline-block;min-width:44px;text-align:center;padding:4px 8px;border-radius:6px;font-weight:700;font-size:20px;background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>` +
+    (c.overall ? `<div class="row" style="margin:4px 0 8px"><span style="display:inline-block;min-width:44px;text-align:center;padding:4px 8px;border-radius:6px;font-weight:700;font-size:var(--fs-title);background:${CLASS_COL[c.overall.class_index]};color:${[3, 4, 5].includes(c.overall.class_index) ? "#333" : "#fff"}">${esc(c.overall.class)}</span>` +
       `<div><b>Gesamtbewertung ${c.overall.score} von 100 Punkten</b><div class="muted">${c.overall.parts.map((x) => `${esc(x.area)} ${x.points ?? "–"}`).join(" · ")} – gewichtet 40/25/20/15 %</div></div></div>`
       : `<p class="muted">${!c.house.area_m2 ? "Für die Gesamtbewertung die Wohnfläche in den Einstellungen eintragen. " : ""}Gesamtbewertung, sobald das Gebäude und mindestens zwei weitere Bereiche (Kessel, Takten, Warmwasser) bewertet sind.</p>`) +
-    (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:13px">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
+    (items ? `<ul style="margin:0;padding-left:0;list-style:none;font-size:var(--fs-text)">${items}</ul>` : `<p class="muted">Für ein Urteil fehlen noch Messdaten.</p>`) +
     (c.preliminary.length ? `<p class="muted" style="margin-top:8px">Noch vorläufig: ${esc(c.preliminary.join("; "))}.</p>` : "");
 }
 // Antworten des Add-ons lesen – mit verständlicher Meldung statt „string did not match the expected pattern“
@@ -3724,18 +3730,16 @@ function guestMode(on) {
   showTab("heat");
 }
 function showTab(name) {
-  if (name === "diag") return openSettings("diagnose");
+  if (name === "diag") return openDiag();
   for (const t of TABS) {
     $("view-" + t).hidden = t !== name;
     $("tab-" + t).classList.toggle("active", t === name);
   }
-  $("view-diag").hidden = name !== "settings" || SET_PAGE !== "diagnose";
   if (name === "settings" && !SET) loadSettings().catch((e) => { $("set-body").textContent = "Fehler: " + e; });
   else if (name === "settings") loadReadiness();  // schon gezeichnet: nur die Zustandsbox frisch (0.36.1)
   if (name === "settings" && SET) loadAdopt(ADOPT_MSG);  // 0.42.1: gespeicherte Daten ohne Raum frisch
   if (name === "settings" && SET) loadSwitch();  // 0.44: offener Thermostatwechsel frisch
-  if (name === "settings" && SET_PAGE === "diagnose") loadDiagPage();
-  if (name === "live") loadLive().catch(liveError);
+  if (name === "live") { loadLive().catch(liveError); if (!DIAG_SEEN) { DIAG_SEEN = true; loadDiagPage(); } }  // Diagnose (0.58)
   if (name === "heat" || name === "overview") loadHeat().catch(heatError);  // 0.43: Status der Übersicht aus api/heat
   if (name === "overview") { if (OV_STALE) load().catch(() => {}); else drawOverview(); }  // Grafen erst bei sichtbarer Breite richtig
 }
@@ -3748,9 +3752,18 @@ function loadDiagPage() {
 function openSettings(page, anchor) {
   setPage(page || "menu");
   showTab("settings");
+  reveal(anchor);
+}
+// Diagnose (seit 0.58 im Tab Live-Daten): Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien
+let DIAG_SEEN = false;
+function openDiag(anchor) {
+  showTab("live");
+  reveal(anchor || "view-diag");
+}
+// Ziel sichtbar machen: alle umgebenden Aufklapper öffnen, hinscrollen
+function reveal(anchor) {
   const a = anchor && $(anchor); if (!a) return;
-  const d = a.closest("details"); if (d) d.open = true;
-  if (a.tagName === "DETAILS") a.open = true;
+  for (let d = a.closest("details"); d; d = d.parentElement && d.parentElement.closest("details")) d.open = true;
   a.scrollIntoView({ block: "start" });
 }
 // Übersicht (0.43): Startseite (Status, Empfehlungen, Ersparnis, Bereiche, Lernstand, Modelle) und Unterseiten im
@@ -4079,7 +4092,7 @@ function powerRef(power, powerEx, missing) {
   const list = (ids) => ids.map((p) => `<code class="eid" title="${esc(p)}">${esc(p)}</code>`).join(", ");
   return `<p class="em-ref" id="power-ref">Leistungssensoren: ${power.length ? list(power) : "keine gewählt – die Funktion ist aus"}` +
     `${powerEx.length ? ` · nicht zählen: ${list(powerEx)}` : ""}${missing.length ? ` <span class="msg-err">Nicht in Home Assistant gefunden: ${missing.map(esc).join(", ")}</span>` : ""}` +
-    ` – <a href="#" onclick="emGo('strom');return false">ändern unter Entitäten</a></p>`;
+    ` – <a href="#" onclick="emGo('strom');return false">ändern unter Experte</a></p>`;
 }
 function modeHint() {
   const m = document.querySelector('input[name="control_mode"]:checked'), box = $("mode-hint");
@@ -4087,7 +4100,7 @@ function modeHint() {
   const managed = [...document.querySelectorAll(".room")].filter((tr) => tr.querySelector(".r-on").checked && tr.querySelector(".r-managed").checked).length;
   if ($("mode-warn")) $("mode-warn").hidden = !(m && m.value === "heatpilot");  // Warnhinweis nur, wenn er gilt (0.43)
   box.textContent = m && m.value === "heatpilot"
-    ? `HeatPilot schreibt nur in Räume mit Häkchen „macht mit“ (zurzeit ${managed}), nur Solltemperaturen zwischen 5 und 25 °C. Boost, Soll und Betriebsart von Hand gelten bis zum nächsten Wechsel. Am Kessel ändert dieser Schalter nichts – Vorlauf und Heizbetrieb (Einstellungen → Kessel über HeatPilot) und das Warmwasser-Soll (Einstellungen → Warmwasser) haben eigene Schalter.`
+    ? `HeatPilot schreibt nur in Räume mit Häkchen „macht mit“ (zurzeit ${managed}), nur Solltemperaturen zwischen 5 und 25 °C. Boost, Soll und Betriebsart von Hand gelten bis zum nächsten Wechsel. Am Kessel ändert dieser Schalter nichts – Vorlauf und Heizbetrieb (Einstellungen → Kessel über HeatPilot) und das Warmwasser-Soll (Einstellungen → Kessel) haben eigene Schalter.`
     : "Wie bisher: HeatPilot lernt, empfiehlt und schaltet Tado nur auf Knopfdruck im Reiter Heizen – nie von selbst.";
   const vc = $("f-valve_control"), vh = $("vc-hint");  // Ventile führen (0.40): wirkt nur mit „HeatPilot steuert“
   if (vc && vh) vh.textContent = !vc.checked ? "" : m && m.value === "heatpilot"
@@ -4109,7 +4122,7 @@ let READY_OPEN = false;  // Link „Einzelheiten“: Box beim nächsten Zeichnen
 const READY_SHOW = { details: false, boiler: false };
 function openReadiness() {
   READY_OPEN = true;
-  openSettings("diagnose");  // die Zustandsbox steht unter Diagnose (0.43)
+  openDiag("ready-card");  // die Zustandsbox steht unter Diagnose (0.43)
   if ($("ready-box")) renderReadyBox(HEAT && HEAT.readiness);
 }
 // Daten aus GET api/heat (readiness) – beim Öffnen der Einstellungen frisch, ohne auf die Antwort zu warten;
@@ -4129,7 +4142,7 @@ function renderReadyBox(r, err = "") {
   if (r && r.boiler_control) box.insertAdjacentHTML("beforeend", boilerReadyHtml(r.boiler_control, READY_SHOW.boiler_hp));  // Weg B (0.41)
   if (r && r.valves) box.insertAdjacentHTML("beforeend", valveReadyHtml(r.valves, READY_SHOW.valves));  // 0.40
   if (r && r.dhw) box.insertAdjacentHTML("beforeend", dhwReadyHtml(r.dhw, READY_SHOW.dhw));  // Weg W (0.38)
-  const cr = $("ctl-ready");  // Einstellungen → Steuerung (0.43): nur der Kopfsatz, Einzelheiten unter Diagnose
+  const cr = $("ctl-ready");  // Einstellungen → Räume (0.43): nur der Kopfsatz, Einzelheiten unter Diagnose
   if (cr) cr.innerHTML = statusLine(r ? ({ "dot-ok": "ok", "dot-warn": "warn" }[(READY[r.level] || {}).dot] || "off") : "off",
     r ? esc(r.headline) : err ? "Status nicht verfügbar" : "Lade Status …", '<a href="#" onclick="openReadiness();return false">Einzelheiten ›</a>');
   if (!READY_OPEN) return;
@@ -4182,10 +4195,10 @@ function boilerHtml(b, open) {
     `<details id="ready-boiler-details"${open ? " open" : ""} ontoggle="READY_SHOW.boiler = this.open"><summary>Steuerungen <span class="muted">(${need} nötig, ${(b.controls || []).length - need} zur Info)</span></summary>` +
     `<div class="scroll"><table class="ready-t"><tr><th>Steuerung</th><th>Wert</th><th class="rt-wide">Bereich</th><th>schreibbar</th><th></th></tr>${rows}</table></div></details>` +
     `<p class="muted" style="margin:6px 0 0">Geschrieben wird nie über EMS-ESP, nur über Home Assistant und nur mit eigenem Schalter: ` +
-    `Vorlauf-Soll und Heizbetrieb unter Einstellungen → Kessel, das Warmwasser-Soll unter Einstellungen → Warmwasser.</p></div>`;
+    `Vorlauf-Soll, Heizbetrieb und Warmwasser-Soll unter Einstellungen → Kessel.</p></div>`;
 }
 
-// Desinfektion (0.36.3) in Einstellungen → Warmwasser (GET api/settings → disinfect): Tag („aus“ = kein Termin),
+// Desinfektion (0.36.3) in Einstellungen → Kessel (GET api/settings → disinfect): Tag („aus“ = kein Termin),
 // Uhrzeit, Temperatur laut Kessel (sonst die Einstellung), Zustand, seit 0.42 die Zeile „Auslösen“ (disinfect.trigger)
 // und Vorschlag mit Begründung. „Vorschlag übernehmen“ trägt nur Tag und Uhrzeit ein – gespeichert wird mit „Speichern“.
 // Geschaltet wird nie aus der Oberfläche, nur im Backend zum Termin.
@@ -4198,7 +4211,7 @@ function disinfectHtml(s, d) {
   const opts = (d.days || ["", ...WEEKDAYS]).map((k) =>
     `<option value="${esc(k)}"${k === day ? " selected" : ""}>${k ? esc(DAY_NAMES[k] || k) : "aus"}</option>`).join("");
   const read = d.temp === null || d.temp === undefined ? "–" : `<b>${fmt(d.temp, 1)} °C</b> ${esc(d.temp_source || "")}`;
-  return `<h3 style="font-size:13px;margin:14px 0 4px" id="dis-head">Desinfektion (Legionellen)</h3>` +
+  return `<h3 style="font-size:var(--fs-text);margin:14px 0 4px" id="dis-head">Desinfektion (Legionellen)</h3>` +
     `<details class="more"><summary>Einmal pro Woche heizt der Kessel den Speicher über 60 °C auf. <span class="m"></span></summary><div>Einmal je Woche heizt der Kessel den Speicher auf die Desinfektionstemperatur. ` +
     `Ohne Regler am Bus löst HeatPilot sie bei „Warmwasser-Soll: HeatPilot setzt“ zum Termin aus (Schalter „Desinfizieren“, siehe „Auslösen“ unten); ` +
     `macht sie ein Regler, plant HeatPilot seinen Termin ein. Große Zapfungen nach der Ladung (z. B. die Wanne) ` +
@@ -4629,12 +4642,12 @@ function modelsDetailHtml(m) {
   return "<h2>Modelle – Einzelheiten</h2><p>Wie sicher die gelernten Modelle sind und woraus sie gelernt haben. Gelernt wird nur aus gemessenen Werten: Fehlt einer Stunde Gas, Außen- oder Innentemperatur, lernt das Hausmodell sie nicht.</p>" +
     dmHouse(m.house) + dmRooms(m.rooms) + dmValves(m.valves) + dmDhw(m.dhw) + dmLog(m) +
     `<p class="job-msg" id="diag-models-job">${jobHtml(JOB)}</p>` +
-    '<p class="muted" style="margin-top:8px">Neu lernen und Hausdaten wiederherstellen: <a href="#" onclick="openAdvanced();return false">Einstellungen → Erweitert</a> · ' +
+    '<p class="muted" style="margin-top:8px">Neu lernen und Hausdaten wiederherstellen: <a href="#" onclick="openAdvanced();return false">Einstellungen → Haus → Experte</a> · ' +
     'alter Temperatursensor je Raum: <a href="#" onclick="openAliases();return false">Einstellungen → Räume</a></p>';
 }
 
 // ---------------------------------------------------------------- Hausdaten wiederherstellen, neu lernen (0.42.1)
-// Knöpfe in Einstellungen → Erweitert, im Hinweis der Karte „Modelle“, bei den Raum-Hinweisen und nach „Gelerntes
+// Knöpfe in Einstellungen → Haus → Experte, im Hinweis der Karte „Modelle“, bei den Raum-Hinweisen und nach „Gelerntes
 // übernehmen“: nach Rückfrage POST api/house/restore bzw. api/house/relearn – das Backend arbeitet im Hintergrund (202).
 // Die Oberfläche fragt api/house/job ab, bis „running“ false ist, und zeigt Stand und Ergebnis in jeder Zeile .job-msg;
 // solange es läuft, sind die Knöpfe (.job-btn) gesperrt. Läuft schon etwas oder startet HeatPilot (409), steht der Grund
@@ -4748,15 +4761,15 @@ function jobFinished() {
   if (SET) { loadAdopt(ADOPT_MSG); loadSwitch(); if (ALIAS_OPEN) loadAliases(ALIAS_MSG); }
   if (!$("view-diag").hidden) loadModels();
 }
-// Einstellungen → Erweitert: die zwei Knöpfe mit Zweck, „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu
+// Einstellungen → Haus → Experte: die zwei Knöpfe mit Zweck, „Lücken aus Home Assistant füllen“ (bis 0.43 „Historie neu
 // einlesen“; Endpunkt und Ablauf gleich), darunter der Stand
 const advHouseHtml = () => '<h3 class="sec-h" id="adv-house">Hausdaten und Lernen</h3><div class="adv-acts">' +
   `<div class="row">${jobButton("restore")}<span class="muted">nach einem Wechsel der Thermostate (z. B. Tado-Cloud → HomeKit): liest die Langzeitstatistik mit den alten Temperatursensoren neu ein (je Raum unter Räume) und holt die Historie alter Thermostate nach – nur ergänzend, löscht nichts; danach lernt HeatPilot neu</span></div>` +
   `<div class="row">${jobButton("relearn")}<span class="muted">rechnet Haus-, Raum- und Ventilmodelle aus den gespeicherten Daten neu – holt nichts aus Home Assistant, löscht keine Messwerte; läuft nach einem Raumwechsel und dem Wiederherstellen von selbst</span></div>` +
   '<div class="row"><button class="btn small" onclick="reloadHistory()">Lücken aus Home Assistant füllen</button><span class="muted">holt nur, was HeatPilot nicht selbst gespeichert hat – eigene Werte bleiben. Dauert je nach Umfang einige Minuten.</span></div></div>' +
   `<p class="job-msg" id="adv-job">${jobHtml(JOB)}</p>`;
-// Links „Einstellungen → Erweitert“: die Karte aufklappen und hinscrollen – auch, wenn die Einstellungen erst laden
-function openAdvanced() { ADV_OPEN = true; openSettings("erweitert"); advReveal(); }
+// Links „Einstellungen → Haus → Experte“: die Karte aufklappen und hinscrollen – auch, wenn die Einstellungen erst laden
+function openAdvanced() { ADV_OPEN = true; openSettings("haus", "exp-haus"); advReveal(); }
 function advReveal() {
   const h = $("adv-house");
   if (!ADV_OPEN || !h) return;
@@ -4860,7 +4873,7 @@ async function loadRoomRestore() {
 function renderRoomRestore() { const b = $("room-restore"); if (b) b.innerHTML = MODELS ? restoreHint(MODELS.house, "room-restore-hint", true) : ""; }
 
 // ---------------------------------------------------------------- Desinfektion auslösen (0.42)
-// Zeile „Auslösen“ in Einstellungen → Warmwasser (disinfect.trigger aus disinfect_status.info): wer die Desinfektion zum
+// Zeile „Auslösen“ in Einstellungen → Kessel (disinfect.trigger aus disinfect_status.info): wer die Desinfektion zum
 // Termin auslöst – „löst HeatPilot aus (So 17:30)“, „macht der Regler“, Trockenlauf oder aus –, der Schalter, was gerade
 // läuft, wartet oder sperrt, und die letzte Desinfektion mit Ergebnis. Dazu die Zeile im Block „Warmwasser über
 // HeatPilot“ (readiness.dhw.disinfect, in dhwReadyHtml) und die Protokollzeilen (DHW_ACTION). Nur Anzeige – die
@@ -4924,7 +4937,7 @@ function applyMinPower() {
 
 // ---------------------------------------------------------------- Warmwasser über HeatPilot (Weg W, 0.38)
 // Schalter „Warmwasser-Soll“ (Aus / Trockenlauf / HeatPilot setzt) mit Entität, Warnhinweis und Statusbox in
-// Einstellungen → Warmwasser (GET api/settings → dhw_control), Statuszeile in Heizen (api/heat → dhw) und Übersicht
+// Einstellungen → Kessel (GET api/settings → dhw_control), Statuszeile in Heizen (api/heat → dhw) und Übersicht
 // (api/summary → dhw_control), „wieder einschalten“ (POST api/dhw/resume – schreibt selbst nichts), Block in „Bereit
 // für die Steuerung?“ (readiness.dhw). Die Texte kommen aus dem Backend, hier werden sie nur angeordnet.
 // Schalter Warmwasser und Kessel (0.43, einheitlich „Aus · Beobachten · HeatPilot steuert“): Backend-Werte bleiben
@@ -4940,7 +4953,7 @@ const dhwStatus = (d) => d.status && d.status.text ? String(d.status.text).repla
 const dhwDecision = (d) => d.decision_until ? `Haltezeit bis ${clock(d.decision_until)}` : d.decision;
 const dhwWarnings = (d) => (d.warnings || []).filter((w) => !(d.paused && DHW_PAUSE.test(w)));
 const dhwDot = (d) => d.paused || dhwWarnings(d).length || (d.writes && !d.entity) ? "dot-warn" : d.active ? "dot-ok" : "";
-let DHW_OPEN = false;  // Link „Einstellungen → Warmwasser“: nach dem Zeichnen der Einstellungen dorthin springen
+let DHW_OPEN = false;  // Link „Einstellungen → Kessel“: nach dem Zeichnen der Einstellungen dorthin springen
 
 // Statuszeile für Heizen und Übersicht: bei „Aus“ nur, solange ein Hinweis gilt (z. B. nach dem Zurückschalten);
 // pausiert mit Knopf „wieder einschalten“, bei Problemen ein Link zu den Einstellungen
@@ -4949,7 +4962,7 @@ function dhwLine(d, note = "") {
   const t = dhwStatus(d), pause = d.paused && d.mode === "heatpilot";
   const text = (/^Warmwasser/.test(t) ? t : `Warmwasser-Soll: ${t}`) + (pause && d.paused_since ? ` · seit ${clock(d.paused_since)}` : "");
   const acts = [pause ? '<button class="btn small" onclick="dhwResume()">wieder einschalten</button>' : "",
-    dhwDot(d) === "dot-warn" ? '<a href="#" onclick="dhwOpenSettings();return false">Einstellungen → Warmwasser</a>' : ""].filter(Boolean);
+    dhwDot(d) === "dot-warn" ? '<a href="#" onclick="dhwOpenSettings();return false">Einstellungen → Kessel</a>' : ""].filter(Boolean);
   return `${readyDot(dhwDot(d))}${esc(text)}` + dhwWarnings(d).map((w) => `<span class="warn">⚠ ${esc(w)}</span>`).join("") +
     (acts.length ? `<span class="boiler-acts">${acts.join(" ")}</span>` : "") +  // 0.43: Knopf und Link in eigener Zeile wie beim Kessel
     (note ? `<span class="dhw-note">${esc(note)}</span>` : "");
@@ -4974,7 +4987,7 @@ function dhwUpdate(d, rd, note) {
   if ($("dhw-box") && DHWC) $("dhw-box").innerHTML = dhwBoxHtml(DHWC.status, DHWC.readiness, note);
   if ($("ready-box") && HEAT && HEAT.readiness) renderReadyBox(HEAT.readiness);
 }
-function dhwOpenSettings() { DHW_OPEN = true; openSettings("warmwasser"); dhwScroll(); }
+function dhwOpenSettings() { DHW_OPEN = true; openSettings("kessel"); dhwScroll(); }
 function dhwScroll() {
   const h = $("dhw-head"); if (!DHW_OPEN || !h) return;
   DHW_OPEN = false;
@@ -4982,7 +4995,7 @@ function dhwScroll() {
   h.scrollIntoView({ block: "start" });
 }
 
-// Abschnitt oben in Einstellungen → Warmwasser: Schalter, Entität (leer = erkannt), Warnhinweis, Statusbox
+// Abschnitt oben in Einstellungen → Kessel: Schalter, Entität (leer = erkannt), Warnhinweis, Statusbox
 function dhwSectionHtml(s, x) {
   x = x || {};
   const mode = DHW_LABEL[s.dhw_control] ? s.dhw_control : "aus", notes = (x.status || {}).notes || DHW_NOTES;
@@ -4998,7 +5011,7 @@ function dhwSectionHtml(s, x) {
     `der Kessel behält den letzten Wert, die Automation dann ggf. wieder einschalten.</div>` +
     `<div class="dhw-box" id="dhw-box">${dhwBoxHtml(x.status, x.readiness)}</div>`;
 }
-// Verweis in Einstellungen → Warmwasser (seit 0.39.1 wird die Entität unter „Entitäten“ gewählt): welche gilt (gewählt /
+// Verweis in Einstellungen → Kessel (seit 0.39.1 wird die Entität unter „Entitäten“ gewählt): welche gilt (gewählt /
 // erkannt), ihr Wert und ihre Grenzen in Home Assistant, Probleme
 function dhwEntityHint(s, x) {
   const rd = x.readiness || {}, sug = x.suggested, has = (v) => v !== null && v !== undefined;
@@ -5040,7 +5053,7 @@ function dhwModeText(mode, saved, entity, st) {
   const back = saved === "heatpilot" && mode !== "heatpilot"
     ? ` Beim Zurückschalten schreibt HeatPilot nichts zurück – der Kessel behält ${kept}; die HA-Automation ggf. wieder einschalten.` : "";
   if (mode === "aus") return "Wie bisher: HeatPilot empfiehlt das Warmwasser-Soll nur (Übersicht, Vorschau) und schreibt nichts." + back;
-  if (mode === "trocken") return "HeatPilot rechnet in jedem Takt nach denselben Regeln und schreibt ins Protokoll (Einstellungen → Diagnose), " +
+  if (mode === "trocken") return "HeatPilot rechnet in jedem Takt nach denselben Regeln und schreibt ins Protokoll (Live → Diagnose), " +
     "was es schreiben würde – am Kessel ändert sich nichts." + back;
   if (!entity) return '<span class="msg-err">Keine Entität für das Warmwasser-Soll – unten wählen, sonst schreibt HeatPilot nichts.</span>';
   return `HeatPilot schreibt das Warmwasser-Soll auf <code class="eid" title="${esc(entity)}">${esc(entity)}</code> – nach den Regeln oben. Vorher die HA-Automation ` +
@@ -5065,7 +5078,7 @@ function valveReadyHtml(x, open) {
     `<details id="ready-valves-details"${open ? " open" : ""} ontoggle="READY_SHOW.valves = this.open"><summary>Einzelheiten <span class="muted">(${c.ready || 0} bereit, ${c.learning || 0} lernen noch · Schalter ${x.switch ? "an" : "aus"})</span></summary>` +
     (run + notes ? `<ul class="ready-list">${run}${notes}</ul>` : "") +
     (rows ? `<div class="scroll"><table class="ready-t"><tr><th>Raum</th><th>Zustand</th><th></th></tr>${rows}</table></div>` : "") + "</details>" +
-    `<p class="muted" style="margin:6px 0 0">Schalter unter Einstellungen → Steuerung → „Ventile führen“; was HeatPilot dabei schreibt bzw. schreiben würde, steht in der Übersicht → Vorschau → Ventile.</p></div>`;
+    `<p class="muted" style="margin:6px 0 0">Schalter unter Einstellungen → Räume → „Ventile führen“; was HeatPilot dabei schreibt bzw. schreiben würde, steht in der Übersicht → Vorschau → Ventile.</p></div>`;
 }
 // Block „Warmwasser über HeatPilot“ in „Bereit für die Steuerung?“ (readiness.dhw, nur Anzeige – ändert die Stufe der
 // Raumsteuerung nicht); der Hinweis „HA-Automation abschalten“ steht sichtbar, solange in 24 h Fremdes kam
@@ -5092,12 +5105,12 @@ function dhwReadyHtml(x, open) {
     `<details id="ready-dhw-details"${open ? " open" : ""} ontoggle="READY_SHOW.dhw = this.open"><summary>Einzelheiten <span class="muted">(Schalter: ${esc(DHW_LABEL[x.mode] || x.mode)})</span></summary>` +
     (list ? `<ul class="ready-list">${list}</ul>` : "") +
     `<div class="scroll"><table class="ready-t">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table></div></details>` +
-    `<p class="muted" style="margin:6px 0 0">Schalter und Entität unter Einstellungen → Warmwasser.</p></div>`;
+    `<p class="muted" style="margin:6px 0 0">Schalter und Entität unter Einstellungen → Kessel.</p></div>`;
 }
 function dhwOpenReady() {
   READY_SHOW.dhw = true;
   renderReadyBox(HEAT && HEAT.readiness);
-  openSettings("diagnose", "ready-dhw");
+  openDiag("ready-dhw");
 }
 
 // ---------------------------------------------------------------- Kessel über HeatPilot (Weg B, 0.41)
@@ -5388,9 +5401,9 @@ function boilerModeText(mode, saved, ents, st) {
     : fb === null || fb === undefined ? " Beim Zurückschalten schreibt HeatPilot nichts zurück – der Rückfall-Vorlauf läge unter 35 °C (Fußboden-Grenze); den Kessel selbst stellen."
     : ` Beim Zurückschalten schreibt HeatPilot einmal ${fb} °C Vorlauf und Heizbetrieb an${reg.present === false ? "" : " (mit Regler am Bus nichts)"} – danach den Regler wieder anschließen bzw. den Kessel selbst stellen.`;
   if (mode === "aus") return "Wie bisher: Regler bzw. Kessel regeln selbst – HeatPilot rechnet den Kessel nicht und schreibt nichts." + back;
-  if (mode === "trocken") return "HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Einstellungen → Diagnose), was es " +
+  if (mode === "trocken") return "HeatPilot rechnet alle 30 s nach den Regeln oben und schreibt ins Protokoll (Live → Diagnose), was es " +
     "schreiben würde – am Kessel ändert sich nichts. Geht auch mit Regler am Bus: So zeigt der Vergleich in der Übersicht, was HeatPilot statt des Reglers setzen würde." + back;
-  if (!ents.flow || !ents.heating) return `<span class="msg-err">Keine Entität für ${ents.flow ? "den Heizbetrieb" : "das Vorlauf-Soll"} – unter Entitäten wählen, sonst schreibt HeatPilot nichts.</span>`;
+  if (!ents.flow || !ents.heating) return `<span class="msg-err">Keine Entität für ${ents.flow ? "den Heizbetrieb" : "das Vorlauf-Soll"} – unter Experte wählen, sonst schreibt HeatPilot nichts.</span>`;
   return `HeatPilot schreibt das Vorlauf-Soll auf <code class="eid" title="${esc(ents.flow)}">${esc(ents.flow)}</code> und schaltet den Heizbetrieb über <code class="eid" title="${esc(ents.heating)}">${esc(ents.heating)}</code> – nur ohne Regler am Bus.` +
     (reg.present === true ? ' <span class="msg-warn">Zurzeit gesperrt: EMS-ESP meldet einen Regler.</span>'
       : reg.present === null ? ` <span class="msg-warn">Zurzeit gesperrt: ${esc(reg.text || "ob ein Regler am Bus ist, ist unbekannt")}.</span>` : "");  // 0.46.6: genauer Grund
@@ -5427,7 +5440,7 @@ function boilerReadyHtml(x, open) {
     (list ? `<ul class="ready-list">${list}</ul>` : "") +
     `<div class="scroll"><table class="ready-t">${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join("")}</table></div></details>` +
     `<p class="muted" style="margin:6px 0 0">Was hier ein Hindernis ist, verhindert auch das Schreiben. ` +
-    "Schalter und „Anleitung Wächter“ unter Einstellungen → Kessel über HeatPilot, Entitäten unter Einstellungen → Entitäten → Kessel über HeatPilot.</p></div>";
+    "Schalter und „Anleitung Wächter“ unter Einstellungen → Kessel über HeatPilot, Entitäten unter Einstellungen → Haus → Experte → Kessel über HeatPilot.</p></div>";
 }
 function boilerEntCell(what, e) {
   const has = (v) => v !== null && v !== undefined;
@@ -5438,7 +5451,7 @@ function boilerEntCell(what, e) {
 function boilerOpenReady() {
   READY_SHOW.boiler_hp = true;
   renderReadyBox(HEAT && HEAT.readiness);
-  openSettings("diagnose", "ready-boiler-hp");
+  openDiag("ready-boiler-hp");
 }
 // Wert der Kessel-Zeilen im Protokoll: Vorlauf in °C, Heizbetrieb an/aus (Trockenlauf, Prüfung und fremde Änderung
 // tragen beim Heizbetrieb 1/0 – der Grund nennt, worum es geht)
@@ -5511,7 +5524,7 @@ async function notifyTest() {
 // EMS-ESP, fehlt, nicht verfügbar), Auswahl mit Suche (passende Entitäten zuerst) und „Automatik“ (zurück zur
 // Erkennung). Die Werte stehen in EM_VAL; gespeichert wird mit „Speichern“ wie alle Einstellungen (collect → emCollect):
 // Kessel- und Regler-Rollen als overrides, alles andere in den bisherigen Feldern. Räume ändert die Räume-Tabelle.
-let EMAP = null, SET_PAGE = "menu", EM_ONLY = false, EM_PICK = null, SET_DIRTY = false;
+let EMAP = null, SET_PAGE = "menu", EM_PICK = null, SET_DIRTY = false;
 let EM_BY = {}, EM_VAL = {}, EM_EXTRA = [], EM_ENT = new Map();
 const EM_OPEN = {};  // aufgeklappte Gruppen bleiben es – auch nach dem Speichern
 const EM_FOLD = ["kessel", "regler"];  // viele optionale Werte: was die Erkennung nicht fand, steht eingeklappt darunter
@@ -5605,60 +5618,51 @@ function emCountText(c) {
 // ---- Zeichnen
 // Einstellungen (0.43): zehn Unterseiten in drei Gruppen – Startliste am Handy, ab 900 px Seitenleiste. Je Zeile eine
 // Kurzinfo; rotes Abzeichen nur, wenn Nötiges fehlt. Alle Unterseiten stehen im DOM (hidden) – „Speichern“ sammelt alles ein
-const SET_PAGES = [["grundlagen", "Grundlagen", "Einrichten"], ["raeume", "Räume", "Einrichten"], ["entitaeten", "Entitäten", "Einrichten"],
-  ["steuerung", "Steuerung", "Steuern"], ["anwesenheit", "Anwesenheit & Urlaub", "Steuern"], ["warmwasser", "Warmwasser", "Steuern"],
-  ["kessel", "Kessel", "Steuern"], ["benachrichtigungen", "Benachrichtigungen", "System"], ["erweitert", "Erweitert", "System"],
-  ["diagnose", "Diagnose", "System"]];
+const SET_PAGES = [["raeume", "Räume"], ["kessel", "Kessel"], ["haus", "Haus"]];  // 0.58: drei Seiten (Styleguide)
 const SET_KEYS = SET_PAGES.map((p) => p[0]);
-const SET_ALIAS = { general: "grundlagen", entities: "entitaeten" };  // Schlüssel bis 0.42 (Umschalter „Allgemein | Entitäten“)
+// Entitäten-Gruppen (entity_map.GROUPS) je Seite – direkt bei ihrer Funktion bzw. unter „Experte“
+const PAGE_GROUPS = { raeume: ["raeume"], kessel: ["kessel_hp", "warmwasser", "kessel", "regler"],
+  haus: ["personen", "benachrichtigungen", "aussen", "gas", "strom"] };
+const EM_PAGE_OF = Object.fromEntries(Object.entries(PAGE_GROUPS).flatMap(([p, gs]) => gs.map((g) => [g, p])));
 function setInfo(k) {
-  const s = SET || {}, rooms = s.rooms || [], n = (a) => (a || []).length;
-  if (k === "grundlagen") return s.emsesp_host ? "EMS-ESP " + esc(s.emsesp_host) : "ohne EMS-ESP";
+  const s = SET || {}, rooms = s.rooms || [];
   if (k === "raeume") {
-    if (!rooms.length) { const a = n((SUG || {}).auto_rooms); return a ? `${a} ${a === 1 ? "Raum" : "Räume"} · automatisch` : "automatisch"; }  // Auto-Erkennung wie roomRows()
-    return `${rooms.length} ${rooms.length === 1 ? "Raum" : "Räume"} · ${rooms.filter((r) => r.managed).length} machen mit`;
+    if (!rooms.length) { const a = ((SUG || {}).auto_rooms || []).length; return a ? `${a} ${a === 1 ? "Raum" : "Räume"} · automatisch` : "automatisch"; }
+    return `${rooms.length} ${rooms.length === 1 ? "Raum" : "Räume"} · ${s.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten"}`;
   }
-  if (k === "entitaeten") { const c = Object.keys(EM_BY).length ? emCounts(Object.values(EM_BY)) : null; return c ? `${c.found} von ${c.total} gefunden` : ""; }
-  if (k === "steuerung") return s.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten";
-  if (k === "anwesenheit") return `${n(s.persons) ? n(s.persons) + " Personen" : "alle Personen"} · ${n(s.vacations)} Urlaub${n(s.vacations) === 1 ? "" : "e"}`;
-  if (k === "warmwasser") return DHW_LABEL[s.dhw_control] || "Aus";
-  if (k === "kessel") return BOILER_LABEL[s.boiler_control] || "Aus";
-  if (k === "benachrichtigungen") return n(s.notify_targets) ? `${n(s.notify_targets)} Ziel${n(s.notify_targets) === 1 ? "" : "e"}` : "keine Ziele";
-  if (k === "erweitert") return s.sample_interval_s ? `Abtastung alle ${esc(s.sample_interval_s)} s` : "";
-  return "Selbsttest, Protokoll, Log";
+  if (k === "kessel") return `Kessel: ${BOILER_LABEL[s.boiler_control] || "Aus"} · Warmwasser: ${DHW_LABEL[s.dhw_control] || "Aus"}`;
+  return s.emsesp_host ? "EMS-ESP " + esc(s.emsesp_host) : "ohne EMS-ESP";
 }
-// Startliste (bzw. Seitenleiste); die Zahl an „Entitäten“: nötige, die fehlen
+// Startseite (bzw. Seitenleiste) mit drei Kacheln; die Zahl je Seite: nötige Entitäten, die fehlen
 function setNav() {
-  const c = Object.keys(EM_BY).length ? emCounts(Object.values(EM_BY)) : null, n = c ? c.missing : 0;
-  let html = "", grp = "";
-  for (const [k, t, g] of SET_PAGES) {
-    if (g !== grp) { html += `${grp ? "</div>" : ""}<h3 class="nav-h">${g}</h3><div class="nav-list">`; grp = g; }
-    const alert = k === "entitaeten" ? `<span class="em-alert" id="em-alert"${n ? "" : " hidden"}>${n}</span>` : "";
-    html += navRow("", t, setInfo(k), alert, `setPage('${k}')`)
+  let html = '<div class="nav-list set-tiles">';
+  for (const [k, t] of SET_PAGES) {
+    const n = pageMissing(k);  // nötige Entitäten, die fehlen
+    html += navRow("", t, setInfo(k), `<span class="em-alert" id="em-alert-${k}"${n ? "" : " hidden"}>${n}</span>`, `setPage('${k}')`)
       .replace('class="nav-row"', `class="nav-row" data-page="${k}"${SET_PAGE === k ? ' aria-current="page"' : ""}`);
   }
   return html + "</div>";
 }
-// Unterseite zeigen ("menu" = Startliste; ab 900 px ist immer eine Seite offen). Diagnose ist die letzte Unterseite:
-// #view-diag steht unter den Einstellungen, die Speicherleiste ist dort aus
+function pageMissing(k) {
+  const es = ((EMAP && EMAP.groups) || []).filter((g) => PAGE_GROUPS[k].includes(g.key)).flatMap((g) => g.entries);
+  return es.length ? emCounts(es).missing : 0;
+}
+// Unterseite zeigen ("menu" = Startseite mit drei Kacheln; ab 900 px ist immer eine Seite offen)
 const setWide = () => typeof matchMedia === "function" && matchMedia("(min-width: 900px)").matches;
 function setPage(p) {
   const was = SET_PAGE;
-  p = SET_ALIAS[p] || p;
   if (!SET_KEYS.includes(p)) p = "menu";
-  if (p === "menu" && setWide()) p = SET_KEYS.includes(was) ? was : "grundlagen";
+  if (p === "menu" && setWide()) p = SET_KEYS.includes(was) ? was : "raeume";
   SET_PAGE = p;
   if (typeof store !== "undefined") store.set("hp-set-page", SET_PAGE);  // zuletzt offene Unterseite
   for (const k of SET_KEYS) { const d = $("set-" + k); if (d) d.hidden = SET_PAGE !== k; }
-  if (SET_PAGE === "erweitert") loadCards().catch(() => {});  // 0.56.4: Karten für Home Assistant
+  if (SET_PAGE === "haus") loadCards().catch(() => {});  // 0.56.4: Karten für Home Assistant
   for (const r of document.querySelectorAll("#set-menu .nav-row"))
     if (r.dataset.page === SET_PAGE) r.setAttribute("aria-current", "page"); else r.removeAttribute("aria-current");
   const v = $("view-settings"); v.classList.toggle("set-on-menu", SET_PAGE === "menu");
   if ($("set-title")) $("set-title").textContent = (SET_PAGES.find((x) => x[0] === SET_PAGE) || [, "Einstellungen"])[1];
-  const bar = document.querySelector("#view-settings .savebar"); if (bar) bar.hidden = SET_PAGE === "diagnose" || SET_PAGE === "menu";
+  const bar = document.querySelector("#view-settings .savebar"); if (bar) bar.hidden = SET_PAGE === "menu";
   const vis = !v.hidden;
-  $("view-diag").hidden = !vis || SET_PAGE !== "diagnose";
-  if (vis && SET_PAGE === "diagnose" && was !== "diagnose") loadDiagPage();
   if (vis && statusPage() && was !== SET_PAGE) loadHeat().catch(() => {});  // 0.47.1: Status laufend aktuell
   if (vis && was !== SET_PAGE && typeof scrollTo === "function") scrollTo(0, 0);
 }
@@ -5668,16 +5672,14 @@ function setDirty() {
   const b = $("savebar"); if (b) b.classList.remove("sb-clean");
   if ($("sb-t")) $("sb-t").textContent = "Ungespeicherte Änderungen";
 }
-function emPage(m) {
-  if (!m) return '<div class="card"><p class="muted">Entitäten nicht geladen – startet das Add-on noch?</p></div>';
-  if (m.error) return `<div class="card" id="em-error"><h2>Entitäten</h2><p class="msg-err">Nicht lesbar: ${esc(m.error)}</p>` +
-    '<p class="muted">Die gespeicherten Zuordnungen bleiben, wie sie sind – Speichern ändert sie nicht.</p></div>';
-  return more("Was HeatPilot aus Home Assistant liest. Was die Erkennung gefunden hat, steht schon da.",
-    "Wo etwas fehlt oder nicht passt, eine andere Entität wählen – die Auswahl zeigt passende zuerst. „Automatik“ geht zurück zur " +
-    "Erkennung. Gespeichert wird mit „Speichern“ wie alle Einstellungen. Was HeatPilot schreibt, steht bei seiner Funktion " +
-    "(Warmwasser, Kessel), Räume, Personen und Benachrichtigungen auf ihren eigenen Seiten.") +
-    `<div class="em-top"><span id="em-sum"></span><label class="em-filter"><input type="checkbox" id="em-only"${EM_ONLY ? " checked" : ""} onchange="emOnly(this.checked)"> nur fehlende und nicht verfügbare</label></div>` +
-    `<div id="em-groups"${EM_ONLY ? ' class="em-only"' : ""}>${m.groups.filter((g) => !EM_PAGE_OF[g.key]).map(emGroup).join("")}</div>`;
+// „Experte“ am Ende jeder Seite (Styleguide 2.): seltene Felder und die Entitäten, die nicht bei ihrer Funktion stehen
+const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas", "strom"] };
+function expert(k, html = "") {
+  const m = EMAP, gs = m && !m.error ? m.groups.filter((g) => EXPERT_GROUPS[k].includes(g.key)) : [];
+  const err = m && m.error && k === "haus" ? `<div class="card" id="em-error"><h2>Entitäten</h2><p class="msg-err">Nicht lesbar: ${esc(m.error)}</p>` +
+    '<p class="muted">Die gespeicherten Zuordnungen bleiben, wie sie sind – Speichern ändert sie nicht.</p></div>' : "";
+  const body = html + err + gs.map(emGroup).join("");
+  return body ? `<details class="expert" id="exp-${k}"><summary>Experte <span class="muted">– selten nötig</span></summary>${body}</details>` : "";
 }
 // Entitäten einer Gruppe direkt bei ihrer Funktion (0.43, E3): Warmwasser, Kessel, Personen & Urlaub, Benachrichtigungen
 function emInline(key, only) {
@@ -5687,9 +5689,9 @@ function emInline(key, only) {
 }
 function emGroup(g) {
   const c = emCounts(g.entries), rooms = g.key === "raeume", rows = rooms ? new Set(g.entries.map((e) => e.room_climate)).size : g.entries.length;
-  const open = EM_OPEN[g.key] ?? (EM_ONLY || c.missing + c.unavailable > 0 || rows <= 6);
+  const open = EM_OPEN[g.key] ?? (c.missing + c.unavailable > 0 || rows <= 6);
   const fold = EM_FOLD.includes(g.key) ? g.entries.filter((e) => emStateOf(e.key).issue === "nicht gefunden") : [];
-  const rest = fold.length ? `<details class="em-fold"${EM_ONLY ? " open" : ""}><summary>Weitere Werte, die die Erkennung nicht gefunden hat ` +
+  const rest = fold.length ? `<details class="em-fold"><summary>Weitere Werte, die die Erkennung nicht gefunden hat ` +
     `<span class="muted">(${fold.length})</span></summary>${fold.map(emRow).join("")}</details>` : "";
   const body = rooms ? ""
     : g.entries.filter((e) => !fold.includes(e)).map(emRow).join("") + rest + (g.key === "kessel" ? emExtra() : "");
@@ -5782,17 +5784,11 @@ function emSum() {
   for (const g of (EMAP && EMAP.groups) || []) {
     const box = $("em-c-" + g.key); if (box) box.textContent = g.key === "raeume" ? emRoomCount(g.entries) : emCountText(emCounts(g.entries));
   }
-  const all = Object.values(EM_BY), c = emCounts(all), n = c.missing;  // rot nur, wenn Nötiges fehlt (0.43)
-  if ($("em-sum")) $("em-sum").textContent = `Insgesamt ${emCountText(c)}`;
-  if ($("em-alert")) { $("em-alert").hidden = !n; $("em-alert").textContent = n; }
-  for (const d of document.querySelectorAll("#set-entitaeten details.em-group"))
+  for (const k of SET_KEYS) {  // rot nur, wenn Nötiges fehlt (0.43), je Seite (0.58)
+    const a = $("em-alert-" + k), n = pageMissing(k); if (a) { a.hidden = !n; a.textContent = n; }
+  }
+  for (const d of document.querySelectorAll("#set-body details.em-group"))
     d.classList.toggle("em-clean", !d.querySelector('.em-row[data-issue="1"]'));
-}
-function emOnly(on) {
-  EM_ONLY = !!on;
-  const box = $("em-groups"); if (!box) return;
-  box.classList.toggle("em-only", EM_ONLY);
-  if (EM_ONLY) for (const d of box.querySelectorAll("details.em-group, details.em-fold")) if (d.querySelector('.em-row[data-issue="1"]')) d.open = true;
 }
 function emOpen(inp) {
   const e = EM_BY[inp.dataset.key], box = inp.closest(".em-row").querySelector(".em-list");
@@ -5861,10 +5857,9 @@ function emAuto(key) {
 function emDrop(key, n) { EM_VAL[key] = (EM_VAL[key] || []).filter((_, i) => i !== n); emRefresh(key); }
 function emExtraDrop(i) { EM_EXTRA.splice(i, 1); $("em-extra").parentNode.outerHTML = emExtra(); }
 // Sprung aus „Allgemein“ zu einer Gruppe der Entitäten bzw. zurück zur Zeile der Räume-Tabelle
-// Gruppen, deren Entitäten bei ihrer Funktion stehen (0.43, E3) – die übrigen unter „Entitäten“
-const EM_PAGE_OF = { warmwasser: "warmwasser", kessel_hp: "kessel", personen: "anwesenheit", benachrichtigungen: "benachrichtigungen", raeume: "raeume" };
+// Zur Entität springen: Seite ihrer Gruppe (PAGE_GROUPS), Aufklapper öffnen
 function emGo(group) {
-  openSettings(EM_PAGE_OF[group] || "entitaeten", "em-g-" + group);
+  openSettings(EM_PAGE_OF[group] || "haus", "em-g-" + group);
 }
 function emRoom(climate) {
   openSettings("raeume");
@@ -5873,13 +5868,13 @@ function emRoom(climate) {
   tr.scrollIntoView({ block: "center" });
   tr.classList.add("room-flash"); setTimeout(() => tr.classList.remove("room-flash"), 2500);
 }
-// Verweis in den Karten von „Allgemein“: was gilt, und der Weg zur Seite „Entitäten“
+// Verweis in den Karten: was gilt, und der Weg zu „Experte“
 function emRef(key, group, label) {
   const e = EM_BY[key], st = e ? emStateOf(key) : null;
   const what = !st ? "" : st.items.length ? st.items.map((i) => `<code class="eid" title="${esc(i.id)}">${esc(i.id)}</code>`).join(", ") + " " + emBadge(st)
     : st.alt ? `Ersatz: ${esc((EM_BY[st.alt] || {}).label || st.alt)}` : emBadge(st);
   return `<p class="em-ref" data-ref="${key}" data-group="${group}" data-label="${esc(label)}">${esc(label)}${what ? ": " + what : ""} – ` +
-    `<a href="#" onclick="emGo('${group}');return false">ändern unter Entitäten</a></p>`;
+    `<a href="#" onclick="emGo('${group}');return false">ändern unter Experte</a></p>`;
 }
 // Speichern: Kessel- und Regler-Rollen als overrides (leer = Erkennung; unbekannte Rollen bleiben), die übrigen in ihre
 // Felder; Personen und Benachrichtigungsziele aus ihren Tabellen (collect). Es zählt nur, was gewählt ist (EM_VAL), nie
@@ -5904,10 +5899,11 @@ function renderSettings() {
   SET_DIRTY = false;
   $("set-menu").innerHTML = setNav();
   const page = (k, html) => `<div id="set-${k}" class="subpage"${SET_PAGE === k ? "" : " hidden"}>${html}</div>`;
+  const P = {}, part = (k, html, first = false) => { P[k] = first ? html + (P[k] || "") : (P[k] || "") + html; return ""; };
   const sugBtn = (t) => `<div class="row set-acts"><button class="btn small" onclick="applySuggestions()">Vorschläge übernehmen</button><span class="muted">${t}</span></div>`;
   const emr = (k) => EM_BY[k] ? `<div class="em-inline" id="em-r-${k}">${emRow(EM_BY[k])}</div>` : "";
   $("set-body").innerHTML = datalists() +
-    page("grundlagen", sugBtn("trägt ein, was die Erkennung gefunden hat – prüfen, dann speichern") +
+    part("haus", sugBtn("trägt ein, was die Erkennung gefunden hat – prüfen, dann speichern") +
     card("Verbindung", `<div class="form-grid">${field("EMS-ESP-Adresse", `<div class="row"><input id="f-emsesp_host" value="${esc(s.emsesp_host)}" placeholder="z. B. 192.168.1.50 oder ems-esp.local" style="flex:1"><button class="btn small" onclick="testEms()">Testen</button></div><div id="ems-msg" class="hint"></div>`, "Optional. Liest alle Kesselwerte direkt – nur lesend, ohne Token. Leer = nur über Home Assistant.")}</div>`) +
     card("Haus", `<div class="form-grid">
       ${field("Wohnfläche (m²)", num("f-living_area_m2", s.living_area_m2, "1"), "Beheizte Fläche – für Heizlast je m² und Energieklasse")}
@@ -5919,7 +5915,7 @@ function renderSettings() {
       ${field("Arbeitspreis (€/kWh)", num("f-gas_price_eur_per_kwh", s.gas_price_eur_per_kwh))}
       ${field("Grundpreis (€/Jahr)", num("f-gas_base_fee_eur_per_year", s.gas_base_fee_eur_per_year))}
     </div><p class="muted" id="kwh-hint"></p>`)) +
-    page("raeume", card("Räume", `${more("Häkchen = HeatPilot lernt den Raum. „Macht mit“ = HeatPilot darf das Soll schreiben, tagsüber mit der Komforttemperatur.", `Nur Räume mit „macht mit“ schreibt HeatPilot bei „HeatPilot steuert“. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
+    part("raeume", card("Räume", `${more("Häkchen = HeatPilot lernt den Raum. „Macht mit“ = HeatPilot darf das Soll schreiben, tagsüber mit der Komforttemperatur.", `Nur Räume mit „macht mit“ schreibt HeatPilot bei „HeatPilot steuert“. Was kein Raum ist (z. B. Klimaanlage im Auto, Heizkreis des Reglers, Warmwasser), einfach abwählen – es fließt dann in keine Auswertung ein. Der <b>Anzeigename</b> ist nur für HeatPilot – in Home Assistant bleibt alles, wie es ist (z. B. „Wohnzimmer Heizung“, damit Siri Licht und Heizung unterscheidet).
       <b>„macht mit“</b>: nur diese Räume schreibt HeatPilot bei „HeatPilot steuert“ – mit der <b>Komforttemperatur</b> als Soll am Tag (Startwert: aktuelles Soll des Thermostats, sonst 21 °C). <b>Raum</b>: gleicher Name = derselbe Raum, z. B. zwei Heizkörper im Wohnzimmer – gemessen wird dann das Mittel, geschrieben auf alle; <b>Raumregler</b>: ein Wandthermostat, das allein misst und allein beschrieben wird (bei Wandthermostaten als Vorschlag angehakt). <b>Fußboden</b>: Fußbodenheizung im Raum und wie sie angeschlossen ist – <b>mit Mischer</b> (er regelt die Temperatur selbst, keine Grenze), <b>mit RTL-Ventil</b> (am Anfang fließt der volle Vorlauf hinein, es öffnet, sobald der Rücklauf kalt ist: der <b>höchste Vorlauf</b> gilt immer) oder <b>direkt am Kessel</b> (der höchste Vorlauf gilt immer; leer = ${FLOOR_MAX.def} °C). HeatPilot plant nie einen Vorlauf darüber; der Heizkörper im Raum gilt als Boost.
       Unter jeder Entität stehen <b>Bereich</b> und <b>Gerät</b> aus Home Assistant; ein leeres Feld „Raum“ zeigt den Bereich als Platzhalter, „Bereiche übernehmen“ trägt ihn ein – Gespeichertes bleibt. Sensoren des Geräts (Temperatur, Feuchte, Heizleistung) sind vorbelegt.
       <b>Voreinstellung</b> und <b>Stufen</b>: die Zahl am Ventilunterteil (Durchflussbegrenzer), z. B. 5 von 6 – leer = unbekannt, Stufen 0 = kein Voreinstellventil. Damit nennt der hydraulische Abgleich konkrete Stufen und rechnet die Wirkung auf die anderen Räume; bei mehreren Geräten in einem Raum gilt der Wert des <b>Schlüsselgeräts</b> (Raumregler, sonst das erste), weitere Ventile dürfen eigene Werte haben.`)}
@@ -5928,36 +5924,37 @@ function renderSettings() {
       <p class="job-msg" id="rooms-job">${jobHtml(JOB)}</p>
       ${ENT.some((e) => e.id.startsWith("climate.") && e.area) ? `<div class="row" style="margin:0 0 8px"><button class="btn small" onclick="applyAreas()">Bereiche übernehmen</button><span class="muted">füllt leere Raum-Felder mit dem Bereich aus Home Assistant</span></div>` : ""}
       <div class="room-list" id="room-table" oninput="roomsDirty()" onchange="roomsDirty()">${roomRows()}</div>`, true, "em-g-raeume")) +
-    page("entitaeten", sugBtn("Gaszähler, Wetter und Außenfühler auf Automatik") + emPage(EMAP)) +
-    page("steuerung", controlCard(s)) +
-    page("anwesenheit", card("Personen", emr("persons"), true, "em-g-personen") +
+    part("exp-haus", sugBtn("Gaszähler, Wetter und Außenfühler auf Automatik")) +
+    part("raeume", controlCard(s)) +
+    part("haus", card("Personen", emr("persons"), true, "em-g-personen") +
     card("Urlaub", `<p>Im Urlaub lernt das Add-on keine Gewohnheiten. Ohne Uhrzeit beim Ende gilt die Standard-Rückkehrzeit.</p>
       <div id="vac-list">${(s.vacations || []).map(vacRow).join("")}</div><button class="btn small" onclick="addVac()">+ Urlaub</button>
       <div class="form-grid" style="margin-top:10px">
         ${field("Standard-Rückkehrzeit", tim("f-vacation_arrival_time", s.vacation_arrival_time), "Kommt jemand per GPS sicher heim, zählt die GPS-Ankunft.")}
       </div>${emr("vacation_entity")}`)) +
-    page("warmwasser", card("Warmwasser steuern", dhwSectionHtml(s, DHWC) + emInline("warmwasser")) +
+    part("kessel", card("Warmwasser steuern", dhwSectionHtml(s, DHWC) + emInline("warmwasser")) +
     card("Temperaturen", `<div class="form-grid">
       ${field("Minimum (°C)", num("f-dhw_min_temp", s.dhw_min_temp, "1"), "Darunter nie, z. B. wenn niemand zu Hause ist")}
       ${field("Komfort (°C)", num("f-dhw_comfort_temp", s.dhw_comfort_temp, "1"), "Mindestens zu Beginn einer Nutzung")}
       ${field("Maximum (°C)", num("f-dhw_max_temp", s.dhw_max_temp, "1"))}
     </div>${disinfectHtml(s, DIS)}`)) +
-    page("kessel", card("Kesseldaten", `<p>Für das Zertifikat und die Abnahme durch die Räume. 0 = unbekannt bzw. Wert von EMS-ESP.</p><div class="form-grid">
+    part("kessel", card("Kesseldaten", `<p>Für das Zertifikat und die Abnahme durch die Räume. 0 = unbekannt bzw. Wert von EMS-ESP.</p><div class="form-grid">
       ${field("Nennleistung Kessel (kW)", num("f-boiler_nominal_kw", s.boiler_nominal_kw, "0.1"), "Typenschild, z. B. 18")}
       ${field("Kleinste Leistung (%)", num("f-boiler_min_power_pct", s.boiler_min_power_pct, "1"), minPowerHint(BPOW))}
       ${field("Maximale Vorlauftemperatur (°C)", num("f-max_flow_temp", s.max_flow_temp, "1"))}
     </div>`) +
-    card("Kessel steuern", boilerSectionHtml(s, BOILC) + emInline("kessel_hp"))) +  // Weg B (0.41)
-    page("benachrichtigungen", card("Benachrichtigungen", emInline("benachrichtigungen"))) +
-    page("erweitert", card("Karten für Home Assistant", '<div id="cards-box"><p class="muted">Lade …</p></div>') +
-    card("Erweitert", `<div class="form-grid">
+    card("Kessel steuern", boilerSectionHtml(s, BOILC) + emInline("kessel_hp")), true) +  // Weg B (0.41), oben
+    part("haus", card("Benachrichtigungen", emInline("benachrichtigungen"))) +
+    part("haus", card("Karten für Home Assistant", '<div id="cards-box"><p class="muted">Lade …</p></div>')) +
+    part("exp-haus", card("Erweitert", `<div class="form-grid">
       ${field("Abtastintervall (s)", num("f-sample_interval_s", s.sample_interval_s, "1"))}
       ${field("Historie beim ersten Start (Tage)", num("f-backfill_days", s.backfill_days, "1"), "Einzelwerte aus dem Recorder")}
       ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
       ${field("Daten aufbewahren (Tage)", num("f-keep_days", s.keep_days, "1"), "365–3650, Standard 720. Ältere Messwerte löscht HeatPilot einmal am Tag; Tageswerte und Gelerntes bleiben.")}
       ${field("Ausführliches Log", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-debug_logging" ${s.debug_logging ? "checked" : ""}> jeden Takt protokollieren</label>`, "Für die Fehlersuche – das Log wird dann deutlich größer")}
     </div>${advHouseHtml()}`, false)) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen; 0.44: Lücken füllen
-    `<div class="savebar sb-clean" id="savebar"${SET_PAGE === "diagnose" || SET_PAGE === "menu" ? " hidden" : ""}><span class="sb-t" id="sb-t"></span>` +
+    SET_KEYS.map((k) => page(k, (P[k] || "") + expert(k, P["exp-" + k]))).join("") +
+    `<div class="savebar sb-clean" id="savebar"${SET_PAGE === "menu" ? " hidden" : ""}><span class="sb-t" id="sb-t"></span>` +
     '<button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="loadSettings()">Verwerfen</button><span id="save-msg"></span></div>';
   $("set-body").oninput = $("set-body").onchange = () => setDirty();  // Speicherleiste erst bei Änderungen (0.43)
   const upd = () => { const v = parseFloat($("f-gas_calorific_value").value) * parseFloat($("f-gas_z_number").value); $("kwh-hint").textContent = isFinite(v) ? `1 m³ Gas = ${fmt(v, 2)} kWh` : ""; };
@@ -5973,7 +5970,7 @@ function renderSettings() {
   aliasReveal(); advReveal();  // Links aus Übersicht und Diagnose: hinscrollen
   setPage(SET_PAGE);  // Startliste bzw. Seitenleiste, Titel, Speicherleiste
 }
-// Einstellungen → Erweitert → „Karten für Home Assistant“ (0.56.4, GET api/cards): Stand, Einrichtung über HACS,
+// Einstellungen → Haus → „Karten für Home Assistant“ (0.56.4, GET api/cards): Stand, Einrichtung über HACS,
 // YAML der drei Karten zum Kopieren
 async function loadCards() {
   const box = $("cards-box"); if (!box) return;
