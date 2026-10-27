@@ -6,12 +6,12 @@
    10 min niedrigerem Ziel, Boost zurück erst warm bzw. 10 min nach dem Wunsch, Heizbetrieb aus erst nach 15 min).
 3. Fußboden-Grenze greift neu bzw. Kesselwert unklar und darüber: sofort auf die Grenze (Schutz).
 4. Heizbetrieb an nur mit bekanntem Vorlauf-Soll bis zur Grenze (oder im selben Schritt geschrieben) – auch in Control.
-5. Eingriff des Wächters: erkannt und gemeldet, keine Pause; Änderungen eines Schritts zählen als ein Ereignis.
+5. Änderungen eines Schritts zählen als ein Ereignis (seit 0.59 schreibt der Wächter nichts mehr).
 6. Meldungen: kein Rückfall bei getrennter Verbindung, keiner auf einen selbst gewählten Dienst.
 7. Vorlauf-Soll und Warmwasser-Soll dieselbe Entität: nicht speicherbar, beide Schreibwege gesperrt.
 8. Grenzen der Entität: Ziel darauf begrenzt; eine Abweisung von Control steht als Hinweis da und wird gemeldet.
-9. Kein Ziel rechenbar: nach 15 min Rückfall-Vorlauf und Heizbetrieb an, mit Hinweis und Meldung.
-10. Anleitung Wächter: ohne Rückfallwert kein Vorschlag; mit Bedingung „kessel ist heatpilot“.
+9. Kein Ziel rechenbar: HeatPilot schreibt nichts, nach 15 min Hinweis und Meldung (seit 0.59 kein Rückfall-Vorlauf).
+10. Anleitung Wächter: mit Bedingung „kessel ist heatpilot“.
 """
 
 import asyncio
@@ -29,7 +29,7 @@ from heatpilot import boiler_watch, floor_limit, regulator, watchdog
 from heatpilot import main as main_mod
 from heatpilot.boiler_control import BoilerControl
 from heatpilot.boiler_status import ready
-from heatpilot.boiler_watch import K_BLIND, K_FOREIGN, K_REJECTED, K_WATCHDOG
+from heatpilot.boiler_watch import K_BLIND, K_FOREIGN, K_REJECTED
 from heatpilot.config import validate
 from heatpilot.control import Control
 from heatpilot.discovery import Room
@@ -333,7 +333,7 @@ def test_heating_off_at_once_when_flow_above_cap_without_demand(tmp_path):
     assert "Schutz" in bc.view["decision"]["flow"] and bc.view["target"].idle
 
 
-# ------------------------------------------------------------------ 5. Eingriff des Wächters
+# ------------------------------------------------------------------ 5. ein Ereignis je Schritt
 def _off_after_15_min(tmp_path):
     eng, ha, bc = house(tmp_path)
     eng.cfg.boiler_idle = "aus"  # seit 0.46.5: Heizbetrieb aus nur bei „Heizbetrieb ganz aus“
@@ -346,28 +346,11 @@ def _off_after_15_min(tmp_path):
     return eng, ha, bc
 
 
-def test_watchdog_intervention_is_reported_not_paused(tmp_path):
-    eng, ha, bc = _off_after_15_min(tmp_path)
-    shows(eng, flow=45, heating=True)  # HeatPilot lief nicht; nach 60 min setzt der Wächter 45 °C und an
-    again = BoilerControl(eng, bc.control, eng.notifier, {"flow": (FLOW, "erkannt"), "heating": (HEAT, "erkannt")})
-    again.plan(T0 + 4 * 3600)
-    assert not again.paused() and not again.state.get("foreign") and again.state["watchdog_hit"]["gap_min"] >= 60
-    assert K_WATCHDOG in eng.notifier.open_keys() and K_FOREIGN not in eng.notifier.open_keys()
-    assert any("Wächter in Home Assistant hat" in w for w in again.as_dict(T0 + 4 * 3600)["warnings"])
-    rows = eng.store.query("SELECT reason FROM control_log WHERE action = 'boiler_foreign'")
-    assert [r["reason"] for r in rows][-1].startswith("Der Wächter in Home Assistant hat eingegriffen")
-
-
 def test_two_changes_in_one_step_are_one_event(tmp_path):
     eng, ha, bc = _off_after_15_min(tmp_path)
-    shows(eng, flow=55, heating=True)  # kein Rückfallwert: ein fremder Schreiber – aber ein Ereignis
+    shows(eng, flow=55, heating=True)  # ein fremder Schreiber – aber ein Ereignis
     bc.plan(T0 + 990)
     assert len(bc.state["foreign"]) == 1 and not bc.paused() and actions(eng).count("boiler_foreign") == 2
-    # nach kurzer Pause von HeatPilot (unter 60 min) gilt auch der Rückfallwert als fremd
-    eng2, ha2, bc2 = _off_after_15_min(tmp_path / "b")
-    shows(eng2, flow=45, heating=True)
-    bc2.plan(T0 + 1200)
-    assert len(bc2.state["foreign"]) == 1 and not bc2.state.get("watchdog_hit")
 
 
 # ------------------------------------------------------------------ 6. Meldungen nicht doppelt
@@ -447,7 +430,7 @@ def test_target_respects_entity_max(tmp_path):
     assert t.flow == 40 and t.hi == 40 and "Höchstwert der Entität" in t.reason
     assert step(bc, T0) == 2 and calls(ha) == [("number", "set_value", FLOW, {"value": 40}),
                                                ("switch", "turn_on", HEAT, {})]
-    assert br.fallback_value(eng.cfg, None, (None, 40)) == 40 and br.flow_limits(eng.cfg, None, (38.5, None))[0] == 39
+    assert br.flow_limits(eng.cfg, None, (38.5, None))[0] == 39
 
 
 def test_rejection_is_shown_and_reported(tmp_path, monkeypatch):
@@ -469,21 +452,16 @@ def test_rejection_is_shown_and_reported(tmp_path, monkeypatch):
 
 
 # ------------------------------------------------------------------ 9. kein Ziel rechenbar
-def test_blind_target_falls_back_after_15_minutes(tmp_path):
+def test_blind_target_writes_nothing_and_reports_after_15_minutes(tmp_path):
     eng, ha, bc = _off_after_15_min(tmp_path)
     eng.states["sensor.out"]["state"] = "unavailable"  # Außenfühler fällt aus
     eng.ems["boiler"].pop("outdoortemp", None)
     climate(eng, "climate.wz", 18.0, 21.0, hvac_action="heating")  # der Raum kühlt aus
     t = T0 + 990
     assert step(bc, t) == 0 and bc.view["target"].heating is None
-    assert any("nach 15 min" in w for w in bc.as_dict(t)["warnings"])
-    n = sum(step(bc, t + i * 30) for i in range(1, 30))
-    assert n == 0
-    assert step(bc, t + 900) == 2 and calls(ha)[-2:] == [("number", "set_value", FLOW, {"value": 45}),
-                                                         ("switch", "turn_on", HEAT, {})]
-    assert K_BLIND in eng.notifier.open_keys() and "Rückfall-Vorlauf 45 °C" in bc.as_dict(t + 900)["status_text"]
-    shows(eng, flow=45, heating=True)
-    assert step(bc, t + 960) == 0 and step(bc, t + 1500) == 0  # einmal geschrieben, dann bleibt es
+    assert any("HeatPilot schreibt nichts" in w for w in bc.as_dict(t)["warnings"])
+    n = sum(step(bc, t + i * 30) for i in range(1, 31))
+    assert n == 0 and K_BLIND in eng.notifier.open_keys()  # 0.59: kein Rückfall-Vorlauf, nur Meldung
     eng.states["sensor.out"]["state"] = "5.0"  # wieder da: normal weiter
     step(bc, t + 1530)
     assert not bc.state.get("blind") and K_BLIND not in eng.notifier.open_keys()
@@ -491,27 +469,18 @@ def test_blind_target_falls_back_after_15_minutes(tmp_path):
 
 
 # ------------------------------------------------------------------ 10. Anleitung Wächter
-def test_guide_without_fallback_and_with_condition(tmp_path):
-    g = watchdog.guide(FLOW, HEAT, None, [], cap=30.0)
-    assert g["steps"] == [] and g["values"]["flow_value"] is None and "Mischer" in g["warning"]
-    g = watchdog.guide(FLOW, HEAT, 45, [])
+def test_guide_with_condition(tmp_path):
+    g = watchdog.guide([])
     assert any("„Bedingung hinzufügen“" in s and "kessel" in s and "heatpilot" in s for s in g["steps"])
-    assert g["warning"] is None and g["values"]["condition"]
+    assert g["values"]["condition"]
     eng, ha, bc = _bath(tmp_path, kind="direkt")
-    eng.cfg.rooms[0]["floor_max_flow"] = 30  # strengste Fußboden-Grenze unter 35 °C
-    assert boiler_status.fallback(eng) is None and bc.as_dict(T0)["watchdog"]["guide"]["warning"]
     eng.watchdog = {"ts": T0, "error": None, "checked": 1,
-                    "found": [{"entity_id": "automation.w", "name": "W", "on": True, "sets_flow": True,
-                               "checks_mode": False}]}
+                    "found": [{"entity_id": "automation.w", "name": "W", "on": True, "checks_mode": False}]}
     assert "Bedingung „kessel ist heatpilot“ fehlt" in watchdog.status(eng, "heatpilot")["text"]
 
 
-def test_guide_warning_and_condition_in_the_ui(tmp_path):
+def test_guide_condition_in_the_ui(tmp_path):
     from test_ui_v41 import js_run
 
-    g_none, g_ok = watchdog.guide(FLOW, HEAT, None, [], cap=30.0), watchdog.guide(FLOW, HEAT, 45, [])
-    r = js_run(tmp_path, f"""out([boilerGuideHtml({json.dumps(g_none)}), boilerGuideHtml({json.dumps(g_ok)})]);""")
-    assert 'id="boiler-guide-warn"' in r[0] and "Mischer" in r[0] and "boiler-steps" not in r[0]
-    assert "<td>Bedingung</td>" in r[1] and "kessel" in r[1] and 'id="boiler-guide-warn"' not in r[1]
-
-
+    r = js_run(tmp_path, f"""out(boilerGuideHtml({json.dumps(watchdog.guide([]))}));""")
+    assert "<td>Bedingung</td>" in r and "kessel" in r and "boiler-steps" in r

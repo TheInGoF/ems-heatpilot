@@ -2,6 +2,12 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.59.0
+- Kein Rückfall-Vorlauf mehr
+- Wächter meldet nur noch, schreibt nichts
+- Wächter-Automation bitte neu kopieren
+- Doku: Notfallanleitung Drehschalter
+
 ## 0.58.1
 - Doku: was unterstützt wird, Thermostatstufen
 - Doku: externe Regler wie ES73 vorher abbauen

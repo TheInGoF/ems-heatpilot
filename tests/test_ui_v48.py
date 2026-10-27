@@ -25,10 +25,10 @@ def test_regulator_warnbox_only_with_regulator_or_unknown(tmp_path):
         sec = r[k]
         assert 'id="boiler-warn"' not in sec and 'class="warnbox"' not in sec, k
         hint = re.search(r'<div class="hint" id="boiler-failsafe"><details class="more"><summary>(.*?)</summary>', sec)
-        assert plain(hint.group(1)) == "Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür den Wächter anlegen.", k
+        assert plain(hint.group(1)) == "Fällt HeatPilot aus, meldet der Wächter es – dann den Drehschalter am Kessel auf Festwert.", k
         body = sec.split('id="boiler-failsafe"')[1].split('id="boiler-box"')[0]
         assert '<span class="m"></span>' in hint.group(1) and "Regler am Bus:" not in plain(body)
-        assert "bleibt der letzte Vorlauf stehen – nachts vielleicht 35 °C" in plain(body)  # unter „mehr“
+        assert "ohne Wärmeabnahme fällt der Kessel zurück" in plain(body)  # unter „mehr“
 
 
 def test_period_switch_entity_rule_and_lines(tmp_path):

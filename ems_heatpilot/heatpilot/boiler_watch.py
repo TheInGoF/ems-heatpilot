@@ -1,4 +1,4 @@
-"""Weg B (seit 0.41): fremde Schreiber, Eingriff des Wächters, Pause, Sperre, Abweisungen – und die Meldungen dazu.
+"""Weg B (seit 0.41): fremde Schreiber, Pause, Sperre, Abweisungen – und die Meldungen dazu.
 
 ``BoilerWatch`` ist ein Mixin für ``boiler_control.BoilerControl`` (wie ``boiler_status`` für die Anzeige): Es braucht
 dessen ``state``, ``notifier``, ``eng``, ``paused``, ``_ch``, ``_log``, ``_save`` und schreibt selbst nichts am Kessel.
@@ -6,9 +6,6 @@ dessen ``state``, ``notifier``, ``eng``, ``paused``, ``_ch``, ``_log``, ``_save`
 * ``_watch`` – fremden Schreiber erkennen: Ein Wert ist anders als zuletzt gesehen, ohne dass HeatPilot schrieb.
   Änderungen in **einem** Schritt (Vorlauf-Soll und Heizbetrieb zugleich) zählen als **ein** Ereignis; 2 Ereignisse
   in 1 h → Pause bis „wieder einschalten“.
-* ``_watchdog_hit`` – nach einer Pause von HeatPilot ab ``WATCHDOG_GAP_S`` (der Wächter in Home Assistant greift nach
-  60 min ohne Heartbeat): Steht der Kessel jetzt auf genau dem Rückfall-Vorlauf mit Heizbetrieb an, war es der Wächter –
-  gemeldet, aber nicht als fremder Schreiber gezählt (keine Pause); HeatPilot führt danach wieder.
 * ``_rejected`` – ``Control`` weist einen Schreibvorgang ab (Schutzregel, z. B. Grenze der Entität): Hinweis, nach
   ``REJECT_NOTE_S`` Meldung; erledigt, sobald 5 min nichts mehr abgewiesen wurde.
 * ``_blocked_note`` – nach dem ersten Schreiben 15 min gesperrt (EMS-ESP antwortet nicht, Regler wieder dran): Meldung.
@@ -21,19 +18,17 @@ import logging
 import time
 
 from . import boiler_rule as br
-from . import watchdog
 from .boiler_rule import CHECK_TOL_K, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_S, PUMP_FLOW, shown
-from .boiler_status import ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, fallback
+from .boiler_status import ACT_FOREIGN, ACT_PAUSE, ACT_RESUME
 
 log = logging.getLogger(__name__)
 
 # Schlüssel der Meldungen (notify.Notifier)
 K_FAIL, K_PAUSED, K_FOREIGN, K_BLOCKED = "boiler_write_failed", "boiler_paused", "boiler_foreign", "boiler_blocked"
-K_REJECTED, K_BLIND, K_WATCHDOG = "boiler_rejected", "boiler_blind", "boiler_watchdog"
+K_REJECTED, K_BLIND = "boiler_rejected", "boiler_blind"
 BLOCKED_NOTE_S = 900   # gesperrt, nachdem HeatPilot schon geschrieben hat: nach so langer Zeit melden
 REJECT_NOTE_S = 900    # Control weist ab: nach so langer Zeit melden …
 REJECT_CLEAR_S = 300   # … erledigt, wenn so lange nichts mehr abgewiesen wurde
-WATCHDOG_GAP_S = watchdog.STALE_MIN * 60 - 300  # so lange lief HeatPilot nicht: der Wächter kann eingegriffen haben
 
 
 def same(what: str, a, b) -> bool:
@@ -81,28 +76,8 @@ class BoilerWatch:
             if last and same(what, cur[what], last["value"]):
                 continue
             changes.append((what, seen, cur[what]))
-        if changes and not self._watchdog_hit(ts, changes, cur):
+        if changes:
             self._foreign(ts, changes)
-
-    def _watchdog_hit(self, ts: int, changes: list[tuple], cur: dict) -> bool:
-        """War es der Wächter in Home Assistant? HeatPilot lief mindestens ``WATCHDOG_GAP_S`` nicht, der Kessel steht
-        jetzt auf genau dem Rückfall-Vorlauf mit Heizbetrieb an, und nur das hat sich geändert. Dann melden statt
-        zählen – kein fremder Schreiber, keine Pause."""
-        st = self.state
-        gap = ts - int(st.get("last_plan") or ts)
-        fb = fallback(self.eng)
-        if gap < WATCHDOG_GAP_S or fb is None or not (same("flow", cur["flow"], fb) and cur["heating"]):
-            return False
-        if any(what == "heating" and not value for what, _, value in changes):
-            return False
-        st["watchdog_hit"] = {"ts": ts, "flow": cur["flow"], "gap_min": gap // 60}
-        text = (f"Der Wächter in Home Assistant hat eingegriffen: Vorlauf-Soll {shown('flow', cur['flow'])}, Heizbetrieb "
-                f"an – HeatPilot lief {gap // 60} min nicht")
-        self._log(ts, ACT_FOREIGN, cur["flow"], f"{text}; kein fremder Schreiber, HeatPilot führt den Kessel wieder")
-        log.warning("Kessel über HeatPilot: %s", text)
-        self._notify(K_WATCHDOG, f"Kessel: {text}. HeatPilot führt den Kessel wieder – bitte im Protokoll des Add-ons "
-                                 "nachsehen, warum es ausfiel", ts)
-        return True
 
     def _foreign(self, ts: int, changes: list[tuple]) -> None:
         """Fremde Änderungen eines Schritts: ein Ereignis (auch wenn Vorlauf-Soll und Heizbetrieb zugleich), je Wert
@@ -208,9 +183,6 @@ class BoilerWatch:
             n.solved(K_PAUSED, ts=ts, quiet=True)
         if not any(t > ts - FOREIGN_WINDOW_S for t in self.state.get("foreign") or []):
             n.solved(K_FOREIGN, "Kessel: seit 1 h keine fremden Änderungen mehr", ts)
-        hit = self.state.get("watchdog_hit")
-        if hit and ts - hit["ts"] >= FOREIGN_WINDOW_S:
-            n.solved(K_WATCHDOG, ts=ts, quiet=True)
 
     def _notify(self, key: str, text: str, ts: int) -> None:
         if self.notifier is not None:

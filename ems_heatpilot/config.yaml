@@ -1,5 +1,5 @@
 name: EMS HeatPilot
-version: "0.58.1"
+version: "0.59.0"
 slug: ems_heatpilot
 description: Lokale, selbstlernende Heizungsoptimierung für EMS-ESP-Thermen mit Tado und Anwesenheit
 url: https://github.com/TheInGoF/ems-heatpilot

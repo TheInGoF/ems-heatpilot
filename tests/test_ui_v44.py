@@ -102,7 +102,7 @@ def test_collect_carries_room_id_unchanged_and_keep_days():
     coll = source(js, "collect")
     assert 'const rid = ((SET.rooms || []).find((r) => r.climate === c) || {}).id;' in coll
     assert "out.rooms.push({ ...(rid ? { id: rid } : {}), climate: c," in coll  # neuer Raum: kein id-Feld
-    assert '"statistics_backfill_days", "keep_days",' in coll
+    assert '"statistics_backfill_days", "keep_days"]) out[k]' in coll
     sets = source(js, "renderSettings")
     assert '${field("Daten aufbewahren (Tage)", num("f-keep_days", s.keep_days, "1"), "365–3650, Standard 720.' in sets
 

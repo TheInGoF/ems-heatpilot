@@ -16,7 +16,7 @@ Wunsch. Die Regeln (Planungspapier, „Regeln für den Vorlauf“, festgelegt vo
   10 min, nachdem das Takten aufgehört hat (kein Pendeln an der Schwelle); mit ``settled`` (bis 0.49) sofort,
 * ``load_flow`` – Mindest-Vorlauf aus der Abnahme: kleinster Vorlauf, bei dem die anfordernden Räume die
   Mindestleistung des Kessels abnehmen; reicht auch der höchste nicht, gilt nichts (lange Pausen, keine Sonderlogik),
-* ``flow_limits``/``fallback_value`` – 35 °C bis ``max_flow_temp`` bzw. Fußboden-Grenze und die Grenzen der Entität,
+* ``flow_limits`` – 35 °C bis ``max_flow_temp`` bzw. Fußboden-Grenze und die Grenzen der Entität,
   ganze Grad; der Rückfallwert beim Zurückschalten, wenn kein Vorlauf-Soll rechenbar ist, und für den Wächter,
 * ``idle_flow`` (seit 0.46.5) – braucht kein Raum Wärme, bleibt der Heizbetrieb an und das Vorlauf-Soll geht auf
   ``PUMP_FLOW`` (der Brenner springt nicht an, die Heizungspumpe läuft weiter); Einstellung „Bei keinem Wärmebedarf“
@@ -45,22 +45,20 @@ KEEPALIVE_S = 60          # 0.48.1: Soll so oft erneuern – ein Kessel ohne Reg
 HEAT_HOLD_S = 300         # Heizbetrieb an/aus: Haltezeit nach jedem Schalten
 HEAT_OFF_S = 900          # Heizbetrieb aus erst nach so langer Zeit ohne Bedarf (kein Pendeln an der Schwelle)
 FLOW_DOWN_S = 600         # Vorlauf-Soll senken erst, wenn das Ziel so lange niedriger bleibt (anheben sofort)
-BLIND_S = 900             # kein Vorlauf-Soll rechenbar: nach so langer Zeit der Rückfall-Vorlauf
+BLIND_S = 900             # kein Vorlauf-Soll rechenbar: nach so langer Zeit Hinweis und Meldung
 BOOST_STEP_K = 2          # Takt-Boost: Schritt …
 BOOST_MAX_K = 10          # … bis höchstens so viel über dem Wert aus Bedarf, Abnahme und Zuschlag …
 BOOST_STEP_S = 600        # … ein Schritt je so viele Sekunden (der erste sofort)
 BOOST_GAP_K = 0.2         # ein Raum wartet: so weit unter seinem Soll …
 BOOST_VALVE_PCT = 5.0     # … mit dem Ventil weiter offen (ab hier gilt ein Ventil als offen)
 BURN_HOLD_S = 600         # 0.50: nicht senken, solange der Brenner kürzer als so lange läuft
-FALLBACK_DEFAULT, FALLBACK_MIN, FALLBACK_MAX = 45, 35, 75  # Rückfall-Vorlauf (Zurückschalten, Wächter)
 REGULATOR_FRESH_S = 600   # Werte des Reglers in Home Assistant gelten so lange als frisch („Regler am Bus“)
 
-# Einstellungen von Weg B (``config.FIELDS``): Schalter, die zwei Entitäten (leer = erkannt), Rückfall-Vorlauf
+# Einstellungen von Weg B (``config.FIELDS``): Schalter, die zwei Entitäten (leer = erkannt)
 FIELDS: dict[str, tuple] = {
     "boiler_control": ("choice", BOILER_MODES),
     "flow_set_entity": ("entity", "number"),
     "heating_switch_entity": ("entity", "switch"),
-    "boiler_fallback_flow": ("int", FALLBACK_MIN, FALLBACK_MAX),
     "boiler_idle": ("choice", IDLE_MODES),
     "boiler_keepalive": ("bool",),  # 0.48.1: Vorlauf-Soll jede Minute erneuern (Kessel ohne Regler verwirft es sonst)
     "regulator_removed": ("bool",),  # 0.46.9: „Regler ist abgebaut“ – vom Nutzer bestätigt, Prüfung entfällt
@@ -72,14 +70,15 @@ NUMBER_ENTITY = re.compile(r"^number\.[a-z0-9_]+$")
 
 LABELS = {"flow": "Vorlauf-Soll", "heating": "Heizbetrieb"}
 REGULATOR_TEXT = "Regler am Bus – er überschreibt alle 60 s. Erst „Beobachten“ prüfen, dann Regler abbauen"
-HINT_FAILSAFE = ("Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen – dafür der Wächter in Home Assistant "
-                 "(Anleitung Wächter)")
+HINT_FAILSAFE = ("Fällt HeatPilot aus, bleibt der letzte Vorlauf stehen; ohne Wärmeabnahme fällt der Kessel zurück. "
+                 "Der Wächter in Home Assistant meldet den Ausfall – dann den Drehschalter am Kessel auf Festwert "
+                 "stellen (Anleitung Wächter)")
 HINT_BACK = "Regler wieder anschließen bzw. den Kessel selbst stellen"
 
 
 def clean_config(cfg) -> None:
-    """Gespeicherte Einstellungen lesen (``Config.from_raw``): Unbekanntes gilt als „aus“, falsche Entitäten als leer,
-    ein unlesbarer Rückfall-Vorlauf als Standard – alte und von Hand geänderte Einstellungen laden immer."""
+    """Gespeicherte Einstellungen lesen (``Config.from_raw``): Unbekanntes gilt als „aus“, falsche Entitäten als leer –
+    alte und von Hand geänderte Einstellungen laden immer."""
     if cfg.boiler_control not in BOILER_MODES:
         cfg.boiler_control = "aus"
     for key, pattern in (("flow_set_entity", NUMBER_ENTITY), ("heating_switch_entity", SWITCH_ENTITY),
@@ -87,9 +86,6 @@ def clean_config(cfg) -> None:
         if not getattr(cfg, key, None) or not pattern.match(str(getattr(cfg, key))):
             setattr(cfg, key, None)
     cfg.boiler_period = getattr(cfg, "boiler_period", False) is True  # nur ein echtes „an“ (0.48), sonst aus
-    v = cfg.boiler_fallback_flow
-    ok = isinstance(v, int) and not isinstance(v, bool) and FALLBACK_MIN <= v <= FALLBACK_MAX
-    cfg.boiler_fallback_flow = v if ok else FALLBACK_DEFAULT
     if getattr(cfg, "boiler_idle", None) not in IDLE_MODES:  # alte Einstellungen ohne die Wahl: Standard
         cfg.boiler_idle = IDLE_MODES[0]
 
@@ -118,15 +114,6 @@ def flow_limits(cfg, cap: float | None = None, bounds: tuple | None = None) -> t
     if e_hi is not None:
         hi = min(hi, int(math.floor(e_hi + 1e-9)))
     return lo, hi
-
-
-def fallback_value(cfg, worst_cap: float | None, bounds: tuple | None = None) -> int | None:
-    """Rückfall-Vorlauf (Zurückschalten, kein Ziel rechenbar, Wächter): ``boiler_fallback_flow``, höchstens
-    ``max_flow_temp``, die strengste Fußboden-Grenze (sie gilt dann ohne HeatPilot immer) und der Höchstwert der
-    Entität. None, wenn das unter 35 °C (bzw. dem Mindestwert der Entität) fiele."""
-    lo, hi = flow_limits(cfg, worst_cap, bounds)
-    value = min(int(cfg.boiler_fallback_flow), hi)
-    return value if value >= lo else None
 
 
 def idle_flow(cfg, bounds: tuple | None = None) -> int | None:

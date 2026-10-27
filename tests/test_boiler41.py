@@ -4,7 +4,7 @@ Sicherheitsregeln (jede hat einen Test): Schalter Standard aus; geschrieben wird
 ``number.set_value`` auf die eine Vorlauf-Soll-Entität (ganzzahlig, 35 °C…``max_flow_temp`` und Fußboden-Grenze) und
 ``switch.turn_on``/``turn_off`` auf die eine Heizbetrieb-Entität; solange ein Regler am Bus ist (oder es unbekannt ist),
 wird nicht geschrieben; Trockenlauf protokolliert nur; Prüfung nach 60 s, Pause nach 3 Fehlschlägen bzw. 2 fremden
-Änderungen in 1 h; Zurückschalten schreibt einmal den Rückfallwert. EMS-ESP bleibt nur lesend.
+Änderungen in 1 h; Zurückschalten schreibt nichts (seit 0.59). EMS-ESP bleibt nur lesend.
 """
 
 import asyncio
@@ -19,7 +19,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from heatpilot import boiler_entity as be
 from heatpilot import boiler_rule as br
 from heatpilot import floor_limit, main as main_mod, readiness, watchdog
-from heatpilot.boiler_control import (ACT_DRY, ACT_FAIL, ACT_FALLBACK, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, K_FAIL,
+from heatpilot.boiler_control import (ACT_DRY, ACT_FAIL, ACT_FOREIGN, ACT_PAUSE, ACT_RESUME, K_FAIL,
                                       K_FOREIGN, K_PAUSED, BoilerControl)
 from heatpilot.boiler_flow import compute
 from heatpilot.boiler_status import ready
@@ -159,27 +159,22 @@ def test_load_flow_and_limits():
     assert br.load_flow(5.4, 22.0, [], 35, 75) is None
     cfg = Config(max_flow_temp=60)
     assert br.flow_limits(cfg) == (35, 60) and br.flow_limits(cfg, 40.5) == (35, 40) and br.flow_limits(cfg, 30)[1] == 30
-    assert br.fallback_value(Config(), None) == 45 and br.fallback_value(Config(), 40.0) == 40
-    assert br.fallback_value(Config(boiler_fallback_flow=50, max_flow_temp=48), None) == 48
-    assert br.fallback_value(Config(), 30.0) is None  # unter 35 °C: nichts
 
 
 def test_settings_default_off_and_clean():
     cfg = Config()
-    assert (cfg.boiler_control, cfg.flow_set_entity, cfg.heating_switch_entity, cfg.boiler_fallback_flow) == (
-        "aus", None, None, 45)
+    assert (cfg.boiler_control, cfg.flow_set_entity, cfg.heating_switch_entity) == ("aus", None, None)
+    assert not hasattr(cfg, "boiler_fallback_flow")  # 0.59: kein Rückfall-Vorlauf
     assert not cfg.writes_boiler() and Config(boiler_control="heatpilot").writes_boiler()
     bad = Config.from_raw({"boiler_control": "voll", "flow_set_entity": "sensor.x", "heating_switch_entity": "Switch.X",
-                           "boiler_fallback_flow": 99})
-    assert (bad.boiler_control, bad.flow_set_entity, bad.heating_switch_entity, bad.boiler_fallback_flow) == (
-        "aus", None, None, 45)
-    clean, errors = validate({"boiler_control": "trocken", "flow_set_entity": FLOW, "heating_switch_entity": HEAT,
-                              "boiler_fallback_flow": "50"})
-    assert errors == [] and clean["boiler_fallback_flow"] == 50 and clean["heating_switch_entity"] == HEAT
+                           "boiler_fallback_flow": 99})  # alte Einstellung: wird ignoriert
+    assert (bad.boiler_control, bad.flow_set_entity, bad.heating_switch_entity) == ("aus", None, None)
+    clean, errors = validate({"boiler_control": "trocken", "flow_set_entity": FLOW, "heating_switch_entity": HEAT})
+    assert errors == [] and clean["heating_switch_entity"] == HEAT
     for raw in ({"flow_set_entity": "number.boiler_heatingtemp"}, {"flow_set_entity": "switch.x"},
                 {"heating_switch_entity": "switch.boiler_heatingoff"},
                 {"heating_switch_entity": "switch.thermostat_hc1_summermode"},
-                {"boiler_control": "an"}, {"boiler_fallback_flow": 30}, {"dhw_set_entity": "number.boiler_selflowtemp"}):
+                {"boiler_control": "an"}, {"dhw_set_entity": "number.boiler_selflowtemp"}):
         assert validate(raw)[1], raw
 
 
@@ -394,22 +389,16 @@ def test_dhw_charge_leaves_flow_alone(tmp_path):
     assert step(bc, T0 + 30) == 1
 
 
-def test_switch_back_writes_fallback_once(tmp_path):
+def test_switch_back_writes_nothing(tmp_path):
     eng, ha, bc = house(tmp_path)
     step(bc, T0)
+    n = len(calls(ha))
     new = SimpleNamespace(cfg=Config(boiler_control="aus"))
-    run(main_mod.App._boiler_back(new, eng, eng))  # wie App.build: über die alte Schreibstelle
-    assert calls(ha)[-2:] == [("number", "set_value", FLOW, {"value": 45}), ("switch", "turn_on", HEAT, {})]
-    assert actions(eng)[-1] == ACT_FALLBACK and bc.state["fallback"]["ok"]
+    run(main_mod.App._boiler_back(new, eng))  # wie App.build: über die alte Schreibstelle
+    assert len(calls(ha)) == n and not hasattr(bc, "fallback")  # 0.59: kein Rückfall-Vorlauf
     eng.cfg.boiler_control = "aus"
     bc.plan(T0 + 30)
     assert any("Regler wieder anschließen" in w for w in bc.warnings(T0 + 30))
-    run(main_mod.App._boiler_back(new, eng, eng))  # schon „aus“: nichts mehr
-    assert len(calls(ha)) == 3
-    # mit Regler am Bus wird nicht zurückgeschrieben
-    eng2, ha2, bc2 = house(tmp_path / "b", regulator=True)
-    res = run(bc2.fallback(45))
-    assert not res["ok"] and "Regler" in res["text"] and calls(ha2) == []
 
 
 def test_restart_keeps_state_and_check(tmp_path):
@@ -518,24 +507,23 @@ def test_watchdog_scan_status_and_guide(tmp_path):
                                                      "for": {"hours": 1}}],
                                        "conditions": [{"condition": "state", "entity_id": watchdog.HEARTBEAT,
                                                        "attribute": "kessel", "state": "heatpilot"}],
-                                       "actions": [{"action": "number.set_value", "target": {"entity_id": FLOW}}]},
+                                       "actions": [{"action": "notify.mobile_app_handy"}]},
                "automation.licht": {"trigger": [{"platform": "state", "entity_id": "binary_sensor.tuer"}]}}
     assert watchdog.status(eng, "heatpilot")["state"] == "unbekannt"
-    eng.watchdog = run(watchdog.scan(AutoHA(configs), states, FLOW))
+    eng.watchdog = run(watchdog.scan(AutoHA(configs), states))
     w = watchdog.status(eng, "heatpilot")
     assert w["state"] == "erkannt" and w["text"] == "Wächter erkannt: HeatPilot-Wächter"
     states["automation.waechter"]["state"] = "off"
-    eng.watchdog = run(watchdog.scan(AutoHA(configs), states, FLOW))
+    eng.watchdog = run(watchdog.scan(AutoHA(configs), states))
     assert watchdog.status(eng, "heatpilot")["state"] == "aus"
-    eng.watchdog = run(watchdog.scan(AutoHA({}), states, FLOW))
+    eng.watchdog = run(watchdog.scan(AutoHA({}), states))
     assert watchdog.status(eng, "heatpilot")["state"] == "fehlt"
     eng.watchdog = run(watchdog.scan(AutoHA(configs, fail={"automation.waechter", "automation.licht"}), states))
     assert watchdog.status(eng, "heatpilot")["state"] == "unbekannt" and "nicht lesbar" in eng.watchdog["error"]
-    g = watchdog.guide(FLOW, HEAT, 45, TARGETS)
-    assert g["values"] == {"trigger_entity": "sensor.heatpilot_heartbeat", "for": "01:00:00", "flow_entity": FLOW,
-                           "flow_value": 45, "heating_entity": HEAT, "message": g["values"]["message"],
+    g = watchdog.guide(TARGETS)
+    assert g["values"] == {"trigger_entity": "sensor.heatpilot_heartbeat", "for": "01:00:00", "message": watchdog.TEXT,
                            "condition": "Attribut „kessel“ von sensor.heatpilot_heartbeat ist „heatpilot“"}
-    assert any(FLOW in s and "45" in s for s in g["steps"]) and any(HEAT in s for s in g["steps"])
+    assert not any(FLOW in s or HEAT in s for s in g["steps"]) and "Drehschalter" in watchdog.TEXT  # 0.59: nur melden
     assert not any("yaml" in s.lower() for s in g["steps"])
 
 
@@ -546,7 +534,7 @@ def test_heartbeat_every_minute_and_scan_only_when_not_off(tmp_path):
     assert run(main_mod.heartbeat(app, 1000.0)) and not run(main_mod.heartbeat(app, 1030.0))
     assert run(main_mod.heartbeat(app, 1060.0)) and len(auto.set) == 2
     eid, state, attrs = auto.set[0]
-    assert eid == watchdog.HEARTBEAT and attrs["device_class"] == "timestamp" and attrs["rueckfall_vorlauf"] == 45
+    assert eid == watchdog.HEARTBEAT and attrs["device_class"] == "timestamp" and "rueckfall_vorlauf" not in attrs
     assert run(main_mod.scan_watchdog(app, 2000.0)) and not run(main_mod.scan_watchdog(app, 2300.0))
     eng.cfg.boiler_control = "aus"
     eng.watchdog = {}
@@ -595,8 +583,8 @@ def test_readiness_block(tmp_path):
     del eng.ems["thermostat"]
     r = ready(eng, T0)
     assert r["level"] == "eingeschränkt" and any("Wächter" in x for x in r["limits"])
-    assert any("Mindestleistung unbekannt" in x for x in r["limits"]) and r["fallback"] == 45
-    eng.watchdog = {"ts": T0, "found": [{"entity_id": "automation.w", "name": "W", "on": True, "sets_flow": True}],
+    assert any("Mindestleistung unbekannt" in x for x in r["limits"]) and "fallback" not in r
+    eng.watchdog = {"ts": T0, "found": [{"entity_id": "automation.w", "name": "W", "on": True}],
                     "error": None, "checked": 1}
     eng.cfg.boiler_min_power_pct, eng.cfg.boiler_nominal_kw = 30.0, 18.0
     r = ready(eng, T0)
@@ -641,7 +629,7 @@ def test_api_boiler_resume_heat_entities(tmp_path):
             j = await (await client.get("/api/boiler")).json()
             assert j["boiler"]["mode"] == "heatpilot" and j["boiler"]["paused"] is True
             assert j["boiler"]["entities"]["flow"]["entity"] == FLOW and j["boiler"]["rules"]["boost_max_k"] == 10
-            assert j["boiler"]["watchdog"]["guide"]["values"]["flow_entity"] == FLOW
+            assert "Drehschalter" in j["boiler"]["watchdog"]["guide"]["values"]["message"]
             assert j["readiness"]["level"] == "nicht bereit"
             r = await client.post("/api/boiler/resume", json={})
             assert r.status == 200 and (await r.json())["boiler"]["paused"] is False
@@ -655,7 +643,7 @@ def test_api_boiler_resume_heat_entities(tmp_path):
             s = await (await client.get("/api/settings")).json()
             assert s["settings"]["boiler_control"] == "heatpilot" and s["boiler_control"]["suggested"] == {
                 "flow": FLOW, "heating": HEAT, "period": None}  # 0.48: Antipendelzeit (hier keine erkannt)
-            assert s["boiler_control"]["fallback_range"] == [35, 75]
+            assert "fallback_range" not in s["boiler_control"]
             summ = await (await client.get("/api/summary")).json()
             assert summ["boiler_control"]["mode"] == "heatpilot"
             p = await (await client.get("/api/preview")).json()
