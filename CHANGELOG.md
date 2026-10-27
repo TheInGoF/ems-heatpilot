@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.62.0
+- **Override „nur jetzt“** (Konzeptpapier, Abschnitt 7, `override.py`): **Nacht**, **Anwesend** oder **Abwesend** für das ganze Haus – im Reiter Heizen unter den Kacheln und als Karte `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ 0.4). Eine einzige Art, gedacht für Ausnahmen: setzt Nacht-, Komfort- bzw. Abwesenheitstemperatur für alle Räume mit „macht mit“ (bei „HeatPilot steuert“) und endet von selbst am nächsten Schaltpunkt des normalen Plans (höchstens 24 h), wenn der Plan von selbst dort ist, bei „Abwesend“ wenn jemand heimkommt, bei „Anwesend“ wenn alle weg sind. Noch einmal tippen beendet es. Ein Boost geht vor; gelernt wird weiter wie sonst
+- Neu: Aktion `override` {mode: nacht|anwesend|abwesend|aus} in `POST api/heat/override` und im Befehl der Karten, `sensor.heatpilot_modus` (Zustand auto/nacht/anwesend/abwesend, Ende `until`), `override` in `api/heat` → control
+- Fix aus 0.60: die neuen Raum-Kacheln der Einstellungen nutzten die Klasse `.room-tiles` des Reiters Heizen mit – jetzt `.rt-grid`
+- Einstellungen → Haus → „Karten für Home Assistant“ nennt auch die Karte „Nur jetzt“
+- Tests: `tests/test_override62.py`
+
 ## 0.61.0
 - **Kessel und Haus auf einen Blick** (Konzeptpapier, Abschnitt 5): oben auf den Seiten Kessel und Haus die eingestellten Aktoren und Sensoren als Gerätekarten (Wert mit Einheit, Entität, „nicht erreichbar“ rot, „nicht gewählt“ blass) – Kessel: was HeatPilot schreibt (Vorlauf-Soll, Heizbetrieb, Antipendelzeit, Warmwasser-Soll, Desinfektion) und was es liest (Vorlauf Ist/Soll, Rücklauf, Brenner, Leistung, Speicher, Ladung); Haus: Außen (Außenfühler, Wetter), Verbrauch (Gaszähler, Anforderung, Leistung), Anwesenheit (Personen, Urlaub). Werte übersetzt (an/aus, zu Hause, Wetterzustand). Geändert wird weiter unten bzw. unter „Experte“
 - Tests: `tests/test_glance61.py`

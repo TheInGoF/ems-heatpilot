@@ -53,7 +53,7 @@ def make_app(helper=True):
         states[cb.COMMAND] = {"state": ""}
     loop = NS(rooms={"climate.wohnzimmer": {"phase": "komfort", "desired": 21.0, "lead": "temp"}})
     eng = NS(found=NS(rooms=[ROOM]), states=states, control_loop=loop, room_reading=lambda r: None,
-             _val=lambda v: None, cfg=NS(is_managing=lambda: True))
+             _val=lambda v: None, cfg=NS(is_managing=lambda: True), store={})  # 0.62: Override im kv
 
     async def refresh():
         return None
@@ -67,7 +67,8 @@ def run(coro):
 def test_room_and_boost_sensors_like_the_tile(monkeypatch):
     app = make_app()
     app.control.boosts["climate.wohnzimmer"] = {"temp": 23.0, "end": time.time() + 3600}
-    assert run(cb.publish(app)) == 2
+    assert run(cb.publish(app)) == 3  # Raum, Boost und seit 0.62 sensor.heatpilot_modus
+    assert app.ha.states["sensor.heatpilot_modus"][0] == "auto"
     state, a = app.ha.states["sensor.heatpilot_raum_wohnzimmer"]
     assert state == 20.4 and a["target"] == 21 and a["phase"] == "komfort" and a["humidity"] == 48
     assert a["action"] == "heating" and a["boost"]["temp"] == 23.0 and a["boost"]["left_min"] == 60

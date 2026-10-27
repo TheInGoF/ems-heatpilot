@@ -217,7 +217,7 @@ def test_heat_tab_shows_only_line_actions_and_rooms():
     page, js = html(), script()
     heat = between(page, '<section id="view-heat">', "</section>")
     ids = re.findall(r'id="([\w-]+)"', heat)
-    assert ids == ["heat-status", "heat-acts", "heat-rooms", "heat-foot", "heat-dlg", "heat-dlg-body"]
+    assert ids == ["heat-status", "heat-acts", "heat-now", "heat-rooms", "heat-foot", "heat-dlg", "heat-dlg-body"]  # 0.62: Nur jetzt
     assert "Antippen zum Bedienen." in heat and "onclick=\"openOverview('status')\"" in heat
     render = between(js, "function renderHeat()", "function act(")
     for word in ("renderDhwLine", "renderBoilerLine", "readyLine", "warnings", "heat-dhw", "heat-boiler"):

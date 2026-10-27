@@ -2,6 +2,12 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.62.0
+- Nur jetzt: Nacht, Anwesend, Abwesend fürs ganze Haus
+- Endet von selbst am nächsten Schaltpunkt
+- Neue Karte heatpilot-mode-card (HACS)
+- Fix: Raumkacheln im Reiter Heizen
+
 ## 0.61.0
 - Kessel und Haus auf einen Blick als Gerätekarten
 

@@ -7,7 +7,7 @@ from test_ui_v361 import between, html, script, source
 def test_tiles_and_room_view_are_wired():
     js, page = script(), html()
     rs = between(js, "function renderSettings()", "\nfunction ")
-    assert '<div class="room-tiles" id="room-tiles"></div>' in rs
+    assert '<div class="rt-grid" id="room-tiles"></div>' in rs
     assert 'oninput="roomsDirty(); roomTiles()" onchange="roomsDirty(); roomTiles()"' in rs
     assert "roomTiles();" in source(js, "renderSettings") and "roomTiles();" in source(js, "loadHeat")
     tiles = source(js, "roomTiles")
