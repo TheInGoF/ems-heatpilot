@@ -205,7 +205,7 @@ function dhwModeHint() {}
 EM_NAMES = ("esc", "isTemp", "isSensor", "PICKERS", "dhwRank", "personRows", "EMAP", "EM_BY", "EM_OPEN", "EM_FOLD",
             "EM_MAX", "EM_PROBLEMS", "EM_BADGE", "EM_CUSTOM", "emInit", "emFits", "emOptions", "emItem", "emState",
             "emValue", "emHas", "emStateOf", "emSaved", "emCounts", "emRoomCount", "emCountText", "setNav", "expert",
-            "emGroup", "emReq", "emRow", "emBadge", "GONE_HINT", "emNow", "emEnt", "emEdit", "emExtra", "roomStates", "emPersons",
+            "emGroup", "emReq", "emRow", "emBadge", "GONE_HINT", "emNow", "emEnt", "emEdit", "emExtra", "emPersons",
             "emRef", "emCollect", "SET_PAGES", "SET_KEYS", "setInfo", "navRow", "PAGE_GROUPS", "EM_PAGE_OF", "EXPERT_GROUPS",
             "pageMissing", "emInline", "eid", "more",
             "DHW_LABEL", "BOILER_LABEL")  # 0.43: Startliste der Einstellungen, Entitäten bei ihrer Funktion

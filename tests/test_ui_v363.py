@@ -40,7 +40,7 @@ NAMES = ("fmt", "esc", "clock", "WEEKDAYS", "field", "readyDot", "EMS_UOM", "boi
          "DIS_NOT_YET", "splitWhen", "disinfectTile", "DAY_NAMES", "CHARGE_FROM", "DIS_BOILER",
          "disinfectHtml", "disinfectState", "disinfectSuggestHtml", "disinfectSync", "applyDisinfect",
          "EMS_LOCK", "ctlRooms", "allRooms", "shortName", "hm", "leftText", "tileColors", "PHASE", "ctl", "managing",
-         "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock", "EM_BY", "roomStates",
+         "unreachable", "roomState", "ctlInfo", "roomDlg", "sibling", "climateEntities", "emsLock", "EM_BY",
          "FLOOR_KINDS", "FLOOR_MAX", "FLOOR_HINT", "floorKind", "floorCell", "SGONE", "GONE_HINT", "roomRows",  # Fußboden seit 0.39.1
          "swRoom", "relearnHtml",  # „Ventil neu lernen“ seit 0.44
          "degC", "DIS_RESULT_CSS", "disWhen", "disDot", "disLast", "disNow", "disinfectTriggerHtml")  # Auslösen (0.42)

@@ -115,7 +115,7 @@ def test_suggestions_name_the_operating_rooms_and_ui_prechecks_only_those(tmp_pa
     src = "\n".join(line for line in js.splitlines()
                     if line.startswith(("const $ =", "const fmt =", "const esc =", "const shortName =", "const field =")))
     src += "\n" + "const sibling =" + between(js, "const sibling =", "// „Bereiche übernehmen“")
-    src += f"\nfunction modeHint(){{}}\nfunction roomStates(){{ return ''; }}\nfunction relearnHtml(){{ return ''; }}\nconst document = {{ getElementById: () => ({{}}) }};\n" \
+    src += f"\nfunction modeHint(){{}}\nfunction relearnHtml(){{ return ''; }}\nconst document = {{ getElementById: () => ({{}}) }};\n" \
            f"const ENT = {json.dumps(ent)}; const SET = {{ rooms: [], floor_heating_rooms: [] }};\n" \
            f"const SUG = {sug_json}; const CTRL = {{}}; const CT = {{}}; const VFOUND = {{}}, SGONE = {{}};\n" \
            "for (const m of roomRows().matchAll(/data-climate=\"([^\"]*)\"[^>]*>\\s*<div class=\"room-row\"><input type=\"checkbox\" class=\"r-on\" title=\"Raum lernen\" aria-label=\"lernen\" ?(checked)?>/g)) " \
