@@ -57,8 +57,7 @@ def make_app(helper=True):
 
     async def refresh():
         return None
-    cfg = NS(control_mode="beobachten", boiler_control="aus", dhw_control="aus")  # 0.65: sensor.heatpilot_betrieb
-    return NS(eng=eng, cfg=cfg, control=FakeCtl(), ha=FakeHA(), refresh_rooms=refresh)
+    return NS(eng=eng, control=FakeCtl(), ha=FakeHA(), refresh_rooms=refresh)
 
 
 def run(coro):
@@ -68,8 +67,7 @@ def run(coro):
 def test_room_and_boost_sensors_like_the_tile(monkeypatch):
     app = make_app()
     app.control.boosts["climate.wohnzimmer"] = {"temp": 23.0, "end": time.time() + 3600}
-    assert run(cb.publish(app)) == 4  # Raum, Boost, seit 0.62 sensor.heatpilot_modus, seit 0.65 sensor.heatpilot_betrieb
-    assert app.ha.states["sensor.heatpilot_betrieb"][1]["kessel"] == "aus"
+    assert run(cb.publish(app)) == 3  # Raum, Boost und seit 0.62 sensor.heatpilot_modus
     assert app.ha.states["sensor.heatpilot_modus"][0] == "auto"
     state, a = app.ha.states["sensor.heatpilot_raum_wohnzimmer"]
     assert state == 20.4 and a["target"] == 21 and a["phase"] == "komfort" and a["humidity"] == 48

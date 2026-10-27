@@ -2,9 +2,7 @@
 
 ## 0.65.0
 - **Räume, die keine sind, dauerhaft ausblenden:** In der Raumansicht (Einstellungen → Räume, Kachel antippen) „Ausblenden – kein Raum“. Bisher ließ sich ein Raum nur abwählen und blieb als blasse Kachel stehen. Ausgeblendetes steht in `hidden_rooms`, verschwindet aus den Kacheln (unten „x ausgeblendet – zeigen“ zum Wieder-Einblenden) und wird von der Erkennung übergangen – auch nach Updates und neuer Suche
-- **Betriebsschalter im Dashboard:** neue Karte `custom:heatpilot-betrieb-card` (HACS „HeatPilot Card“ 0.5) mit Räume (Beobachten · HeatPilot steuert), Kessel und Warmwasser (Aus · Beobachten · HeatPilot steuert); „HeatPilot steuert“ fragt einmal nach. Neu: `sensor.heatpilot_betrieb` und der Befehl `betrieb` {what, mode}, gespeichert wie die Einstellungsseite (`app.apply_settings`)
-- Einstellungen → Haus → „Karten für Home Assistant“ nennt auch die Karte „Betrieb“
-- Tests: `tests/test_betrieb65.py`
+- Tests: `tests/test_hidden_rooms65.py`
 
 ## 0.64.0
 - **Ersparnis gegenüber festem Zeitplan** (Konzeptpapier, Abschnitt 8, `savings_compare.time_saving`): Stunden je Woche weniger geheizt als mit dem eingestellten Wochenplan – gelernte Nachtzeiten (nur mit „Gelernte Zeiten verwenden“, sonst „möglich“) und Stunden, in denen niemand zu Hause war (außerhalb der festen Nacht). Immer sichtbar, auch ohne Gasdaten
