@@ -11,11 +11,13 @@ einen Helfer. Darum stellt HeatPilot bereit:
   Soll und Dauer, das Ergebnis des letzten Befehls (``last``).
 * ``sensor.heatpilot_modus`` (seit 0.62, ``override.sensor``): Override „nur jetzt“ – nacht, anwesend, abwesend
   oder auto, mit Ende (``until``).
+* ``sensor.heatpilot_betrieb`` (seit 0.65, ``betrieb``): die drei Betriebsschalter Räume, Kessel, Warmwasser –
+  bedient über den Befehl ``betrieb`` (gespeichert wie auf der Einstellungsseite).
 * ``input_text.heatpilot_befehl`` (``ensure_command``): legt HeatPilot einmal als Helfer an (WebSocket
   ``input_text/create``). Die Karte schreibt einen Befehl als JSON hinein, z. B.
   ``{"a": "boost", "rooms": ["climate.wohnzimmer"], "temp": 22, "minutes": 120, "n": 1730000000}`` (``n`` macht
   gleiche Befehle unterscheidbar). HeatPilot führt ihn aus (``heat_actions`` – dieselbe Stelle wie die Seite), leert
-  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode, override (das Soll
+  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode, override, betrieb (das Soll
   eines Raums stellt die Karte über das Thermostat-Pop-up von Home Assistant).
 * ``GET api/cards`` (``routes``, seit 0.56.4): Stand für Einstellungen → Haus → „Karten für Home Assistant“ –
   Helfer vorhanden, Raum-Sensoren, Wetter-Entität, Link zum Repository.
@@ -40,8 +42,9 @@ log = logging.getLogger(__name__)
 
 COMMAND = "input_text.heatpilot_befehl"
 BOOST = "sensor.heatpilot_boost"
+BETRIEB = "sensor.heatpilot_betrieb"  # 0.65
 ROOM_PREFIX = "sensor.heatpilot_raum_"
-CARD_ACTIONS = ("boost", "schedule", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
+CARD_ACTIONS = ("boost", "schedule", "mode", "override", "betrieb")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
 REPO = "https://github.com/TheInGoF/heatpilot-card"
 EVERY_S = 30
 
@@ -109,11 +112,20 @@ def boost(eng, ctl, last: dict | None) -> tuple[str, int, dict]:
         "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX, "command": COMMAND, "last": last}
 
 
+def betrieb(cfg) -> tuple[str, str, dict]:
+    """``sensor.heatpilot_betrieb`` (0.65): die drei Betriebsschalter für die Karte – Zustand = Räume."""
+    return BETRIEB, cfg.control_mode, {
+        "friendly_name": "HeatPilot Betrieb", "icon": "mdi:tune-variant", "raeume": cfg.control_mode,
+        "kessel": cfg.boiler_control, "warmwasser": cfg.dhw_control,
+        "modes": {"raeume": ["beobachten", "heatpilot"], "kessel": ["aus", "trocken", "heatpilot"],
+                  "warmwasser": ["aus", "trocken", "heatpilot"]}}
+
+
 async def publish(app) -> int:
     """Raum- und Boost-Sensoren setzen; Zahl der gesetzten Sensoren."""
     eng = app.eng
     items = [*rooms(eng, app.control), boost(eng, app.control, getattr(app, "card_last", None)),
-             override.sensor(eng.store)]  # 0.62: Modus „nur jetzt“
+             override.sensor(eng.store), betrieb(app.cfg)]  # 0.62: Modus „nur jetzt“, 0.65: Betriebsschalter
     for entity, state, attrs in items:
         await app.ha.set_state(entity, state, attrs)
     keep = {e for e, _s, _a in items}  # Raum umbenannt oder entfernt, alte Namen (bis 0.56.2: nach Thermostat)
