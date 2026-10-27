@@ -110,13 +110,12 @@ def test_card_on_top_of_overview_and_details_under_diagnose():
     # 0.43: vor den Modellen der Abschnitt „Status“ (erster Abschnitt) und die Statuszeile der Übersicht
     # 0.43 Schritt 6: Startseite der Übersicht – Status, Startzeile, Empfehlungen, Ersparnis, Bereiche, Lernstand, Modelle
     start = between(page, '<div id="ov-start">', '<div id="ov-haus" hidden>')
-    assert '<p class="sub" id="status">Lade …</p>' in start and '<div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>' in start
-    assert start.index('id="ov-plan"') < start.index('id="models"') and '<div class="ov-kpis" id="tiles"></div>' in page
+    assert '<p class="sub" id="status">Lade …</p>' in start and 'id="models"' not in start  # 0.58: Modelle unter Live → Diagnose
+    assert '<div class="ov-kpis" id="tiles"></div>' in page
     assert 'id="guards"' not in start and 'id="ov-save"' not in start  # 0.55: Lernstand und Ersparnis unter Haus
-    ov = between(page, '<section id="view-overview" hidden>', "</section>")
-    assert ov.index('id="ov-status"') < ov.index('id="models"')
     diag = between(page, '<div id="view-diag">', "</section>")
-    assert diag.index('id="diag-checks"') < diag.index('<div class="card" id="diag-models"') < \
+    assert '<div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>' in diag
+    assert diag.index('id="diag-checks"') < diag.index('id="models"') < diag.index('<div class="card" id="diag-models"') < \
         diag.index('id="heat-log-box"') < diag.index("Diagnose-Datei")  # 0.43: Protokoll aus dem Heizen
     ld = between(js, "async function load() {", "// " + "-" * 64 + " Einstellungen")
     starting = between(ld, "if (s.starting) {", "setTimeout(load, 5000)")
@@ -128,8 +127,7 @@ def test_card_on_top_of_overview_and_details_under_diagnose():
     # 0.43: Diagnose ist die letzte Unterseite der Einstellungen – beim Öffnen lädt loadDiagPage auch die Modelle
     assert 'if (name === "diag") return openDiag();' in source(js, "showTab")
     assert "exportSize(); loadSensors(); loadModels();" in source(js, "loadDiagPage")
-    assert 'showTab("diag");\n  $("diag-models").scrollIntoView' in source(js, "openModels")
-    assert 'onclick="openModels()"' in source(js, "modelsHtml")  # Klick auf die Karte → Diagnose
+    assert "openModels" not in js  # 0.58: Karte steht selbst in der Diagnose
 
 
 def test_settings_rooms_advanced_certificate_and_polling_are_wired():
@@ -182,7 +180,7 @@ out({{ bad: modelsHtml(B), ok: modelsHtml(OK), fresh: modelsHtml(F) }});
 """)
     b, h = real["bad"], real["bad"]["house"]
     t = plain(got["bad"])
-    assert t.startswith("Modelle Einzelheiten unter Diagnose Haus " + h["state"]), t
+    assert t.startswith("Modelle Haus " + h["state"]), t
     loss = f"Wärmeverlust {n(h['heat_loss_w_per_k'])} ± {n(h['heat_loss_sd_w_per_k'])} W/K"  # geschützte Leerzeichen
     assert loss.replace(" ", "\u00a0").replace("Wärmeverlust\u00a0", "Wärmeverlust ") in got["bad"]
     assert loss in t and f"{h['learned_text']} · Stundenwerte seit {day(h['data']['from'])}" in t

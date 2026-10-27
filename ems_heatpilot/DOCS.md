@@ -16,9 +16,12 @@ keine YAML-Optionen.
 
 **Aufbau der Oberfläche (seit 0.43):** vier Reiter. **Heizen** bedient die Räume (Aktionen, Raumkacheln und eine Zeile
 zum Raumbetrieb – keine Systemmeldungen). **Übersicht** ist seit 0.55 ein schneller Überblick in drei Karten:
-**Jetzt** (Räume mit „x von y am Soll“, Wetter mit Wind, Warmwasser, Kessel, Bereitschaft, Warnungen, zuletzt geschrieben),
+**Jetzt** (seit 0.58 grafisch: je Raum ein Balken bis zur Ist-Temperatur – orange, solange das Thermostat heizt – mit
+Strich beim Soll, Skala 15–25 °C, Ist / Soll rot, wenn mehr als 0,3 K darunter; Kessel als drei Kacheln Brenner, Vorlauf
+und Warmwasser je Ist/Soll aus den 30-s-Werten; dazu Betrieb, Bereitschaft, Warnungen, Kessel- und Warmwasser-Modus,
+zuletzt geschrieben – das Wetter steht nur noch in der Karte Wetter),
 **Nächste 24 Stunden** (Zeitleiste aus der Vorschau: Raumphasen mit Soll, Warmwasser-Soll, Desinfektion, Heizbetrieb an/aus,
-Vorlauf-Spanne) und **Modelle**; dazwischen seit 0.55.2 die Karte **Wetter** – seit 0.56.1 oben
+Vorlauf-Spanne; die Karte **Modelle** steht seit 0.58 unter Live → Diagnose); dazwischen seit 0.55.2 die Karte **Wetter** – seit 0.56.1 oben
 wie eine Wetter-Karte das Wetter jetzt (Symbol, Temperatur, Zustand, gefühlt, Spanne 24 h, Wind mit Richtung und Böen,
 Luftfeuchte, Luftdruck, UV, Wolken), darunter die nächsten 24 Stunden: je Stunde ein Balken für Temperatur,
 Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index) und Wind (blass dahinter die Böen) – aus der
@@ -201,7 +204,7 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   (Vorlauf, Raum, Speicher), Gaszähler zählt nicht obwohl der Brenner lief,
   Aufzeichnungslücken, EMS-ESP nicht erreichbar, Programmfehler der letzten 24 h,
   Modelle ohne Empfehlung (mit Grund).
-- **„Modelle – Einzelheiten“** (seit 0.42.1, Ziel eines Klicks auf die Karte „Modelle“ in der Übersicht):
+- **„Modelle – Einzelheiten“** (seit 0.42.1; darüber seit 0.58 die Karte „Modelle“):
   Hausmodell mit Gründen, Wärmeverlust ± Unsicherheit, Vorhersagefehler, Lernschritte und die Datenlage der
   Stundenwerte – gespeichert (mit Zeitraum und Lücken), mit Gas, Außen- und Innentemperatur (daraus lernt das
   Hausmodell), ohne Innentemperatur, ohne verwertbaren Gaswert, ohne Außentemperatur; je Raum und Ventil Zustand und
@@ -1731,7 +1734,7 @@ verloren:
   beim Wiederherstellen. Abläufe laufen nacheinander – ein später gestarteter zeigt „Wartet: …“. Startet HeatPilot
   neu, während es neu lernt, lernt es beim Start fertig.
 
-**Karte „Modelle“** (oben in der Übersicht, auch während des Lernens): Hausmodell plausibel oder lernt, Wärmeverlust ±
+**Karte „Modelle“** (seit 0.58 unter Live → Diagnose, auch während des Lernens): Hausmodell plausibel oder lernt, Wärmeverlust ±
 Unsicherheit, Vorhersagefehler, aus wie vielen Stunden und Tageswerten es wirklich gelernt hat – von wie vielen
 Stunden mit Gas, Außen- und Innentemperatur seit wann (ältester Tag mit Innentemperatur); gelernt wird nur in der
 Heizperiode, ohne Warmwasser und Fremdwärme; Räume plausibel n von m, Ventile belastbar n von m, Warmwasser. Haben viele Stunden Gas und

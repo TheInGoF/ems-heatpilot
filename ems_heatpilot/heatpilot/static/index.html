@@ -416,7 +416,7 @@ details.adopt-more > summary { padding: 2px 0 4px; }
 .mc-head { justify-content: space-between; margin-bottom: 6px; }
 .mc-head h2 { margin: 0; }
 .mc-head a, .mc-warn a { font-size: var(--fs-small); }
-.mc-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: var(--fs-text); cursor: pointer; }
+.mc-grid { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 12px; font-size: var(--fs-text); }
 .mc-k { display: flex; gap: 6px; align-items: center; align-self: start; color: var(--text-secondary); white-space: nowrap; line-height: 19px; }
 .mc-v { color: var(--text-primary); min-width: 0; overflow-wrap: anywhere; }
 .mc-v .muted { font-size: var(--fs-small); }
@@ -565,6 +565,16 @@ details.dlg-dev { margin-top: 8px; } details.dlg-dev .ctl-info { margin-top: 4px
 .ov-status { margin-bottom: 12px; }
 h3.st-h { font-size: var(--fs-small); font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 2px; }
 .ov-status h2 + h3.st-h { margin-top: 6px; }
+.ovb { display: grid; grid-template-columns: minmax(0, 7.5em) minmax(0, 1fr) auto; gap: var(--s2); align-items: center; margin: var(--s2) 0; }
+.ovb-n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ovb-bar { position: relative; height: 12px; border-radius: var(--r-s); background: var(--surface-2); }
+.ovb-bar i { position: absolute; inset: 0 auto 0 0; border-radius: var(--r-s); background: var(--series-5); }
+.ovb.heat .ovb-bar i { background: var(--series-2); }
+.ovb-bar b { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text-primary); }
+.ovb-v { font-size: var(--fs-small); color: var(--text-secondary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ovb-v.low { color: var(--err-text); }
+#ov-gauges:empty { display: none; }
+.kpi.ovg-on .value { color: var(--series-2); }
 .ov-status .dhw-line { margin: var(--s1) 0; font-size: var(--fs-text); color: var(--text-primary); }
 .ov-status .boiler-acts { margin-top: 4px; }
 .ov-status .boiler-acts .btn { margin: 0 8px 0 0; }
@@ -772,6 +782,7 @@ ul.rules li { margin: 3px 0; }
       <p>Nur Anzeige – schaltet nichts. Stand der gespeicherten Einstellungen.</p>
       <div id="ready-box"><p class="muted">Lade …</p></div>
     </div>
+    <div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>
     <div class="card" id="diag-models"><h2>Modelle – Einzelheiten</h2><p class="muted">Lade …</p></div>
     <div class="card" id="diag-log-card">
       <h2>Protokoll</h2>
@@ -841,9 +852,10 @@ ul.rules li { margin: 3px 0; }
   <div class="card ov-status" id="ov-status">
     <h2>Jetzt</h2>
     <h3 class="st-h">Räume</h3><div id="ov-rooms-state"><p class="muted">Lade …</p></div><div id="ov-switch"></div>
-    <h3 class="st-h">Wetter</h3><div id="ov-weather"><p class="muted">Lade …</p></div>
-    <h3 class="st-h">Warmwasser</h3><p class="sub dhw-line" id="ov-dhw" hidden></p><div class="st-fallback" id="ov-dhw-off"></div>
-    <h3 class="st-h">Kessel</h3><p class="sub dhw-line" id="ov-boiler" hidden></p><div class="st-fallback" id="ov-boiler-off"></div>
+    <div class="ov-bars" id="ov-bars"></div>
+    <h3 class="st-h">Kessel und Warmwasser</h3><div class="ov-kpis k3" id="ov-gauges"></div>
+    <p class="sub dhw-line" id="ov-dhw" hidden></p><div class="st-fallback" id="ov-dhw-off"></div>
+    <p class="sub dhw-line" id="ov-boiler" hidden></p><div class="st-fallback" id="ov-boiler-off"></div>
     <h3 class="st-h">Zuletzt geschrieben</h3><div id="ov-last"><p class="muted">Lade …</p></div>
   </div>
   <p class="sub" id="status">Lade …</p>
@@ -851,7 +863,6 @@ ul.rules li { margin: 3px 0; }
   <div class="card" id="ov-wx" hidden><h2>Wetter</h2><div id="ov-wx-now"></div><div id="ov-wx-chart"></div></div>
   <!-- 0.55: was HeatPilot die nächsten 24 h vorhat (aus api/preview, renderOvPlan) -->
   <div class="card" id="ov-plan"><div class="row mc-head"><h2>Nächste 24 Stunden</h2><a href="#" onclick="ovPage('vorschau');return false">Vorschau ›</a></div><div id="ov-plan-list"><p class="muted">Lade …</p></div></div>
-  <div class="card" id="models"><h2>Modelle</h2><p class="muted">Lade …</p></div>
   <div class="card" id="advice"></div>
   <p class="ov-save-line" id="ov-save-line" hidden></p>
   <div class="ov-areas"><h3 class="nav-h">Bereiche</h3><div class="nav-list" id="ov-areas"></div></div>
@@ -1541,21 +1552,33 @@ function ovRoomsHtml(c, r, sum) {
   for (const w of c.warnings || []) h += statusLine("err", `⚠ ${esc(w)}`);
   return h;  // 0.55: ohne Erklärsatz – die Übersicht soll knapp bleiben
 }
-// 0.55: eine Zeile zu den Räumen – wie viele am Soll, wer mehr als 0,3 K darunter liegt
-function ovRoomsLine(j) {
-  const rs = ctlRooms(j).filter((r) => r.mode !== "off" && r.temp !== null && r.temp !== undefined && r.target !== null && r.target !== undefined);
-  if (!rs.length) return "";
-  const low = rs.filter((r) => r.temp < r.target - 0.3);
-  return statusLine(low.length ? "warn" : "ok", `${rs.length - low.length} von ${rs.length} Räumen am Soll` +
-    (low.length ? ` · darunter: ${low.map((r) => `${esc(shortName(r.name))} ${fmt(r.temp)} / ${fmt(r.target)} °C`).join(", ")}` : ""));
+// 0.58: Übersicht → Jetzt, je Raum ein Balken: gefüllt bis zur Ist-Temperatur (orange, solange das Thermostat heizt),
+// Strich beim Soll, Skala 15–25 °C; rechts Ist / Soll, rot, wenn mehr als 0,3 K darunter
+const OVB_LO = 15, OVB_HI = 25;
+function ovBarsHtml(j) {
+  const pos = (t) => Math.min(100, Math.max(0, (t - OVB_LO) / (OVB_HI - OVB_LO) * 100)).toFixed(1);
+  return ctlRooms(j).filter((r) => r.temp !== null && r.temp !== undefined).map((r) => {
+    const off = r.mode === "off", tgt = off || r.target === null || r.target === undefined ? null : r.target;
+    const low = tgt !== null && r.temp < tgt - 0.3;
+    return `<div class="ovb${!off && r.action === "heating" ? " heat" : ""}"><span class="ovb-n">${esc(shortName(r.name))}</span>` +
+      `<span class="ovb-bar"><i style="width:${pos(r.temp)}%"></i>${tgt !== null ? `<b style="left:${pos(tgt)}%"></b>` : ""}</span>` +
+      `<span class="ovb-v${low ? " low" : ""}">${fmt(r.temp)}${tgt !== null ? ` / ${fmt(tgt)}` : " · aus"} °C</span></div>`;
+  }).join("");
 }
-// 0.55: Wetter jetzt – außen, Wind (kühlt schneller aus, seit 0.54 je Raum gelernt), Spanne der nächsten 12 h
-function ovWeatherHtml(s) {
-  const parts = [s.t_out !== null && s.t_out !== undefined ? `Außen ${fmt(s.t_out)} °C` : "Außen unbekannt"];
-  if (s.wind !== null && s.wind !== undefined) parts.push(`Wind ${fmt(s.wind, 0)} m/s${s.wind >= 10 ? " – kühlt schneller aus" : ""}`);
-  const n = s.forecast && s.forecast.next12;
-  if (n) parts.push(`nächste 12 h ${fmt(n.min, 0)} bis ${fmt(n.max, 0)} °C`);
-  return statusLine("off", parts.join(" · "));
+// 0.58: Übersicht → Jetzt, Kessel als drei Kacheln aus den 30-s-Werten (api/live): Brenner, Vorlauf, Warmwasser je Ist/Soll
+function ovGaugesHtml(n) {
+  const has = (x) => x !== null && x !== undefined;
+  if (!n || !(has(n.burner_on) || has(n.flow) || has(n.dhw_temp))) return "";
+  const g = (label, v, unit, note, cls = "") => `<div class="kpi${cls}"><div class="label">${label}</div>` +
+    `<div class="value">${v}${unit ? `<span class="unit"> ${unit}</span>` : ""}</div><div class="note">${note}</div></div>`;
+  const on = !!n.burner_on;
+  return g("Brenner", !has(n.burner_on) ? "–" : on ? "an" : "aus", "", on && n.dhw ? "lädt Warmwasser" : on && has(n.burner_pow) ? `${fmt(n.burner_pow, 0)} % Leistung` : "", on ? " ovg-on" : "") +
+    g("Vorlauf", has(n.flow) ? fmt(n.flow, 0) : "–", "°C", has(n.sel_flow) ? `Soll ${fmt(n.sel_flow, 0)} °C` : "") +
+    g("Warmwasser", has(n.dhw_temp) ? fmt(n.dhw_temp, 0) : "–", "°C", has(n.dhw_set) ? `Soll ${fmt(n.dhw_set, 0)} °C` : "");
+}
+async function loadOvNow() {
+  const j = await getJSON("api/live?hours=0.5");
+  if (j.now) $("ov-gauges").innerHTML = ovGaugesHtml(j.now);
 }
 // 0.55: Übersicht → Nächste 24 Stunden – die Wechsel aus der Vorschau (api/preview, Stundenraster) als Zeitleiste:
 // Raumphasen (gleiche Phase und gleiches Soll zusammen), Warmwasser-Soll, Desinfektion, Heizbetrieb
@@ -1686,8 +1709,7 @@ function ovLastHtml(c, d) {
 function renderOvStatus(lines = true) {
   const j = HEAT, sum = LAST_SUMMARY, c = j && j.control ? j.control : null;
   if (!$("ov-status")) return;
-  if (c) $("ov-rooms-state").innerHTML = ovRoomsHtml(c, j.readiness || (sum && sum.readiness), sum) + ovRoomsLine(j);
-  if (sum) $("ov-weather").innerHTML = ovWeatherHtml(sum);
+  if (c) { $("ov-rooms-state").innerHTML = ovRoomsHtml(c, j.readiness || (sum && sum.readiness), sum); $("ov-bars").innerHTML = ovBarsHtml(j); }
   else if (sum) $("ov-rooms-state").innerHTML = ovRoomsHtml({ mode: sum.control_mode, status_text: sum.control_mode === "heatpilot" ? "HeatPilot steuert" : "Beobachten" }, sum.readiness, sum);
   if (j && lines) { renderDhwLine("ov-dhw", j.dhw); renderBoilerLine("ov-boiler", j.boiler); }
   const d = (j && j.dhw) || (sum && sum.dhw_control), b = (j && j.boiler) || (sum && sum.boiler_control);
@@ -1729,6 +1751,7 @@ async function loadHeat() {
   if (j.starting) { heatMsg("Startet noch …"); heatTimer = setTimeout(() => loadHeat().catch(heatError), 5000); return; }
   guestMode(j.guest);  // 0.52: Gast-Ansicht (Lovelace) – nur der Reiter „Heizen“, Bedienen ohne Einstellungen
   HEAT = j; renderHeat();
+  if (!$("view-overview").hidden) loadOvNow().catch(() => {});
   const box = statusPage();  // 0.47.1: Kessel/Warmwasser in den Einstellungen ohne Neuladen aktuell halten
   if (box) {
     if (j.boiler) boilerUpdate(j.boiler, j.readiness && j.readiness.boiler_control, "");
@@ -4561,8 +4584,7 @@ function restoreHint(h, id, inRooms = false) {
 function modelsHtml(m) {
   const h = m.house, r = m.rooms, v = m.valves, w = m.dhw;
   const row = (id, ok, warn, label, val) => `<span class="mc-k">${mcDot(ok, warn)}${label}</span><span class="mc-v" id="${id}">${val}</span>`;
-  return '<div class="row mc-head"><h2>Modelle</h2><a href="#" id="mc-more" onclick="openModels();return false">Einzelheiten unter Diagnose</a></div>' +
-    '<div class="mc-grid" id="mc-grid" onclick="openModels()" title="Einzelheiten unter Diagnose">' +
+  return '<h2>Modelle</h2><div class="mc-grid" id="mc-grid">' +
     row("mc-house", h.ok, true, "Haus", mcHouse(h)) +
     row("mc-rooms", r.total > 0 && r.ok === r.total, r.total > 0, "Räume", mcRooms(r)) +
     (v.total ? row("mc-valves", v.reliable === v.total, true, "Ventile", mcValves(v)) : "") +
@@ -4573,10 +4595,6 @@ function renderModels(m) {
   if (!m) return;
   MODELS = m;
   $("models").innerHTML = modelsHtml(m);
-}
-function openModels() {
-  showTab("diag");
-  $("diag-models").scrollIntoView({ block: "start" });
 }
 // Wärmebedarf (Grafik): Stunden ohne Innentemperatur fehlen dort – sagen, statt still weniger zu zeigen
 function demandNote(h) {

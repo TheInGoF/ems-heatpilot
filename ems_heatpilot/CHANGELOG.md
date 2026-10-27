@@ -7,6 +7,8 @@ Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 - Seltenes unter „Experte“ am Seitenende
 - Diagnose jetzt im Reiter Live
 - Einheitliche Schriftgrößen und Karten
+- Übersicht: Räume als Balken, Kessel als Kacheln
+- Modelle jetzt unter Live → Diagnose
 
 ## 0.57.1
 - Räume warten: Antipendelzeit 5 statt 10 min
