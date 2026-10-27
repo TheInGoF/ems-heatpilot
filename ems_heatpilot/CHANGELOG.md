@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.61.0
+- Kessel und Haus auf einen Blick als Gerätekarten
+
 ## 0.60.0
 - Räume als Kacheln mit Qualitätsanzeige
 - Klick öffnet die Raumansicht mit Gerätekarten

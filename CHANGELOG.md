@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.61.0
+- **Kessel und Haus auf einen Blick** (Konzeptpapier, Abschnitt 5): oben auf den Seiten Kessel und Haus die eingestellten Aktoren und Sensoren als Gerätekarten (Wert mit Einheit, Entität, „nicht erreichbar“ rot, „nicht gewählt“ blass) – Kessel: was HeatPilot schreibt (Vorlauf-Soll, Heizbetrieb, Antipendelzeit, Warmwasser-Soll, Desinfektion) und was es liest (Vorlauf Ist/Soll, Rücklauf, Brenner, Leistung, Speicher, Ladung); Haus: Außen (Außenfühler, Wetter), Verbrauch (Gaszähler, Anforderung, Leistung), Anwesenheit (Personen, Urlaub). Werte übersetzt (an/aus, zu Hause, Wetterzustand). Geändert wird weiter unten bzw. unter „Experte“
+- Tests: `tests/test_glance61.py`
+
 ## 0.60.0
 - **Einstellungen → Räume als Kacheln** (Konzeptpapier, Abschnitt 5): alle Räume nebeneinander mit Name, Ist/Soll und einer **Qualitätsanzeige** – Thermostatstufe (1 indirekt, 2 Soll, 3 Ventil), Raumfühler vorhanden, Lernfortschritt des Raummodells („Modell plausibel“ / „lernt“ / „neu“); gelb, wo sich Nachrüsten oder Warten lohnt. Abgewählte Räume blass („lernt nicht“)
 - **Raumansicht:** Ein Klick auf eine Kachel öffnet darunter den Raum – oben die Geräte als Karten (Thermostat mit Ist, Soll und Ventil, Raumfühler, Feuchte, Ventil/Heizleistung, Ventilstellung; „nicht erreichbar“ rot; fehlt der Raumfühler: „dringend empfohlen“), darunter die bisherigen Einstellungen. Die Zeilen „automatisch gefunden“ je Raum (`roomStates`) entfallen – die Gerätekarten zeigen dasselbe
