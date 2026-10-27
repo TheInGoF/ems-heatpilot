@@ -935,6 +935,7 @@ ul.rules li { margin: 3px 0; }
     <div class="ov-kpis" id="ov-save-kpi"></div>
     <details class="more"><summary>Geschätzte Ersparnis pro Tag (kWh Gas) durch Absenken bei Abwesenheit und nachts. <span class="m"></span></summary><div id="savings-text">Berechnet mit dem gelernten Modell.</div></details>
     <div id="chart-savings"></div>
+    <div id="save-more"></div>
   </div>
   <div class="card" id="guards"></div>
   <div class="card" id="cert"></div>
@@ -3879,7 +3880,7 @@ function ovPage(p) {
 function drawOverview() {
   if ($("view-overview").hidden) return;
   ovCharts();
-  if (OV_PAGE === "haus") drawWeek();
+  if (OV_PAGE === "haus") { drawWeek(); loadSaveMore().catch(() => {}); }  // 0.64: Ersparnis gegenüber Zeitplan und früher
   if (OV_PAGE === "vorschau") drawPreview();
   if (OV_PAGE === "warmwasser" || OV_PAGE === "kessel") drawNext();  // volle Breite der sichtbaren Karte
   if (OV_PAGE === "raeume" && OV_VALVE) ovValve(OV_VALVE, false);
@@ -4043,6 +4044,34 @@ function roomRows() {
       ${field("Ventilstellung (Stellgröße)", `<input class="r-valvepos" list="dl-valvepos" value="${esc(r.valve_pos || "")}" placeholder="number.… (0–100 %)">`, "die number-Entität, mit der sich das Ventil in % stellen lässt")}
       </div><div class="r-relearn" data-climate="${esc(c.id)}">${relearnHtml(c.id)}</div></details></div>`;
   }).join("");
+}
+// 0.64: Ersparnis gegenüber festem Zeitplan (Stunden je Woche) und gegenüber früher (Heizgas je Gradtag, Zeitraum
+// wählbar) – unter Übersicht → Haus → Ersparnis (api/savings)
+async function loadSaveMore() {
+  const box = $("save-more"); if (!box) return;
+  const j = await getJSON("api/savings"); if (j.starting) return;
+  const t = j.time || {}, h = j.history || {}, r = h.recent || {}, ref = h.ref || {};
+  const hrs = (v) => v === null || v === undefined ? "–" : `${v < 0 ? "−" : ""}${fmt(Math.abs(v), 0)}`;
+  box.innerHTML = `<h3 class="st-h">Gegenüber festem Zeitplan</h3><div class="ov-kpis k3">` +
+    tile("weniger geheizt", hrs(t.total_h_week), "h/Wo", "Nächte und Abwesenheit") +
+    tile("Nächte", hrs(t.learned_used ? t.night_h_week : 0), "h/Wo", t.learned_used ? "gelernte Zeiten" : `möglich ${hrs(t.night_h_possible)} h – „Gelernte Zeiten verwenden“`) +
+    tile("Abwesenheit", hrs(t.away_h_week), "h/Wo", "niemand zu Hause, außerhalb der Nacht") + "</div>" +
+    `<h3 class="st-h">Gegenüber früher (witterungsbereinigt)</h3>` +
+    `<p class="muted">Heizgas je Gradtag (20/15): letzte 30 Tage ${r.kwh_per_kd ? fmt(r.kwh_per_kd, 2) + " kWh/Kd" : "–"} · Vergleich ${ref.kwh_per_kd ? fmt(ref.kwh_per_kd, 2) + " kWh/Kd" : "–"}` +
+    (h.saved_pct !== null && h.saved_pct !== undefined ? ` → <b>${fmt(h.saved_pct)} % ${h.saved_pct >= 0 ? "weniger" : "mehr"}</b>` : "") + `</p>` +
+    (h.note ? `<p class="muted">${esc(h.note)}</p>` : "") +
+    `<div class="row"><label class="muted">von <input type="date" id="save-ref-from" value="${esc(ref.from || "")}"></label>` +
+    `<label class="muted">bis <input type="date" id="save-ref-to" value="${esc(ref.to || "")}"></label>` +
+    `<button class="btn small" onclick="saveRef()">Vergleichen</button></div><p class="muted" id="save-ref-msg"></p>`;
+}
+async function saveRef() {
+  const msg = $("save-ref-msg");
+  try {
+    const j = await getJSON("api/savings/ref", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ from: $("save-ref-from").value, to: $("save-ref-to").value }) });
+    if (j.error) throw new Error(j.error);
+    await loadSaveMore();
+  } catch (e) { msg.textContent = e.message || String(e); }
 }
 // 0.61: Kessel und Haus auf einen Blick (Konzeptpapier, Abschnitt 5) – die eingestellten Aktoren und Sensoren als
 // Gerätekarten (Wert, Einheit, Verbindung) aus der Zuordnung der Entitäten; geändert wird weiter unten bzw. unter Experte

@@ -31,7 +31,12 @@ Luftfeuchte, Luftdruck, UV, Wolken), darunter die nächsten 24 Stunden: je Stund
 Regen (blass dahinter die Wahrscheinlichkeit), Wolken, Sonne (UV-Index) und Wind (blass dahinter die Böen) – aus der
 stündlichen Vorhersage der Wetter-Integration, Antippen eines Balkens zeigt den Wert; was die Integration nicht liefert,
 fällt weg (Zustand von Haus, Räumen, Ventilen, Warmwasser). Darunter die Empfehlungen je eine Zeile
-(antippen klappt den Beleg auf), die Ersparnis als eine Zeile (Karte und Lernstand stehen unter Haus) und die Unterseiten Haus, Räume, Warmwasser, Kessel, Anwesenheit und
+(antippen klappt den Beleg auf), die Ersparnis als eine Zeile (Karte und Lernstand stehen unter Haus; seit 0.64 dort
+zusätzlich **gegenüber festem Zeitplan** – Stunden je Woche weniger geheizt durch gelernte Nachtzeiten und
+Abwesenheit, ohne „Gelernte Zeiten verwenden“ als „möglich“ – und **gegenüber früher**: Heizgas je Gradtag (G 20/15,
+nur Heiztage unter 15 °C, ohne Warmwasser) der letzten 30 Tage gegen einen **selbst gewählten Vergleichszeitraum**,
+damit Zeiten mit früheren Automationen oder Tado-Zeitplänen ausgeschlossen werden können; je Zeitraum mindestens
+7 Heiztage) und die Unterseiten Haus, Räume, Warmwasser, Kessel, Anwesenheit und
 Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startseite mit drei Kacheln (seit 0.61 oben auf Kessel und Haus „auf einen Blick“:
 die eingestellten Aktoren und Sensoren als Gerätekarten mit Wert und Verbindung): **Räume** (Räume, Steuerung, Nachtzeiten), **Kessel**
 (Warmwasser, Desinfektion, Kessel steuern, Kesseldaten) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit &
