@@ -455,4 +455,4 @@ def test_version_changelog_and_docs():
     docs = (root / "ems_heatpilot" / "DOCS.md").read_text(encoding="utf-8")
     assert "**Aufbau der Oberfläche (seit 0.43):**" in docs and "Reiter **Diagnose" not in docs
     assert "Einstellungen → Haus & Kessel" not in docs and "Protokoll im Heizen-Reiter" not in docs
-    assert "**Oberfläche (seit 0.43):**" in (root / "README.md").read_text(encoding="utf-8")
+    assert "**Oberfläche (seit 0.58):**" in (root / "README.md").read_text(encoding="utf-8")

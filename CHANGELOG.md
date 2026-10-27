@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.58.1
+- **README und DOCS: Support-Umfang** (Konzeptpapier UI & Rollout, Abschnitt 8): getestet an einer Anlage, alles andere „Community / ungetestet“ ohne Anspruch auf Hilfe; Kessel nur mit EMS-Bus über EMS-ESP; Thermostate in drei Stufen (1 tado V3 indirekt und träge, 2 Zigbee mit Soll, 3 Ventil direkt per PID wie Shelly TRV), tado X ungetestet; externer Raumfühler dringend empfohlen
+- **Voraussetzung am Kessel gut sichtbar:** externe Regler, die Vorlauf-Soll oder Heizbetrieb schreiben (z. B. ES73), vor dem Steuern abbauen oder abschalten
+- README: Abschnitt Oberfläche auf den Stand 0.58
+
 ## 0.58.0
 - **Einstellungen nach dem UI-Styleguide (`docs/ui-styleguide.md`):** Startseite mit drei Kacheln **Räume** (Räume, Räume steuern, Nachtzeiten), **Kessel** (Kesseldaten, Kessel steuern, Warmwasser steuern, Temperaturen und Desinfektion) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit & Urlaub, Benachrichtigungen, Karten für Home Assistant) – höchstens zwei Ebenen statt zehn Unterseiten. Seltenes (gelesene Entitäten, Regler, Erweitert) steht am Ende jeder Seite im ausklappbaren Bereich **Experte**; die Zahl fehlender Entitäten steht an der Kachel
 - **Diagnose im Reiter Live:** Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log und Dateien stehen am Ende von Live (geladen beim ersten Öffnen); alle Sprünge („Einzelheiten ›“, Protokoll) führen dorthin

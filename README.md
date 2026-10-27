@@ -15,9 +15,8 @@ HeatPilot ist ein Home-Assistant-Add-on für Kessel mit **EMS-Bus** (Buderus,
 Bosch, Junkers, Sieger u. a.) über **[EMS-ESP](https://github.com/emsesp/EMS-ESP32)**,
 mit Raumregelung über **Tado** und Anwesenheit über die Home-Assistant-App.
 
-> **Beta (0.x): Raumregelung mit Tado** – über die Tado-Cloud-Integration oder lokal
-> über die Tado-Bridge in HomeKit (`homekit_controller`). Andere `climate`-Thermostate
-> in Home Assistant werden erkannt und lassen sich wählen, sind aber ungetestet.
+> **Beta (0.x).** Getestet an einer Anlage: EMS-Kessel mit Tado V3 und Shelly TRV. Was unterstützt wird und was
+> nicht, steht unter [Was unterstützt wird](#was-unterstützt-wird).
 
 ## Was es heute kann (0.37)
 
@@ -126,20 +125,44 @@ Stand der Absprachen 19.10.2026, Details in [docs/planung-vorlauf-ems.md](docs/p
 - Optional: Personen mit der Home-Assistant-App (Anwesenheit), eine Wetter-Integration
   (Vorhersage für den Vorheizplan, Bewölkung für die Sonne), Leistungssensor(en) fürs Haus (Nachtzeiten aus dem Stromverbrauch)
 
+## Was unterstützt wird
+
+HeatPilot ist ein Hobbyprojekt. Getestet ist es an **einer** Anlage – der des Entwicklers. Alles andere gilt als
+„Community / ungetestet“: Es kann funktionieren, einen Anspruch auf Hilfe für fremde Anlagen gibt es nicht. Fehler
+bitte mit Export als Issue melden (Live → Diagnose); Wünsche für andere Hardware nur mit eigenem Test.
+
+**Kessel:** ausschließlich mit **EMS-Bus über EMS-ESP**. Andere Kessel (OpenTherm, eBUS, Wärmepumpen) werden nicht
+unterstützt. Ohne Kesselsteuerung bleibt HeatPilot eine lernende Raumsteuerung nach Anwesenheit und gelernten Zeiten.
+
+> **Voraussetzung am Kessel:** Jeder externe Heizungsregler, der Vorlauf-Soll oder Heizbetrieb selbst schreibt
+> (z. B. **ES73**, RC310, RC35 am EMS-Bus), muss abgebaut oder abgeschaltet sein, bevor HeatPilot den Kessel steuert.
+> Sonst überschreibt er die Werte von HeatPilot regelmäßig, und beide arbeiten gegeneinander. Zum Beobachten und Lernen
+> darf er bleiben.
+
+**Thermostate** – drei Stufen, nach Güte der Regelung:
+
+| Stufe | Beispiel | Wie HeatPilot regelt | Stand |
+|---|---|---|---|
+| 1 – indirekt, träge | tado V3 (stellen lokal über HomeKit, Ventilstellung über die Cloud-Integration) | über das Soll, vorausschauend (z. B. 21 → 20 °C, wenn der Raum erfahrungsgemäß überheizt); ca. 5 min Verzögerung | getestet |
+| 2 – Soll direkt | Zigbee-Thermostate mit Ventilstellung in Home Assistant | über das Soll, Ventil live sichtbar | ungetestet |
+| 3 – Ventil direkt | Shelly TRV (Ventilöffnung als beschreibbare Entität) | PID über die Ventilöffnung, schleicht sich an das Soll heran | im Test |
+
+tado X: ungetestet, nicht bewertbar. Für jede Stufe dringend empfohlen: ein **externer Raumfühler** je Raum – der Fühler
+im Thermostat sitzt am Heizkörper und misst zu hoch (Einstellungen → Räume → Einzelheiten).
+
 ## Installation
 
 1. Home Assistant → Einstellungen → Add-ons → Add-on-Store → ⋮ → Repositories
 2. `https://github.com/TheInGoF/ems-heatpilot` eintragen
 3. „EMS HeatPilot“ installieren und starten
 4. In der Seitenleiste „HeatPilot“ öffnen – der Reiter **Einstellungen** führt
-   durch die Einrichtung (Vorschläge sind vorausgefüllt). Das Add-on hat keine YAML-Optionen. Welche Entitäten
-   HeatPilot liest – Kessel, Regler, Außen, Gas, Strom, Räume –, steht geordnet auf der Unterseite **Entitäten**: was
-   gefunden ist, was fehlt, Auswahl mit Suche. Die Entitäten, auf die HeatPilot schreibt, wählst du bei ihrer Funktion
-   (Einstellungen → Kessel).
+   durch die Einrichtung (Vorschläge sind vorausgefüllt). Das Add-on hat keine YAML-Optionen. Die Entitäten, auf die
+   HeatPilot schreibt, wählst du bei ihrer Funktion (Einstellungen → Kessel); was es nur liest, steht unter
+   Einstellungen → Haus → Experte.
 
-**Oberfläche (seit 0.43):** vier Reiter – **Heizen** (Räume bedienen), **Übersicht** (zuerst „Status“: Warmwasser,
-Kessel, Bereitschaft, Warnungen; dazu Haus, Räume, Warmwasser, Kessel, Anwesenheit, Vorschau), **Live** und
-**Einstellungen** (Startliste mit Unterseiten, zuletzt **Diagnose**). Die Schalter heißen überall
+**Oberfläche (seit 0.58):** vier Reiter – **Heizen** (Räume bedienen), **Übersicht** (Räume und Kessel grafisch,
+Wetter, die nächsten 24 Stunden, Empfehlungen), **Live** (Messwerte, darunter **Diagnose**) und **Einstellungen**
+(drei Kacheln Räume, Kessel, Haus; Seltenes unter „Experte“). Die Schalter heißen überall
 „Aus · Beobachten · HeatPilot steuert“.
 
 **Seit 0.44:** Wechselt ein Raum das Thermostat, fragt HeatPilot, ob Gelerntes übernommen wird (gleiches Thermostat, neu
