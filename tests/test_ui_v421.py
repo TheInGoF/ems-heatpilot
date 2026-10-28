@@ -137,7 +137,7 @@ def test_settings_rooms_advanced_certificate_and_polling_are_wired():
     assert rooms.index('<div id="room-restore"></div><div id="room-adopt"></div>') < rooms.index(
         '<details class="adopt alias" id="alias-box" ontoggle="aliasToggle(this)"') < rooms.index(
         '<p class="job-msg" id="rooms-job">${jobHtml(JOB)}</p>') < rooms.index('id="room-table"')
-    assert '</div>${advHouseHtml()}`, false)' in between(rs, 'card("Erweitert"', "set-entities")
+    assert '</div>${advHouseHtml()}`, false, "set-adv")' in between(rs, 'card("Erweitert"', "set-entities")
     assert "ALIAS = null; ALIAS_MSG = \"\";" in rs and "renderRoomRestore(); if (ALIAS_OPEN) loadAliases();" in rs
     assert "aliasReveal(); advReveal();" in rs
     assert "loadRoomRestore();" in source(js, "loadAdopt")

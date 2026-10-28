@@ -206,7 +206,7 @@ EM_NAMES = ("esc", "isTemp", "isSensor", "PICKERS", "dhwRank", "personRows", "EM
             "EM_MAX", "EM_PROBLEMS", "EM_BADGE", "EM_CUSTOM", "emInit", "emFits", "emOptions", "emItem", "emState",
             "emValue", "emHas", "emStateOf", "emSaved", "emCounts", "emRoomCount", "emCountText", "setNav", "expert",
             "emGroup", "emReq", "emRow", "emBadge", "GONE_HINT", "emNow", "emEnt", "emEdit", "emExtra", "emPersons",
-            "emRef", "emCollect", "SET_PAGES", "SET_KEYS", "setInfo", "navRow", "PAGE_GROUPS", "EM_PAGE_OF", "EXPERT_GROUPS",
+            "emRef", "emCollect", "SET_PAGES", "SET_KEYS", "setInfo", "navRow", "PAGE_GROUPS", "EM_PAGE_OF", "EXPERT_GROUPS", "MAIN_GROUPS", "mainGroups",
             "pageMissing", "emInline", "eid", "more",
             "DHW_LABEL", "BOILER_LABEL")  # 0.43: Startliste der Einstellungen, Entitäten bei ihrer Funktion
 SECTION_B = "// ---------------------------------------------------------------- Entitäten (0.39.1)"
@@ -278,7 +278,7 @@ def test_settings_split_into_general_and_entities():
     assert 'emInit(EMAP);' in rs and '$("set-menu").innerHTML = setNav();' in rs and '$("set-body").innerHTML = datalists() +' in rs
     assert re.findall(r'part\("([\w-]+)"', rs) == ["haus", "raeume", "exp-haus", "raeume", "haus", "kessel", "kessel", "haus",
                                                  "haus", "exp-haus"]
-    assert 'SET_KEYS.map((k) => page(k, glance(k) + (P[k] || "") + expert(k, P["exp-" + k]))).join("")' in rs
+    assert 'SET_KEYS.map((k) => page(k, glance(k) + (P[k] || "") + mainGroups(k) + expert(k, P["exp-" + k]))).join("")' in rs
     assert "emSum();" in rs
     titles = re.findall(r'card\("([^"]+)"', rs)
     assert titles == ["Verbindung", "Haus", "Gas & Kosten", "Räume", "Personen", "Urlaub", "Warmwasser steuern", "Temperaturen",
@@ -371,7 +371,7 @@ def test_rows_render_status_and_escape(tmp_path):
     r = run_em(tmp_path, data, """const row = (k) => emRow(EM_BY[k]);
       out({ flow: row("flow_temp"), bp: row("burner_power"), dhw: row("dhw_active"), auto: row("dhw_temp"),
             nav: setNav(), sum: emCountText(emCounts(EMAP.groups[0].entries)), extra: emExtra(),
-            page: expert("kessel") + expert("haus"), inl: emInline("personen") + emInline("benachrichtigungen"),
+            page: expert("kessel") + expert("haus") + mainGroups("haus"), inl: emInline("personen") + emInline("benachrichtigungen"),
             err: (() => { const m = EMAP; EMAP = { error: "<b>kaputt" }; const h = expert("haus"); EMAP = m; return h; })(),
             none: (() => { const m = EMAP; EMAP = null; const h = expert("haus"); EMAP = m; return h; })(),
             ref: emRef("gas_sensor", "gas", "Gaszähler"), rooms: emRoomCount(EMAP.groups[7].entries) });""")  # 0.41: Kessel über HeatPilot davor
@@ -393,7 +393,7 @@ def test_rows_render_status_and_escape(tmp_path):
     assert groups == ["kessel", "regler", "aussen", "gas", "strom"]
     assert 'Weitere Werte, die die Erkennung nicht gefunden hat <span class="muted">(' in r["page"]
     assert 'id="em-persons"' in r["inl"] and '<div id="notify-list">Ziele</div>' in r["inl"]
-    assert '<details class="expert" id="exp-kessel">' in r["page"] and '<details class="expert" id="exp-haus">' in r["page"]
+    assert '<div class="exp-parts" id="exp-kessel">' in r["page"] and '<div class="exp-parts" id="exp-haus">' in r["page"]  # 0.66: Kacheln
     assert "<b>kaputt" not in r["err"] and "Nicht lesbar: &lt;b>kaputt" in r["err"] and "Speichern ändert sie nicht" in r["err"]
     assert r["none"] == ""  # nichts geladen: kein „Experte“
     assert plain(r["ref"]) == "Gaszähler: sensor.gaszaehler automatisch gefunden – ändern unter Experte"

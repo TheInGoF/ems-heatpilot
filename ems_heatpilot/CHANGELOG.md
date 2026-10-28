@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.66.0
+- Einstellungen: nur Kacheln, Klick öffnet Unterseite
+- Experte als Kacheln statt Aufklapper
+- Strom & Aktivität als eigene Kachel unter Haus
+
 ## 0.65.1
 - Fix: Lampen und Mediaplayer im Sensor-Eimer wählbar
 

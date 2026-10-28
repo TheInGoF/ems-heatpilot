@@ -78,7 +78,7 @@ def test_settings_start_list_sidebar_and_save_bar():
     # Gerüst: Startseite, Kopf „‹ Einstellungen“, Inhalt
     sec = between(page, '<section id="view-settings"', "\n  </section>\n  <section")
     assert 'class="set-view set-on-menu" hidden>' in sec and '<nav class="set-menu" id="set-menu"' in sec
-    assert "onclick=\"setPage('menu')\">‹ Einstellungen</button>" in sec and '<div id="set-body">' in sec
+    assert 'id="set-back" onclick="setBack()">‹ Einstellungen</button>' in sec  # 0.66: zurück aus der Unterseite and '<div id="set-body">' in sec
     assert '<div id="view-diag">' not in sec
     # ab 900 px Seitenleiste 220 px, Inhalt höchstens 760 px; dort ist immer eine Seite offen
     css = between(page, "<style>", "</style>")
@@ -107,7 +107,8 @@ def test_settings_contents_per_page_and_entities_at_their_function():
     # E3: Schreib-Entitäten bei der Funktion, gelesene Werte unter „Experte“
     assert 'emInline("warmwasser")' in between(rs, 'part("kessel", card("Warmwasser steuern"', 'part("kessel", card("Kesseldaten"')
     assert 'const PAGE_GROUPS = { raeume: ["raeume"], kessel: ["kessel_hp", "warmwasser", "kessel", "regler"],' in js
-    assert 'const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas", "strom"] };' in js
+    assert 'const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas"] };' in js
+    assert 'const MAIN_GROUPS = { raeume: [], kessel: [], haus: ["strom"] };' in js  # 0.66: Strom & Aktivität vorn
     assert 'openSettings(EM_PAGE_OF[group] || "haus", "em-g-" + group);' in source(js, "emGo")
     # Steuerung in Karten, „Im Modus Beobachten“ zugeklappt mit den alten Feldern aus „Komfort & Strategie“
     cc = source(js, "controlCard")
@@ -358,10 +359,10 @@ def test_toast_only_in_heat_tab_and_dialog_message_in_dialog(tmp_path):
 def test_jumps_go_through_open_settings_and_open_overview():
     js = script()
     os_ = source(js, "openSettings")
-    assert 'setPage(page || "menu");\n  showTab("settings");\n  reveal(anchor);' in os_
+    assert 'setPage(page || "menu");\n  showTab("settings");' in os_ and "if (sec) setSub(sec.dataset.sec);\n  reveal(anchor);" in os_
     assert "a.scrollIntoView" in source(js, "reveal") and 'showTab("live");' in source(js, "openDiag")
     for fn, call in (("dhwOpenSettings", 'openSettings("kessel")'), ("boilerOpenSettings", 'openSettings("kessel")'),
-                     ("openAdvanced", 'openSettings("haus", "exp-haus")'), ("openAliases", 'openSettings("raeume")'),
+                     ("openAdvanced", 'openSettings("haus", "set-adv")'), ("openAliases", 'openSettings("raeume")'),
                      ("emRoom", 'openSettings("raeume")'), ("dhwOpenReady", 'openDiag("ready-dhw")'),
                      ("boilerOpenReady", 'openDiag("ready-boiler-hp")')):
         assert call in source(js, fn), fn

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.66.0
+- **Einstellungen höchstens zwei Klicks tief** (Konzeptpapier 5 / Styleguide 2): Einstellungen → Räume (1. Klick) → Wohnzimmer (2. Klick). Jede Seite zeigt nur noch Kacheln – je Abschnitt eine (Räume: je Raum eine, dazu „Räume verwalten“); ein Klick öffnet eine Unterseite mit nur diesem Abschnitt bzw. Raum (`setSections`, `setSub`, `showSub`), „‹ Räume“ führt zurück (`setBack`). In der Raum-Unterseite ist nichts mehr aufzuklappen
+- **„Experte“ ist kein Aufklapper mehr:** seine Teile (gelesene Entitäten, Regler, Erweitert) sind schlichtere Kacheln am Ende der Seite unter „Experte – selten nötig“
+- **Strom & Aktivität vorn:** die Gruppe mit Leistungssensoren und Sensor-Eimer steht als eigene Kachel auf der Seite Haus statt unter Experte (`MAIN_GROUPS`)
+- Sprünge aus Übersicht und Diagnose öffnen direkt den passenden Abschnitt; „Erweitert“ hat die Kennung `set-adv`
+- Tests: `tests/test_ebene2_66.py`
+
 ## 0.65.1
 - **Fix Sensor-Eimer: Lampen und Mediaplayer wählbar.** Die Auswahl in den Einstellungen (`GET api/entities`, `PICK_DOMAINS`) kannte die Bereiche `light` und `media_player` nicht – im Feld „Aktivität (Lampen, Bewegungsmelder …)“ erschienen deshalb nur Schalter und Melder
 - Test in `tests/test_sensor_bucket63.py`: alle Bereiche des Sensor-Eimers stehen in der Auswahl
