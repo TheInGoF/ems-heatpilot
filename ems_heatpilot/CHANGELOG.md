@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.67.1
+- Fix: Menü der Übersicht überlappte in der Seitenleiste
+- Lange Kacheltitel brechen um
+
 ## 0.67.0
 - Übersicht → Gewohnheiten: schlafend / wach / abwesend je Wochentag
 - „Strom & Aktivität“ heißt „Gewohnheiten erkennen“
