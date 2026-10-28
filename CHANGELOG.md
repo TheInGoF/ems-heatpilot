@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.65.1
+- **Fix Sensor-Eimer: Lampen und Mediaplayer wählbar.** Die Auswahl in den Einstellungen (`GET api/entities`, `PICK_DOMAINS`) kannte die Bereiche `light` und `media_player` nicht – im Feld „Aktivität (Lampen, Bewegungsmelder …)“ erschienen deshalb nur Schalter und Melder
+- Test in `tests/test_sensor_bucket63.py`: alle Bereiche des Sensor-Eimers stehen in der Auswahl
+
 ## 0.65.0
 - **Räume, die keine sind, dauerhaft ausblenden:** In der Raumansicht (Einstellungen → Räume, Kachel antippen) „Ausblenden – kein Raum“. Bisher ließ sich ein Raum nur abwählen und blieb als blasse Kachel stehen. Ausgeblendetes steht in `hidden_rooms`, verschwindet aus den Kacheln (unten „x ausgeblendet – zeigen“ zum Wieder-Einblenden) und wird von der Erkennung übergangen – auch nach Updates und neuer Suche
 - Tests: `tests/test_hidden_rooms65.py`

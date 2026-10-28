@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.65.1
+- Fix: Lampen und Mediaplayer im Sensor-Eimer wählbar
+
 ## 0.65.0
 - Räume, die keine sind, dauerhaft ausblenden
 

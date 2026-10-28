@@ -75,3 +75,10 @@ def test_confidence_and_activity_count():
     assert SampleMixin.activity_count(fake) == 1 and "on" in ACTIVE_STATES
     fake.found.activity = []
     assert SampleMixin.activity_count(fake) is None
+
+
+def test_lamps_and_media_players_are_offered():
+    """0.65.1: Die Auswahl der Einstellungen (GET api/entities) listet Lampen und Mediaplayer – sonst ließ sich der
+    Sensor-Eimer nur mit Schaltern und Meldern füllen."""
+    from heatpilot import entity_map, web
+    assert set(entity_map.KINDS["activity"][0]) <= set(web.PICK_DOMAINS)
