@@ -62,7 +62,8 @@ GROUPS: dict[str, tuple[str, str]] = {
                                            "Vorlauf-Soll und Heizbetrieb, seit 0.48 die Antipendelzeit."),
     "aussen": ("Außen & Wetter", "Außentemperatur und Vorhersage."),
     "gas": ("Gas & Anforderung", "Verbrauch und Anforderung."),
-    "strom": ("Strom & Aktivität", "Hausleistung und Aktivität (Lampen, Bewegungsmelder …) für die Nachtzeiten."),
+    "strom": ("Gewohnheiten erkennen", "Hausleistung und Aktivität (Lampen, Gruppen, Bewegungsmelder …) – daraus lernt "
+              "HeatPilot, wann ihr schlaft und wach seid; was gelernt ist, zeigt Übersicht → Gewohnheiten."),
     "raeume": ("Räume", "Thermostate und Sensoren je Raum – geändert wird unter Einstellungen → Räume."),
     "personen": ("Personen & Urlaub", "Wer für die Anwesenheit zählt, und ein Urlaubs-Schalter."),
     "benachrichtigungen": ("Benachrichtigungen", "Ziele wählen, speichern, dann mit der Testnachricht prüfen."),
@@ -93,7 +94,7 @@ KINDS: dict[str, tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]] = {
     "gas": (("sensor",), ("m³", "m3", "kWh"), ("gas", "energy")),
     "demand": (("sensor",), ("%",), ()),
     "power": (("sensor",), ("W", "kW"), ("power",)),
-    "activity": (("light", "switch", "binary_sensor", "input_boolean", "media_player"), (), ()),  # 0.63
+    "activity": (("light", "switch", "binary_sensor", "input_boolean", "media_player", "group"), (), ()),  # 0.63, Gruppen 0.67
     "person": (("person",), (), ()),
     "toggle": (("input_boolean", "switch", "binary_sensor"), (), ()),
     "notify": (("notify",), (), ()),
@@ -205,7 +206,7 @@ FIELD_ENTRIES: dict[str, tuple[str, str, str, bool, bool, str]] = {
                       "Nachtzeiten."),
     "power_exclude": ("strom", "Nicht zählen (Waschmaschine, Wallbox …)", "power", True, False,
                       "Verbraucher, die auch nachts laufen – werden von der Hausleistung abgezogen."),
-    "activity_sensors": ("strom", "Aktivität (Lampen, Bewegungsmelder …)", "activity", True, False,
+    "activity_sensors": ("strom", "Aktivität (Lampen, Gruppen, Bewegungsmelder …)", "activity", True, False,
                          "Sensor-Eimer: jede Entität, die an ist, zählt als „wach“ – daraus lernt HeatPilot mit der "
                          "Hausleistung Schlafens- und Aufwachzeit. Ein kurzes Licht nachts (Toilette) weckt nicht."),
     "persons": ("personen", "Personen", "person", True, True,

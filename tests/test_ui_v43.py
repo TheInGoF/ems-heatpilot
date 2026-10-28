@@ -108,7 +108,7 @@ def test_settings_contents_per_page_and_entities_at_their_function():
     assert 'emInline("warmwasser")' in between(rs, 'part("kessel", card("Warmwasser steuern"', 'part("kessel", card("Kesseldaten"')
     assert 'const PAGE_GROUPS = { raeume: ["raeume"], kessel: ["kessel_hp", "warmwasser", "kessel", "regler"],' in js
     assert 'const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas"] };' in js
-    assert 'const MAIN_GROUPS = { raeume: [], kessel: [], haus: ["strom"] };' in js  # 0.66: Strom & Aktivität vorn
+    assert 'const MAIN_GROUPS = { raeume: [], kessel: [], haus: ["strom"] };' in js  # 0.66: Gewohnheiten erkennen vorn
     assert 'openSettings(EM_PAGE_OF[group] || "haus", "em-g-" + group);' in source(js, "emGo")
     # Steuerung in Karten, „Im Modus Beobachten“ zugeklappt mit den alten Feldern aus „Komfort & Strategie“
     cc = source(js, "controlCard")

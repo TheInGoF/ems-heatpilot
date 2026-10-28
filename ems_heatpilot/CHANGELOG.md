@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.67.0
+- Übersicht → Gewohnheiten: schlafend / wach / abwesend je Wochentag
+- „Strom & Aktivität“ heißt „Gewohnheiten erkennen“
+- Fix: Gruppen im Sensor-Eimer wählbar
+
 ## 0.66.0
 - Einstellungen: nur Kacheln, Klick öffnet Unterseite
 - Experte als Kacheln statt Aufklapper
