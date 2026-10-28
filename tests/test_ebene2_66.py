@@ -1,6 +1,6 @@
 """0.66: zweite Ebene der Einstellungen – Einstellungen → Räume (1. Klick) → Wohnzimmer (2. Klick). Jede Seite zeigt nur
 Kacheln (je Abschnitt eine, Räume zusätzlich je Raum), ein Klick öffnet eine Unterseite mit nur diesem Abschnitt;
-„Experte“ ist kein Aufklapper mehr, seine Teile sind schlichtere Kacheln am Ende; Strom & Aktivität steht vorn."""
+„Experte“ ist kein Aufklapper mehr, seine Teile sind schlichtere Kacheln am Ende; „Gewohnheiten erkennen“ (früher Strom & Aktivität) steht vorn."""
 
 from test_ui_v361 import html, script, source
 

@@ -40,7 +40,7 @@ damit Zeiten mit früheren Automationen oder Tado-Zeitplänen ausgeschlossen wer
 Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startseite mit drei Kacheln (seit 0.61 oben auf Kessel und Haus „auf einen Blick“:
 die eingestellten Aktoren und Sensoren als Gerätekarten mit Wert und Verbindung): **Räume** (Räume, Steuerung, Nachtzeiten), **Kessel**
 (Warmwasser, Desinfektion, Kessel steuern, Kesseldaten) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit &
-Urlaub, Benachrichtigungen, Karten, seit 0.66 auch Strom & Aktivität). Seit 0.66 höchstens zwei Klicks tief:
+Urlaub, Benachrichtigungen, Karten, seit 0.66 auch Gewohnheiten erkennen). Seit 0.66 höchstens zwei Klicks tief:
 Jede Seite zeigt nur Kacheln – je Abschnitt eine, bei Räume zusätzlich je Raum eine; ein Klick öffnet eine Unterseite
 mit nur diesem Abschnitt bzw. Raum, „‹ Räume“ führt zurück. Seltenes (gelesene Entitäten, Regler, Erweitert) steht als
 schlichtere Kacheln am Ende unter **Experte**. **Diagnose** (Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien) steht am Ende
@@ -792,10 +792,10 @@ Plans.
 Wann das Haus schlafen geht, verrät der Stromzähler: Abends fällt der Verbrauch auf das Nachtniveau
 (Standby), morgens steigt er wieder (Kaffeemaschine, Licht, Bad). Seit 0.36 lernt HeatPilot daraus
 den Wochenplan der Nachtabsenkung – als Vorschlag oder, mit dem Häkchen, als wirksame Zeiten.
-Die Sensoren wählst du unter Einstellungen → Haus → Experte → Strom & Aktivität; das Häkchen steht unter
+Die Sensoren wählst du unter Einstellungen → Haus → Gewohnheiten erkennen; das Häkchen steht unter
 Einstellungen → Räume, unter dem Wochenplan (dort auch, welche Sensoren gewählt sind).
 
-**Sensor-Eimer** (seit 0.63): Unter „Aktivität (Lampen, Bewegungsmelder …)“ lassen sich beliebige Entitäten
+**Sensor-Eimer** (seit 0.63): Unter „Aktivität (Lampen, Gruppen, Bewegungsmelder …)“ lassen sich beliebige Entitäten
 hineinwerfen – Lampen, Schalter, Bewegungs- und Türmelder, Mediaplayer. Jede zählt als „wach“, solange sie an ist (an,
 offen, spielt, Bewegung erkannt); HeatPilot speichert je Messpunkt, wie viele an sind. Ein 10-min-Abschnitt gilt als
 wach, wenn die Hausleistung über der Schwelle liegt **oder** eine Entität an ist; ohne Leistungssensor zählt der Eimer
@@ -808,6 +808,11 @@ Heizstart rechnet HeatPilot je Raum selbst zurück (Vorheizen). Unter dem Wochen
 04:50, sehr sicher · Wochenende 08:10, sicher“**; je Tag „sehr sicher“ (ab 5 Nächten mit höchstens 30 min Streuung),
 „sicher“ (belastbar) oder „unsicher“. Der Eimer wirkt ab den Nächten nach dem Speichern (die Historie von Lampen liest
 HeatPilot nicht nach).
+
+**Was gelernt ist** (seit 0.67): Übersicht → Gewohnheiten zeigt je Wochentag und Stunde **schlafend** (die Nacht laut
+gelernten Zeiten, wo sie für den Tag belastbar sind, sonst laut Wochenplan), **abwesend** (laut Gewohnheit der Personen
+ist wahrscheinlich niemand zu Hause) und sonst **wach**; dazu je Tag „gelernt“ oder „eingestellt“ und wie sicher die
+Aufwachzeit ist. Gruppen (`group.…`) lassen sich seit 0.67 ebenfalls in den Eimer werfen.
 
 - **Leistungssensoren (Haus, ggf. je Phase):** ein oder mehrere Sensoren in W oder kW; die Summe
   ist die Hausleistung, bei drei Phasen also alle drei eintragen. Gemeint ist der **Verbrauch** des

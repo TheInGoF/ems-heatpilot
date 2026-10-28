@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.67.0
+- **Gelernte Gewohnheiten sichtbar:** Übersicht → Gewohnheiten (bisher „Anwesenheit“) zeigt oben je Wochentag und Stunde, was HeatPilot gelernt hat – **schlafend** (Nachtzeiten aus Hausleistung und Sensor-Eimer, wo für den Tag belastbar, sonst der eingestellte Wochenplan), **abwesend** (laut Gewohnheit der Personen ist wahrscheinlich niemand zu Hause, unter 30 %) und sonst **wach**. Je Tag steht dabei, ob die Zeiten gelernt oder eingestellt sind und wie sicher die Aufwachzeit ist. Neu: `habits.py`, `GET api/habits` – nichts wird neu gerechnet, nur Vorhandenes zusammengesetzt
+- **„Strom & Aktivität“ heißt jetzt „Gewohnheiten erkennen“** (Einstellungen → Haus) und verweist auf die neue Anzeige
+- **Fix Sensor-Eimer: Gruppen wählbar.** Die Auswahl kannte den Bereich `group` nicht; Gruppen von Lampen oder Meldern zählen jetzt als „wach“, solange sie an sind
+- Tests: `tests/test_habits67.py`
+
 ## 0.66.0
 - **Einstellungen höchstens zwei Klicks tief** (Konzeptpapier 5 / Styleguide 2): Einstellungen → Räume (1. Klick) → Wohnzimmer (2. Klick). Jede Seite zeigt nur noch Kacheln – je Abschnitt eine (Räume: je Raum eine, dazu „Räume verwalten“); ein Klick öffnet eine Unterseite mit nur diesem Abschnitt bzw. Raum (`setSections`, `setSub`, `showSub`), „‹ Räume“ führt zurück (`setBack`). In der Raum-Unterseite ist nichts mehr aufzuklappen
 - **„Experte“ ist kein Aufklapper mehr:** seine Teile (gelesene Entitäten, Regler, Erweitert) sind schlichtere Kacheln am Ende der Seite unter „Experte – selten nötig“

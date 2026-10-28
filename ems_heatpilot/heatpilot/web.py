@@ -51,7 +51,7 @@ from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, cl
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness, web_guest
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
 from . import boiler_period, boiler_power, disinfect_entity, live_log, report, room_identity, savings_compare
-from . import sensor_gone, web_adopt, web_restore, web_weather
+from . import habits, sensor_gone, web_adopt, web_restore, web_weather
 from . import card_bridge, heat_actions, web_switch
 from .emsesp import EmsEsp
 
@@ -60,7 +60,7 @@ STATIC = Path(__file__).parent / "static"
 
 # Domains, aus denen die Oberfläche Entitäten zur Auswahl anbietet
 PICK_DOMAINS = ("sensor", "binary_sensor", "climate", "weather", "input_boolean", "switch",
-                "number", "select", "person", "counter", "light", "media_player")  # 0.65.1: Sensor-Eimer
+                "number", "select", "person", "counter", "light", "media_player", "group")  # Sensor-Eimer
 
 
 def clean(value):
@@ -568,6 +568,6 @@ def make_app(app) -> web.Application:
     # 0.44: Thermostatwechsel und „Ventil neu lernen“ (web_switch)
     for method, path, handler in sum((m.routes(app, json_response) for m in  # 0.55.2: + web_weather (Wetter 24 h)
                                       (web_adopt, web_restore, web_switch, live_log, web_weather, card_bridge,
-                                       report, savings_compare)), []):  # 0.59.2: Fehlerbericht, 0.64: Ersparnis
+                                       report, savings_compare, habits)), []):  # 0.59.2: Fehlerbericht, 0.64: Ersparnis
         web_app.router.add_route(method, path, handler)
     return web_app

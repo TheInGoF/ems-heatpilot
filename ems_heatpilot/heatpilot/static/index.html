@@ -683,6 +683,12 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .now-row .chip.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
 .now-row .chip[disabled] { opacity: .5; cursor: default; }
 .now-row .now-n { flex-basis: 100%; }
+.hb-grid { display: grid; gap: 3px; margin: var(--s2) 0; }
+.hb-row { display: grid; grid-template-columns: 2.2em 1fr 9.5em; gap: 6px; align-items: center; font-size: var(--fs-small); }
+.hb-cells { display: grid; grid-template-columns: repeat(24, 1fr); gap: 1px; }
+.hb-cells i { height: 16px; border-radius: 2px; }
+.hb-axis b { font-weight: normal; color: var(--text-muted); }
+.hb-src { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .sec-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
 .sec-tiles .st-h { grid-column: 1 / -1; margin: var(--s2) 0 0; }
 .sec-tile { min-height: 72px; justify-content: space-between; }
@@ -808,7 +814,7 @@ ul.rules li { margin: 3px 0; }
           <option value="12">12 h</option><option value="24" selected>24 h</option><option value="72">3 Tage</option><option value="168">7 Tage</option></select></div>
       <p class="muted" id="pres-text" style="margin:6px 0 8px"></p>
       <div id="live-persons"></div>
-      <p class="muted" style="margin:8px 0 0">Gewohnheit und Heimkehr-Kontrolle: <a href="#" onclick="openOverview('anwesenheit');return false">Übersicht → Anwesenheit ›</a></p>
+      <p class="muted" style="margin:8px 0 0">Gewohnheit und Heimkehr-Kontrolle: <a href="#" onclick="openOverview('anwesenheit');return false">Übersicht → Gewohnheiten ›</a></p>
     </div>
   <div id="view-diag">
     <h3 class="nav-h">Diagnose</h3>
@@ -1010,6 +1016,10 @@ ul.rules li { margin: 3px 0; }
   </div>
   </div>
   <div id="ov-anwesenheit" hidden>
+  <div class="card" id="habits">
+    <h2>Gelernte Gewohnheiten</h2>
+    <div id="habits-body"><p class="muted">Lädt …</p></div>
+  </div>
   <div id="ov-pres"><p class="muted">Keine Personen eingerichtet.</p></div>
   <div class="card">
     <h2>Vorheizplan (nur Empfehlung)</h2>
@@ -3567,7 +3577,7 @@ function renderPresenceNow(j) {
       { yMin: 0, height: 150, bands: [{ name: "zu Hause", values: s.home, color: "var(--band-home)" }], label: "Entfernung " + p.name });
   });
 }
-// Übersicht → Anwesenheit (0.43): was HeatPilot gelernt hat – Gewohnheit je Person, Heimkehr-Kontrolle zugeklappt
+// Übersicht → Gewohnheiten (0.43, bis 0.67 „Anwesenheit“): was HeatPilot gelernt hat – Gewohnheit je Person, Heimkehr-Kontrolle zugeklappt
 function renderPresenceLearned(j) {
   if (!j.persons.length) { $("ov-pres").innerHTML = '<p class="muted">Keine Personen eingerichtet – Einstellungen → Haus.</p>'; return; }
   const err = (c) => c ? `${c.error_min > 0 ? "+" : c.error_min < 0 ? "−" : "±"}${Math.abs(c.error_min)}′ <span class="muted">${c.source === "gps" ? "GPS" : c.source === "gewohnheit" ? "Gew." : esc(c.source || "")}</span>` : "–";
@@ -3858,7 +3868,7 @@ function reveal(anchor) {
 // Übersicht (0.43): Startseite (Status, Empfehlungen, Ersparnis, Bereiche, Lernstand, Modelle) und Unterseiten im
 // Muster der Einstellungen. Alle Unterseiten stehen im DOM (hidden); die zuletzt offene merkt sich store (hp-ov-page)
 const OV_PAGES = [["start", "Start"], ["haus", "Haus"], ["raeume", "Räume"], ["warmwasser", "Warmwasser"], ["kessel", "Kessel"],
-  ["anwesenheit", "Anwesenheit"], ["vorschau", "Vorschau"]];
+  ["anwesenheit", "Gewohnheiten"], ["vorschau", "Vorschau"]];
 const OV_KEYS = OV_PAGES.map((p) => p[0]);
 let OV_PAGE = "start", OV_BURNER = "starts", LAST_SUMMARY_HIST = null;
 // Kurzinfo je Bereich (ein Wert), aus der letzten Antwort von api/summary bzw. api/preview
@@ -3902,7 +3912,24 @@ function drawOverview() {
   if (OV_PAGE === "vorschau") drawPreview();
   if (OV_PAGE === "warmwasser" || OV_PAGE === "kessel") drawNext();  // volle Breite der sichtbaren Karte
   if (OV_PAGE === "raeume" && OV_VALVE) ovValve(OV_VALVE, false);
-  if (OV_PAGE === "anwesenheit") loadPresence().catch(() => {});
+  if (OV_PAGE === "anwesenheit") { loadPresence().catch(() => {}); loadHabits().catch(() => {}); }
+}
+// 0.67: Gelernte Gewohnheiten je Wochentag und Stunde – schlafend (Nachtzeiten), abwesend (Personen), sonst wach
+const HABIT_COLORS = { schlafend: "var(--series-4)", wach: "var(--series-3)", abwesend: "var(--series-5)" };
+async function loadHabits() {
+  const j = await getJSON("api/habits");
+  if (!j.starting) $("habits-body").innerHTML = habitsHtml(j);
+}
+function habitsHtml(j) {
+  const cell = (st) => `<i style="background:${HABIT_COLORS[st]}" title="${st}"></i>`;
+  const rows = j.days.map((d) => `<div class="hb-row"><span class="hb-day">${d.day}</span><div class="hb-cells">${d.hours.map(cell).join("")}</div>` +
+    `<span class="hb-src muted">${d.source}${d.sure ? ", " + esc(d.sure) : ""}</span></div>`).join("");
+  const axis = '<div class="hb-row hb-axis"><span></span><div class="hb-cells">' +
+    [0, 6, 12, 18].map((h) => `<b style="grid-column:${h + 1}/span 6">${h}</b>`).join("") + "</div><span></span></div>";
+  const legend = '<div class="legend">' + Object.entries(HABIT_COLORS).map(([k, c]) => `<span><i class="lk" style="border-top-color:${c}"></i>${k}</span>`).join("") + "</div>";
+  const notes = [j.nights ? `Nachtzeiten aus ${j.nights} ${j.nights === 1 ? "Nacht" : "Nächten"}` : "noch keine Nacht ausgewertet – es gilt der Wochenplan",
+    j.persons ? "Abwesenheit aus den Gewohnheiten der Personen" : "ohne Personen keine Abwesenheit"];
+  return legend + `<div class="hb-grid">${axis}${rows}</div><p class="muted">${notes.join(" · ")}. Mehr Quellen: Einstellungen → Haus → Gewohnheiten erkennen.</p>`;
 }
 // Kessel → Brenner: ein Graf hinter dem Umschalter Starts | Ohne Bedarf | Wartezeit
 function ovBurnerView(v) {
@@ -5937,7 +5964,7 @@ function expert(k, html = "") {
   const body = html + err + gs.map(emGroup).join("");
   return body ? `<div class="exp-parts" id="exp-${k}">${body}</div>` : "";  // 0.66: je Teil eine Kachel „Experte“
 }
-// 0.66: Gruppen der Zuordnung, die nicht selten nötig sind, als eigene Abschnitte (Haus: Strom & Aktivität)
+// 0.66: Gruppen der Zuordnung, die nicht selten nötig sind, als eigene Abschnitte (Haus: Gewohnheiten erkennen)
 const MAIN_GROUPS = { raeume: [], kessel: [], haus: ["strom"] };
 const mainGroups = (k) => EMAP && !EMAP.error ? EMAP.groups.filter((g) => MAIN_GROUPS[k].includes(g.key)).map(emGroup).join("") : "";
 // Entitäten einer Gruppe direkt bei ihrer Funktion (0.43, E3): Warmwasser, Kessel, Personen & Urlaub, Benachrichtigungen
