@@ -238,7 +238,7 @@ def test_unexpected_cold_draw_raises_reserve_if_the_floor_is_bound():
 
 def test_floor_reports_margin_bound_only_with_someone_home():
     m, cfg = DhwModel(), _cfg()
-    at = datetime(2026, 10, 19, 3, 0)
+    at = datetime(2026, 10, 19, 4, 0)  # kurz vor dem Nachtende: Speicher lädt (seit 0.68 knapper)
     assert m.recommend(at, True, None, cfg)["margin_bound"]
     assert m.recommend(at, None, None, cfg)["margin_bound"]
     assert not m.recommend(at, False, None, cfg)["margin_bound"]

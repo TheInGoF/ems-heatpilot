@@ -11,8 +11,10 @@ Zustände (wie eine übliche Automation: fallen lassen, wenn niemand Wasser brau
 
 * Urlaub bzw. niemand zu Hause und die Ankunft weiter weg als Aufheizdauer + ``BUFFER_H`` → Minimum
   (Ankunft unbekannt, weil die Gewohnheit noch lernt: das heutige Soll bleibt),
-* Nacht laut Nachtplan (eingestellt bzw. gelernt, ``Config.is_night_at``), Nachtende weiter weg als Aufheizdauer
-  + ``BUFFER_H`` → Minimum,
+* Nacht laut Nachtplan (eingestellt bzw. gelernt, ``Config.is_night_at``) → Minimum, bis die Ladung gerade noch
+  ``HEAT_GAP_H`` vor dem frühesten Heizstart der Räume fertig wird (``heat_start``, seit 0.68; ohne Heizstart vor
+  dem Nachtende). Die Ladedauer rechnet ab der aktuellen Speichertemperatur (``temp``), sonst ab dem Minimum: Startet
+  das Vorheizen um 4:13 und braucht das Wasser 23 min, lädt der Speicher ab 3:45 – nicht mehr zu einer festen Zeit,
 * sonst (jemand zu Hause und wach, kurz vor Ankunft bzw. Aufstehen) → Komfort + gelernte Reserve; erwartete große
   Zapfung → max(Komfort, Minimum + Bedarf).
 
@@ -34,7 +36,8 @@ from .values import num
 
 HYST_ASSUMED_K = 5.0  # Einschalthysterese, wenn der Kessel keine meldet
 HYST_HINT_K = 5.0     # größer: Hinweis, dass eine kleinere Hysterese Bereitschaftsverlust spart
-BUFFER_H = 0.5        # Puffer zur Aufheizdauer vor Ankunft bzw. Aufstehen (0.46.2: 1 h war zu früh)
+BUFFER_H = 0.5        # Puffer zur Aufheizdauer vor Ankunft (0.46.2: 1 h war zu früh)
+HEAT_GAP_H = 5 / 60   # nachts: Warmwasser so lange vor dem Heizstart fertig (0.68)
 DRAW_AHEAD_H = 1.0    # Zapfungen mindestens so weit voraus sehen (0.46.2)
 AWAY, VACATION, NIGHT, OPEN = "niemand zu Hause", "Urlaub", "Nacht", "offen"
 HOME, UNKNOWN = "jemand zu Hause", "Anwesenheit unbekannt"
@@ -77,14 +80,29 @@ def _night(cfg, now: datetime) -> bool:
     return bool(is_night and is_night(now))
 
 
-def _drop(now, someone_home, next_arrival, cfg, horizon: float, unknown_from, vacation: bool) -> str | None:
+def heat_start(desireds, now: datetime) -> datetime | None:
+    """Frühester Heizstart der Räume (Beginn des Vorheizens) aus ihren Wunschzuständen – ``now``, wenn einer schon
+    vorheizt. Nur nachts von Belang (``_drop`` nimmt ihn, wenn er vor dem Nachtende liegt)."""
+    return min((now if d.phase == "vorheizen" else d.until for d in desireds
+                if d.phase in ("nacht", "vorheizen") and d.until is not None), default=None)
+
+
+def _ready_by(cfg, now: datetime, start: datetime | None) -> datetime:
+    """Bis wann der Speicher nachts geladen sein soll: ``HEAT_GAP_H`` vor dem Heizstart bzw. dem Nachtende."""
+    end = cfg.night_end_at(now)
+    return (start if start is not None and start <= end else end) - timedelta(hours=HEAT_GAP_H)
+
+
+def _drop(now, someone_home, next_arrival, cfg, horizon: float, unknown_from, vacation: bool,
+          charge_h: float, start: datetime | None) -> str | None:
     """Warum der Speicher bis zum Minimum fallen darf (Urlaub, niemand zu Hause, Nacht) – ``OPEN``, wenn die
-    Ankunft unbekannt ist; None: Warmwasser kann innerhalb der Aufheizdauer gebraucht werden."""
+    Ankunft unbekannt ist; None: Warmwasser kann innerhalb der Aufheizdauer gebraucht werden. Nachts reicht die
+    Ladedauer ``charge_h`` bis kurz vor den Heizstart ``start``."""
     if someone_home is False and (next_arrival is None or _hours(now, next_arrival) > horizon):
         if unknown_from is not None and _hours(now, unknown_from) <= horizon:
             return OPEN
         return VACATION if vacation else AWAY
-    if _night(cfg, now) and _hours(now, cfg.night_end_at(now)) > horizon:
+    if _night(cfg, now) and _hours(now, _ready_by(cfg, now, start)) > charge_h:
         return NIGHT
     return None
 
@@ -124,17 +142,21 @@ def _out(target: int, h: float, assumed: bool, why: str, drop: bool, *, expects:
 
 def recommend(model, now: datetime, someone_home: bool | None, next_arrival: datetime | None, cfg, *,
               unknown_from: datetime | None = None, current_set: float | None = None,
-              disinfect_h: float | None = None, hyst=None, vacation: bool = False) -> dict:
+              disinfect_h: float | None = None, hyst=None, vacation: bool = False, temp: float | None = None,
+              heat_start: datetime | None = None) -> dict:
     """Empfohlenes Warmwasser-Soll jetzt (``target``) und die Temperatur, über der der Speicher bleibt (``hold``).
 
     ``hyst``: Einschalthysterese des Kessels (``dhw_hyst_on``, Vorzeichen egal), None = unbekannt.
     ``unknown_from``/``current_set``: Ist offen, ob jemand heimkommt, bleibt das heutige Soll.
     ``disinfect_h``: Ladedauer der Desinfektion zum Termin (``dhw_disinfect.ready_hours``).
+    ``temp``/``heat_start`` (0.68): Speichertemperatur jetzt und frühester Heizstart – nachts fertig kurz davor.
     """
     h, assumed = hysteresis(hyst)
     comfort = cfg.dhw_comfort_temp + model.comfort_margin
-    horizon = (capped(comfort, cfg) - cfg.dhw_min_temp) / max(model.charge_rate_kh, 5.0) + BUFFER_H
-    drop = _drop(now, someone_home, next_arrival, cfg, horizon, unknown_from, vacation)
+    rate = max(model.charge_rate_kh, 5.0)
+    horizon = (capped(comfort, cfg) - cfg.dhw_min_temp) / rate + BUFFER_H
+    charge_h = max(capped(comfort, cfg) - (cfg.dhw_min_temp if temp is None else temp), 0.0) / rate
+    drop = _drop(now, someone_home, next_arrival, cfg, horizon, unknown_from, vacation, charge_h, heat_start)
     if drop == OPEN:
         keep = round(current_set) if current_set is not None else capped(cfg.dhw_comfort_temp, cfg)
         return _out(keep, h, assumed, "Ankunft unbekannt (Gewohnheit lernt noch), Soll bleibt", False)

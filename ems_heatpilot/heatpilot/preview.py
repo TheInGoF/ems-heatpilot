@@ -415,7 +415,7 @@ class _Run:
             arrival, unknown = (pres.arrival, pres.arrival_unknown) if hc == 0 else (None, None)
         rec = self.eng.dhw.recommend(t, someone, arrival, self.cfg, unknown_from=unknown,
                                      current_set=self.dhw_last, disinfect_h=self.dis_h, hyst=self.dhw_hyst,
-                                     vacation=pres.vacation)
+                                     vacation=pres.vacation, heat_start=getattr(self.eng, "heat_start", None))
         self.dhw_last = rec["target"]
         # dieselbe Rundung und Schwelle wie Weg W (0.38)
         return (dhw_control.wish(rec["target"], self.cfg), rec["reason"], dhw_control.unrounded(rec["target"], self.cfg),

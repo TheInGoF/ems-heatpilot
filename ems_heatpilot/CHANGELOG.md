@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.68.0
+- Warmwasser nachts fertig 5 min vor dem Heizstart
+- Ladedauer ab aktueller Speichertemperatur
+- Fix: keine Kessel-Pause mehr durch Warmwasser-Ladung
+
 ## 0.67.1
 - Fix: Menü der Übersicht überlappte in der Seitenleiste
 - Lange Kacheltitel brechen um
