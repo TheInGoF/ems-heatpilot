@@ -323,7 +323,7 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         sample, rooms, _ = self.snapshot()
         ts = now_ts or int(time.time())
         self.live.add(ts, sample, rooms)
-        live_log.record(self.store, ts, sample, rooms)  # 0.49.2: 48 h in der Datenbank, als CSV abrufbar
+        live_log.record(self.store, ts, sample, rooms, self.persons)  # 0.49.2: 48 h als CSV; Personen seit 0.68
 
     # ------------------------------------------------------------------ Speichern
     def save(self) -> None:

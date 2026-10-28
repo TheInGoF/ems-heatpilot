@@ -28,13 +28,12 @@ denselben Fehlerregeln; erst ein erfolgreicher Schreibvorgang macht ihren Schrit
 eigener Schritt nie als Hand zählt: Steht am Thermostat, was HeatPilot zuletzt schreiben wollte (``tried``, auch nach
 einem Teilfehler in einer Gruppe oder einem Neuaufbau während des Aufrufs) bzw. der laufende Schritt, gilt das als
 geschrieben; meldet es bis zu ``GRACE_TICKS`` Takte nach dem Schreiben noch den Wert von vorher, ist das Geschriebene
-noch nicht angekommen (``_observe``). Verwirft die Führung einen Schritt wegen Hand (auch „aus“), gilt das Wunschsoll
-als zuletzt geschrieben – die Hand bleibt dann wie oben bis zum Phasenwechsel. In der Pause geht nur das Zurück der
-Führung hinaus; vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt ``release`` laufende Schritte einmal zurück.
+noch nicht angekommen (``_observe``; danach einmal erneut geschrieben statt Hand, 0.68). Verwirft die Führung einen
+Schritt wegen Hand (auch „aus“), gilt das Wunschsoll als zuletzt geschrieben – die Hand bleibt dann wie oben bis zum
+Phasenwechsel. In der Pause geht nur das Zurück der Führung hinaus; vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt ``release`` laufende Schritte einmal zurück.
 Sollwerte gelten ab 0,1 K als verschieden (``_same``, mit Toleranz für Gleitkommareste).
-``plan()`` läuft im Takt der Engine (nach ``dhw_step``) und sammelt die Schreibvorgänge,
-``apply()`` führt sie danach aus (asynchron, nur über ``Control``). ``stop()`` (main.build beim
-Neuaufbau) hält ein noch laufendes ``apply()`` an, damit die alte Schleife nicht weiterschreibt.
+``plan()`` läuft im Takt der Engine (nach ``dhw_step``) und sammelt die Schreibvorgänge, ``apply()`` führt sie danach
+aus (nur über ``Control``); ``stop()`` (main.build beim Neuaufbau) hält ein laufendes ``apply()`` an.
 """
 
 from __future__ import annotations
@@ -344,11 +343,10 @@ class ControlLoop:
         return expired
 
     def _observe(self, c: str, current: float | None) -> bool:
-        """Eigenes am Thermostat erkennen, bevor Hand zählt (0.40). Meldet es bis zu ``GRACE_TICKS`` Takte nach einem
-        Schreibvorgang noch den Wert von vorher, ist das Geschriebene noch nicht angekommen (True: keine Hand, nichts
-        Neues). Steht dort, was HeatPilot zuletzt schreiben wollte (``tried`` – auch nach einem Teilfehler in einer
-        Gruppe oder einem Neuaufbau während des Aufrufs) bzw. der laufende Schritt der Führung, gilt es als
-        geschrieben."""
+        """Eigenes am Thermostat erkennen, bevor Hand zählt (0.40). Meldet es bis zu ``GRACE_TICKS`` Takte nach dem
+        Schreiben noch den Wert von vorher, ist es noch nicht angekommen (True: keine Hand, nichts Neues). Steht dort, was
+        HeatPilot schreiben wollte (``tried``, auch nach Teilfehler oder Neuaufbau) bzw. der Schritt der Führung, gilt es
+        als geschrieben; angekommen gibt ``again`` (einmal erneut schreiben, 0.68) wieder frei."""
         st = self.state.get(c)
         if not st:
             return False
@@ -360,6 +358,8 @@ class ControlLoop:
         if current is not None and not _same(current, st.get("last_written")) and (
                 _same(current, st.get("tried")) or (active is not None and _same(current, active["sp"]))):
             st["last_written"] = current
+        if _same(current, st.get("last_written")):
+            st.pop("again", None)
         return False
 
     def _context(self, c: str, d: Desired, current: float | None, boosts: dict, expired: set,
@@ -386,6 +386,8 @@ class ControlLoop:
         manual = not lag and last is not None and current is not None and not _same(current, last) and c not in boosts
         if manual and _same(current, d.setpoint):  # von Hand genau auf den Wunsch gedreht
             st["last_written"], last, manual = current, current, False
+        elif manual and _same(current, st.get("before")) and not st.get("again"):  # 0.68: nie angekommen (Thermostat
+            last, manual, st["again"] = None, False, True  # war weg) statt Hand – einmal erneut schreiben
         sp, reason, prop, write = d.setpoint, f"{d.phase}: {d.reason}", None, False
         if manual and (self.eng.states.get(c) or {}).get("state") == "auto":  # 0.50.2: Tado folgt nach Boost bzw.
             manual, st["boosted"] = False, True  # Timer wieder seinem Zeitplan – keine Hand: zurück zum Wunsch

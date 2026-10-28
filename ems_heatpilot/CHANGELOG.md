@@ -6,6 +6,8 @@ Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 - Warmwasser nachts fertig 5 min vor dem Heizstart
 - Ladedauer ab aktueller Speichertemperatur
 - Fix: keine Kessel-Pause mehr durch Warmwasser-Ladung
+- Fix: Soll nach Thermostat-Ausfall erneut geschrieben
+- 30-s-Werte mit Anwesenheit je Person
 
 ## 0.67.1
 - Fix: Menü der Übersicht überlappte in der Seitenleiste

@@ -10,7 +10,9 @@ Wassermenge und Abnahme aus Vor- und Rücklauf, Brennerleistung und Pumpe – br
   eine Auswertung nicht rekonstruieren muss, warum das Vorlauf-Soll so stand.
 * ``csv_text`` – die letzten Stunden als CSV (Komma, Dezimalpunkt): Zeit, Kesselwerte, HeatPilot, seit 0.57 die
   Spalte ``hp_geschrieben`` (alles aus dem Protokoll seit dem vorigen Punkt: geschrieben, nicht übernommen, fremde
-  Änderung, Pause …), je Raum vier Spalten.
+  Änderung, Pause …), je Raum vier Spalten, seit 0.68 je Person vier (zu Hause, Entfernung, erwartete Ankunft und
+  ihre Quelle – gps/gewohnheit) und im Haus ``home_count``/``vacation``: Die Datei soll alles enthalten, was ein großes
+  Modell zum Nachtrainieren der kleinen Modelle im Add-on braucht.
 * ``routes`` – ``GET /api/live/export?hours=24`` (Download, Live → Diagnose → Dateien).
 
 Nur lesen und speichern, schreibt nichts an Kessel oder Thermostate.
@@ -31,18 +33,27 @@ from .values import local
 KEEP_H = 48
 DEFAULT_H = 24
 # Zusätzlich zu den Werten der Live-Ansicht: Zähler und Anlagendruck (Starts im Takt genau ablesen)
-EXTRA = ("burn_starts", "heat_starts", "heat_min", "min_period", "syspress", "demand_pct")
+EXTRA = ("burn_starts", "heat_starts", "heat_min", "min_period", "syspress", "demand_pct", "home_count", "vacation")
 COLS = KEYS + EXTRA
 ROOM_COLS = ("ist", "soll", "ventil", "feuchte")
+PERSON_COLS = ("zuhause", "km", "ankunft", "quelle")  # 0.68
 # 0.50: HeatPilots Entscheidung für den Kessel (Weg B, auch im Trockenlauf) – leer bei „aus“
 BOILER_COLS = ("hp_heizbetrieb", "hp_ziel", "hp_bedarf", "hp_abnahme", "hp_zuschlag_k", "hp_boost_k", "hp_starts_h",
                "hp_lauf_min", "hp_wartet", "hp_kommt_nicht_hoch", "hp_grund", "hp_vorlauf_entscheidung")
 
 
-def record(store, ts: int, sample: dict, rooms: list[tuple]) -> None:
-    """Einen 30-s-Punkt speichern – ``rooms`` wie in ``Engine.snapshot`` (Raum, Ist, Soll, Ventil, Feuchte, …)."""
+def _person(p, now) -> list:
+    e = p.eta(now)
+    return [p.home, None if p.dist_km is None else round(p.dist_km, 2),
+            e["eta"].isoformat(timespec="minutes") if e.get("eta") else None, e.get("source")]
+
+
+def record(store, ts: int, sample: dict, rooms: list[tuple], persons: dict | None = None) -> None:
+    """Einen 30-s-Punkt speichern – ``rooms`` wie in ``Engine.snapshot`` (Raum, Ist, Soll, Ventil, Feuchte, …),
+    ``persons`` die Lerner je Person (``Engine.persons``)."""
     data = {"s": {k: sample.get(k) for k in COLS},
-            "r": {r[0]: [r[1], r[2], r[3], r[4] if len(r) > 4 else None] for r in rooms}}
+            "r": {r[0]: [r[1], r[2], r[3], r[4] if len(r) > 4 else None] for r in rooms},
+            "p": {eid: _person(p, local(ts)) for eid, p in (persons or {}).items()}}
     store.add_live(ts, data, KEEP_H * 3600)
 
 
@@ -92,16 +103,19 @@ def csv_text(eng, hours: float = DEFAULT_H, now_ts: int | None = None) -> str:
     names = {r.climate: r.name for r in eng.found.rooms}
     seen = {c for _, d in rows for c in d.get("r", {})}
     climates = [c for c in names if c in seen] + sorted(seen - set(names))
+    people = sorted({e for _, d in rows for e in d.get("p", {})})
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\n")
     w.writerow(["zeit", "ts", *COLS, *BOILER_COLS, "hp_geschrieben",
-                *(f"{names.get(c, c)} {col}" for c in climates for col in ROOM_COLS)])
+                *(f"{names.get(c, c)} {col}" for c in climates for col in ROOM_COLS),
+                *(f"{e} {col}" for e in people for col in PERSON_COLS)])  # Entität: der Fehlerbericht ersetzt sie
     logs = _log_by_row([ts for ts, _ in rows], eng.store, names)
     for ts, d in rows:
-        s, r, b = d.get("s", {}), d.get("r", {}), d.get("b", {})
+        s, r, b, p = d.get("s", {}), d.get("r", {}), d.get("b", {}), d.get("p", {})
         w.writerow([local(ts).isoformat(timespec="seconds"), ts, *(_cell(s.get(k)) for k in COLS),
                     *(_cell(b.get(k)) for k in BOILER_COLS), logs.get(ts, ""),
-                    *(_cell((r.get(c) or [None] * 4)[i]) for c in climates for i in range(len(ROOM_COLS)))])
+                    *(_cell((r.get(c) or [None] * 4)[i]) for c in climates for i in range(len(ROOM_COLS))),
+                    *(_cell((p.get(e) or [None] * 4)[i]) for e in people for i in range(len(PERSON_COLS)))])
     return out.getvalue()
 
 

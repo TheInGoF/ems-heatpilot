@@ -47,3 +47,52 @@ def test_heating_stays_on_while_hot_water_charges():
     assert not d.write and "Warmwasser lädt" in d.why
     assert decide_heating(False, True, 1000.0, charging=True, protect="Grenze unter 35 °C").write  # Schutz geht vor
     assert decide_heating(False, True, 1000.0).write
+
+
+def test_write_lost_while_thermostat_was_away_is_written_again_once(tmp_path):
+    """28.10.: Flur war 03:30–05:07 nicht erreichbar; das 20 °C von 04:30 kam nie an. Als er wieder 19 °C (den Wert
+    von vorher) meldete, galt das als Hand – bis 10:04 blieb er auf 19 °C. Seit 0.68 wird einmal erneut geschrieben."""
+    from test_control34 import MON, climate, make, step, ts_of
+
+    eng, ha, _, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 17.0)
+    t = ts_of(MON, 12)
+    step(eng, loop, t)
+    want = ha.calls[-1][3]["temperature"]
+    assert want != 17.0
+    for i in range(1, 4):  # nicht erreichbar: die Gnadenfrist läuft ab
+        eng.states["climate.wz"] = {"state": "unavailable", "attributes": {}}
+        step(eng, loop, t + 60 * i)
+    climate(eng, "climate.wz", 20.0, 17.0)  # wieder da, mit dem Wert von vorher
+    n = len(ha.calls)
+    step(eng, loop, t + 300)
+    assert len(ha.calls) > n and ha.calls[-1][3] == {"temperature": want}
+    n = len(ha.calls)
+    for i in range(6, 10):  # steht es danach immer noch dort, gilt es als Hand – kein Dauerschreiben
+        step(eng, loop, t + 60 * i)
+    assert len(ha.calls) == n
+
+
+def test_30s_export_has_presence_per_person(tmp_path):
+    """Die 30-s-Werte sollen alles enthalten, was ein großes Modell zum Nachtrainieren braucht – auch die Anwesenheit:
+    je Person zu Hause, Entfernung, erwartete Ankunft und Quelle; im Haus Anwesende und Urlaub."""
+    import csv
+    import io
+
+    from heatpilot import live_log
+    from heatpilot.presence import PersonLearner
+    from test_live_log492 import NOW, _eng
+
+    eng = _eng(tmp_path)
+    away = PersonLearner("person.ingo")
+    away.home, away.dist_km = False, 20.04
+    home = PersonLearner("person.b")
+    home.home = True
+    live_log.record(eng.store, NOW, {"flow": 40.0, "home_count": 1, "vacation": 0}, [],
+                    {"person.ingo": away, "person.b": home})
+    rows = list(csv.reader(io.StringIO(live_log.csv_text(eng, 1, NOW + 10))))
+    row = dict(zip(rows[0], rows[1]))
+    assert row["home_count"] == "1" and row["vacation"] == "0"
+    assert row["person.ingo zuhause"] == "0" and row["person.ingo km"] == "20.04"
+    assert row["person.b zuhause"] == "1" and row["person.b quelle"] == "zuhause" and row["person.b ankunft"]
+    assert rows[0][-8:-4] == ["person.b zuhause", "person.b km", "person.b ankunft", "person.b quelle"]
