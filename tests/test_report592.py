@@ -53,17 +53,18 @@ def test_stage_and_info():
 
 def test_build_zip(monkeypatch):
     eng = fake_eng()
-    monkeypatch.setattr(report.diagnostics, "export", lambda app, days: {"days": days, "rooms": ["Wohnzimmer"]})
+    monkeypatch.setattr(report.diagnostics, "export", lambda app, days: {"days": days, "rooms": ["Wohnzimmer"],
+                                                                        "anwesenheit": [1], "personen": {"p": 1}})
     monkeypatch.setattr(report.diagnostics, "self_check", lambda app: [])
-    monkeypatch.setattr(report.live_log, "csv_text", lambda eng, h: f"zeit,Wohnzimmer ist\n{h},20\n")
+    monkeypatch.setattr(report.live_log, "csv_text", lambda eng, h, persons: f"zeit,Wohnzimmer ist\n{h},{persons:d}\n")
     app = SimpleNamespace(eng=eng, cfg=eng.cfg)
     z = zipfile.ZipFile(io.BytesIO(report.build(app, Registry(), 12)))
     assert sorted(z.namelist()) == ["info.json", "kurzzeit_12h.csv", "langzeit_30_tage.json"]
     info = json.loads(z.read("info.json"))
     assert info["version"] == __version__ and info["boiler_model"] == "unbekannt"
     assert [t["stage"] for t in info["thermostats"]] == [1, 3] and info["thermostats"][1]["climate"] == "climate.raum_2"
-    assert json.loads(z.read("langzeit_30_tage.json")) == {"days": 30, "rooms": ["Raum 1"]}
-    assert z.read("kurzzeit_12h.csv").decode() == "zeit,Raum 1 ist\n12,20\n"
+    assert json.loads(z.read("langzeit_30_tage.json")) == {"days": 30, "rooms": ["Raum 1"]}  # 0.68: ohne Personen
+    assert z.read("kurzzeit_12h.csv").decode() == "zeit,Raum 1 ist\n12,0\n"  # persons=False
 
 
 def test_ui_and_issue_form():

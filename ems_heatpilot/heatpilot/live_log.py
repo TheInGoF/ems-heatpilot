@@ -12,7 +12,7 @@ Wassermenge und Abnahme aus Vor- und Rücklauf, Brennerleistung und Pumpe – br
   Spalte ``hp_geschrieben`` (alles aus dem Protokoll seit dem vorigen Punkt: geschrieben, nicht übernommen, fremde
   Änderung, Pause …), je Raum vier Spalten, seit 0.68 je Person vier (zu Hause, Entfernung, erwartete Ankunft und
   ihre Quelle – gps/gewohnheit) und im Haus ``home_count``/``vacation``: Die Datei soll alles enthalten, was ein großes
-  Modell zum Nachtrainieren der kleinen Modelle im Add-on braucht.
+  Modell zum Nachtrainieren der kleinen Modelle im Add-on braucht (der öffentliche Fehlerbericht lässt die Personen weg).
 * ``routes`` – ``GET /api/live/export?hours=24`` (Download, Live → Diagnose → Dateien).
 
 Nur lesen und speichern, schreibt nichts an Kessel oder Thermostate.
@@ -96,14 +96,15 @@ def _log_by_row(stamps: list[int], store, names: dict) -> dict[int, str]:
     return {t: " · ".join(x) for t, x in out.items()}
 
 
-def csv_text(eng, hours: float = DEFAULT_H, now_ts: int | None = None) -> str:
-    """Die letzten ``hours`` Stunden (höchstens ``KEEP_H``) als CSV; Räume mit Namen, unbekannte mit ihrer Entität."""
+def csv_text(eng, hours: float = DEFAULT_H, now_ts: int | None = None, persons: bool = True) -> str:
+    """Die letzten ``hours`` Stunden (höchstens ``KEEP_H``) als CSV; Räume mit Namen, unbekannte mit ihrer Entität.
+    ``persons=False``: ohne die Spalten je Person (öffentlicher Fehlerbericht)."""
     now_ts = int(now_ts or time.time())
     rows = eng.store.live_rows(now_ts - int(min(hours, KEEP_H) * 3600))
     names = {r.climate: r.name for r in eng.found.rooms}
     seen = {c for _, d in rows for c in d.get("r", {})}
     climates = [c for c in names if c in seen] + sorted(seen - set(names))
-    people = sorted({e for _, d in rows for e in d.get("p", {})})
+    people = sorted({e for _, d in rows for e in d.get("p", {})}) if persons else []
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\n")
     w.writerow(["zeit", "ts", *COLS, *BOILER_COLS, "hp_geschrieben",

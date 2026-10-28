@@ -7,6 +7,9 @@ Eine ZIP-Datei mit drei Teilen:
 * ``langzeit_30_tage.json`` – das Gelernte mit den Stundenwerten der letzten 30 Tage (``diagnostics.export``);
 * ``kurzzeit_<h>h.csv`` – die 30-s-Werte der letzten 12 oder 24 h (``live_log.csv_text``).
 
+Seit 0.68 ohne Daten je Person (``PERSON_KEYS``, Spalten je Person der 30-s-Werte) – die internen Exporte (Diagnose-
+Datei, Gelernte Werte, 30-s-Werte) behalten sie für die Entwicklung.
+
 Anonymisiert (``Anonymizer``): Raum-, Bereichs-, Personen- und Ortsnamen, Gerätenamen und Entitäten werden durch
 „Raum 1“, „Person 1“, „Ort 1“, „Gerät 1“, ``climate.raum_1``, ``sensor.e1`` … ersetzt, Koordinaten fallen weg. Die
 Entitäten von EMS-ESP (``boiler_…``, ``thermostat_…``) und von HeatPilot bleiben lesbar – sie sagen nichts über den
@@ -28,6 +31,7 @@ from .discovery import ROOM_PLATFORMS, RegistryIndex
 ISSUE_URL = "https://github.com/TheInGoF/ems-heatpilot/issues/new?template=fehler.yml"
 LONG_DAYS = 30
 SHORT_HOURS = (12, 24)
+PERSON_KEYS = ("anwesenheit", "personen")  # 0.68: Fehlerbericht ohne Daten je Person
 KEEP_PREFIXES = ("boiler_", "thermostat_", "ems_esp", "heatpilot", "dhw_", "mixer_", "solar_")
 DROP_KEYS = {"latitude", "longitude", "gps_accuracy", "entity_picture", "emsesp_host", "notify_targets"}
 STAGES = {1: "Stufe 1 – indirekt, träge (Soll, Tado)", 2: "Stufe 2 – Soll direkt",
@@ -134,9 +138,10 @@ def build(app, reg, hours: int = 24) -> bytes:
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr("info.json", json.dumps(anon.data(info(app, reg)), ensure_ascii=False, indent=1, default=str))
-        z.writestr(f"langzeit_{LONG_DAYS}_tage.json", json.dumps(anon.data(diagnostics.export(app, LONG_DAYS)),
-                                                                 ensure_ascii=False, default=str, separators=(",", ":")))
-        z.writestr(f"kurzzeit_{hours}h.csv", anon.text(live_log.csv_text(app.eng, hours)))
+        long = {k: v for k, v in diagnostics.export(app, LONG_DAYS).items() if k not in PERSON_KEYS}
+        z.writestr(f"langzeit_{LONG_DAYS}_tage.json", json.dumps(anon.data(long), ensure_ascii=False, default=str,
+                                                                 separators=(",", ":")))
+        z.writestr(f"kurzzeit_{hours}h.csv", anon.text(live_log.csv_text(app.eng, hours, persons=False)))  # 0.68
     return out.getvalue()
 
 

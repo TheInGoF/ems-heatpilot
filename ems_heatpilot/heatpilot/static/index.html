@@ -864,7 +864,7 @@ ul.rules li { margin: 3px 0; }
     </div>
     <div class="card diag-files" id="diag-files">
       <h2>Dateien</h2>
-      <p>Fehlerbericht für ein Issue auf GitHub – anonymisiert: Raum-, Personen- und Ortsnamen und Entitäten ersetzt, ohne GPS. Drin: Langzeit (30 Tage, stündlich, mit dem Gelernten), Kurzzeit (30-s-Werte) und Version, Thermostatstufen, Kesselmodell.</p>
+      <p>Fehlerbericht für ein Issue auf GitHub – anonymisiert: Raum-, Personen- und Ortsnamen und Entitäten ersetzt, ohne GPS. Drin: Langzeit (30 Tage, stündlich, mit dem Gelernten), Kurzzeit (30-s-Werte) und Version, Thermostatstufen, Kesselmodell – ohne Daten je Person.</p>
       <div class="row"><select id="report-hours" class="sel" onchange="$('report-btn').href = 'api/report?hours=' + this.value">
         <option value="12">Kurzzeit 12 h</option><option value="24" selected>Kurzzeit 24 h</option></select>
         <a class="btn primary" id="report-btn" href="api/report?hours=24" download style="text-decoration:none" onclick="return dlClick(event, this, 'dl-report')">Fehlerbericht herunterladen</a>
