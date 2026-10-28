@@ -259,7 +259,10 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   und löscht Älteres laufend. Damit lässt sich etwa die umgewälzte Wassermenge aus Brennerleistung und Spreizung
   nachrechnen. Seit 0.50 steht in jeder Zeile auch, was HeatPilot für den Kessel entschieden hat (Spalten `hp_…`:
   Heizbetrieb, Ziel, Bedarf, Abnahme, Zuschlag, Boost, Starts je Stunde, mittlere Laufzeit, wartende und nicht
-  hochkommende Räume, Grund und Entscheidung zum Vorlauf-Soll) – leer, solange „Kessel über HeatPilot“ aus ist. Ohne
+  hochkommende Räume, Grund und Entscheidung zum Vorlauf-Soll) – leer, solange „Kessel über HeatPilot“ aus ist.
+  Seit 0.68 auch die **Anwesenheit**: `home_count` (Anwesende) und `vacation`, je Person (Spalten nach der Entität,
+  z. B. `person.anna km`) zu Hause, Entfernung in km, erwartete Ankunft und deren Quelle (gps, gewohnheit) – ohne
+  Koordinaten. Die Datei soll alles enthalten, was ein großes Modell zum Nachtrainieren der Modelle im Add-on braucht. Ohne
   Personen und GPS.
 
 Kommt keine Verbindung zu Home Assistant zustande (z. B. „Anmeldung bei Home
@@ -532,7 +535,8 @@ Phasenwechsel.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
   Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
   HeatPilot steuert: „HeatPilot: Nacht 18°“, „Vorheizen → 21°“, „manuell 22° bis 21:00“
-  (jemand hat von Hand gedreht), „erreicht ≈ 19,5°“ (Ziel laut Raummodell nicht erreichbar),
+  (jemand hat von Hand gedreht – seit 0.68 nicht, wenn das Thermostat nach dem Schreiben nur den Wert von vorher
+  meldet, etwa weil es kurz nicht erreichbar war: dann schreibt HeatPilot einmal erneut), „erreicht ≈ 19,5°“ (Ziel laut Raummodell nicht erreichbar),
   „Pause · 21°“. Heizt der Raum gerade, ist die Kachel orange; aus = grau mit
   Ausschalt-Symbol. Antippen öffnet den Dialog mit Soll (−/+), Betriebsart, Ventil, Restzeit
   eines Timers, den Geräten des Raums und – bei „HeatPilot steuert“ – Phase, Wunschsoll,
