@@ -6,7 +6,7 @@ from test_ui_v361 import between, script, source
 
 def test_glance_cards_on_kessel_and_haus():
     js = script()
-    assert "page(k, glance(k) + (P[k] || \"\") + expert(k" in between(js, "function renderSettings()", "\nfunction ")
+    assert "page(k, glance(k) + (P[k] || \"\") + mainGroups(k) + expert(k" in between(js, "function renderSettings()", "\nfunction ")
     g = between(js, "const GLANCE = {", "};")
     for key in ("flow_set_entity", "heating_switch_entity", "dhw_set_entity", "flow_temp", "return_temp",
                 "outdoor_sensors", "weather_entity", "gas_sensor", "persons"):

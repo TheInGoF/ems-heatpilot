@@ -683,6 +683,20 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .now-row .chip.on { background: var(--series-1); border-color: var(--series-1); color: #fff; }
 .now-row .chip[disabled] { opacity: .5; cursor: default; }
 .now-row .now-n { flex-basis: 100%; }
+.sec-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
+.sec-tiles .st-h { grid-column: 1 / -1; margin: var(--s2) 0 0; }
+.sec-tile { min-height: 72px; justify-content: space-between; }
+.subpage > [hidden] { display: none !important; }
+.subpage > details.em-group > summary { pointer-events: none; list-style: none; }  /* Unterseite: immer offen */
+.subpage > details.em-group > summary::-webkit-details-marker { display: none; }  /* Kachelraster, Raumkacheln, Knöpfe: in der Unterseite weg */
+.sec-tile.exp { background: none; }
+.set-back.sub-back { display: inline; }
+#set-raeume.sub-room > .card:has(#room-table) > :not(#room-table) { display: none; }
+#set-raeume.sub-room #room-table .room.sel { border: 0; padding: 0; }
+#set-raeume.sub-room details.room-more { margin-left: 0; }
+#set-raeume.sub-room details.room-more > summary { display: none; }  /* Unterseite: nichts mehr aufzuklappen */
+#set-raeume.sub-rooms-tools #room-table { display: none; }
+#room-tiles { margin-bottom: var(--s2); }
 .rt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
 .rt-tile { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: var(--s2) var(--s2) var(--s2) 12px; border: 1px solid var(--border);
   border-radius: var(--r); background: var(--surface-2); color: var(--text-primary); font: inherit; cursor: pointer; min-width: 0; }
@@ -875,7 +889,7 @@ ul.rules li { margin: 3px 0; }
   <section id="view-settings" class="set-view set-on-menu" hidden>
     <nav class="set-menu" id="set-menu" aria-label="Einstellungen"></nav>
     <div class="set-main">
-      <div class="set-head" id="set-head"><button type="button" class="set-back" onclick="setPage('menu')">‹ Einstellungen</button><h2 id="set-title">Einstellungen</h2></div>
+      <div class="set-head" id="set-head"><button type="button" class="set-back" id="set-back" onclick="setBack()">‹ Einstellungen</button><h2 id="set-title">Einstellungen</h2></div>
       <div id="set-body"><p class="muted">Lade …</p></div>
     </div>
   </section>
@@ -3825,6 +3839,8 @@ function loadDiagPage() {
 function openSettings(page, anchor) {
   setPage(page || "menu");
   showTab("settings");
+  const sec = anchor && $(anchor) && $(anchor).closest("#set-body .card[data-sec]");  // 0.66: Abschnitt öffnen
+  if (sec) setSub(sec.dataset.sec);
   reveal(anchor);
 }
 // Diagnose (seit 0.58 im Tab Live-Daten): Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien
@@ -4089,7 +4105,7 @@ function glance(k) {
     const cards = keys.filter((key) => EM_BY[key]).map((key) => glanceCard(EM_BY[key], emStateOf(key))).join("");
     return cards ? `<h3 class="st-h">${title}</h3><div class="r-devs">${cards}</div>` : "";
   }).join("");
-  return rows ? card(g[0], rows) : "";
+  return rows ? card(g[0], rows).replace('class="card set-card"', 'class="card set-card glance"') : "";
 }
 function glanceCard(e, st) {
   const it = st.items[0], more = st.items.length > 1 ? ` <span class="muted">+${st.items.length - 1}</span>` : "";
@@ -4146,14 +4162,15 @@ function roomHideBtn(c) {
 }
 function roomHide(c) {
   const tr = document.querySelector(`#room-table .room[data-climate="${CSS.escape(c)}"]`);
-  if (ROOM_HIDE.has(c)) ROOM_HIDE.delete(c); else { ROOM_HIDE.add(c); if (tr) tr.querySelector(".r-on").checked = false; ROOM_SEL = null; }
-  roomsDirty(); roomTiles();
+  if (ROOM_HIDE.has(c)) ROOM_HIDE.delete(c); else { ROOM_HIDE.add(c); if (tr) tr.querySelector(".r-on").checked = false; }
+  roomsDirty(); roomTiles(); showSub();
 }
 function roomPick(c) {
-  ROOM_SEL = ROOM_SEL === c ? null : c;
-  roomTiles();
+  ROOM_SEL = c; SET_SUB = "room";  // 0.66: Raum als Unterseite
+  roomTiles(); showSub();
   const tr = document.querySelector(`#room-table .room.sel`);
-  if (tr) { tr.querySelector("details.room-more").open = true; tr.scrollIntoView({ block: "nearest" }); }
+  if (tr) tr.querySelector("details.room-more").open = true;
+  if (typeof scrollTo === "function") scrollTo(0, 0);
 }
 // Gerätekarten der Raumansicht (Styleguide 5): Thermostat, Raumfühler, Feuchte, Ventilstellung – Wert und Verbindung
 function roomDevices(tr) {
@@ -4981,7 +4998,7 @@ const advHouseHtml = () => '<h3 class="sec-h" id="adv-house">Hausdaten und Lerne
   '<div class="row"><button class="btn small" onclick="reloadHistory()">Lücken aus Home Assistant füllen</button><span class="muted">holt nur, was HeatPilot nicht selbst gespeichert hat – eigene Werte bleiben. Dauert je nach Umfang einige Minuten.</span></div></div>' +
   `<p class="job-msg" id="adv-job">${jobHtml(JOB)}</p>`;
 // Links „Einstellungen → Haus → Experte“: die Karte aufklappen und hinscrollen – auch, wenn die Einstellungen erst laden
-function openAdvanced() { ADV_OPEN = true; openSettings("haus", "exp-haus"); advReveal(); }
+function openAdvanced() { ADV_OPEN = true; openSettings("haus", "set-adv"); advReveal(); }
 function advReveal() {
   const h = $("adv-house");
   if (!ADV_OPEN || !h) return;
@@ -5855,7 +5872,7 @@ function setPage(p) {
   const was = SET_PAGE;
   if (!SET_KEYS.includes(p)) p = "menu";
   if (p === "menu" && setWide()) p = SET_KEYS.includes(was) ? was : "raeume";
-  SET_PAGE = p;
+  SET_PAGE = p; if (was !== p) SET_SUB = null;  // 0.66: neue Seite beginnt mit den Kacheln
   if (typeof store !== "undefined") store.set("hp-set-page", SET_PAGE);  // zuletzt offene Unterseite
   for (const k of SET_KEYS) { const d = $("set-" + k); if (d) d.hidden = SET_PAGE !== k; }
   if (SET_PAGE === "haus") loadCards().catch(() => {});  // 0.56.4: Karten für Home Assistant
@@ -5864,9 +5881,46 @@ function setPage(p) {
   const v = $("view-settings"); v.classList.toggle("set-on-menu", SET_PAGE === "menu");
   if ($("set-title")) $("set-title").textContent = (SET_PAGES.find((x) => x[0] === SET_PAGE) || [, "Einstellungen"])[1];
   const bar = document.querySelector("#view-settings .savebar"); if (bar) bar.hidden = SET_PAGE === "menu";
-  const vis = !v.hidden;
+  const vis = !v.hidden; setSections();
   if (vis && statusPage() && was !== SET_PAGE) loadHeat().catch(() => {});  // 0.47.1: Status laufend aktuell
   if (vis && was !== SET_PAGE && typeof scrollTo === "function") scrollTo(0, 0);
+}
+// 0.66: zweite Ebene (Konzeptpapier 5, Styleguide 2) – Einstellungen → Räume (1. Klick) → Wohnzimmer (2. Klick). Jede
+// Seite zeigt nur Kacheln: je Abschnitt eine (Räume: je Raum eine, dazu „Räume verwalten“), die Teile von „Experte“
+// schlichter am Ende; ein Klick öffnet eine Unterseite mit nur diesem Abschnitt, „‹ Räume“ führt zurück
+let SET_SUB = null;
+function setSections() {
+  const pg = $("set-" + SET_PAGE); if (!pg) return;
+  const exp = pg.querySelector(":scope > .exp-parts");
+  if (exp) { for (const el of [...exp.children]) { el.dataset.exp = "1"; pg.appendChild(el); } exp.remove(); }
+  const secs = [...pg.querySelectorAll(":scope > .card:not(.glance)")];
+  secs.forEach((el, i) => { el.dataset.sec = el.dataset.sec || el.id || `${SET_PAGE}-${i}`; });
+  let grid = pg.querySelector(":scope > .sec-tiles");
+  if (!grid) { grid = document.createElement("div"); grid.className = "sec-tiles"; pg.insertBefore(grid, secs[0] || null); }
+  const rt = $("room-tiles"); if (SET_PAGE === "raeume" && rt && rt.parentElement !== pg) pg.insertBefore(rt, grid);
+  const tile = (el) => `<button type="button" class="rt-tile sec-tile${el.dataset.exp ? " exp" : ""}" onclick="setSub('${el.dataset.sec}')">` +
+    `<span class="rt-n">${esc(secTitle(el))}</span><span class="muted">${esc((el.querySelector(".em-count") || {}).textContent || "")}</span></button>`;
+  const main = secs.filter((el) => !el.dataset.exp), rare = secs.filter((el) => el.dataset.exp);
+  grid.innerHTML = main.map(tile).join("") + (rare.length ? `<h3 class="st-h">Experte <span class="muted">– selten nötig</span></h3>${rare.map(tile).join("")}` : "");
+  showSub();
+}
+const secTitle = (el) => el.querySelector("#room-table") ? "Räume verwalten" : ((el.querySelector("h2") || {}).textContent || "").trim();
+function setSub(sec) { SET_SUB = sec; showSub(); if (typeof scrollTo === "function") scrollTo(0, 0); }
+function setBack() { if (SET_SUB) { SET_SUB = null; ROOM_SEL = null; roomTiles(); showSub(); } else setPage("menu"); }
+function showSub() {
+  const pg = $("set-" + SET_PAGE); if (!pg) return;
+  const sub = SET_SUB, rooms = $("room-table") && $("room-table").closest(".card");
+  for (const el of pg.querySelectorAll(":scope > .card")) {
+    el.hidden = el.classList.contains("glance") ? !!sub : !(sub && (el.dataset.sec === sub || (sub === "room" && el === rooms)));
+    if (!el.hidden && el.tagName === "DETAILS") el.open = true;
+  }
+  for (const el of pg.querySelectorAll(":scope > .sec-tiles, :scope > #room-tiles, :scope > .set-acts")) el.hidden = !!sub;
+  pg.classList.toggle("sub-room", sub === "room");
+  pg.classList.toggle("sub-rooms-tools", !!rooms && sub === rooms.dataset.sec);
+  const page = (SET_PAGES.find((x) => x[0] === SET_PAGE) || [, "Einstellungen"])[1], cur = sub && sub !== "room" && pg.querySelector(`:scope > [data-sec="${sub}"]`);
+  const roomName = sub === "room" && ROOM_SEL && document.querySelector(`#room-table .room.sel .r-name`);
+  if ($("set-title")) $("set-title").textContent = cur ? secTitle(cur) : roomName ? (roomName.value || roomName.placeholder) : page;
+  if ($("set-back")) { $("set-back").textContent = `‹ ${sub ? page : "Einstellungen"}`; $("set-back").classList.toggle("sub-back", !!sub); }
 }
 // Ungespeicherte Änderungen (0.43): erst dann zeigt die Speicherleiste „Speichern“ und „Verwerfen“
 function setDirty() {
@@ -5875,14 +5929,17 @@ function setDirty() {
   if ($("sb-t")) $("sb-t").textContent = "Ungespeicherte Änderungen";
 }
 // „Experte“ am Ende jeder Seite (Styleguide 2.): seltene Felder und die Entitäten, die nicht bei ihrer Funktion stehen
-const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas", "strom"] };
+const EXPERT_GROUPS = { raeume: [], kessel: ["kessel", "regler"], haus: ["aussen", "gas"] };
 function expert(k, html = "") {
   const m = EMAP, gs = m && !m.error ? m.groups.filter((g) => EXPERT_GROUPS[k].includes(g.key)) : [];
   const err = m && m.error && k === "haus" ? `<div class="card" id="em-error"><h2>Entitäten</h2><p class="msg-err">Nicht lesbar: ${esc(m.error)}</p>` +
     '<p class="muted">Die gespeicherten Zuordnungen bleiben, wie sie sind – Speichern ändert sie nicht.</p></div>' : "";
   const body = html + err + gs.map(emGroup).join("");
-  return body ? `<details class="expert" id="exp-${k}"><summary>Experte <span class="muted">– selten nötig</span></summary>${body}</details>` : "";
+  return body ? `<div class="exp-parts" id="exp-${k}">${body}</div>` : "";  // 0.66: je Teil eine Kachel „Experte“
 }
+// 0.66: Gruppen der Zuordnung, die nicht selten nötig sind, als eigene Abschnitte (Haus: Strom & Aktivität)
+const MAIN_GROUPS = { raeume: [], kessel: [], haus: ["strom"] };
+const mainGroups = (k) => EMAP && !EMAP.error ? EMAP.groups.filter((g) => MAIN_GROUPS[k].includes(g.key)).map(emGroup).join("") : "";
 // Entitäten einer Gruppe direkt bei ihrer Funktion (0.43, E3): Warmwasser, Kessel, Personen & Urlaub, Benachrichtigungen
 function emInline(key, only) {
   const g = ((EMAP && EMAP.groups) || []).find((x) => x.key === key); if (!g) return "";
@@ -6148,8 +6205,8 @@ function renderSettings() {
       ${field("Langzeitstatistik (Tage)", num("f-statistics_backfill_days", s.statistics_backfill_days, "1"))}
       ${field("Daten aufbewahren (Tage)", num("f-keep_days", s.keep_days, "1"), "365–3650, Standard 720. Ältere Messwerte löscht HeatPilot einmal am Tag; Tageswerte und Gelerntes bleiben.")}
       ${field("Ausführliches Log", `<label style="display:flex;gap:6px;align-items:center;color:var(--text-primary)"><input type="checkbox" id="f-debug_logging" ${s.debug_logging ? "checked" : ""}> jeden Takt protokollieren</label>`, "Für die Fehlersuche – das Log wird dann deutlich größer")}
-    </div>${advHouseHtml()}`, false)) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen; 0.44: Lücken füllen
-    SET_KEYS.map((k) => page(k, glance(k) + (P[k] || "") + expert(k, P["exp-" + k]))).join("") +
+    </div>${advHouseHtml()}`, false, "set-adv")) +  // 0.42.1: Hausdaten wiederherstellen, neu lernen; 0.44: Lücken füllen
+    SET_KEYS.map((k) => page(k, glance(k) + (P[k] || "") + mainGroups(k) + expert(k, P["exp-" + k]))).join("") +
     `<div class="savebar sb-clean" id="savebar"${SET_PAGE === "menu" ? " hidden" : ""}><span class="sb-t" id="sb-t"></span>` +
     '<button class="btn primary" onclick="saveSettings()">Speichern</button><button class="btn" onclick="loadSettings()">Verwerfen</button><span id="save-msg"></span></div>';
   $("set-body").oninput = $("set-body").onchange = () => setDirty();  // Speicherleiste erst bei Änderungen (0.43)

@@ -40,8 +40,10 @@ damit Zeiten mit früheren Automationen oder Tado-Zeitplänen ausgeschlossen wer
 Vorschau. **Live** zeigt die Messwerte der letzten Stunden. **Einstellungen** öffnet eine Startseite mit drei Kacheln (seit 0.61 oben auf Kessel und Haus „auf einen Blick“:
 die eingestellten Aktoren und Sensoren als Gerätekarten mit Wert und Verbindung): **Räume** (Räume, Steuerung, Nachtzeiten), **Kessel**
 (Warmwasser, Desinfektion, Kessel steuern, Kesseldaten) und **Haus** (EMS-ESP, Haus, Gas & Kosten, Anwesenheit &
-Urlaub, Benachrichtigungen, Karten). Seltenes steht am Ende jeder Seite unter **Experte** (gelesene Entitäten,
-Regler, Erweitert). **Diagnose** (Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien) steht am Ende
+Urlaub, Benachrichtigungen, Karten, seit 0.66 auch Strom & Aktivität). Seit 0.66 höchstens zwei Klicks tief:
+Jede Seite zeigt nur Kacheln – je Abschnitt eine, bei Räume zusätzlich je Raum eine; ein Klick öffnet eine Unterseite
+mit nur diesem Abschnitt bzw. Raum, „‹ Räume“ führt zurück. Seltenes (gelesene Entitäten, Regler, Erweitert) steht als
+schlichtere Kacheln am Ende unter **Experte**. **Diagnose** (Selbsttest, Bereitschaft, Modelle, Protokoll, Sensoren, Log, Dateien) steht am Ende
 des Reiters **Live**. Die Schalter heißen überall **Aus · Beobachten · HeatPilot steuert**; „Beobachten“ (früher
 „Trockenlauf“) rechnet und protokolliert, schreibt aber nichts. Die Entitäten, auf die HeatPilot schreibt
 (Warmwasser-Soll, Desinfektion, Vorlauf-Soll, Heizbetrieb), wählst du bei ihrer Funktion unter Einstellungen → Kessel;
