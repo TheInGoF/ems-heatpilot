@@ -46,7 +46,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import guards, override, room_lead, valve_control
+from . import dhw_target, guards, override, room_lead, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
@@ -327,6 +327,7 @@ class ControlLoop:
                 "last_written": None, "errors": 0, "retry_at": None, "paused": paused and managing,
                 "valve": None, "valve_guided": False,  # 0.40: laufender Eingriff der Ventilführung, geführt?
             }
+        eng.heat_start = dhw_target.heat_start(desireds.values(), now)  # 0.68: Warmwasser nachts fertig davor
         return desireds
 
     def _restores(self, ts: int, desireds: dict, managing: bool, paused: bool) -> set[str]:

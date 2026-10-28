@@ -2188,16 +2188,21 @@ rechnet HeatPilot mit 5 K und sagt das im Grund („Hysterese 5 K angenommen“)
 - **Urlaub** bzw. **niemand zu Hause** und die nächste Ankunft weiter weg als die Aufheizdauer →
   Minimum („Urlaub – Speicher darf bis … °C fallen“). Ist die Ankunft unbekannt, weil die Gewohnheit noch
   lernt, bleibt das heutige Soll
-- **Nacht** laut Nachtplan (eingestellt bzw. gelernt), solange das Nachtende weiter weg ist als die
-  Aufheizdauer → Minimum („Nacht – Speicher darf bis … °C fallen“)
+- **Nacht** laut Nachtplan (eingestellt bzw. gelernt) → Minimum („Nacht – Speicher darf bis … °C fallen“), bis die
+  Ladung gerade noch **5 min vor dem frühesten Heizstart der Räume** fertig wird (seit 0.68; ohne Heizstart vor dem
+  Nachtende). Die Ladedauer rechnet ab der aktuellen Speichertemperatur: Beginnt das Vorheizen um 4:13 und braucht das
+  Wasser 23 min, lädt der Speicher ab 3:45 – Warmwasser und Heizen kommen sich nicht in die Quere
 - **sonst** – jemand zu Hause und wach, bzw. innerhalb der Aufheizdauer vor Ankunft oder Aufstehen („vor dem
   Aufstehen aufheizen“) → **Komfort** (+ gelernte Reserve) als Soll. Ist eine große Zapfung üblich, Soll =
   Minimum + Bedarf, wenn das höher ist – ohne Hysterese, denn während des Zapfens lädt der Kessel nach.
   Zapfungen sieht die Strategie mindestens eine Stunde voraus
 
-Die **Aufheizdauer** ist (Komfort-Soll − Minimum) / gelernte Ladegeschwindigkeit + 0,5 h Puffer (bis 0.46.1:
-bis Komfort + Hysterese und 1 h Puffer). Beispiel: Minimum 40 °C, Komfort 50 °C, 20 K/h → 1 h vor dem Nachtende
-wird geheizt. Den früheren Tagesboden „keine Zapfung erwartet → Minimum + Reserve“ gibt es nicht mehr. Die
+Die **Aufheizdauer** vor einer Ankunft ist (Komfort-Soll − Minimum) / gelernte Ladegeschwindigkeit + 0,5 h Puffer
+(bis 0.46.1: bis Komfort + Hysterese und 1 h Puffer). Beispiel: Minimum 40 °C, Komfort 50 °C, 20 K/h → 1,5 h vor der
+Ankunft wird geheizt. Nachts zählt seit 0.68 die Ladedauer ab der aktuellen Speichertemperatur, fertig 5 min vor dem
+Heizstart (bis 0.67: ab dem Minimum, fertig eine halbe Stunde vor dem Nachtende – also jede Nacht zur selben Zeit).
+**Während einer Ladung** schaltet HeatPilot den Heizbetrieb nicht aus – mancher Kessel zeigt dabei „Heizbetrieb an“
+(bis 0.67 wurde das als Fehlschlag gezählt; nach dreien pausierte die Kesselsteuerung). Den früheren Tagesboden „keine Zapfung erwartet → Minimum + Reserve“ gibt es nicht mehr. Die
 gelernte Reserve wurde mit 0.46.2 einmal auf 0 gesetzt – sie stammte aus der früheren Strategie. Übersicht → Warmwasser
 zeigt in „Empfehlung jetzt“ das Soll und darunter wie der Grund „Speicher 45–50 °C“ bzw. beim Fallenlassen „Speicher
 darf bis 40 °C fallen“ („Hysterese 5 K angenommen“ nur, wenn der Kessel keine meldet) und den Grund;

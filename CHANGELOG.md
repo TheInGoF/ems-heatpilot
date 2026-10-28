@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.68.0
+- **Warmwasser nachts passend zum Heizstart statt zur festen Zeit:** Der Speicher fällt nachts auf das Minimum und lädt so spät, dass er **5 min vor dem frühesten Heizstart der Räume** fertig ist (`dhw_target.heat_start` aus den Wunschzuständen des Regelkreises, `HEAT_GAP_H`); ohne Heizstart vor dem Nachtende. Die Ladedauer rechnet ab der **aktuellen Speichertemperatur** mit der gelernten Ladegeschwindigkeit (bisher ab dem Minimum plus 30 min Puffer vor dem Nachtende – deshalb jede Nacht um ~3:00). Beispiel: Vorheizen ab 4:13, Wasser braucht 23 min → Laden ab 3:45. Vor einer Ankunft bleibt es bei der halben Stunde Puffer
+- **Fix: Kesselsteuerung pausierte nach einer Warmwasser-Ladung.** Während der Ladung zeigt mancher Kessel „Heizbetrieb an“; HeatPilot schaltete dreimal aus, wertete das als Fehlschlag und pausierte („3 Fehlschläge in Folge“) – am 27.10. fiel dadurch das Vorheizen von 03:30 bis 05:09 aus. Jetzt bleibt der Heizbetrieb während einer Ladung unangetastet (`decide_heating(charging=…)`), und die Ladung zählt auch, wenn nur der Messpunkt sie erkennt (`dhw_now`)
+- Tests: `tests/test_dhw_heatstart68.py`; angepasst: `test_dhw_hyst46`, `test_dhw_v462`, `test_v32_dhw_review`
+
 ## 0.67.1
 - **Fix Seitenleiste der Übersicht:** In der schmalen Seitenleiste (ab 900 px Breite) lief der Wert über den Titel („Gewohnheiten“ unter „1 von 2 zu Hause“). Ist das Menü schmaler als 320 px, steht der Wert jetzt klein unter dem Titel (Container-Abfrage auf `.set-menu`)
 - **Kacheln der Einstellungen:** lange Titel („Gewohnheiten erkennen“, „Karten für Home Assistant“) brechen um statt mit „…“ abgeschnitten zu werden

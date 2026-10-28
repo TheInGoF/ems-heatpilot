@@ -451,12 +451,14 @@ class DhwModel:
     # ------------------------------------------------------------------ Strategie
     def recommend(self, now: datetime, someone_home: bool | None, next_arrival: datetime | None, cfg,
                   unknown_from: datetime | None = None, current_set: float | None = None,
-                  disinfect_h: float | None = None, hyst=None, vacation: bool = False) -> dict:
+                  disinfect_h: float | None = None, hyst=None, vacation: bool = False, temp: float | None = None,
+                  heat_start: datetime | None = None) -> dict:
         """Empfohlenes Warmwasser-Soll jetzt (nur Empfehlung, gesetzt wird es über Weg W) – gerechnet in
         ``dhw_target`` (seit 0.46: Ziel = tiefste gehaltene Speichertemperatur, Soll = Ziel + Hysterese)."""
         from .dhw_target import recommend  # spät: dhw_target nutzt Namen aus diesem Modul
         return recommend(self, now, someone_home, next_arrival, cfg, unknown_from=unknown_from,
-                         current_set=current_set, disinfect_h=disinfect_h, hyst=hyst, vacation=vacation)
+                         current_set=current_set, disinfect_h=disinfect_h, hyst=hyst, vacation=vacation, temp=temp,
+                         heat_start=heat_start)
 
     def summary(self, t_now: float | None) -> dict:
         hours = self.daily

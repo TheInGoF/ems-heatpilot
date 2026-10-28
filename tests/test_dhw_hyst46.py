@@ -57,10 +57,11 @@ def test_setpoint_rounds_up_and_stops_at_the_maximum():
 
 # ------------------------------------------------------------------ Zustände
 def test_night_drops_to_minimum_and_heats_up_before_waking():
-    # seit 0.46.2: Laderate 20 K/h, Aufheizen 30 → 50 °C (Komfort ist das Soll) 1 h, + 0,5 h Puffer
+    # Laderate 20 K/h, Aufheizen 30 → 50 °C (Komfort ist das Soll) 1 h; seit 0.68 fertig 5 min vor dem Nachtende
     cfg, m = _cfg(), DhwModel()
     assert m.recommend(datetime(2026, 10, 19, 2, 30), True, None, cfg, hyst=-5)["hold"] == 30.0  # 2 h vor Ende
-    rec = m.recommend(datetime(2026, 10, 19, 3, 0), True, None, cfg, hyst=-5)  # 1,5 h vor dem Nachtende
+    assert m.recommend(datetime(2026, 10, 19, 3, 20), True, None, cfg, hyst=-5)["hold"] == 30.0  # 1 h 10 min davor
+    rec = m.recommend(datetime(2026, 10, 19, 3, 25), True, None, cfg, hyst=-5)  # 1 h 5 min vor dem Nachtende
     assert rec["hold"] == 45.0 and rec["target"] == 50
     assert rec["reason"] == "vor dem Aufstehen aufheizen – Speicher 45–50 °C"
     assert m.recommend(datetime(2026, 10, 19, 2, 30), None, None, cfg, hyst=-5)["hold"] == 30.0  # unbekannt: auch
@@ -69,7 +70,8 @@ def test_night_drops_to_minimum_and_heats_up_before_waking():
     assert m.recommend(datetime(2026, 10, 19, 22, 30), True, None, cfg, hyst=-5)["target"] == 50
     assert m.recommend(datetime(2026, 10, 19, 23, 30), True, None, cfg, hyst=-5)["hold"] == 30.0
     assert m.recommend(datetime(2026, 10, 20, 5, 0), True, None, cfg, hyst=-5)["hold"] == 30.0
-    assert m.recommend(datetime(2026, 10, 20, 5, 30), True, None, cfg, hyst=-5)["target"] == 50
+    assert m.recommend(datetime(2026, 10, 20, 5, 50), True, None, cfg, hyst=-5)["hold"] == 30.0
+    assert m.recommend(datetime(2026, 10, 20, 5, 55), True, None, cfg, hyst=-5)["target"] == 50
 
 
 def test_nobody_home_and_vacation_drop_to_minimum_until_shortly_before_arrival():

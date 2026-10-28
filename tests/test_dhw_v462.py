@@ -64,17 +64,17 @@ def test_draw_seen_one_hour_ahead_even_when_charging_fast():
 
 
 # ------------------------------------------------------------------ Aufheizdauer
-def test_heating_starts_comfort_minus_minimum_over_rate_plus_half_an_hour_before_night_end():
+def test_heating_starts_comfort_minus_minimum_over_rate_and_is_ready_5_min_before_night_end():  # seit 0.68
     for dhw_min, rate in ((40.0, 20.0), (30.0, 20.0), (30.0, 40.0)):
         cfg, m = _cfg(dhw_min=dhw_min), DhwModel()
         m.charge_rate_kh = rate
-        lead = timedelta(hours=(50.0 - dhw_min) / rate + dt.BUFFER_H)
-        assert dt.BUFFER_H == 0.5
+        lead = timedelta(hours=(50.0 - dhw_min) / rate + dt.HEAT_GAP_H)
         early = m.recommend(NIGHT_END - lead - timedelta(minutes=5), True, None, cfg, hyst=-5)
         start = m.recommend(NIGHT_END - lead, True, None, cfg, hyst=-5)
         assert early["hold"] == dhw_min and early["reason"].startswith("Nacht"), (dhw_min, rate)
         assert start["target"] == 50 and start["reason"].startswith("vor dem Aufstehen aufheizen"), (dhw_min, rate)
-    # dasselbe vor der Ankunft (Minimum 40, 20 K/h: 1 h vorher)
+    # vor der Ankunft weiter mit einer halben Stunde Puffer (Minimum 40, 20 K/h: 1 h vorher)
+    assert dt.BUFFER_H == 0.5
     cfg, m = _cfg(), DhwModel()
     assert m.recommend(MON_NOON, False, MON_NOON + timedelta(minutes=65), cfg, hyst=-5)["hold"] == 40.0
     assert m.recommend(MON_NOON, False, MON_NOON + timedelta(hours=1), cfg, hyst=-5)["target"] == 50
@@ -82,9 +82,9 @@ def test_heating_starts_comfort_minus_minimum_over_rate_plus_half_an_hour_before
 
 def test_heating_lead_uses_comfort_plus_reserve_capped():
     cfg, m = _cfg(), DhwModel()
-    m.comfort_margin = 4.0  # Soll 54: (54 − 40) / 20 + 0,5 = 1,2 h
-    assert m.recommend(NIGHT_END - timedelta(minutes=72), True, None, cfg, hyst=-5)["target"] == 54
-    assert m.recommend(NIGHT_END - timedelta(minutes=77), True, None, cfg, hyst=-5)["hold"] == 40.0
+    m.comfort_margin = 4.0  # Soll 54: (54 − 40) / 20 h = 42 min, fertig 5 min vor dem Nachtende
+    assert m.recommend(NIGHT_END - timedelta(minutes=47), True, None, cfg, hyst=-5)["target"] == 54
+    assert m.recommend(NIGHT_END - timedelta(minutes=52), True, None, cfg, hyst=-5)["hold"] == 40.0
 
 
 # ------------------------------------------------------------------ Reserve, Schatten, Ankunft

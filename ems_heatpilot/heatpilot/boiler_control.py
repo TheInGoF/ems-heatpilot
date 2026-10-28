@@ -154,7 +154,8 @@ class BoilerControl(BoilerStatus, BoilerWatch):
         now = time.time() if now is None else now
         sample = {"dhw_special": self.eng.dhw_special(), "dhw_disinfecting": flag(self.eng._boiler("dhw_disinfecting"))}
         special = special_running(self.eng, sample)
-        if flag(self.eng._boiler("dhw_active")) == 1 or special:
+        # 0.68: auch, wenn der Messpunkt die Ladung erkennt (Meldung fehlt oder kommt später als „Heizbetrieb an“)
+        if flag(self.eng._boiler("dhw_active")) == 1 or special or getattr(self.eng, "dhw_now", False):
             self.state["dhw_ts"] = int(now)
             if special:
                 self.state["special_ts"] = int(now)
@@ -354,7 +355,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             unsafe = (f"Vorlauf-Soll am Kessel {_c(over)} °C über der Grenze {target.hi} °C" if over is not None
                       else "Vorlauf-Soll am Kessel unbekannt" if not known else None)
         return decide_heating(want, ref["heating"][0], ts, ref["heating"][1], paused, checking, hch.get("off_since"),
-                              unsafe, protect, resting=_resting(ref["flow"][0]))
+                              unsafe, protect, resting=_resting(ref["flow"][0]), charging=target.charging)
 
     def _blind(self, ts: int, target):
         """Kein Vorlauf-Soll rechenbar (Außentemperatur fehlt, kein Raummodell …): HeatPilot schreibt nichts, der Kessel

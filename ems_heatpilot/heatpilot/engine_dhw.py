@@ -110,7 +110,8 @@ class DhwMixin:
             self.dhw_rec = self.dhw.recommend(now, None if home is None else home > 0, arrival, self.cfg,
                                               unknown_from=unknown, current_set=num(sample.get("dhw_set")),
                                               disinfect_h=self.disinfect_ready_h(), hyst=hyst,
-                                              vacation=bool(sample.get("vacation")))
+                                              vacation=bool(sample.get("vacation")), temp=num(sample.get("dhw_temp")),
+                                              heat_start=getattr(self, "heat_start", None))  # 0.68: aus dem Regelkreis
             return check, (self.dhw_rec["hold"], self.dhw_rec["target"])
         # unsicheres Modell: keine Empfehlung, Schatten folgt dem heutigen Soll (mit derselben Hysterese)
         self.dhw_rec = {"target": None, "reason": "lernt noch: " + "; ".join(check["reasons"])}
@@ -119,6 +120,7 @@ class DhwMixin:
 
     def dhw_step(self, ts: int, sample: dict) -> None:
         """Warmwasser lernen und die Spar-Strategie im Schatten mitlaufen lassen."""
+        self.dhw_now = bool(sample.get("dhw"))  # 0.68: Ladung laut Messpunkt (auch erschlossen) für die Kesselsteuerung
         t_cur = sample.get("dhw_temp")
         nom = self.nominal_kw()  # Einstellung vor Kessel-Sensor (der liefert oft keine Zahl)
         kw = None
