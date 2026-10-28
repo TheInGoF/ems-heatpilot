@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.67.1
+- **Fix Seitenleiste der Übersicht:** In der schmalen Seitenleiste (ab 900 px Breite) lief der Wert über den Titel („Gewohnheiten“ unter „1 von 2 zu Hause“). Ist das Menü schmaler als 320 px, steht der Wert jetzt klein unter dem Titel (Container-Abfrage auf `.set-menu`)
+- **Kacheln der Einstellungen:** lange Titel („Gewohnheiten erkennen“, „Karten für Home Assistant“) brechen um statt mit „…“ abgeschnitten zu werden
+
 ## 0.67.0
 - **Gelernte Gewohnheiten sichtbar:** Übersicht → Gewohnheiten (bisher „Anwesenheit“) zeigt oben je Wochentag und Stunde, was HeatPilot gelernt hat – **schlafend** (Nachtzeiten aus Hausleistung und Sensor-Eimer, wo für den Tag belastbar, sonst der eingestellte Wochenplan), **abwesend** (laut Gewohnheit der Personen ist wahrscheinlich niemand zu Hause, unter 30 %) und sonst **wach**. Je Tag steht dabei, ob die Zeiten gelernt oder eingestellt sind und wie sicher die Aufwachzeit ist. Neu: `habits.py`, `GET api/habits` – nichts wird neu gerechnet, nur Vorhandenes zusammengesetzt
 - **„Strom & Aktivität“ heißt jetzt „Gewohnheiten erkennen“** (Einstellungen → Haus) und verweist auf die neue Anzeige

@@ -488,6 +488,13 @@ label.switch input:checked { background: var(--series-1); } label.switch input:c
 .nr-t { flex: 1; min-width: 0; } .nr-t b { display: block; font-weight: 500; }
 .nr-t small { display: block; font-size: var(--fs-small); color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nr-v { font-size: var(--fs-text); color: var(--text-secondary); white-space: nowrap; }
+/* 0.67.1: in der schmalen Seitenleiste steht der Wert unter dem Titel statt darüber */
+.set-menu { container-type: inline-size; }
+@container (max-width: 320px) {
+  .nav-row { display: grid; grid-template-columns: 1fr auto; gap: 2px var(--s3); }
+  .nav-row .nr-chev { grid-row: 1 / span 2; grid-column: 2; }
+  .nav-row .nr-v { grid-column: 1; white-space: normal; font-size: var(--fs-small); color: var(--text-muted); }
+}
 .nr-chev { color: var(--text-muted); }
 @media (max-width: 520px) {
   table.tbl.stack, table.tbl.stack tbody, table.tbl.stack tr, table.tbl.stack td { display: block; width: 100%; }
@@ -692,6 +699,7 @@ details.ov-fold > .card { border: 0; padding: 0; margin: 8px 0 0; background: no
 .sec-tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(140px, 42vw), 1fr)); gap: var(--s2); margin: 0 0 var(--s4); }
 .sec-tiles .st-h { grid-column: 1 / -1; margin: var(--s2) 0 0; }
 .sec-tile { min-height: 72px; justify-content: space-between; }
+.sec-tile .rt-n { white-space: normal; overflow: visible; }  /* 0.67.1: lange Titel umbrechen statt kürzen */
 .subpage > [hidden] { display: none !important; }
 .subpage > details.em-group > summary { pointer-events: none; list-style: none; }  /* Unterseite: immer offen */
 .subpage > details.em-group > summary::-webkit-details-marker { display: none; }  /* Kachelraster, Raumkacheln, Knöpfe: in der Unterseite weg */
