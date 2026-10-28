@@ -244,7 +244,9 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   Benachrichtigungsziele fehlen; die Entitäten von EMS-ESP (`boiler_…`, `thermostat_…`) bleiben lesbar. Drin:
   `info.json` (Version, Kesselmodell aus der Geräteregistry, Thermostatstufe je Raum, die drei Schalter, Selbsttest),
   `langzeit_30_tage.json` (das Gelernte mit den Stundenwerten der letzten 30 Tage) und `kurzzeit_12h.csv` bzw.
-  `kurzzeit_24h.csv` (die 30-s-Werte). **„Fehler auf GitHub melden“** öffnet das vorbereitete Issue-Formular – vorher
+  `kurzzeit_24h.csv` (die 30-s-Werte). Seit 0.68 **ohne Daten je Person** (Anwesenheit, Entfernung, Ankunft,
+  Personenmodelle) – die vollen Daten darunter behalten sie, damit die Entwicklung alles sieht, was HeatPilot weiß.
+  **„Fehler auf GitHub melden“** öffnet das vorbereitete Issue-Formular – vorher
   fragt HeatPilot nach: Auch anonymisiert zeigt der Bericht, besonders mit den 30-s-Werten, wann jemand zu Hause ist
   und schläft; das Formular verlangt dieselbe Bestätigung. Die folgenden Dateien stehen darunter eingeklappt unter
   **„Volle Daten – Achtung, sensible Daten“**: nicht anonymisiert, nur für die Entwicklung, nie öffentlich posten.

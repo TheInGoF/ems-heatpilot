@@ -8,6 +8,7 @@ Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 - Fix: keine Kessel-Pause mehr durch Warmwasser-Ladung
 - Fix: Soll nach Thermostat-Ausfall erneut geschrieben
 - 30-s-Werte mit Anwesenheit je Person
+- Fehlerbericht ohne Daten je Person
 
 ## 0.67.1
 - Fix: Menü der Übersicht überlappte in der Seitenleiste
