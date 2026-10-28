@@ -60,7 +60,7 @@ STATIC = Path(__file__).parent / "static"
 
 # Domains, aus denen die Oberfläche Entitäten zur Auswahl anbietet
 PICK_DOMAINS = ("sensor", "binary_sensor", "climate", "weather", "input_boolean", "switch",
-                "number", "select", "person", "counter")
+                "number", "select", "person", "counter", "light", "media_player")  # 0.65.1: Sensor-Eimer
 
 
 def clean(value):
