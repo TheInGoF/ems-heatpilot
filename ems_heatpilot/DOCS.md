@@ -1693,9 +1693,21 @@ Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
   den **Öffnungs-Deckel** um 5 Punkte je Tag – nie unter 40 %. Bleibt die Unterversorgung 3 Tage aus, gehen die
   Deckel schrittweise zurück auf 100 %. Der Deckel begrenzt nur den PID-Ausgang. Der handgeführte Abgleich
   (Empfehlungen zur Voreinstellung am Ventilunterteil) bleibt für temperaturgeführte Räume.
+- **Reihenfolge, wenn ein Raum nicht warm wird** (seit 0.70): erst der eigene Deckel weg, dann die leichten Räume
+  drosseln, erst zuletzt mehr Vorlauf. Bleibt ein Raum 15 min an seinem Deckel unter Soll, fällt der Deckel sofort
+  (nicht erst nach Tagen). Ein gedeckelter Raum treibt den Vorlauf nie – erst mit dem Ventil auf 100 %.
+- **Gelernte Wirkungsgrenze** (seit 0.70): Ab welcher Öffnung wird der Raum nicht mehr schneller warm? HeatPilot lernt
+  es je Raum aus 14 Tagen (Raum unter Soll, Heizung läuft, Ventil ruhig; Anstieg je Öffnungsklasse von 20 %) und
+  begrenzt den PID darauf – der zieht dann nicht sinnlos bis 100 % auf und regelt früher zurück. Die Grenze ist nur
+  ein weicher Deckel: Wird der Raum daran nicht warm, ruht sie, bis er es ist. Liegt sie unter 60 %, ist eher das
+  Ventil falsch kalibriert – dann begrenzt HeatPilot nicht, sondern meldet „Ventil wirkt schon ab … % voll“.
 - Die Soll-Schiene und [Ventile führen](#ventile-führen) fassen ventilgeführte Räume nicht an; **gelernt** wird der
   Raum weiter wie bisher – das gestellte Prozent ist sein Ventilwert. Die Raumkarte zeigt z. B.
   „Ventil · komfort 21° · 45 %“.
+- **Ventil schließt nicht** (seit 0.70, alle Räume mit Ventil in %, ohne Fußbodenheizung): Wird ein Raum bei 0 %
+  deutlich schneller warm, wenn die Heizung läuft, als wenn sie steht (mindestens 0,3 K/h, je mindestens 2 h in
+  7 Tagen), meldet HeatPilot „Ventil schließt wohl nicht ganz“ – Ventiladapter prüfen, Thermostat neu kalibrieren, ggf.
+  Unterlegscheibe. Sonne und Nachbarwärme kommen auch ohne Heizung und lösen die Meldung deshalb nicht aus.
 
 ## Räume wechseln (z. B. Tado-Cloud → HomeKit)
 

@@ -39,7 +39,7 @@ import math
 from dataclasses import dataclass, field
 
 from . import boiler_rule as br
-from . import boiler_power, boiler_stall, floor_limit, guards, preview, valve_dry
+from . import balance_auto, boiler_power, boiler_stall, floor_limit, guards, preview, valve_dry
 from .dhw_control import special_running
 
 
@@ -130,8 +130,9 @@ def _off(heating, reason: str, **kw) -> Target:
 
 
 def _stall_rooms(eng, readings: dict, floors) -> list[tuple]:
-    """(climate, Name, Ist, Soll, Ventil) der Räume, die für den Zuschlag zählen – ohne Fußbodenheizung."""
-    skip = {f.climate for f in floors}
+    """(climate, Name, Ist, Soll, Ventil) der Räume, die für den Zuschlag zählen – ohne Fußbodenheizung und ohne
+    gedeckelte ventilgeführte Räume (0.70: erst der Deckel weg, ``balance_auto``, dann mehr Vorlauf)."""
+    skip = {f.climate for f in floors} | balance_auto.capped(eng)
     return [(r.climate, r.name, *readings[r.climate][1:4]) for r in eng.found.rooms
             if r.climate in readings and r.climate not in skip]
 

@@ -7,6 +7,12 @@ dann senkt HeatPilot die Deckel der leichten Räume in kleinen Schritten (wie ei
 nur automatisch und umkehrbar). Bleibt die Unterversorgung ``RAISE_DAYS`` Tage aus, gehen die Deckel schrittweise
 zurück Richtung 100 %.
 
+Seit 0.70 gilt eine feste Reihenfolge, wenn ein Raum nicht warm wird: **erst der eigene Deckel weg, dann die leichten
+Räume drosseln, erst zuletzt mehr Vorlauf.** Bleibt ein Raum ``RELEASE_S`` lang an seinem Deckel unter Soll, fällt
+sein Abgleich-Deckel sofort weg und die gelernte Wirkungsgrenze (``valve_range``, im Zustand ``limit``) ruht, bis er
+warm ist (``released``). Solange ein Raum gedeckelt ist, treibt er den Vorlauf nicht (``capped`` für
+``boiler_flow``) – erst mit dem Ventil auf 100 %.
+
 Der Deckel begrenzt nur den PID-Ausgang (``valve_pid_control``); Räume über das Soll hinaus drosselt der PID ohnehin.
 Beobachtet wird je 30-s-Schritt (``observe``), entschieden einmal je Tageswechsel (``_rebalance``). Zustand
 {caps, day, obs, calm_days, last} läuft über ``valve_pid_control`` (kv) weiter. Der handgeführte Abgleich
@@ -24,11 +30,21 @@ EASY_MIN_S = 3600   # … mindestens so lange am Tag
 STEP_PCT = 5        # Deckel je Tag höchstens um so viel senken bzw. anheben
 CAP_MIN = 40        # nie weiter drosseln als bis hierhin
 RAISE_DAYS = 3      # so viele ruhige Tage in Folge, dann Deckel wieder anheben
+RELEASE_S = 900     # 0.70: so lange am Deckel unter Soll – Deckel weg, Wirkungsgrenze ruht bis warm
 
 
 def cap(st: dict, climate: str) -> float:
-    """Öffnungs-Deckel eines Raums in % (100 = ungedrosselt)."""
-    return float((st.get("caps") or {}).get(climate, 100.0))
+    """Öffnungs-Deckel eines Raums in % (100 = ungedrosselt): Abgleich und Wirkungsgrenze, außer freigegeben."""
+    if climate in (st.get("released") or {}):
+        return 100.0
+    return float(min((st.get("caps") or {}).get(climate, 100.0), (st.get("limit") or {}).get(climate, 100.0)))
+
+
+def capped(eng) -> set[str]:
+    """Ventilgeführte Räume mit Deckel unter 100 % – sie treiben den Vorlauf nicht (``boiler_flow``)."""
+    ctl = getattr(eng, "valve_pid", None)
+    st = ((ctl.state if ctl is not None else None) or {}).get("bal") or {}
+    return {c for c in set(st.get("caps") or {}) | set(st.get("limit") or {}) if cap(st, c) < 100.0}
 
 
 def observe(st: dict, rooms: list[tuple], ts: int) -> None:
@@ -42,12 +58,21 @@ def observe(st: dict, rooms: list[tuple], ts: int) -> None:
     st["day"] = day
     dt = min(max(ts - st.get("ts", ts), 0), 120)
     st["ts"] = ts
-    obs = st.setdefault("obs", {})
+    obs, rel = st.setdefault("obs", {}), st.setdefault("released", {})
     for climate, temp, sp, out, limit in rooms:
         o = obs.setdefault(climate, {"starve_s": 0, "easy_s": 0})
         if temp < sp - STARVE_K and out >= min(limit, 100.0) - 1.0:
             o["starve_s"] += dt
-        elif temp >= sp - 0.1 and out <= EASY_PCT:
+            o["run_s"] = o.get("run_s", 0) + dt if limit < 100.0 else 0
+            if o["run_s"] >= RELEASE_S:  # 0.70: erst der eigene Deckel weg
+                rel[climate], o["run_s"] = ts, 0
+                st.setdefault("caps", {}).pop(climate, None)
+                st["last"] = {"day": day, "released": [climate]}
+            continue
+        o["run_s"] = 0
+        if climate in rel and temp >= sp - 0.1:
+            rel.pop(climate)  # warm: die Wirkungsgrenze gilt wieder
+        if temp >= sp - 0.1 and out <= EASY_PCT:
             o["easy_s"] += dt
 
 

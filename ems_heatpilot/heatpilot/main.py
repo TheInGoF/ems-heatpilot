@@ -28,6 +28,7 @@ from . import boiler_period, disinfect_entity, disinfect_rule, floor_limit, hous
 from . import card_bridge, room_ids, room_switch  # 0.44: feste Raumkennung, Thermostatwechsel; 0.56: Karten
 from . import live_log  # 0.50: Entscheidung von Weg B ins 30-s-Protokoll
 from . import room_heating, sensor_gone, valve_learn  # 0.45: Heizleistung vom alten Thermostat; 0.45.1
+from . import valve_leak  # 0.70: Ventil schließt nicht
 from .app_jobs import JobsMixin
 from .backfill import run_backfill
 from . import room_lead
@@ -524,6 +525,7 @@ async def run(app: App) -> None:
             summary = eng.summary()
             eng.note_changes(summary)
             await publish(app.ha, summary)
+            valve_leak.check(eng)  # 0.70: Ventil schließt nicht – stündlich, nur Meldung (zuletzt: stört sonst nichts)
             log.debug("Takt fertig in %.2f s", time.monotonic() - started)
         except Exception:  # noqa: BLE001
             log.exception("Fehler im Takt")

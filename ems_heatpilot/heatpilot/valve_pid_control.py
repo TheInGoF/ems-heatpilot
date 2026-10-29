@@ -9,7 +9,8 @@ Für Räume mit Führung „ventilgeführt“ (``room_lead``, z. B. Shelly BLU T
    pausiert der Raum ``FAIL_HOLD_S`` (Meldung), dann geht es von selbst weiter.
 3. **PID-Schritt** (``valve_pid.step``): Wunsch-Soll und Phase kommen aus der Regelschleife (``controlloop``), die
    Raumtemperatur aus dem Raum (Zusatzsensor bzw. Thermostat), der Vorlauf vom Kessel. Der Öffnungs-Deckel kommt vom
-   automatischen Abgleich (``balance_auto``). Ohne Raumtemperatur stellt HeatPilot nach ``valve_pid.BLIND_S`` einmal
+   automatischen Abgleich (``balance_auto``), seit 0.70 mit der gelernten Wirkungsgrenze (``valve_range``, stündlich).
+   Ohne Raumtemperatur stellt HeatPilot nach ``valve_pid.BLIND_S`` einmal
    den sicheren Wert ``FALLBACK_PCT`` (kein Frost, kein Überheizen) und wartet.
 4. **Schreiben** nur über ``Control.set_valve`` (harte Schutzregeln in ``room_lead.check_valve_call``), nach den
    Schreibregeln ``valve_pid.decide``; die Nutzer-Pause der Steuerung hält auch diese Schiene an.
@@ -25,7 +26,7 @@ import json
 import logging
 import time
 
-from . import balance_auto, guards, room_lead, valve_pid
+from . import balance_auto, guards, room_lead, valve_pid, valve_range
 from .dhw_rule import CHECK_MAX_S, CHECK_S, MAX_FAILS
 from .values import num
 
@@ -36,6 +37,7 @@ HAND_PCT = 5        # fremde Hand: Ventil weicht ab so vielen Prozentpunkten vom
 HAND_HOLD_S = 3600  # … dann wartet der Raum so lange
 HAND_GRACE_S = 120  # so lange nach dem eigenen Schreiben zählt eine Abweichung nicht als fremd
 FAIL_HOLD_S = 3600  # nach ``MAX_FAILS`` Fehlschlägen in Folge: Raum so lange pausieren, dann von selbst weiter
+RANGE_EVERY_S = 3600  # 0.70: Wirkungsgrenze der Ventile (``valve_range``) so oft neu lernen
 K_FAIL, K_HAND = "valve_pid_fail", "valve_pid_hand"
 ACT_SET, ACT_FAIL = "valve_set", "valve_check_failed"
 
@@ -86,7 +88,11 @@ class ValvePidControl:
         for room in rooms:
             st = rst.setdefault(room.climate, {})
             self._step_room(room, st, ts, loop, paused, managing, flow, t_out, obs)
-        balance_auto.observe(self.state.setdefault("bal", {}), obs, ts)
+        bal = self.state.setdefault("bal", {})
+        balance_auto.observe(bal, obs, ts)
+        if ts - int(bal.get("range_ts") or 0) >= RANGE_EVERY_S:  # 0.70
+            bal["range_ts"] = ts
+            valve_range.update(bal, self.eng.notifier, rooms, self.eng.store, ts)
         self.view = {"ts": ts, "rooms": {r.climate: dict(rst.get(r.climate) or {}) for r in rooms}}
         self._save()
 
