@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.70.0
+- Raum wird nicht warm: erst Deckel weg, dann Abgleich, zuletzt Vorlauf
+- Ventile: gelernte Wirkungsgrenze für den PID
+- Meldung „Ventil schließt nicht“
+
 ## 0.69.0
 - Fahrt zur Unzeit Richtung Zuhause: erst bestätigte Heimfahrt zählt
 
