@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.69.0
+- **Keine falsche Heimkehr mehr bei Fahrten zwischen zwei Zielen:** Am 27.10. um 10:15 fuhr jemand von einer Baustelle zur nächsten, ein Stück Richtung Zuhause. HeatPilot erwartete die Ankunft um 10:57, heizte alle Räume vor und lud Warmwasser – 20 min später war klar: kein Heimweg. Bisher reichte jedes Näherkommen mit halbem Heimfahrt-Tempo. Jetzt (`PersonLearner.eta`): Läge die GPS-Ankunft mehr als `UNEXPECTED_H` (2 h) vor der gewohnten Heimkehr, zählt erst eine bestätigte Heimfahrt (`steady_return`: 30 min am Stück näher, 15 km); bis dahin gilt die Gewohnheit. Zur gewohnten Zeit (oder ohne gelernte Gewohnheit) reagiert HeatPilot wie bisher sofort
+- Tests: `tests/test_presence69.py`
+
 ## 0.68.0
 - **Warmwasser nachts passend zum Heizstart statt zur festen Zeit:** Der Speicher fällt nachts auf das Minimum und lädt so spät, dass er **5 min vor dem frühesten Heizstart der Räume** fertig ist (`dhw_target.heat_start` aus den Wunschzuständen des Regelkreises, `HEAT_GAP_H`); ohne Heizstart vor dem Nachtende. Die Ladedauer rechnet ab der **aktuellen Speichertemperatur** mit der gelernten Ladegeschwindigkeit (bisher ab dem Minimum plus 30 min Puffer vor dem Nachtende – deshalb jede Nacht um ~3:00). Beispiel: Vorheizen ab 4:13, Wasser braucht 23 min → Laden ab 3:45. Vor einer Ankunft bleibt es bei der halben Stunde Puffer
 - **Fix: Kesselsteuerung pausierte nach einer Warmwasser-Ladung.** Während der Ladung zeigt mancher Kessel „Heizbetrieb an“; HeatPilot schaltete dreimal aus, wertete das als Fehlschlag und pausierte („3 Fehlschläge in Folge“) – am 27.10. fiel dadurch das Vorheizen von 03:30 bis 05:09 aus. Jetzt bleibt der Heizbetrieb während einer Ladung unangetastet (`decide_heating(charging=…)`), und die Ladung zählt auch, wenn nur der Messpunkt sie erkennt (`dhw_now`)

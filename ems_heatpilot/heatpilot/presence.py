@@ -35,6 +35,7 @@ SPEED_WINDOW_S = 900     # Annäherungstempo: Regression über so viele Sekunden
 # oder mindestens so schnell im Verhältnis zum gelernten Heimfahrt-Tempo
 APPROACH_MIN_KM = 4 * JITTER_KM
 APPROACH_MIN_FRAC = 0.5
+UNEXPECTED_H = 2.0       # 0.69: GPS-Ankunft so viel vor der Gewohnheit: nur eine bestätigte Heimfahrt zählt
 
 # Kontrolle der Vorhersage: was wurde so lange vor der tatsächlichen Ankunft erwartet?
 CHECK_BEFORE_MIN = (60, 30, 15)
@@ -507,21 +508,22 @@ class PersonLearner:
         if speed is not None:
             info["speed_kmh"] = round(speed, 1)
         ret = self.steady_return(now)
+        habit = None if self.long_away else self.next_home_by_habit(now, earliest=self.earliest_arrival(now),
+                                                                      since=self._away_since)
         if speed is not None and speed > MOVE_KMH and self.dist_km and self._approaching(speed):
             vl = self.approach_speed_kmh
             v = 0.5 * max(speed, vl) + 0.5 * vl  # Momenttempo (Stau, Anfahrt) darf nur verfrühen, nie verspäten
             eta = now + timedelta(hours=self.dist_km / max(v, 5))
             if ret and ret["eta"] > now:  # bestätigte Heimfahrt: deren Schnitt mitnehmen
                 eta = min(eta, ret["eta"])
-            info["eta"], info["source"], info["confidence"] = eta, "gps", 0.8
-            return info
+            # 0.69: zur Unzeit (Gewohnheit sagt viel später) ist Näherkommen oft nur eine Fahrt zum nächsten Ziel
+            if ret or not habit or habit[0] - eta <= timedelta(hours=UNEXPECTED_H):
+                info["eta"], info["source"], info["confidence"] = eta, "gps", 0.8
+                return info
         if ret:  # bestätigte Heimfahrt, gerade kurz Rast/Stau: deren Ankunft gilt weiter
             info["eta"], info["source"], info["confidence"] = ret["eta"], "gps", 0.7
             return info
-        if self.long_away:
-            return info  # lange weg: die Gewohnheit sagt über die Rückkehr nichts
-        habit = self.next_home_by_habit(now, earliest=self.earliest_arrival(now), since=self._away_since)
-        if habit:
+        if habit:  # lange weg: keine – die Gewohnheit sagt über die Rückkehr nichts
             info["eta"], info["confidence"] = habit[0], round(habit[1], 2)
             info["source"] = "gewohnheit"
         return info

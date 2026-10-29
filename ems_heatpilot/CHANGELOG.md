@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.69.0
+- Fahrt zur Unzeit Richtung Zuhause: erst bestätigte Heimfahrt zählt
+
 ## 0.68.0
 - Warmwasser nachts fertig 5 min vor dem Heizstart
 - Ladedauer ab aktueller Speichertemperatur
