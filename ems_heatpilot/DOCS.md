@@ -348,7 +348,9 @@ Unter den Grafen steht je gewählter Person:
   erwarteter Ankunft samt Quelle (GPS-Annäherung oder Gewohnheit). Als
   GPS-Annäherung zählt nur, wer mindestens halb so schnell wie das gelernte
   Heimfahrt-Tempo näher kommt oder seit Beginn der Annäherung mindestens 2 km
-  näher ist – GPS-Schwankung am Arbeitsplatz ergibt keine Ankunft.
+  näher ist – GPS-Schwankung am Arbeitsplatz ergibt keine Ankunft. Seit 0.69 zur Unzeit nur eine erkannte
+  Heimfahrt: Läge die GPS-Ankunft über 2 h vor der gewohnten Heimkehr, ist Näherkommen oft nur die Fahrt zum nächsten
+  Ziel (von Baustelle zu Baustelle) – bis die Heimfahrt erkannt ist, gilt die Gewohnheit.
 - **Lange weg:** Wer länger als 72 h weg ist (oder länger als 24 h und dabei über
   300 km entfernt), gilt als verreist: Die Gewohnheit lernt das nicht, das Raster
   bleibt auf dem Stand bei der Abfahrt. Ausnahme regelmäßige Abwesenheit
