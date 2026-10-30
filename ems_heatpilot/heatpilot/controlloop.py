@@ -32,8 +32,7 @@ noch nicht angekommen (``_observe``; danach einmal erneut geschrieben statt Hand
 Schritt wegen Hand (auch „aus“), gilt das Wunschsoll als zuletzt geschrieben – die Hand bleibt dann wie oben bis zum
 Phasenwechsel. In der Pause geht nur das Zurück der Führung hinaus; vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt ``release`` laufende Schritte einmal zurück.
 Sollwerte gelten ab 0,1 K als verschieden (``_same``, mit Toleranz für Gleitkommareste).
-``plan()`` läuft im Takt der Engine (nach ``dhw_step``) und sammelt die Schreibvorgänge, ``apply()`` führt sie danach
-aus (nur über ``Control``); ``stop()`` (main.build beim Neuaufbau) hält ein laufendes ``apply()`` an.
+``plan()`` (Takt der Engine, nach ``dhw_step``) sammelt, ``apply()`` schreibt (nur über ``Control``), ``stop()`` hält es an.
 """
 
 from __future__ import annotations
@@ -389,14 +388,15 @@ class ControlLoop:
         elif manual and _same(current, st.get("before")) and not st.get("again"):  # 0.68: nie angekommen (Thermostat
             last, manual, st["again"] = None, False, True  # war weg) statt Hand – einmal erneut schreiben
         sp, reason, prop, write = d.setpoint, f"{d.phase}: {d.reason}", None, False
-        if manual and (self.eng.states.get(c) or {}).get("state") == "auto":  # 0.50.2: Tado folgt nach Boost bzw.
-            manual, st["boosted"] = False, True  # Timer wieder seinem Zeitplan – keine Hand: zurück zum Wunsch
+        auto = (self.eng.states.get(c) or {}).get("state") == "auto"  # Tado-/Geräte-Automatik (0.50.2 nach Boost):
+        if auto and c not in boosts:  # seit 0.71 nie stehen lassen – keine Hand, zurück zum Wunsch, auf manuell
+            manual, st["boosted"] = False, True
         if c in boosts:
             st["boosted"] = True
         elif c in expired:
             st.pop("boosted", None)  # Wiederherstellung läuft über end_boost (restores), nicht doppelt
         elif st.pop("boosted", False):
-            write = not _same(current, d.setpoint)  # nach dem Boost zurück zum Wunsch (auch nach „aus“)
+            write = auto or not _same(current, d.setpoint)  # nach Boost/Automatik zurück zum Wunsch (auch nach „aus“)
         elif phase_changed and not _same(current, d.setpoint):
             write = True  # Phasenwechsel beendet Handänderung/„aus“, auch wenn das Wunsch-Soll gleich bleibt
         else:

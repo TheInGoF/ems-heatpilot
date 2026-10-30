@@ -71,3 +71,34 @@ def test_own_modes_need_heatpilot_in_control(tmp_path):
     eng.cfg.control_mode = "beobachten"
     with pytest.raises(ControlError, match="HeatPilot steuert"):
         run(heat_actions.run(_app(eng, vp), "mode", {"room": "climate.wz", "mode": "off"}))
+
+
+# ------------------------------------------------------------------ Tado bleibt auf manuell (0.71)
+def test_device_automation_is_never_left_standing(tmp_path):
+    """Tado springt von selbst in seine Automatik zurück; stand dort zufällig dasselbe Soll, blieb es bisher dabei."""
+    from test_control34 import MON, climate, make, step, ts_of
+
+    eng, ha, _, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 17.0)
+    step(eng, loop, ts_of(MON, 12))
+    want = ha.calls[-1][3]["temperature"]
+    climate(eng, "climate.wz", 20.0, want, mode="auto")  # Tado-Automatik mit demselben Soll
+    n = len(ha.calls)
+    step(eng, loop, ts_of(MON, 12) + 60)
+    assert ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "heat"}) in ha.calls[n:]
+
+
+def test_boost_and_schedule_of_led_tado_rooms_avoid_the_tado_automation(tmp_path):
+    from test_control34 import make
+
+    tado = Room("Wz", "climate.wz", managed=True, comfort=21.0, platform="tado")
+    eng, ha, ctl, loop = make(tmp_path, rooms=[tado])
+    eng.states["climate.wz"] = {"state": "heat", "attributes": {"temperature": 20, "hvac_modes": ["off", "heat", "auto"]}}
+    run(ctl.boost(["climate.wz"], 23, 30, own={"climate.wz"}))
+    assert not [c for c in ha.calls if c[:2] == ("tado", "set_climate_timer")]
+    assert ("climate", "set_temperature", "climate.wz", {"temperature": 23.0}) in ha.calls
+    run(ctl.schedule(["climate.wz"], {"climate.wz": 21.0}))
+    assert ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "auto"}) not in ha.calls
+    assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": 21.0})
+    run(ctl.schedule(["climate.wz"]))  # nicht geführt (beobachten): wie bisher zurück in den Tado-Zeitplan
+    assert ha.calls[-1] == ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "auto"})

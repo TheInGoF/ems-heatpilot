@@ -521,9 +521,12 @@ Phasenwechsel.
   nach Ablauf stellt es den Wunschzustand (HeatPilot steuert) bzw. das Soll von vorher
   (Beobachten) wieder her – aber nur, wenn das Boost-Soll noch steht; wurde inzwischen von
   Hand gedreht, bleibt das stehen. Läuft ein Timer, zeigt die Kachel die Restzeit.
-  **Zeitplan** – Tado-Cloud-Räume zurück in den Tado-Zeitplan (beendet laufende Timer sofort);
-  andere Räume bekommen bei „HeatPilot steuert“ den Wunschzustand, bei „Beobachten“ erscheint
-  der Hinweis, den Zeitplan in der Tado-App fortzusetzen. **Ausschalten** – alle Räume aus,
+  **Zeitplan** – bei „HeatPilot steuert“ bekommen Räume mit „macht mit“ den Wunschzustand (seit 0.71 auch Tado – das
+  Thermostat bleibt auf manuell); bei „Beobachten“ gehen Tado-Cloud-Räume zurück in den Tado-Zeitplan (beendet
+  laufende Timer sofort), bei anderen erscheint der Hinweis, den Zeitplan in der App fortzusetzen.
+  **Tado-Automatik** (seit 0.71): Räume, die HeatPilot führt, bleiben immer auf manuell – die Betriebsart „Automatik“
+  heißt dort HeatPilots Plan, ein Boost läuft ohne Tado-Timer (danach fiele Tado in seine Automatik), und springt
+  ein Thermostat von selbst in die Automatik zurück, stellt HeatPilot es im nächsten Takt wieder auf manuell. **Ausschalten** – alle Räume aus,
   Tado hält dann nur den Frostschutz. **Pause** (nur bei „HeatPilot steuert“) – 1 h, 2 h, 4 h
   oder bis morgen früh (06:00) schreibt HeatPilot nichts (außer dem Zurück eines Schritts von
   [Ventile führen](#ventile-führen) aufs Wunschsoll); „Weiter“ hebt die Pause auf.

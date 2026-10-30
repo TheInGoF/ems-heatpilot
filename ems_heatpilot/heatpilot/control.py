@@ -474,7 +474,9 @@ class Control(boiler_period.PeriodWrite):
         return {"ok": not errors, "done": done, "errors": errors}
 
     # ------------------------------------------------------------------ Bedienung
-    async def boost(self, rooms, temp, minutes) -> dict:
+    async def boost(self, rooms, temp, minutes, own: set | frozenset = frozenset()) -> dict:
+        """Boost; ``own`` (seit 0.71): Räume, die HeatPilot führt – auch bei Tado ohne Tado-Timer (der fällt danach in
+        die Tado-Automatik), HeatPilot stellt am Ende selbst zurück."""
         rooms, t = self._check_rooms(rooms), self._temp(temp)
         try:
             minutes = int(minutes)
@@ -488,11 +490,11 @@ class Control(boiler_period.PeriodWrite):
         async def one(r):
             room = self.groups[r]
             targets = room.write_targets
-            local = not all(self.is_tado(e) for e in targets)
+            local = r in own or not all(self.is_tado(e) for e in targets)
             before = self.target(r)
             before_mode = self._mode(r)
             for e in targets:
-                if self.is_tado(e):
+                if self.is_tado(e) and r not in own:
                     await self._call("tado", "set_climate_timer", e,
                                      {"temperature": t, "time_period": _hhmmss(minutes)}, reason)
                 else:
@@ -503,18 +505,18 @@ class Control(boiler_period.PeriodWrite):
         return await self._each(rooms, f"Boost {t:g} °C für {minutes} min", one)
 
     async def schedule(self, rooms, desired: dict[str, float] | None = None) -> dict:
-        """„Zeitplan“: Tado-Cloud-Räume zurück in den Tado-Zeitplan (beendet auch einen Timer).
-        Andere Entitäten haben keinen Zeitplan: mit ``desired`` (Steuerung heatpilot) wird der
-        Wunschzustand geschrieben, sonst gibt es nur den Hinweis (``hint``)."""
+        """„Zeitplan“: mit ``desired`` (Steuerung heatpilot, Räume mit „macht mit“) wird der Wunschzustand geschrieben –
+        seit 0.71 auch bei Tado, das Thermostat bleibt auf manuell. Sonst Tado-Cloud-Räume zurück in den Tado-Zeitplan
+        (beendet auch einen Timer); andere Entitäten haben keinen Zeitplan: nur der Hinweis (``hint``)."""
         hints = []
 
         async def one(r):
             room = self.groups[r]
             for e in room.write_targets:
-                if self.is_tado(e):
-                    await self._call("climate", "set_hvac_mode", e, {"hvac_mode": "auto"}, "Zeitplan")
-                elif desired and desired.get(r) is not None:
+                if desired and desired.get(r) is not None:  # HeatPilot führt (0.71: auch Tado) – bleibt manuell
                     await self._set(e, self._temp(desired[r]), "Zeitplan (HeatPilot)")
+                elif self.is_tado(e):
+                    await self._call("climate", "set_hvac_mode", e, {"hvac_mode": "auto"}, "Zeitplan")
                 else:
                     hints.append(room.name)
             self.boosts.pop(r, None)
