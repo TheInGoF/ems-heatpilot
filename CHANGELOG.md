@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.71.0
+- **Stufe-3-Räume: nie eine Betriebsart am Thermostat.** Bei einem Ventil, das HeatPilot direkt in Prozent stellt, schaltet eine Betriebsart (auch „auto“) oder ein Soll am Thermostat dessen manuelle Ventilsteuerung ab – passiert am 30.10. beim neuen Flur-Thermostat über den Knopf „Betriebsart“. `Control` sperrt jetzt jeden `climate`- bzw. `tado`-Aufruf auf diese Thermostate (`stage3`)
+- **Eigene Betriebsarten für ventilgeführte Räume** (`valve_modes`, Zustand `own` je Raum): Die Knöpfe Betriebsart, Soll, Boost und Zeitplan (Seite und Karten, `heat_actions`) wirken bei diesen Räumen auf den PID – **Aus** hält nur den Frostschutz 7 °C, **Manuell**/Soll bis zum nächsten Phasenwechsel, **Boost** für die gewählte Dauer, **Zeitplan** zurück zum Plan. Gemischte Auswahl wird aufgeteilt; ohne „HeatPilot steuert“ eine Fehlermeldung. Die Raumkachel zeigt die eigene Betriebsart („Ventil · Aus (Frostschutz) · 0 %“)
+- Tests: `tests/test_valve_modes71.py`
+
 ## 0.70.0
 - **Reihenfolge, wenn ein Raum nicht warm wird: Deckel → Abgleich → Vorlauf.** Bisher blieb ein ventilgeführter Raum mit Abgleich-Deckel gedeckelt, auch wenn er selbst fror (Deckel stiegen erst nach 3 ruhigen Tagen). Jetzt fällt sein Deckel nach 15 min am Deckel unter Soll sofort (`balance_auto.RELEASE_S`, Zustand `released`); dann drosselt der Abgleich die leichten Räume; mehr Vorlauf gibt es erst, wenn das Ventil auf 100 % steht – gedeckelte Räume zählen für den Zuschlag „kommt nicht hoch“ nicht (`balance_auto.capped`, `boiler_flow._stall_rooms`)
 - **Gelernte Wirkungsgrenze der Ventile** (`valve_range`, ventilgeführte Räume): ab welcher Öffnung der Raum nicht mehr schneller warm wird – je Öffnungsklasse (20 %) der Anstieg in K/h je K Vorlauf über Raum aus 14 Tagen, stündlich neu. Der PID wird darauf begrenzt (weicher Deckel, kein sinnloses Aufziehen bis 100 %), die Grenze ruht aber, sobald der Raum daran nicht warm wird – nie ein Grund für mehr Vorlauf. Unter 60 % gilt sie als unplausibel (Ventil falsch kalibriert): keine Grenze, sondern eine Meldung

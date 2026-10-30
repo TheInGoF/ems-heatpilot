@@ -3,6 +3,7 @@ Karten in Home Assistant (``card_bridge``, seit 0.56).
 
 Aktionen: ``boost`` {rooms, temp, minutes} · ``schedule`` {rooms} · ``temp`` {room, temp} · ``mode`` {rooms|room,
 mode} · ``pause`` {hours} · ``override`` {mode: nacht|anwesend|abwesend|aus} (0.62, ``override``). Fehler als ``control.ControlError`` (Text für die Oberfläche).
+Ventilgeführte Räume (Stufe 3) bedient ``valve_modes`` selbst – ihr Thermostat bekommt keine Betriebsart (seit 0.71).
 """
 
 from __future__ import annotations
@@ -11,12 +12,26 @@ from datetime import datetime
 
 from . import control as control_mod
 from . import override as override_mod
+from . import valve_modes
 
 ACTIONS = ("boost", "schedule", "temp", "mode", "pause", "override")
 
 
 async def run(app, action: str, body: dict) -> dict:
     """Aktion ausführen; Ergebnis wie ``control`` ({done, failed, …}) bzw. bei ``pause`` {paused_until}."""
+    if action in ("boost", "schedule", "temp", "mode"):  # 0.71: Stufe 3 ohne Betriebsart am Thermostat
+        try:
+            body, own = valve_modes.take(app, action, body)
+        except (TypeError, ValueError) as err:
+            raise control_mod.ControlError(str(err) or "Wert fehlt") from None
+        if body is None:
+            return {"ok": True, "done": own, "errors": []}
+        res = await _run(app, action, body)
+        return {**res, "done": own + list(res.get("done") or [])} if own else res
+    return await _run(app, action, body)
+
+
+async def _run(app, action: str, body: dict) -> dict:
     ctl, loop = app.control, app.eng.control_loop
     if action == "boost":
         return await ctl.boost(body.get("rooms"), body.get("temp"), body.get("minutes"))

@@ -1900,8 +1900,10 @@ function roomState(r) {
   if (r.ems) return `Nur Anzeige · ${t}`;  // Heizkreis von EMS-ESP (0.36.3)
   if (r.boost) return `Boost · ${t} · ${boostLeft(r.boost)}`;
   if (managing() && r.managed && r.lead === "ventil" && c && c.phase) {  // 0.51: HeatPilot stellt die Öffnung
-    const v = r.valve_pid || {}, pct = v.want ?? r.valve;
-    let s = `Ventil · ${PHASE[c.phase] || c.phase} ${fmt(c.desired)}°` + (pct !== null && pct !== undefined ? ` · ${fmt(pct, 0)} %` : "");
+    const v = r.valve_pid || {}, pct = v.want ?? r.valve, o = v.own;  // 0.71: eigene Betriebsart (Stufe 3)
+    const what = !o ? `${PHASE[c.phase] || c.phase} ${fmt(c.desired)}°` : o.mode === "aus" ? "Aus (Frostschutz)"
+      : o.mode === "boost" ? `Boost ${fmt(o.sp)}°${boostUntil({ end: o.until })}` : `Manuell ${fmt(o.sp)}°`;
+    let s = `Ventil · ${what}` + (pct !== null && pct !== undefined ? ` · ${fmt(pct, 0)} %` : "");
     if (v.hold) s += " · von Hand";
     return s;
   }
