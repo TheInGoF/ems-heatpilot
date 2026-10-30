@@ -23,7 +23,7 @@ class FakeCtl:
     def active(self, targets=None, now=None):
         return {r: {**b, "left_min": 60} for r, b in self.boosts.items()}
 
-    async def boost(self, rooms, temp, minutes):
+    async def boost(self, rooms, temp, minutes, own=frozenset()):
         if not rooms:
             raise control_mod.ControlError("Kein Raum gewählt")
         self.calls.append(("boost", rooms, temp, minutes))
@@ -51,7 +51,8 @@ def make_app(helper=True):
                                                                     "hvac_action": "heating", "current_humidity": 48}}}
     if helper:
         states[cb.COMMAND] = {"state": ""}
-    loop = NS(rooms={"climate.wohnzimmer": {"phase": "komfort", "desired": 21.0, "lead": "temp"}})
+    loop = NS(rooms={"climate.wohnzimmer": {"phase": "komfort", "desired": 21.0, "lead": "temp"}},
+              desired_setpoints=lambda: {})  # 0.71: von HeatPilot geführte Räume (hier keine)
     eng = NS(found=NS(rooms=[ROOM]), states=states, control_loop=loop, room_reading=lambda r: None,
              _val=lambda v: None, cfg=NS(is_managing=lambda: True), store={})  # 0.62: Override im kv
 
