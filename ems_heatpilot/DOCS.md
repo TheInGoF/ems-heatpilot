@@ -1693,6 +1693,12 @@ Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
   den **Öffnungs-Deckel** um 5 Punkte je Tag – nie unter 40 %. Bleibt die Unterversorgung 3 Tage aus, gehen die
   Deckel schrittweise zurück auf 100 %. Der Deckel begrenzt nur den PID-Ausgang. Der handgeführte Abgleich
   (Empfehlungen zur Voreinstellung am Ventilunterteil) bleibt für temperaturgeführte Räume.
+- **Eigene Betriebsarten** (seit 0.71): Am Thermostat eines ventilgeführten Raums (Stufe 3) stellt HeatPilot nie die
+  Betriebsart oder ein Soll – das beendet dessen manuelle Ventilsteuerung; jeder solche Aufruf ist gesperrt. Die Knöpfe
+  im Reiter Heizen und auf den Karten wirken stattdessen auf HeatPilots eigene Führung: **Aus** hält nur den
+  Frostschutz (7 °C, bis du etwas anderes wählst), **Manuell** bzw. ein Soll gilt bis zum nächsten Wechsel im Plan,
+  **Boost** für die gewählte Dauer, **Zeitplan** führt zurück zum Plan. Die Kachel zeigt z. B. „Ventil · Aus
+  (Frostschutz) · 0 %“ oder „Ventil · Boost 24° bis 21:26 · 100 %“. Das geht nur bei „HeatPilot steuert“.
 - **Reihenfolge, wenn ein Raum nicht warm wird** (seit 0.70): erst der eigene Deckel weg, dann die leichten Räume
   drosseln, erst zuletzt mehr Vorlauf. Bleibt ein Raum 15 min an seinem Deckel unter Soll, fällt der Deckel sofort
   (nicht erst nach Tagen). Ein gedeckelter Raum treibt den Vorlauf nie – erst mit dem Ventil auf 100 %.
