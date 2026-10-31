@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.73.0
+- Eigenes Climate je Raum: Zeitplan, Manuell, Aus, Boost
+- Thermostat nur noch Einrichtung; Tado nur Temperaturen
+- Kachelfarben nach Soll; Karte 0.6.0 mit eigenem Raum-Dialog
+
 ## 0.72.0
 - Nachts keine Meldungen, morgens nur, was noch gilt
 - Shelly-Thermostate: nur Ventil, nie Soll oder Betriebsart

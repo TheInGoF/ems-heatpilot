@@ -394,14 +394,24 @@ def test_tado_cloud_entity_keeps_tado_timer_and_schedule(tmp_path):
 
 
 def test_schedule_button_on_homekit_entity(tmp_path):
+    from types import SimpleNamespace
+
+    from heatpilot import heat_actions
+
     eng, ha, ctl, loop = make(tmp_path)
     climate(eng, "climate.wz", 20.0, 23.0)
     step(eng, loop, ts_of(MON, 12))
-    res = run(ctl.schedule(["climate.wz"], loop.desired_setpoints()))  # heatpilot: Wunschzustand schreiben
-    assert res["ok"] and ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": 21.0})
+    climate(eng, "climate.wz", 20.0, 23.0)  # von Hand zurückgedreht: bleibt bis zum Phasenwechsel
+    step(eng, loop, ts_of(MON, 12) + 60)
+    assert ha.calls[-1][3] == {"temperature": 21.0}
+    n = len(ha.calls)
+    res = run(heat_actions.run(SimpleNamespace(eng=eng, control=ctl), "schedule", {"rooms": ["climate.wz"]}))
+    assert res["done"] == ["climate.wz"] and len(ha.calls) == n  # heatpilot: das eigene Climate zurück zum Plan …
+    step(eng, loop, ts_of(MON, 12) + 120)
+    assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": 21.0})  # … im nächsten Takt
     eng2, ha2, ctl2, loop2 = make(tmp_path / "b", cfg=Config())
     climate(eng2, "climate.wz", 20.0, 23.0)
-    res = run(ctl2.schedule(["climate.wz"], loop2.desired_setpoints()))  # beobachten: nur der Hinweis
+    res = run(ctl2.schedule(["climate.wz"]))  # beobachten: nur der Hinweis
     assert ha2.calls == [] and "Tado-App" in res["hint"] and res["ok"]
 
 
