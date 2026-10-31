@@ -1873,9 +1873,9 @@ function renderHeat() {
   renderOvStatus();  // Übersicht → Status: Räume, Warmwasser (0.38), Kessel (0.41), zuletzt geschrieben
   if (DLG) renderDlg();  // offener Dialog zeigt den neuen Stand
 }
-// 0.62: „nur jetzt“ (Konzeptpapier, Abschnitt 7) – Nacht, Anwesend, Abwesend für das ganze Haus bis zum nächsten
-// Schaltpunkt; der aktive Knopf beendet ihn. Wirkt nur bei „HeatPilot steuert“
-const NOW_MODES = [["nacht", "Nacht"], ["anwesend", "Anwesend"], ["abwesend", "Abwesend"]];
+// 0.62: „nur jetzt“ (Konzeptpapier, Abschnitt 7) – Nacht, Tag (0.71: Nacht beenden), Anwesend, Abwesend für das ganze
+// Haus bis zum nächsten Schaltpunkt; der aktive Knopf beendet ihn. Wirkt nur bei „HeatPilot steuert“
+const NOW_MODES = [["nacht", "Nacht"], ["tag", "Tag"], ["anwesend", "Anwesend"], ["abwesend", "Abwesend"]];
 function nowHtml(c, pil) {
   const ov = c.override || {};
   const btn = ([k, t]) => `<button type="button" class="chip${ov.mode === k ? " on" : ""}"${pil ? "" : " disabled"} ` +

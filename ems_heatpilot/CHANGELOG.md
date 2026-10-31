@@ -6,6 +6,8 @@ Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 - Stufe 3: keine Betriebsart mehr ans Thermostat
 - Eigene Betriebsarten für ventilgeführte Räume (Aus, Manuell, Boost, Zeitplan)
 - Tado bleibt auf manuell, „Automatik“ = HeatPilots Plan
+- Knopf „Tag“: Nacht sofort beenden
+- Knöpfe „nur jetzt“ werden nicht gelernt
 
 ## 0.70.0
 - Raum wird nicht warm: erst Deckel weg, dann Abgleich, zuletzt Vorlauf
