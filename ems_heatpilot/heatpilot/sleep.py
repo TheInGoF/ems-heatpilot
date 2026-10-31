@@ -48,6 +48,7 @@ import statistics
 from collections import Counter, defaultdict
 from datetime import date, datetime, time, timedelta
 
+from . import override
 from .config import WEEKDAYS
 
 KV_NIGHTS = "sleep.nights"
@@ -83,6 +84,7 @@ ROUND_MIN = 5
 
 OK, NO_DATA, NOT_HOME, LOW_CONTRAST, NO_START = ("ok", "keine Daten", "nicht zu Hause",
                                                  "zu wenig Unterschied", "kein Schlafbeginn")
+BUTTON = "Knopf „nur jetzt“"  # 0.71: Nacht mit Override – lehrt nichts
 
 
 def _local(ts: float) -> datetime:
@@ -241,6 +243,7 @@ def learn(store, now_ts: int) -> dict[str, dict]:
     zählen). Eine Abfrage je offener Nacht – im Betrieb eine am Tag.
     """
     nights: dict[str, dict] = store.get(KV_NIGHTS) or {}
+    buttons = override.periods(store, now_ts)
     today = _local(now_ts).date()
     oldest = today - timedelta(days=KEEP_DAYS)
     changed = False
@@ -265,6 +268,9 @@ def learn(store, now_ts: int) -> dict[str, dict]:
                     "WHERE ts >= ? AND ts < ?", (_at(day, WINDOW[0]), _at(day, WINDOW[1])))
                 if any(r["power_w"] is not None or r["activity_n"] is not None for r in rows):
                     nights[key] = learn_night(rows, day)
+                    a, b = _at(day, WINDOW[0]), _at(day, WINDOW[1])
+                    if any(s < b and e > a for s, e in buttons):  # 0.71: die Knöpfe lehren nichts
+                        nights[key].update(valid=False, reason=BUTTON)
                     changed = True
             day += timedelta(days=1)
     if changed:

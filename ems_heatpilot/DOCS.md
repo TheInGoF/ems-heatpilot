@@ -530,14 +530,18 @@ Phasenwechsel.
   Tado hält dann nur den Frostschutz. **Pause** (nur bei „HeatPilot steuert“) – 1 h, 2 h, 4 h
   oder bis morgen früh (06:00) schreibt HeatPilot nichts (außer dem Zurück eines Schritts von
   [Ventile führen](#ventile-führen) aufs Wunschsoll); „Weiter“ hebt die Pause auf.
-- **Nur jetzt** (seit 0.62, unter den Kacheln, wirkt bei „HeatPilot steuert“): **Nacht**, **Anwesend** oder
-  **Abwesend** für das ganze Haus – für Ausnahmen wie früh ins Bett, nachts um 3 Uhr zur Arbeit oder spät heimkommen.
+- **Nur jetzt** (seit 0.62, unter den Kacheln, wirkt bei „HeatPilot steuert“): **Nacht**, **Tag**, **Anwesend** oder
+  **Abwesend** für das ganze Haus – für Ausnahmen wie früh ins Bett, nachts um 3 Uhr zur Arbeit, samstags früh raus
+  oder spät heimkommen. **Tag** (seit 0.71) beendet die Nacht: Räume in Nacht oder Vorheizen bekommen, was tagsüber
+  gälte – Komfort, wenn jemand zu Hause ist, sonst die Abwesenheitstemperatur.
   Alle Räume mit „macht mit“ bekommen die Nacht-, Komfort- bzw. Abwesenheitstemperatur, bis zum nächsten
   Schaltpunkt des normalen Plans (höchstens 24 h). Früher endet es, wenn der Plan von selbst so weit ist (abends
   beginnt die Nacht), bei „Abwesend“ jemand heimkommt bzw. bei „Anwesend“ alle weg sind. Danach gilt wieder der
-  normale Plan; noch einmal auf den aktiven Knopf tippen beendet es sofort. Ein Boost geht vor. Gelernt wird weiter
-  wie sonst. Für das Dashboard gibt es dafür die Karte `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ ab 0.4);
-  sie liest `sensor.heatpilot_modus` (auto, nacht, anwesend, abwesend; Attribut `until`) und bedient über den Befehl
+  normale Plan; noch einmal auf den aktiven Knopf tippen beendet es sofort. Ein Boost geht vor. **Die Knöpfe lehren
+  nichts** (seit 0.71): Jeder Knopf wird mit Beginn und Ende gemerkt, und eine Nacht, in der einer aktiv war, zählt
+  für die gelernten Nachtzeiten nicht („ausgelassen: Knopf „nur jetzt““). Für das Dashboard gibt es dafür die Karte
+  `custom:heatpilot-mode-card` (HACS „HeatPilot Card“ ab 0.4, „Tag“ ab 0.5); sie liest `sensor.heatpilot_modus`
+  (auto, nacht, tag, anwesend, abwesend; Attribut `until`) und bedient über den Befehl
   `override`.
 - **Raumkacheln** (zwei nebeneinander, wie bei Tado): Feuchte, Ist-Temperatur groß, Name und
   Zustand. Beobachten: „Zeitplan · 21°“, „Eingestellt auf 22°“, „Timer“, „Frostschutz“.
