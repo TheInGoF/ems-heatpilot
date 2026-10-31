@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.73.1
+- Fix: gewählte Betriebsart sofort am Knopf sichtbar
+
 ## 0.73.0
 - Eigenes Climate je Raum: Zeitplan, Manuell, Aus, Boost
 - Thermostat nur noch Einrichtung; Tado nur Temperaturen

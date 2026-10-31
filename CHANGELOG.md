@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.73.1
+- **Fix: Betriebsart sofort sichtbar.** Nach „Manuell“, „Aus“ oder „Zeitplan“ blieb der Knopf in der App (und auf der Karte) bis zum nächsten Takt auf dem alten Stand – die Anzeigedaten des Raums kamen erst mit dem Plan. `room_modes._set` trägt Betriebsart und Soll jetzt gleich in die Anzeige ein (nach „Zeitplan“ das Soll des Plans, `plan_sp`)
+- Test in `tests/test_room_modes72.py`
+
 ## 0.73.0
 - **Eigenes Climate je geführtem Raum** (`room_modes`, bisher `valve_modes` nur für Ventilräume): Räume mit „macht mit“ haben bei „HeatPilot steuert“ HeatPilots eigene Betriebsarten – Zeitplan (HeatPilots Plan), Manuell (bis zum nächsten Phasenwechsel), Aus (Frostschutz 7 °C) und Boost. Der Stand liegt im Zustand der Regelschleife (`own`), `room_modes.desired` legt ihn im Takt über den Wunschzustand; Tado bekommt daraus nur Temperaturen, ein Ventilraum nur die Öffnung. Das Thermostat-Climate dient nur noch der Einrichtung
 - Damit entfallen die Sonderwege aus 0.71 (Boost ohne Tado-Timer per `Control.boost(own=…)`, „Zeitplan“ mit Wunsch-Soll per `Control.schedule(desired)`, `ControlLoop.desired_setpoints`): geführte Räume laufen nur noch über `room_modes`, `Control` bedient nur noch nicht geführte

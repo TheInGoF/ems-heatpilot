@@ -107,3 +107,20 @@ def test_tado_room_buttons_set_own_modes_and_only_temperatures_go_out(tmp_path):
         step(eng, loop, t + 60 * (i + 1))
         assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": want}), action
     assert not [c for c in ha.calls if c[:2] == ("tado", "set_climate_timer") or c[3].get("hvac_mode") in ("auto", "off")]
+
+
+def test_button_shows_at_once_not_only_after_the_next_tick(tmp_path):
+    """Der Knopf „Manuell“ blieb in der App bis zum nächsten Takt ungefärbt – die Anzeige kam erst mit dem Plan."""
+    from test_control34 import MON, climate, make, step, ts_of
+
+    eng, ha, ctl, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 17.0)
+    step(eng, loop, ts_of(MON, 12))
+    plan = loop.rooms["climate.wz"]["desired"]
+    app = SimpleNamespace(eng=eng, control=ctl)
+    run(heat_actions.run(app, "temp", {"room": "climate.wz", "temp": 23.5}))
+    assert loop.rooms["climate.wz"]["own"]["mode"] == "manuell" and loop.rooms["climate.wz"]["desired"] == 23.5
+    run(heat_actions.run(app, "mode", {"room": "climate.wz", "mode": "off"}))
+    assert loop.rooms["climate.wz"]["desired"] == room_modes.FROST_C
+    run(heat_actions.run(app, "schedule", {"rooms": ["climate.wz"]}))
+    assert loop.rooms["climate.wz"]["own"] is None and loop.rooms["climate.wz"]["desired"] == plan
