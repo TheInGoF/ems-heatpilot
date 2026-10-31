@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.73.0
+- **Eigenes Climate je geführtem Raum** (`room_modes`, bisher `valve_modes` nur für Ventilräume): Räume mit „macht mit“ haben bei „HeatPilot steuert“ HeatPilots eigene Betriebsarten – Zeitplan (HeatPilots Plan), Manuell (bis zum nächsten Phasenwechsel), Aus (Frostschutz 7 °C) und Boost. Der Stand liegt im Zustand der Regelschleife (`own`), `room_modes.desired` legt ihn im Takt über den Wunschzustand; Tado bekommt daraus nur Temperaturen, ein Ventilraum nur die Öffnung. Das Thermostat-Climate dient nur noch der Einrichtung
+- Damit entfallen die Sonderwege aus 0.71 (Boost ohne Tado-Timer per `Control.boost(own=…)`, „Zeitplan“ mit Wunsch-Soll per `Control.schedule(desired)`, `ControlLoop.desired_setpoints`): geführte Räume laufen nur noch über `room_modes`, `Control` bedient nur noch nicht geführte
+- **Raumkacheln färben nach dem Soll** statt nach „heizt gerade“ – bei „HeatPilot steuert“ nach HeatPilots Soll (`tileSoll`), sonst nach dem des Thermostats; aus = grau. Der Raum-Dialog zeigt bei geführten Räumen HeatPilots Soll und die eigenen Betriebsarten
+- Raum-Sensoren für die Karte mit `own` (`card_bridge`); **HeatPilot Card 0.6.0**: Kacheln nach Soll, Antippen öffnet HeatPilots Climate (Soll −/+, Zeitplan · Manuell · Aus, Boost), das Thermostat-Pop-up nur noch über „Thermostat (Einrichtung)“
+- Tests: `tests/test_room_modes72.py` (bisher `test_valve_modes71.py`); angepasst: `test_control34`, `test_card_bridge56`, `test_ems_lock363`, `test_ui_v363`, `test_ui_v43`
+
 ## 0.72.0
 - **Nachts keine Meldungen in Home Assistant:** Während der Nacht laut Plan behält der Notifier seine Warteschlange (`Notifier.quiet`, gesetzt in `main.build`); am Morgen geht raus, was noch gilt – Problem und „wieder in Ordnung“, die sich über Nacht erledigt haben, fallen beide weg. Tagsüber wie bisher; der Problem-Sensor zeigt offene Probleme auch nachts, die Testnachricht geht immer
 - **Shelly nur übers Ventil:** Ein Shelly-Thermostat mit Ventil-Entität ist immer ventilgeführt (`discovery._lead`), und `Control` sperrt jedes Soll und jede Betriebsart an Shelly-Thermostaten (`stage3` um die Shelly-Plattform erweitert, `room_lead.SHELLY`) – nur die Öffnung in Prozent geht hin

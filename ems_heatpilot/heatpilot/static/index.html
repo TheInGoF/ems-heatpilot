@@ -157,10 +157,8 @@ select.sel { padding: 5px; border-radius: var(--r-s); border: 1px solid var(--bo
 .rtile .big small { font-size: var(--fs-title); font-weight: 600; }
 .rtile h3 { margin: 6px 0 0; font-size: var(--fs-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rtile .state { font-size: var(--fs-small); color: var(--text-secondary); margin-top: 2px; }
-.rtile.heating { background: var(--heat-bg); border-color: transparent; color: var(--heat-fg); }
-.rtile.heating h3, .rtile.heating .state { color: var(--heat-fg); }
-.rtile.heating .hum { background: rgba(255,255,255,.16); color: var(--heat-fg); }
-.rtile.off { background: var(--off-bg); color: var(--text-secondary); }
+.rtile.soll { background: var(--t-bg); border-color: transparent; }  /* 0.72: Farbe nach Soll (wie Tado), nicht nach „heizt“ */
+.rtile.soll .big { color: var(--t-fg); }
 .rtile.off h3 { color: var(--text-secondary); }
 .rtile .left { font-size: var(--fs-small); font-weight: 700; padding: 3px 9px; border-radius: var(--r); background: var(--heat-fg); color: #111; }
 dialog.hp { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-1); color: var(--text-primary); padding: 0; width: min(440px, calc(100vw - 32px)); box-sizing: border-box; }
@@ -1895,19 +1893,27 @@ const boostUntil = (b) => { const t = b && (b.end ? b.end * 1000 : Date.now() + 
   return t ? ` bis ${new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}` : ""; };
 const boostLeft = (b) => { const m = Math.max(0, Math.round(b.left_min || 0)), t = b.end ? b.end * 1000 : Date.now() + m * 60000;
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")} bis ${new Date(t).toLocaleTimeString("de-DE", { hour: "2-digit", minute: "2-digit" })}`; };
+// 0.72: eigenes Climate je Raum (``room_modes``) – Text der Betriebsart und das Soll, nach dem die Kachel färbt
+const ownText = (o) => o.mode === "aus" ? "Aus (Frostschutz)"
+  : o.mode === "boost" ? `Boost ${fmt(o.sp)}°${boostUntil({ end: o.until })}` : `Manuell ${fmt(o.sp)}°`;
+function tileSoll(r) {
+  const c = r.control || {};
+  if (managing() && r.managed && c.phase && c.desired !== null && c.desired !== undefined) return (c.own || {}).mode === "aus" ? null : c.desired;
+  return r.mode === "off" ? null : r.target;
+}
 function roomState(r) {
   const c = r.control, t = fmt(r.target) + "°";
   if (r.ems) return `Nur Anzeige · ${t}`;  // Heizkreis von EMS-ESP (0.36.3)
   if (r.boost) return `Boost · ${t} · ${boostLeft(r.boost)}`;
   if (managing() && r.managed && r.lead === "ventil" && c && c.phase) {  // 0.51: HeatPilot stellt die Öffnung
-    const v = r.valve_pid || {}, pct = v.want ?? r.valve, o = v.own;  // 0.71: eigene Betriebsart (Stufe 3)
-    const what = !o ? `${PHASE[c.phase] || c.phase} ${fmt(c.desired)}°` : o.mode === "aus" ? "Aus (Frostschutz)"
-      : o.mode === "boost" ? `Boost ${fmt(o.sp)}°${boostUntil({ end: o.until })}` : `Manuell ${fmt(o.sp)}°`;
+    const v = r.valve_pid || {}, pct = v.want ?? r.valve;
+    const what = c.own ? ownText(c.own) : `${PHASE[c.phase] || c.phase} ${fmt(c.desired)}°`;
     let s = `Ventil · ${what}` + (pct !== null && pct !== undefined ? ` · ${fmt(pct, 0)} %` : "");
     if (v.hold) s += " · von Hand";
     return s;
   }
   if (managing() && r.managed && c && c.phase) {  // Zustand aus der Regelschleife
+    if (c.own) return ownText(c.own);
     const until = c.manual_until ? ` bis ${clock(c.manual_until)}` : "";
     if (r.mode === "off") return "Aus" + until;
     if (c.manual) return `Manuell · ${t}${until}`;
@@ -1921,12 +1927,12 @@ function roomState(r) {
   return r.mode === "heat" ? `Manuell · ${t}` : `Zeitplan · ${t}`;
 }
 function roomTile(r) {
-  const off = r.mode === "off", heating = !off && (r.action === "heating" || (r.valve || 0) > 0);
+  const soll = tileSoll(r), off = soll === null, col = tileColors(soll, off ? "off" : "heat");  // 0.72: Farbe nach Soll
   const s = fmt(r.temp), i = s.indexOf(",");
   const big = i < 0 ? `${s}<small>°</small>` : `${s.slice(0, i)}<small>${s.slice(i)}°</small>`;
   const hum = r.humidity !== null && r.humidity !== undefined ? `<span class="hum">${ICON.drop}${fmt(r.humidity, 0)} %</span>` : "<span></span>";
   const right = r.boost ? `<span class="left">noch ${leftText(r.boost.left_min)}</span>` : off ? `<span class="pw">${ICON.off}</span>` : "";
-  return `<button class="rtile ${off ? "off" : heating ? "heating" : "idle"}" onclick="openDlg('room','${esc(r.climate)}')">` +
+  return `<button class="rtile soll${off ? " off" : ""}" style="--t-fg:${col.fg};--t-bg:${col.bg}" onclick="openDlg('room','${esc(r.climate)}')">` +
     `<div class="top">${hum}${right}</div>` +
     `<div><div class="big">${big}</div><h3>${esc(shortName(r.name))}</h3><div class="state">${roomState(r)}</div></div></button>`;
 }
@@ -2003,21 +2009,25 @@ function syncBoost(j) {
       : "Setzt in Tado einen Timer. Danach gilt dort wieder der Zeitplan, auch wenn das Add-on neu startet.");
   }
 }
+// 0.72: geführter Raum – der Dialog bedient HeatPilots eigenes Climate (Zeitplan = HeatPilots Plan), nicht das Thermostat
+const ownLed = (r) => managing() && r.managed && r.control && r.control.phase;
+const ownMode = (r) => { const o = (r.control || {}).own; return !o ? "auto" : o.mode === "aus" ? "off" : "heat"; };
 function roomDlg(r) {
   if (!r) return "<h2>Raum</h2><p>Nicht mehr vorhanden.</p>";
-  const off = r.mode === "off", modeName = { auto: "Zeitplan", heat: "Manuell", off: "Aus" };
-  const modes = ["auto", "heat", "off"].filter((m) => !r.modes.length || r.modes.includes(m));
+  const own = ownLed(r), mode = own ? ownMode(r) : r.mode, soll = own ? tileSoll(r) : r.target;
+  const off = mode === "off", modeName = { auto: "Zeitplan", heat: "Manuell", off: "Aus" };
+  const modes = ["auto", "heat", "off"].filter((m) => own || !r.modes.length || r.modes.includes(m));
   const lock = !!r.ems;  // Heizkreis von EMS-ESP: nur Anzeige (0.36.3)
-  $("heat-dlg").style.setProperty("--tile-fg", tileColors(off ? null : r.target, r.mode).fg);
+  $("heat-dlg").style.setProperty("--tile-fg", tileColors(off ? null : soll, mode).fg);
   // 0.43: nur Bedienung – Betriebsart als Umschalter (gewählt = blau). Kennlinie, Totzeit, Kp/Ki stehen unter
   // Übersicht → Räume (Link unten, ovValve)
   return `<h2>${esc(shortName(r.name))}</h2>` +
     `<div class="dlg-temp"><b>${fmt(r.temp)} °C</b>` +
     `<span class="muted">${r.action === "heating" ? "heizt · " : ""}Ventil ${fmt(r.valve, 0)} %${r.humidity !== null && r.humidity !== undefined ? ` · Feuchte ${fmt(r.humidity, 0)} %` : ""}</span></div>` +
     `<div class="tile-ctl"><button class="btn" onclick="roomTemp('${esc(r.climate)}', -0.5)" ${off || lock ? "disabled" : ""}>−</button>` +
-    `<span>Soll <b>${off ? "aus" : fmt(r.target) + " °C"}</b></span>` +
+    `<span>Soll <b>${off ? "aus" : fmt(soll) + " °C"}</b></span>` +
     `<button class="btn" onclick="roomTemp('${esc(r.climate)}', 0.5)" ${off || lock ? "disabled" : ""}>+</button></div>` +
-    `<div class="seg seg-b modes" role="group" aria-label="Betriebsart">${modes.map((m) => `<button type="button"${r.mode === m ? ' class="on"' : ""} aria-pressed="${r.mode === m}" onclick="roomMode('${esc(r.climate)}','${m}')"${lock ? " disabled" : ""}>${modeName[m]}</button>`).join("")}</div>` +
+    `<div class="seg seg-b modes" role="group" aria-label="Betriebsart">${modes.map((m) => `<button type="button"${mode === m ? ' class="on"' : ""} aria-pressed="${mode === m}" onclick="roomMode('${esc(r.climate)}','${m}')"${lock ? " disabled" : ""}>${modeName[m]}</button>`).join("")}</div>` +
     (r.boost ? `<p class="muted dlg-note">Boost läuft noch ${leftText(r.boost.left_min)}${r.boost.local ? " (lokal in HeatPilot)" : ""} – „Zeitplan“ beendet ihn sofort.</p>` : "") +
     (lock ? `<div class="ctl-info ems-lock" id="dlg-ems">${EMS_LOCK} – Soll und Betriebsart nur am Regler.</div>` : "") +
     ctlInfo(r) +
@@ -2065,7 +2075,7 @@ function heatAction(a) {
 }
 function roomTemp(c, d) {
   const r = HEAT.rooms.find((x) => x.climate === c); if (!r) return;
-  const t = Math.min(Math.max((r.target ?? 20) + d, HEAT.limits.temp_min), HEAT.limits.temp_max);
+  const t = Math.min(Math.max(((ownLed(r) ? tileSoll(r) : r.target) ?? 20) + d, HEAT.limits.temp_min), HEAT.limits.temp_max);
   heatPost("temp", { room: c, temp: t }, `Soll ${fmt(t)} °C …`);
 }
 function roomMode(c, m) { heatPost("mode", { room: c, mode: m }, "Schalte …"); }

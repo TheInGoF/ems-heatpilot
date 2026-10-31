@@ -124,9 +124,9 @@ def test_control_rejects_every_write_to_ems_room(tmp_path):
     ctl = Control(ha, Store(tmp_path / "c.db"), rooms)
     with pytest.raises(PermissionError, match="Heizkreis von EMS-ESP"):
         run(ctl._call("climate", "set_temperature", EMS, {"temperature": 20.0}))
-    for res in (run(ctl.boost([EMS], 21.0, 60)), run(ctl.set_temp(EMS, 20.0)), run(ctl.set_mode(EMS, "off")),
-                run(ctl.schedule([EMS], {EMS: 20.0}))):
+    for res in (run(ctl.boost([EMS], 21.0, 60)), run(ctl.set_temp(EMS, 20.0)), run(ctl.set_mode(EMS, "off"))):
         assert not res["ok"] and "gesperrt" in res["errors"][0] and LOCK_TEXT in res["errors"][0]
+    assert "hint" in run(ctl.schedule([EMS]))  # kein Tado: nur der Hinweis, nichts geschrieben
     with pytest.raises(PermissionError):
         run(ctl.apply(EMS, 20.0, "Regelschleife"))
     assert ha.calls == []

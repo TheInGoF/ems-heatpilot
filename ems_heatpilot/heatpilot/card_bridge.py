@@ -90,7 +90,7 @@ def rooms(eng, ctl) -> list[tuple[str, object, dict]]:
             "next_change": c.get("next_change"), "next_phase": c.get("next_phase"), "ems": bool(r.ems),
             "managing": managing, "manual": bool(c.get("manual")), "manual_until": c.get("manual_until"),
             "paused": bool(c.get("paused")), "reach_c": c.get("reach_c"), "preheat_flow": c.get("preheat_flow"),
-            "valve_want": v.get("want"), "valve_hold": bool(v.get("hold")),
+            "valve_want": v.get("want"), "valve_hold": bool(v.get("hold")), "own": c.get("own"),  # 0.72: eigenes Climate
             "boost": None if not b else {"temp": b["temp"], "until": int(b["end"]), "left_min": b["left_min"]},
         }))
     return out

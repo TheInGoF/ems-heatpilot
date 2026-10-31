@@ -18,9 +18,8 @@ Geschrieben wird nur bei einer Änderung des Wunsch-Sollwerts (Phasenwechsel), n
 Hat jemand von Hand gedreht (Soll ≠ zuletzt geschrieben, auch „aus“), bleibt das bis zum nächsten
 Phasenwechsel – dann schreibt HeatPilot den Wunschzustand auch, wenn er sich dabei nicht ändert
 (vorheizen → komfort). Pause hält alle Schreibvorgänge an; ein Boost, der in der Pause abläuft,
-endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS`` Hinweis – seit 0.38 auch als
-Meldung über die Benachrichtigungsziele und im Problem-Sensor (``notify``), einmal je Ereignis; der erste Erfolg
-danach meldet „wieder in Ordnung“.
+endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS`` Hinweis, seit 0.38 auch als
+Meldung und im Problem-Sensor (``notify``), einmal je Ereignis; der erste Erfolg danach: „wieder in Ordnung“.
 Seit 0.40 legt die Ventilführung (``valve_control``, eigener Schalter „Ventile führen“, Standard aus) höchstens einen
 Schritt auf das Wunsch-Soll (früh drosseln, gemeinsam anfordern): ``plan()`` fragt sie je Raum nach dem Soll
 (``Guide.plan``) – Phasenwechsel, Hand, Boost und Pause gehen vor –, geschrieben wird es auf demselben Weg, mit
@@ -44,7 +43,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import dhw_target, guards, override, room_lead, valve_control
+from . import dhw_target, guards, override, room_lead, room_modes, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
@@ -309,6 +308,7 @@ class ControlLoop:
             d = first[room.climate]
             if d.phase == "vorheizen" and not vac:  # 0.50.5: erst knapp unter dem Ziel – die Restwärme bringt den Rest
                 d = d._replace(setpoint=_clamp(d.setpoint - tn[0], float(room.comfort), cfg))
+            d = room_modes.desired(st, d, ts)  # 0.72: eigenes Climate – Zeitplan, Manuell, Aus, Boost
             heatup.track(st, d.phase, d.setpoint, d.until, temp, ts, vac)
             desireds[room.climate] = d
             self.rooms[room.climate] = {
@@ -321,7 +321,7 @@ class ControlLoop:
                 "preheat_flow": shared if managing else None,  # 0.50.4: gemeinsamer Vorlauf fürs Vorheizen
                 "reach_c": reach_c(model if ok else None, d.setpoint, cfg.max_flow_temp,
                                    5.0 if t_out is None else t_out),
-                "manual": False, "manual_until": None, "boost": room.climate in boosts,
+                "manual": False, "manual_until": None, "boost": room.climate in boosts, "own": st.get("own"),
                 "last_written": None, "errors": 0, "retry_at": None, "paused": paused and managing,
                 "valve": None, "valve_guided": False,  # 0.40: laufender Eingriff der Ventilführung, geführt?
             }
@@ -532,12 +532,6 @@ class ControlLoop:
         return done
 
     # ------------------------------------------------------------------ Anzeige
-    def desired_setpoints(self) -> dict[str, float]:
-        """Wunsch-Soll je Raum mit „macht mit“ (für den Knopf „Zeitplan“ bei Steuerung heatpilot)."""
-        if not self.eng.cfg.is_managing():
-            return {}
-        return {c: r["desired"] for c, r in self.rooms.items() if r["managed"] and r["desired"] is not None}
-
     def warnings(self) -> list[str]:
         """Hinweise im Reiter „Heizen“: Schreibfehler in Folge, dazu (0.36.3) verworfene Boosts auf den Heizkreis
         von EMS-ESP, die noch am Regler stehen (``Control.notes``)."""

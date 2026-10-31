@@ -1,12 +1,12 @@
-"""0.71: Stufe-3-Räume (Ventil direkt geführt) – nie eine Betriebsart oder ein Soll ans Thermostat (das beendet dessen
-Ventilsteuerung); die Knöpfe wirken auf HeatPilots eigene Betriebsarten: Aus (Frostschutz), Manuell, Boost, Zeitplan."""
+"""0.72: eigenes Climate je geführtem Raum (``room_modes``, für Ventilräume seit 0.71) – die Knöpfe wirken auf HeatPilots
+Betriebsarten Zeitplan, Manuell, Aus (Frostschutz), Boost; ans Thermostat geht keine Betriebsart: Tado bekommt nur
+Temperaturen und bleibt auf manuell, ein Ventil (Stufe 3, Shelly) nur die Öffnung."""
 
 from types import SimpleNamespace
 
 import pytest
 
-from heatpilot import heat_actions, valve_modes
-from heatpilot.control import ControlError
+from heatpilot import heat_actions, room_modes
 from heatpilot.discovery import Room
 
 from test_control import run
@@ -38,8 +38,9 @@ def test_off_keeps_frost_protection_and_schedule_returns_to_the_plan(tmp_path):
     vstep(eng, loop, vp, T0 + 600)
     st = vp.state["rooms"]["climate.wz"]
     assert st["want"] == 0 and st["why"].startswith("Aus (Frostschutz)")  # 20 °C über 7 °C: zu
+    assert loop.rooms["climate.wz"]["desired"] == room_modes.FROST_C
     run(heat_actions.run(app, "schedule", {"rooms": ["climate.wz"]}))
-    assert "own" not in st
+    assert "own" not in loop.state["climate.wz"]
 
 
 def test_temp_holds_until_the_next_phase_and_boost_ends_by_itself(tmp_path):
@@ -47,30 +48,29 @@ def test_temp_holds_until_the_next_phase_and_boost_ends_by_itself(tmp_path):
     app = _app(eng, vp)
     vstep(eng, loop, vp, T0)
     run(heat_actions.run(app, "temp", {"room": "climate.wz", "temp": 23}))
-    st = vp.state["rooms"]["climate.wz"]
+    st = loop.state["climate.wz"]
     assert st["own"]["mode"] == "manuell" and st["own"]["sp"] == 23.0
-    assert valve_modes.apply(st, 21.0, st["own"]["phase"], T0 + 60) == (23.0, "Manuell 23 °C")
-    assert valve_modes.apply(st, 18.0, "nacht", T0 + 60) == (18.0, None) and "own" not in st  # Phasenwechsel
+    assert room_modes.apply(st, 21.0, st["own"]["phase"], T0 + 60) == (23.0, "Manuell 23 °C")
+    assert room_modes.apply(st, 18.0, "nacht", T0 + 60) == (18.0, None) and "own" not in st  # Phasenwechsel
     run(heat_actions.run(app, "boost", {"rooms": ["climate.wz"], "temp": 24, "minutes": 30}))
-    assert valve_modes.apply(st, 21.0, "komfort", int(st["own"]["since"]) + 60)[0] == 24.0
-    assert valve_modes.apply(st, 21.0, "komfort", int(st["own"]["since"]) + 1800) == (21.0, None)
+    assert room_modes.apply(st, 21.0, "komfort", int(st["own"]["since"]) + 60)[0] == 24.0
+    assert room_modes.apply(st, 21.0, "komfort", int(st["own"]["since"]) + 1800) == (21.0, None)
 
 
 def test_mixed_rooms_split_between_own_modes_and_the_thermostat(tmp_path):
-    eng, ha, loop, vp = vhouse(tmp_path, rooms=[vroom(), Room("Bad", "climate.bad", managed=True, comfort=21.0,
-                                                                   platform="homekit_controller")])
+    eng, ha, loop, vp = vhouse(tmp_path, rooms=[vroom(), Room("Bad", "climate.bad", managed=False, comfort=21.0,
+                                                                   platform="homekit_controller")])  # macht nicht mit
     eng.states["climate.bad"] = {"state": "heat", "attributes": {"temperature": 20, "hvac_modes": ["off", "heat"]}}
     app = _app(eng, vp)
     res = run(heat_actions.run(app, "mode", {"rooms": ["climate.wz", "climate.bad"], "mode": "off"}))
     assert sorted(res["done"]) == ["climate.bad", "climate.wz"]
-    assert [c[2] for c in _climate_calls(ha)] == ["climate.bad"]  # nur das normale Thermostat
+    assert [c[2] for c in _climate_calls(ha)] == ["climate.bad"]  # nur das Thermostat des nicht geführten Raums
 
 
-def test_own_modes_need_heatpilot_in_control(tmp_path):
+def test_without_heatpilot_in_control_the_buttons_go_to_the_thermostat(tmp_path):
     eng, ha, loop, vp = vhouse(tmp_path)
     eng.cfg.control_mode = "beobachten"
-    with pytest.raises(ControlError, match="HeatPilot steuert"):
-        run(heat_actions.run(_app(eng, vp), "mode", {"room": "climate.wz", "mode": "off"}))
+    assert room_modes.own_rooms(_app(eng, vp)) == set()
 
 
 # ------------------------------------------------------------------ Tado bleibt auf manuell (0.71)
@@ -88,17 +88,22 @@ def test_device_automation_is_never_left_standing(tmp_path):
     assert ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "heat"}) in ha.calls[n:]
 
 
-def test_boost_and_schedule_of_led_tado_rooms_avoid_the_tado_automation(tmp_path):
-    from test_control34 import make
+def test_tado_room_buttons_set_own_modes_and_only_temperatures_go_out(tmp_path):
+    """Tado: Aus = 7 °C, Boost und Manuell als Temperatur, Zeitplan = HeatPilots Plan – nie Tados Automatik oder Timer."""
+    from test_control34 import MON, make, step, ts_of
 
     tado = Room("Wz", "climate.wz", managed=True, comfort=21.0, platform="tado")
     eng, ha, ctl, loop = make(tmp_path, rooms=[tado])
-    eng.states["climate.wz"] = {"state": "heat", "attributes": {"temperature": 20, "hvac_modes": ["off", "heat", "auto"]}}
-    run(ctl.boost(["climate.wz"], 23, 30, own={"climate.wz"}))
-    assert not [c for c in ha.calls if c[:2] == ("tado", "set_climate_timer")]
-    assert ("climate", "set_temperature", "climate.wz", {"temperature": 23.0}) in ha.calls
-    run(ctl.schedule(["climate.wz"], {"climate.wz": 21.0}))
-    assert ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "auto"}) not in ha.calls
-    assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": 21.0})
-    run(ctl.schedule(["climate.wz"]))  # nicht geführt (beobachten): wie bisher zurück in den Tado-Zeitplan
-    assert ha.calls[-1] == ("climate", "set_hvac_mode", "climate.wz", {"hvac_mode": "auto"})
+    eng.states["climate.wz"] = {"state": "heat", "attributes": {"temperature": 17, "current_temperature": 20,
+                                                                "hvac_modes": ["off", "heat", "auto"]}}
+    app = SimpleNamespace(eng=eng, control=ctl)
+    t = ts_of(MON, 12)
+    step(eng, loop, t)
+    plan = ha.calls[-1][3]["temperature"]
+    for i, (action, body, want) in enumerate([("mode", {"mode": "off"}, room_modes.FROST_C),
+                                               ("boost", {"temp": 24, "minutes": 30}, 24.0),
+                                               ("mode", {"mode": "auto"}, plan), ("temp", {"temp": 22.5}, 22.5)]):
+        run(heat_actions.run(app, action, {**body, "room": "climate.wz", "rooms": ["climate.wz"]}))
+        step(eng, loop, t + 60 * (i + 1))
+        assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": want}), action
+    assert not [c for c in ha.calls if c[:2] == ("tado", "set_climate_timer") or c[3].get("hvac_mode") in ("auto", "off")]

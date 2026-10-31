@@ -26,7 +26,7 @@ import json
 import logging
 import time
 
-from . import balance_auto, guards, room_lead, valve_modes, valve_pid, valve_range
+from . import balance_auto, guards, room_lead, room_modes, valve_pid, valve_range
 from .dhw_rule import CHECK_MAX_S, CHECK_S, MAX_FAILS
 from .values import num
 
@@ -113,7 +113,6 @@ class ValvePidControl:
             self._blind(room, st, ts, current)
             return
         st.pop("blind", None)
-        sp, own = valve_modes.apply(st, float(sp), info.get("phase"), ts)  # 0.71: Aus, Manuell, Boost
         cap = balance_auto.cap(self.state.get("bal") or {}, room.climate)
         model = self.eng.rooms.get(room.climate)
         ok = model is not None and guards.check_room(model)["ok"]
@@ -121,7 +120,8 @@ class ValvePidControl:
                                 model if ok else None, ts, hi=cap)
         hold = max(int(st.get("hold_until") or 0), int(st.get("pause_until") or 0)) or None
         d = valve_pid.decide(target, current, ts, (st.get("last") or {}).get("ts"), hold)
-        st["why"], st["want"], st["cap"] = (f"{own} · {d.why}" if own else d.why), d.value, cap
+        own = (info.get("own") or {}).get("mode")  # eigenes Climate (``room_modes``): steckt schon im Wunsch-Soll
+        st["why"], st["want"], st["cap"] = (f"{room_modes.LABELS.get(own, own)} · {d.why}" if own else d.why), d.value, cap
         obs.append((room.climate, temp, float(sp), target, cap))
         if d.write and not st.get("check"):
             self.pending.append((room, d.value, f"{d.why} · Soll {sp:g} °C ({info.get('phase') or '–'})"))
@@ -214,7 +214,7 @@ class ValvePidControl:
         out = {}
         for climate, st in (self.state.get("rooms") or {}).items():
             room = next((r for r in self.rooms() if r.climate == climate), None)
-            out[climate] = {"want": st.get("want"), "why": st.get("why"), "cap": st.get("cap"), "own": st.get("own"),
+            out[climate] = {"want": st.get("want"), "why": st.get("why"), "cap": st.get("cap"),
                             "gain": (st.get("pid") or {}).get("gain", 1.0),
                             "current": self.current(room) if room is not None else None,
                             "hold": bool(max(int(st.get("hold_until") or 0), int(st.get("pause_until") or 0))

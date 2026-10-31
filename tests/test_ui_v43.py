@@ -30,7 +30,7 @@ NAMES = ("fmt", "esc", "clock", "timeOf", "READY", "readyDot", "readyRest", "rea
          "modeText", "ctlRooms", "shortName", "ovRoomsHtml", "ACTION_NAME", "DHW_ACTION", "BOILER_ACTION", "degC",
          "boilerVal", "boilerLogValue", "heatLogRows", "ovLastHtml", "WEEKDAYS", "SEQ_N", "_lin", "_gam", "toOklch",
          "fromOklch", "seqRamp", "seqStep", "heatLegend", "heatMsg", "leftText", "hm", "tileColors", "EMS_LOCK", "ctlInfo",
-         "valveGuideLine", "VD_RULE", "roomDlg")
+         "valveGuideLine", "VD_RULE", "ownText", "tileSoll", "ownLed", "ownMode", "roomDlg")
 
 
 def run_js(tmp_path, body: str, extra: str = ""):
