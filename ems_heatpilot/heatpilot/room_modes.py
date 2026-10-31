@@ -40,6 +40,10 @@ def _set(app, climate: str, own: dict | None, now: float) -> None:
     else:
         st["own"] = {**own, "since": int(now)}
     st.pop("last_written", None)  # neu schreiben, auch nach einer Hand am Thermostat
+    info = loop.rooms.get(climate)
+    if info is not None:  # Anzeige sofort (Knopf, Farbe), nicht erst nach dem nächsten Takt
+        info["own"] = st.get("own")
+        info["desired"] = apply(dict(st), st.get("plan_sp", info.get("desired")), info.get("phase"), int(now))[0]
     vp = getattr(app.eng, "valve_pid", None)
     if vp is not None:
         (vp.state.get("rooms") or {}).get(climate, {}).pop("hold_until", None)  # beendet „von Hand am Ventil“
@@ -98,6 +102,8 @@ def apply(st: dict, sp: float, phase: str | None, ts: int) -> tuple[float, str |
 
 
 def desired(st: dict, d, ts: int):
-    """Wunschzustand eines Raums (``controlloop.Desired``) mit der eigenen Betriebsart darüber."""
+    """Wunschzustand eines Raums (``controlloop.Desired``) mit der eigenen Betriebsart darüber; das Soll des Plans steht
+    in ``plan_sp`` (für die Anzeige gleich nach „Zeitplan“)."""
+    st["plan_sp"] = d.setpoint
     sp, label = apply(st, d.setpoint, d.phase, ts)
     return d if label is None else d._replace(setpoint=sp, reason=label)
