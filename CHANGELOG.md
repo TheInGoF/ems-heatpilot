@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.73.2
+- **Fix: Übersicht → Räume breiter als der Bildschirm.** Die Tabelle mit fünf Spalten brauchte auf dem Handy mehr Platz, als die Karte hatte; die aufgeklappten Einzelheiten (Ventilverhalten, Grafik) liefen mit ihr seitlich weg. Unter 520 px fehlt jetzt die Spalte „Trägheit“ (steht in den Einzelheiten), „Ist → Soll“ bleibt einzeilig. Karten haben keine Mindestbreite mehr und brechen lange Wörter (Entitätsnamen) um, statt die Seite zu verbreitern
+
 ## 0.73.1
 - **Fix: Betriebsart sofort sichtbar.** Nach „Manuell“, „Aus“ oder „Zeitplan“ blieb der Knopf in der App (und auf der Karte) bis zum nächsten Takt auf dem alten Stand – die Anzeigedaten des Raums kamen erst mit dem Plan. `room_modes._set` trägt Betriebsart und Soll jetzt gleich in die Anzeige ein (nach „Zeitplan“ das Soll des Plans, `plan_sp`)
 - Test in `tests/test_room_modes72.py`

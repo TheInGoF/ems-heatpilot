@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.73.2
+- Fix: Übersicht → Räume passt aufs Handy
+
 ## 0.73.1
 - Fix: gewählte Betriebsart sofort am Knopf sichtbar
 
