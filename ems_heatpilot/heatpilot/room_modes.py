@@ -44,6 +44,9 @@ def _set(app, climate: str, own: dict | None, now: float) -> None:
     if info is not None:  # Anzeige sofort (Knopf, Farbe), nicht erst nach dem nächsten Takt
         info["own"] = st.get("own")
         info["desired"] = apply(dict(st), st.get("plan_sp", info.get("desired")), info.get("phase"), int(now))[0]
+    ctl = getattr(app, "control", None)  # 0.73.3: ein alter Boost (Tado-Timer, lokal) hielt die Regelschleife an
+    if ctl is not None and ctl.boosts.pop(climate, None) is not None:
+        ctl._save()  # HeatPilots nächstes Soll löst auch den Timer am Thermostat ab
     vp = getattr(app.eng, "valve_pid", None)
     if vp is not None:
         (vp.state.get("rooms") or {}).get(climate, {}).pop("hold_until", None)  # beendet „von Hand am Ventil“
@@ -99,6 +102,19 @@ def apply(st: dict, sp: float, phase: str | None, ts: int) -> tuple[float, str |
         return FROST_C, LABELS["aus"]
     value = own.get("sp")
     return (sp, None) if value is None else (float(value), f"{LABELS.get(mode, mode)} {value:g} °C")
+
+
+def boosts(loop, now: float | None = None) -> dict[str, dict]:
+    """Laufende eigene Boosts je Raum – im Format von ``Control.active`` (Boost-Sensor, Karte, Raum-Anzeige)."""
+    now = time.time() if now is None else now
+    out = {}
+    for c, st in (getattr(loop, "state", None) or {}).items():
+        own = st.get("own") or {}
+        until = int(own.get("until") or 0)
+        if own.get("mode") == "boost" and until > now:
+            out[c] = {"temp": float(own["sp"]), "end": until, "left_min": max(0, round((until - now) / 60)),
+                      "minutes": round((until - int(own.get("since") or now)) / 60), "local": True}
+    return out
 
 
 def desired(st: dict, d, ts: int):

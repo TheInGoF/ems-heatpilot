@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.73.3
+- **Fix: Räume blieben im Boost, „Zeitplan“ übernahm nicht.** Ein Boost, der noch in `Control` stand (Tado-Timer bzw. lokal, etwa von vor 0.73), hält die Regelschleife für diesen Raum an – „Zeitplan“ (auch „alle Räume“) räumte seit 0.73 aber nur das eigene Climate auf. Jetzt beendet jede Bedienung über das eigene Climate auch einen solchen Boost (`room_modes._set`); HeatPilots nächstes Soll löst den Timer am Thermostat ab
+- **Fix: eigene Boosts unsichtbar.** Boost-Sensor (`sensor.heatpilot_boost`, Karte), Raum-Sensoren und der Reiter Heizen kannten nur Boosts aus `Control`; ein Boost über das eigene Climate fehlte dort und ließ sich nicht über „Stopp“ beenden. `room_modes.boosts` liefert sie im selben Format dazu
+- Tests in `tests/test_room_modes72.py`
+
 ## 0.73.2
 - **Fix: Übersicht → Räume breiter als der Bildschirm.** Die Tabelle mit fünf Spalten brauchte auf dem Handy mehr Platz, als die Karte hatte; die aufgeklappten Einzelheiten (Ventilverhalten, Grafik) liefen mit ihr seitlich weg. Unter 520 px fehlt jetzt die Spalte „Trägheit“ (steht in den Einzelheiten), „Ist → Soll“ bleibt einzeilig. Karten haben keine Mindestbreite mehr und brechen lange Wörter (Entitätsnamen) um, statt die Seite zu verbreitern
 
