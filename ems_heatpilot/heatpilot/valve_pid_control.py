@@ -36,6 +36,7 @@ KV = "valve_pid.state"
 HAND_PCT = 5        # fremde Hand: Ventil weicht ab so vielen Prozentpunkten vom zuletzt Geschriebenen ab …
 HAND_HOLD_S = 3600  # … dann wartet der Raum so lange
 HAND_GRACE_S = 120  # so lange nach dem eigenen Schreiben zählt eine Abweichung nicht als fremd
+ARRIVE_S = 900      # 0.73.4: so lange darf das Ventil noch den Wert von vorher melden (Shelly BLU über das Gateway)
 FAIL_HOLD_S = 3600  # nach ``MAX_FAILS`` Fehlschlägen in Folge: Raum so lange pausieren, dann von selbst weiter
 RANGE_EVERY_S = 3600  # 0.70: Wirkungsgrenze der Ventile (``valve_range``) so oft neu lernen
 K_FAIL, K_HAND = "valve_pid_fail", "valve_pid_hand"
@@ -132,7 +133,9 @@ class ValvePidControl:
         if last is None or current is None or st.get("check"):
             return
         fresh = ts - last["ts"] <= HAND_GRACE_S
-        if not fresh and abs(current - last["value"]) >= HAND_PCT:
+        before = last.get("before")  # 0.73.4: meldet es noch den Wert von vorher, ist es nicht angekommen – keine Hand
+        arriving = before is not None and abs(current - before) < HAND_PCT and ts - last["ts"] <= ARRIVE_S
+        if not fresh and not arriving and abs(current - last["value"]) >= HAND_PCT:
             st["hold_until"] = ts + HAND_HOLD_S
             st.pop("last", None)  # der fremde Wert ist jetzt der Stand – kein zweites Mal melden
             log.info("Ventil %s: von Hand auf %.0f %% gestellt – HeatPilot wartet %d min", room.name, current,
@@ -148,6 +151,10 @@ class ValvePidControl:
             return
         if current is None and ts < chk["until"]:
             return
+        before = chk.get("before")
+        if (current is not None and before is not None and abs(current - before) <= 1.0
+                and abs(current - chk["value"]) > 1.0 and ts < chk["until"]):
+            return  # 0.73.4: noch der Wert von vorher – das Ventil meldet verzögert, weiter warten
         st.pop("check")
         if current is not None and abs(current - chk["value"]) <= 1.0:
             st["fails"] = 0
@@ -187,7 +194,7 @@ class ValvePidControl:
         now = time.time() if now is None else now
         n, rst = 0, self.state.setdefault("rooms", {})
         for room, value, why in pending:
-            st = rst.setdefault(room.climate, {})
+            st, before = rst.setdefault(room.climate, {}), self.current(room)
             try:
                 await self.control.set_valve(room.valve_pos, int(value), f"{room.name}: {why}")
             except PermissionError as err:
@@ -199,8 +206,9 @@ class ValvePidControl:
                 st["why"] = f"nicht geschrieben ({err})"
                 log.warning("Ventil %s: nicht geschrieben (%s)", room.name, err)
                 continue
-            st["last"] = {"ts": int(now), "value": int(value)}
-            st["check"] = {"due": now + CHECK_S, "until": now + CHECK_MAX_S, "value": int(value)}
+            st["last"] = {"ts": int(now), "value": int(value), "before": before}
+            st["check"] = {"due": now + CHECK_S, "until": now + max(CHECK_MAX_S, ARRIVE_S), "value": int(value),
+                           "before": before}
             if st.pop("hold_until", None) and self.notifier is not None:
                 self.notifier.solved(K_HAND, quiet=True)
             n += 1

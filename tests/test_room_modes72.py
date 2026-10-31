@@ -160,3 +160,18 @@ def test_own_boost_shows_in_the_boost_sensor_and_the_room(tmp_path):
     assert n == 1 and attrs["rooms"][0]["temp"] == 24.0 and 55 <= attrs["rooms"][0]["left_min"] <= 60
     room = next(a for _e, _s, a in card_bridge.rooms(eng, ctl) if a["climate"] == "climate.wz")
     assert room["boost"]["temp"] == 24.0
+
+
+def test_schedule_after_own_boost_clears_every_boost_display(tmp_path):
+    from heatpilot import card_bridge
+    from test_control34 import MON, climate, make, step, ts_of
+
+    eng, ha, ctl, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 17.0)
+    step(eng, loop, ts_of(MON, 12))
+    app = SimpleNamespace(eng=eng, control=ctl)
+    run(heat_actions.run(app, "boost", {"rooms": ["climate.wz"], "temp": 24, "minutes": 60}))
+    run(heat_actions.run(app, "schedule", {"rooms": ["climate.wz"]}))
+    assert card_bridge.boost(eng, ctl, None)[1] == 0
+    room = next(a for _e, _s, a in card_bridge.rooms(eng, ctl) if a["climate"] == "climate.wz")
+    assert room["boost"] is None and room["own"] is None
