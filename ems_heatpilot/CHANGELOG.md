@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.73.3
+- Fix: „Zeitplan“ beendet auch alte Boosts, HeatPilot übernimmt wieder
+- Fix: eigene Boosts in Boost-Anzeige und Karte sichtbar
+
 ## 0.73.2
 - Fix: Übersicht → Räume passt aufs Handy
 

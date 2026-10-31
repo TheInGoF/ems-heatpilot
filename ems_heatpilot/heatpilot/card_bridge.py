@@ -33,7 +33,7 @@ import time
 import unicodedata
 
 from . import control as control_mod
-from . import heat_actions, override
+from . import heat_actions, override, room_modes
 from .values import num
 
 log = logging.getLogger(__name__)
@@ -69,7 +69,7 @@ def rooms(eng, ctl) -> list[tuple[str, object, dict]]:
     """(Entität, Zustand, Attribute) je Raum – wie die Raumkachel der HeatPilot-Seite."""
     targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
                for r in eng.found.rooms}
-    boosts = ctl.active(targets) if ctl else {}
+    boosts = {**(ctl.active(targets) if ctl else {}), **room_modes.boosts(eng.control_loop)}  # 0.73.3: auch eigene
     loop, managing = eng.control_loop, eng.cfg.is_managing()
     vp = getattr(eng, "valve_pid", None)  # ventilgeführte Räume: Wunsch-Öffnung, von Hand gehalten
     vps = (vp.as_dict().get("rooms") or {}) if vp is not None else {}
@@ -99,7 +99,7 @@ def rooms(eng, ctl) -> list[tuple[str, object, dict]]:
 def boost(eng, ctl, last: dict | None) -> tuple[str, int, dict]:
     targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
                for r in eng.found.rooms}
-    act = ctl.active(targets) if ctl else {}
+    act = {**(ctl.active(targets) if ctl else {}), **room_modes.boosts(eng.control_loop)}  # 0.73.3: auch eigene
     names = {r.climate: r.name for r in eng.found.rooms}
     return BOOST, len(act), {
         "friendly_name": "HeatPilot Boost", "icon": "mdi:fire",

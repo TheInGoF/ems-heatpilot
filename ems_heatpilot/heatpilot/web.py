@@ -50,6 +50,7 @@ from .config import CONTROL_MODES, DHW_MODES, DISINFECT_DAYS, FIELDS, PRESET_MAX
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES, Registry, climate_info
 from . import advice, certificate, control as control_mod, controlloop, diagnostics, live, preview, preview_log, readiness, web_guest
 from . import boiler_entity, boiler_rule, boiler_status, dhw_control, dhw_entity, entity_map, notify, valve_control
+from . import room_modes
 from . import boiler_period, boiler_power, disinfect_entity, live_log, report, room_identity, savings_compare
 from . import habits, sensor_gone, web_adopt, web_restore, web_weather
 from . import card_bridge, heat_actions, web_switch
@@ -354,7 +355,7 @@ def make_app(app) -> web.Application:
         eng, ctl, loop = app.eng, app.control, app.eng.control_loop
         targets = {r.climate: (eng.states.get(r.climate) or {}).get("attributes", {}).get("temperature")
                    for r in eng.found.rooms}
-        boosts = ctl.active(targets) if ctl else {}
+        boosts = {**(ctl.active(targets) if ctl else {}), **room_modes.boosts(loop)}  # 0.73.3: auch eigene
         ctl_rooms = loop.rooms if loop else {}
         vp = getattr(eng, "valve_pid", None)  # 0.51: Status der ventilgeführten Räume
         valve_states = (vp.as_dict().get("rooms") or {}) if vp is not None else {}

@@ -124,3 +124,39 @@ def test_button_shows_at_once_not_only_after_the_next_tick(tmp_path):
     assert loop.rooms["climate.wz"]["desired"] == room_modes.FROST_C
     run(heat_actions.run(app, "schedule", {"rooms": ["climate.wz"]}))
     assert loop.rooms["climate.wz"]["own"] is None and loop.rooms["climate.wz"]["desired"] == plan
+
+
+def test_schedule_ends_an_old_control_boost_so_heatpilot_takes_over(tmp_path):
+    """Ein Boost von vor 0.73 (Tado-Timer bzw. lokal in ``Control``) hielt die Regelschleife an – „Zeitplan“ räumte nur
+    das eigene Climate auf, der Raum blieb im Boost."""
+    from test_control34 import MON, climate, make, step, ts_of
+
+    eng, ha, ctl, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 17.0)
+    t = ts_of(MON, 12)
+    step(eng, loop, t)
+    plan = ha.calls[-1][3]["temperature"]
+    eng.cfg.control_mode = "beobachten"
+    run(ctl.boost(["climate.wz"], 24, 120))  # alter Boost über Control
+    eng.cfg.control_mode = "heatpilot"
+    climate(eng, "climate.wz", 20.0, 24.0)
+    step(eng, loop, t + 60)
+    assert ha.calls[-1][3] == {"temperature": 24.0}  # Boost läuft, HeatPilot hält sich raus
+    run(heat_actions.run(SimpleNamespace(eng=eng, control=ctl), "schedule", {"rooms": ["climate.wz"]}))
+    assert "climate.wz" not in ctl.boosts
+    step(eng, loop, t + 120)
+    assert ha.calls[-1] == ("climate", "set_temperature", "climate.wz", {"temperature": plan})
+
+
+def test_own_boost_shows_in_the_boost_sensor_and_the_room(tmp_path):
+    from heatpilot import card_bridge
+    from test_control34 import MON, climate, make, step, ts_of
+
+    eng, ha, ctl, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 17.0)
+    step(eng, loop, ts_of(MON, 12))
+    run(heat_actions.run(SimpleNamespace(eng=eng, control=ctl), "boost", {"rooms": ["climate.wz"], "temp": 24, "minutes": 60}))
+    _, n, attrs = card_bridge.boost(eng, ctl, None)
+    assert n == 1 and attrs["rooms"][0]["temp"] == 24.0 and 55 <= attrs["rooms"][0]["left_min"] <= 60
+    room = next(a for _e, _s, a in card_bridge.rooms(eng, ctl) if a["climate"] == "climate.wz")
+    assert room["boost"]["temp"] == 24.0
