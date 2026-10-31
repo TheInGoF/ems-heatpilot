@@ -256,6 +256,7 @@ class App(JobsMixin):
                                valves=room_lead.valve_rooms(found.rooms))  # 0.51: ventilgeführte Räume
         eng.notifier = Notifier(self.store, self.control, cfg.notify_targets,
                                 carry=old.notifier if old is not None else None)
+        eng.notifier.quiet = lambda: cfg.is_night_at(datetime.now().astimezone())  # 0.71: nachts keine Meldungen
         eng.control_loop = ControlLoop(eng, self.control)
         eng.dhw_control = DhwControl(eng, self.control, eng.notifier, entity,
                                      carry=old.dhw_control if old is not None else None)

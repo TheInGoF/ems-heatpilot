@@ -18,6 +18,10 @@ kurz und konkret. Wer etwas melden will, öffnet ein Problem unter einem Schlüs
 nicht in jedem Takt – und beim Schließen einmal „wieder in Ordnung“ (nur, wenn das Problem gemeldet wurde);
 höchstens eine Problem-Meldung je Schlüssel in 6 h. Der Stand überlebt Neustarts (kv ``notify.state``).
 
+Nachts keine Meldungen (seit 0.71): Solange ``quiet()`` wahr ist (``main.build``: Nacht laut Plan), behält ``flush``
+die Warteschlange; was sich bis zum Morgen erledigt hat (Problem und „wieder in Ordnung“), fällt dann ganz weg. Der
+Problem-Sensor zeigt offene Probleme auch nachts.
+
 Offene Probleme zeigt der Problem-Sensor ``binary_sensor.heatpilot_problem`` (``problem_state``, gesetzt von
 ``publisher.publish_problem``) mit den Gründen im Attribut ``reasons`` – auch ohne eingestellte Ziele.
 """
@@ -85,6 +89,8 @@ class Notifier:
         self.state: dict[str, dict] = carry.state if carry is not None else dict(store.get(KV) or {})
         self.queue: list[tuple[str, str]] = carry.queue if carry is not None else []
         self.last: dict = carry.last if carry is not None else dict(store.get(KV_LAST) or {})
+        self.quiet = None    # 0.71: Aufruf → True, solange nichts geschickt wird (nachts); None: immer schicken
+        self.held = carry.held if carry is not None else False  # Warteschlange über Nacht zurückgehalten
 
     # ------------------------------------------------------------------ Probleme
     def problem(self, key: str, text: str, ts: float | None = None) -> bool:
@@ -163,10 +169,16 @@ class Notifier:
 
     async def flush(self) -> int:
         """Vorgemerkte Meldungen an alle Ziele schicken (einmal versucht, Fehler nur geloggt). Gibt die Zahl der
-        Meldungen zurück."""
+        Meldungen zurück. Nachts (``quiet``, 0.71) nichts – die Warteschlange bleibt bis zum Morgen."""
         if not self.queue:
             return 0
-        items, self.queue[:] = list(self.queue), []
+        if self.quiet is not None and self.quiet():
+            self.held = True
+            return 0
+        keys = {k for k, _ in self.queue}
+        done = {k for k in keys if k + OK_SUFFIX in keys} if self.held else set()  # über Nacht erledigt: beide weg
+        items = [(k, t) for k, t in self.queue if k.removesuffix(OK_SUFFIX) not in done]
+        self.queue[:], self.held = [], False
         for key, text in items:
             sent, errors = await self._send_all(text)
             log.info("Meldung „%s“ an %s%s", text, ", ".join(sent) or "niemand",

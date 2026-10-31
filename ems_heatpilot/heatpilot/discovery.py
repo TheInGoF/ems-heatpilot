@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 # Rollen -> EMS-ESP-Namen und ihre Beschriftungen (seit 0.36.3 in ``discovery_roles``) – hier durchgereicht,
 # weil Module und Tests sie aus ``heatpilot.discovery`` holen
 from .discovery_roles import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES  # noqa: F401
+from . import room_lead
 from .ems_lock import EMS_CLIMATE, LOCK_TEXT, is_ems_climate
 
 log = logging.getLogger(__name__)
@@ -456,8 +457,8 @@ def group_rooms(entries: list[dict], by_id: dict, reg: dict, info: dict[str, dic
             humidity=head.get("humidity") or None, temp_sensor=head.get("temperature") or None,
             group=head.get("group") or None, controller=bool(head.get("controller")),
             managed=managed and not ems, comfort=comfort, ems=ems,
-            lead=head.get("lead") or "temp", valve_pos=head.get("valve_pos") or None,
-            platform=reg.get(head["climate"], {}).get("platform"),
+            lead=_lead(head, reg.get(head["climate"], {}).get("platform")),
+            valve_pos=head.get("valve_pos") or None, platform=reg.get(head["climate"], {}).get("platform"),
             members=[device(r) for r in others],
             preset=_preset(head, "preset"), preset_max=_preset(head, "preset_max"),
             area=info.get(head["climate"], {}).get("area"),
@@ -474,6 +475,14 @@ def person_kind(state: dict) -> str:
     if not a.get("device_trackers"):
         return "dummy"
     return "person" if a.get("user_id") else "device"
+
+
+def _lead(head: dict, platform: str | None) -> str:
+    """Führung eines Raums: wie eingestellt; ein Shelly mit Ventil-Entität ist immer ventilgeführt (0.71) – ihm darf
+    HeatPilot weder Soll noch Betriebsart schicken, nur die Öffnung."""
+    if platform == room_lead.SHELLY and head.get("valve_pos"):
+        return "ventil"
+    return head.get("lead") or "temp"
 
 
 def discover(states: list[dict], registry, cfg, all_rooms: bool = False) -> Discovered:

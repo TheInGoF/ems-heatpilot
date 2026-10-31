@@ -145,6 +145,7 @@ class Control(boiler_period.PeriodWrite):
         self.rooms: set[str] = {c for room in self.groups.values() for c in room.climates} - self.ems
         # 0.71: Thermostate der ventilgeführten Räume (Stufe 3) – Betriebsart und Soll nie anfassen (``valve_modes``)
         self.stage3: set[str] = {c for room in self.groups.values() if room_lead.valve_led(room) for c in room.climates}
+        self.stage3 |= {e for e in self.rooms if self.platform(e) == room_lead.SHELLY}  # Shelly: nur das Ventil
         self.states = states if states is not None else {}
         # laufende Boosts je Raum: {temp, end, local, before, before_mode, targets}
         self.boosts: dict[str, dict] = dict(store.get(KV) or {})
@@ -243,8 +244,8 @@ class Control(boiler_period.PeriodWrite):
         if (domain, service) not in ALLOWED:
             raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt")
         if domain in ("climate", "tado") and entity_id in self.stage3:
-            raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt: HeatPilot führt das Ventil direkt "
-                                  "(Stufe 3) – eine Betriebsart am Thermostat beendet dessen Ventilsteuerung")
+            raise PermissionError(f"{domain}.{service} auf {entity_id} ist gesperrt: HeatPilot stellt hier nur das Ventil "
+                                  "(Stufe 3, Shelly) – Soll oder Betriebsart am Thermostat beenden dessen Ventilsteuerung")
         if domain == "number" and self.conflict and entity_id == self.flow_entity:
             raise PermissionError(self.conflict)
         if domain == "number" and self.flow_entity and entity_id == self.flow_entity:

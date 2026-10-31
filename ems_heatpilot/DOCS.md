@@ -1492,7 +1492,9 @@ Bereitschaft), `POST api/boiler/resume` („wieder einschalten“ – ohne Pause
 ## Benachrichtigungen
 
 Seit 0.38 meldet HeatPilot Probleme an Ziele in Home Assistant – **Einstellungen → Haus → Benachrichtigungen**
-(bis 0.39 eine eigene Karte), Liste mit Häkchen:
+(bis 0.39 eine eigene Karte), Liste mit Häkchen. **Nachts keine Meldungen** (seit 0.72): Während der Nacht laut Plan
+schickt HeatPilot nichts; was anfällt, kommt am Morgen – was sich bis dahin von selbst erledigt hat, gar nicht. Der
+Problem-Sensor zeigt offene Probleme auch nachts, und die Testnachricht geht immer.
 
 - **notify-Entitäten** (Home Assistant ab 2024.6, z. B. `notify.handy`) – geschickt mit der Aktion
   `notify.send_message`,
@@ -1700,6 +1702,8 @@ Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
   den **Öffnungs-Deckel** um 5 Punkte je Tag – nie unter 40 %. Bleibt die Unterversorgung 3 Tage aus, gehen die
   Deckel schrittweise zurück auf 100 %. Der Deckel begrenzt nur den PID-Ausgang. Der handgeführte Abgleich
   (Empfehlungen zur Voreinstellung am Ventilunterteil) bleibt für temperaturgeführte Räume.
+- **Shelly nur übers Ventil** (seit 0.72): Ein Shelly-Thermostat mit Ventil-Entität ist immer ventilgeführt, und an
+  ein Shelly-Thermostat geht nie ein Soll oder eine Betriebsart – nur die Öffnung in Prozent.
 - **Eigene Betriebsarten** (seit 0.71): Am Thermostat eines ventilgeführten Raums (Stufe 3) stellt HeatPilot nie die
   Betriebsart oder ein Soll – das beendet dessen manuelle Ventilsteuerung; jeder solche Aufruf ist gesperrt. Die Knöpfe
   im Reiter Heizen und auf den Karten wirken stattdessen auf HeatPilots eigene Führung: **Aus** hält nur den

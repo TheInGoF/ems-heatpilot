@@ -13,4 +13,4 @@ or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Lesser General Public License
 SPDX-License-Identifier: LGPL-3.0-or-later
 """
 
-__version__ = "0.71.0"
+__version__ = "0.72.0"

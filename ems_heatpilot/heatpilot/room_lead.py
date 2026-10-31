@@ -18,6 +18,7 @@ import re
 
 NUMBER = re.compile(r"^number\.[a-z0-9_]+$")
 LEADS = ("temp", "ventil")
+SHELLY = "shelly"  # 0.71: Shelly-Thermostate bekommen nur die Ventilöffnung – nie Soll oder Betriebsart
 
 
 def clean_entry(r: dict, climate: str) -> dict:
