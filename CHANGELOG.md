@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.73.5
+- **Ventilräume auf der Kachel wie alle anderen:** statt „Ventil · Vorheizen 19,5° · 30 %“ nur der Betriebszustand („Vorheizen → 19,5°“); Betriebsart und „Manuell“ des Shelly-Climates fließen nicht mehr ein. Die Ventilstellung steht im Raum-Dialog. Ein eigener Boost zeigt seinen Text („Boost 24° bis …“) vor dem Soll des Thermostats
+- **„Zeitplan“ und „Ausschalten“ zählen nach dem eigenen Climate:** „0 von 7 Räumen“ zählte Thermostate in ihrer Automatik – seit Tado auf manuell bleibt, immer 0. Jetzt „6 von 7 im Plan“ bzw. „alle im Plan“ und „1 von 7 aus“ nach HeatPilots Betriebsart
+- HeatPilot Card 0.6.1: Ventilräume ebenso
+
 ## 0.73.4
 - **Fix: Ventilraum hing in der 60-min-Wartezeit fest.** Shelly BLU meldet die Ventilstellung über das Gateway verzögert. Zeigte das Ventil 2 min nach dem Schreiben noch den alten Wert, hielt HeatPilot das für „von Hand verstellt“ und wartete 60 min – danach schrieb er wieder, das Ventil meldete wieder zu spät, und es ging von vorn los. Ebenso zählte die Prüfung nach 60 s den alten Wert als Fehlschlag (nach dreien 1 h Pause). Jetzt merkt sich HeatPilot den Wert von vorher (`before`): Meldet das Ventil bis zu `ARRIVE_S` (15 min) noch diesen, ist das Geschriebene nur noch nicht angekommen – keine Hand, kein Fehlschlag. Ein wirklich totes Ventil fällt damit nach rund 45 min statt 4 min auf
 - Tests in `tests/test_valve_pid51.py` (angepasst und neu), `tests/test_room_modes72.py`

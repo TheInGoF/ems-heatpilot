@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.73.5
+- Ventilräume auf der Kachel wie alle anderen
+- „Zeitplan“/„Ausschalten“ zählen nach HeatPilots Betriebsart
+
 ## 0.73.4
 - Fix: Shelly-Ventil hing in der 60-min-Wartezeit (verzögerte Rückmeldung)
 
