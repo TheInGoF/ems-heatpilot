@@ -43,3 +43,42 @@ def test_a_night_with_a_button_is_not_learned(tmp_path):
     nights = sleep.learn(db2, NOW)
     assert not nights[key]["valid"] and nights[key]["reason"] == sleep.BUTTON
     assert sum(n["valid"] for n in nights.values()) == sum(n["valid"] for n in clean.values()) - 1
+
+
+# ------------------------------------------------------------------ nachts keine Meldungen, Shelly nur übers Ventil
+def test_no_messages_at_night_and_what_resolved_overnight_is_dropped(tmp_path):
+    from test_control import run
+    from test_notify38 import notifier
+
+    n, sent = notifier(tmp_path, targets=("notify.a",))
+    night = [True]
+    n.quiet = lambda: night[0]
+    n.problem("k", "kaputt", T0)
+    n.problem("j", "Ventil schließt nicht", T0)
+    n.solved("k", "wieder in Ordnung", T0 + 600)
+    assert run(n.flush()) == 0 and sent.items == [] and n.problem_state()["on"]  # Sensor zeigt es trotzdem
+    night[0] = False
+    run(n.flush())
+    assert [x[2] for x in sent.items] == ["Ventil schließt nicht"]  # über Nacht erledigt: beide weg
+    n.problem("k", "kaputt", T0 + 30000)
+    n.solved("k", "wieder in Ordnung", T0 + 30100)
+    run(n.flush())  # tagsüber wie bisher: beides
+    assert [x[2] for x in sent.items[1:]] == ["kaputt", "wieder in Ordnung"]
+
+
+def test_shelly_thermostat_gets_neither_setpoint_nor_mode(tmp_path):
+    import pytest
+
+    from heatpilot import discovery
+    from heatpilot.discovery import Room
+    from test_control import run
+    from test_control34 import make
+
+    assert discovery._lead({"valve_pos": "number.flur_valve"}, "shelly") == "ventil"  # Shelly mit Ventil: Stufe 3
+    assert discovery._lead({"valve_pos": "number.x"}, "zha") == "temp"
+    shelly = Room("Flur", "climate.flur", managed=True, comfort=20.0, platform="shelly")
+    eng, ha, ctl, loop = make(tmp_path, rooms=[shelly])
+    for service, data in (("set_temperature", {"temperature": 21}), ("set_hvac_mode", {"hvac_mode": "heat"})):
+        with pytest.raises(PermissionError, match="nur das Ventil"):
+            run(ctl._call("climate", service, "climate.flur", data))
+    assert ha.calls == []

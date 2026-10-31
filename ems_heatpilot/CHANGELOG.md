@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.72.0
+- Nachts keine Meldungen, morgens nur, was noch gilt
+- Shelly-Thermostate: nur Ventil, nie Soll oder Betriebsart
+
 ## 0.71.0
 - Stufe 3: keine Betriebsart mehr ans Thermostat
 - Eigene Betriebsarten für ventilgeführte Räume (Aus, Manuell, Boost, Zeitplan)

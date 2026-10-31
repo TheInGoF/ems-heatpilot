@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.72.0
+- **Nachts keine Meldungen in Home Assistant:** Während der Nacht laut Plan behält der Notifier seine Warteschlange (`Notifier.quiet`, gesetzt in `main.build`); am Morgen geht raus, was noch gilt – Problem und „wieder in Ordnung“, die sich über Nacht erledigt haben, fallen beide weg. Tagsüber wie bisher; der Problem-Sensor zeigt offene Probleme auch nachts, die Testnachricht geht immer
+- **Shelly nur übers Ventil:** Ein Shelly-Thermostat mit Ventil-Entität ist immer ventilgeführt (`discovery._lead`), und `Control` sperrt jedes Soll und jede Betriebsart an Shelly-Thermostaten (`stage3` um die Shelly-Plattform erweitert, `room_lead.SHELLY`) – nur die Öffnung in Prozent geht hin
+- Tests: in `tests/test_tag71.py`
+
 ## 0.71.0
 - **Stufe-3-Räume: nie eine Betriebsart am Thermostat.** Bei einem Ventil, das HeatPilot direkt in Prozent stellt, schaltet eine Betriebsart (auch „auto“) oder ein Soll am Thermostat dessen manuelle Ventilsteuerung ab – passiert am 30.10. beim neuen Flur-Thermostat über den Knopf „Betriebsart“. `Control` sperrt jetzt jeden `climate`- bzw. `tado`-Aufruf auf diese Thermostate (`stage3`)
 - **Eigene Betriebsarten für ventilgeführte Räume** (`valve_modes`, Zustand `own` je Raum): Die Knöpfe Betriebsart, Soll, Boost und Zeitplan (Seite und Karten, `heat_actions`) wirken bei diesen Räumen auf den PID – **Aus** hält nur den Frostschutz 7 °C, **Manuell**/Soll bis zum nächsten Phasenwechsel, **Boost** für die gewählte Dauer, **Zeitplan** zurück zum Plan. Gemischte Auswahl wird aufgeteilt; ohne „HeatPilot steuert“ eine Fehlermeldung. Die Raumkachel zeigt die eigene Betriebsart („Ventil · Aus (Frostschutz) · 0 %“)
