@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.73.4
+- **Fix: Ventilraum hing in der 60-min-Wartezeit fest.** Shelly BLU meldet die Ventilstellung über das Gateway verzögert. Zeigte das Ventil 2 min nach dem Schreiben noch den alten Wert, hielt HeatPilot das für „von Hand verstellt“ und wartete 60 min – danach schrieb er wieder, das Ventil meldete wieder zu spät, und es ging von vorn los. Ebenso zählte die Prüfung nach 60 s den alten Wert als Fehlschlag (nach dreien 1 h Pause). Jetzt merkt sich HeatPilot den Wert von vorher (`before`): Meldet das Ventil bis zu `ARRIVE_S` (15 min) noch diesen, ist das Geschriebene nur noch nicht angekommen – keine Hand, kein Fehlschlag. Ein wirklich totes Ventil fällt damit nach rund 45 min statt 4 min auf
+- Tests in `tests/test_valve_pid51.py` (angepasst und neu), `tests/test_room_modes72.py`
+
 ## 0.73.3
 - **Fix: Räume blieben im Boost, „Zeitplan“ übernahm nicht.** Ein Boost, der noch in `Control` stand (Tado-Timer bzw. lokal, etwa von vor 0.73), hält die Regelschleife für diesen Raum an – „Zeitplan“ (auch „alle Räume“) räumte seit 0.73 aber nur das eigene Climate auf. Jetzt beendet jede Bedienung über das eigene Climate auch einen solchen Boost (`room_modes._set`); HeatPilots nächstes Soll löst den Timer am Thermostat ab
 - **Fix: eigene Boosts unsichtbar.** Boost-Sensor (`sensor.heatpilot_boost`, Karte), Raum-Sensoren und der Reiter Heizen kannten nur Boosts aus `Control`; ein Boost über das eigene Climate fehlte dort und ließ sich nicht über „Stopp“ beenden. `room_modes.boosts` liefert sie im selben Format dazu

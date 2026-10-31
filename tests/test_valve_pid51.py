@@ -165,7 +165,7 @@ def test_valve_led_room_gets_percent_not_setpoints(tmp_path):
 def test_check_after_60_s_and_three_failures_pause_the_room(tmp_path):
     eng, ha, loop, vp = vhouse(tmp_path)
     vstep(eng, loop, vp, T0)
-    for k in range(1, 12):  # Entität zeigt weiter 30 %: Prüfungen schlagen fehl
+    for k in range(1, 60):  # Entität zeigt weiter 30 %: nach je ARRIVE_S (0.73.4) schlägt die Prüfung fehl
         vstep(eng, loop, vp, T0 + k * 70)
         if vp.state["rooms"]["climate.wz"].get("pause_until"):
             break
@@ -235,3 +235,20 @@ def test_ui_has_lead_select_and_valve_picker():
     for needle in ('class="r-lead"', 'class="r-valvepos"', "dl-valvepos", "valvepos:",
                    'lead: tr.querySelector(".r-lead").value'):
         assert needle in html, needle
+
+
+def test_slow_reporting_valve_is_no_hand_and_no_failure(tmp_path):
+    """0.73.4: Shelly BLU meldet die Stellung über das Gateway verzögert. Zeigte das Ventil nach 2 min noch den Wert von
+    vorher, galt das als „von Hand“ – HeatPilot wartete 60 min, schrieb wieder, und alles begann von vorn."""
+    eng, ha, loop, vp = vhouse(tmp_path, temp=18.0)
+    vstep(eng, loop, vp, T0)
+    want = writes(ha)[-1][1]
+    assert want != 30
+    for k in range(1, 8):  # 7 min lang noch die alten 30 %
+        vstep(eng, loop, vp, T0 + k * 60)
+    st = vp.state["rooms"]["climate.wz"]
+    assert not st.get("hold_until") and st.get("fails", 0) == 0 and st.get("check")
+    eng.states[ENT]["state"] = str(want)  # jetzt gemeldet
+    vstep(eng, loop, vp, T0 + 8 * 60)
+    st = vp.state["rooms"]["climate.wz"]
+    assert not st.get("check") and st.get("fails", 0) == 0 and not st.get("hold_until")
