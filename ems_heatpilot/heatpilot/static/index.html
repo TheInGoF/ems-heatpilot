@@ -60,6 +60,9 @@ h2 { font-size: var(--fs-title); margin: 0 0 4px; }
 .muted { color: var(--text-muted); font-size: var(--fs-small); }
 .tiles { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(150px, 40vw), 1fr)); gap: var(--s4); margin-bottom: var(--s4); }
 .tile, .card { background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--r); padding: var(--s4); }
+.card { min-width: 0; overflow-wrap: break-word; }  /* 0.73.2: lange Entitätsnamen brechen um statt die Seite zu verbreitern */
+#rooms td:nth-child(2) { white-space: nowrap; }
+@media (max-width: 520px) { #rooms tr > :nth-child(4):not([colspan]) { display: none; } }  /* 0.73.2: Trägheit steht in den Einzelheiten */
 .tile .label { color: var(--text-secondary); font-size: var(--fs-small); }
 .tile .value { font-size: var(--fs-num); font-weight: 600; font-variant-numeric: tabular-nums; }
 .tile .unit { font-size: var(--fs-text); color: var(--text-secondary); font-weight: 400; }
@@ -2383,6 +2386,7 @@ async function load() {
       const det = [["Aufheizen +2 K bei max. Vorlauf" + outNote, ok ? (r.hours_plus_2k_max_flow === null ? "nicht erreichbar" : fmt(r.hours_plus_2k_max_flow * 60, 0) + " min") : learn],
         ["Vorlauf für 21 °C" + outNote, ok ? hold : learn], ["Sonne", ok ? sunText(r.solar_gain, r.updates) : learn],
         ["Wind", ok ? (r.wind_gain > 0.0002 ? `kühlt bei 10 m/s um ${fmt(r.wind_gain * 10 * (r.tau_h || 1) * 100, 0)} % schneller aus` : "kaum Einfluss gelernt") : learn],  // 0.54
+        ["Trägheit", ok ? fmt(r.tau_h) + " h" : learn],  // 0.73.2: auch hier – die Spalte fehlt auf dem Handy
         ["Fehler", r.rmse_k === null ? "–" : fmt(r.rmse_k, 2) + " K"], ["Lernschritte", r.updates]]
         .map(([k, v]) => `<span>${k}: <b>${v}</b></span>`).join("");
       return `<tr class="ov-r"><td>${name}${r.floor ? ` <span class="badge" title="Fußbodenheizung, Wirkung ${fmt(r.floor_gain, 3)}">Fußboden</span>` : ""}</td><td>${fmt(r.temp)} → ${fmt(r.target)} °C</td><td>${fmt(r.valve, 0)} %</td>` +
