@@ -1853,8 +1853,9 @@ function renderHeat() {
   const j = HEAT; if (!j) return;
   const ids = allRooms(), own = ctlRooms(j);
   BOOST.rooms = BOOST.rooms.filter((c) => ids.includes(c));
-  const n = own.length, running = own.filter((r) => r.boost), offN = own.filter((r) => r.mode === "off").length;
-  const autoN = own.filter((r) => r.mode === "auto" && !r.boost).length;
+  const modeOf = (r) => ownLed(r) ? ownMode(r) : r.mode;  // 0.73.5: geführte Räume zählen nach dem eigenen Climate
+  const n = own.length, running = own.filter((r) => r.boost), offN = own.filter((r) => modeOf(r) === "off").length;
+  const autoN = own.filter((r) => modeOf(r) === "auto" && !r.boost).length;
   const left = running.length ? Math.max(...running.map((r) => r.boost.left_min)) : 0;
   const last = running.length ? running.reduce((a, r) => (r.boost.left_min > a.left_min ? r.boost : a), running[0].boost) : null;
   const c = ctl(), pil = managing();
@@ -1863,7 +1864,7 @@ function renderHeat() {
   // vier Kacheln immer – „Pause“ bei Beobachten gesperrt, das Raster springt nicht
   $("heat-acts").innerHTML =
     act("boost", "Boost", running.length ? `läuft · noch ${leftText(left)}${boostUntil(last)}` : `${fmt(BOOST.temp)} °C · ${hm(BOOST.minutes)}`, running.length > 0) +
-    act("sched", "Zeitplan", autoN === n ? "alle Räume" : `${autoN} von ${n} Räumen`, false) +
+    act("sched", "Zeitplan", autoN === n ? "alle im Plan" : `${autoN} von ${n} im Plan`, false) +
     act("off", "Ausschalten", offN ? `${offN} von ${n} aus` : "alle Räume", false) +
     (GUEST ? "" : act("pause", "Pause", !pil ? "nur bei HeatPilot steuert" : c.paused_until ? `noch ${leftText(c.pause_left_min || 1)}` : "HeatPilot anhalten", !!c.paused_until, !pil));
   $("heat-now").innerHTML = GUEST ? "" : nowHtml(c, pil);  // 0.62: Override „nur jetzt“
@@ -1907,19 +1908,12 @@ function tileSoll(r) {
 function roomState(r) {
   const c = r.control, t = fmt(r.target) + "°";
   if (r.ems) return `Nur Anzeige · ${t}`;  // Heizkreis von EMS-ESP (0.36.3)
+  if (managing() && r.managed && c && c.own) return ownText(c.own);  // eigenes Climate (0.73)
   if (r.boost) return `Boost · ${t} · ${boostLeft(r.boost)}`;
-  if (managing() && r.managed && r.lead === "ventil" && c && c.phase) {  // 0.51: HeatPilot stellt die Öffnung
-    const v = r.valve_pid || {}, pct = v.want ?? r.valve;
-    const what = c.own ? ownText(c.own) : `${PHASE[c.phase] || c.phase} ${fmt(c.desired)}°`;
-    let s = `Ventil · ${what}` + (pct !== null && pct !== undefined ? ` · ${fmt(pct, 0)} %` : "");
-    if (v.hold) s += " · von Hand";
-    return s;
-  }
-  if (managing() && r.managed && c && c.phase) {  // Zustand aus der Regelschleife
-    if (c.own) return ownText(c.own);
-    const until = c.manual_until ? ` bis ${clock(c.manual_until)}` : "";
-    if (r.mode === "off") return "Aus" + until;
-    if (c.manual) return `Manuell · ${t}${until}`;
+  if (managing() && r.managed && c && c.phase) {  // Zustand aus der Regelschleife – Ventilräume wie die übrigen (0.73.5)
+    const until = c.manual_until ? ` bis ${clock(c.manual_until)}` : "", valve = r.lead === "ventil";
+    if (r.mode === "off" && !valve) return "Aus" + until;
+    if (c.manual && !valve) return `Manuell · ${t}${until}`;
     const d = fmt(c.desired) + "°";
     let s = c.paused ? `Pause · ${t}` : c.phase === "vorheizen" ? `Vorheizen → ${d}` : `HeatPilot · ${PHASE[c.phase] || c.phase} ${d}`;
     if (unreachable(c)) s += ` · erreicht ≈ ${fmt(c.reach_c)}°`;
