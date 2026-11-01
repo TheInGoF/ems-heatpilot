@@ -5,7 +5,7 @@ auslöst – „Desinfektion: löst HeatPilot aus (So 17:30)“, „macht der Re
 ob gerade etwas sperrt, ob ein Ablauf läuft und wie die letzte ausging. ``ready`` macht daraus Einschränkungen und
 Hinweise für den Block „Warmwasser über HeatPilot“ (ändert die Stufe der Raumsteuerung nicht). ``DisinfectStatus`` ist
 das Mixin für ``disinfect_control.DisinfectControl`` (Protokollzeilen, ``as_dict`` für ``api/dhw``). Hier stehen auch
-die Aktionen der Protokollzeilen (``control_log``; die Zeilen von ``Control`` heißen ``disinfect_on``/``_off``).
+die Aktionen der Protokollzeilen (``control_log``; das Einschalten über ``Control`` heißt ``disinfect_on``).
 
 Uhrzeiten gehen als ISO-Felder hinaus (der Browser setzt sie in seiner Zeitzone ein); Texte tragen nur den Termin, wie
 er eingestellt ist („So 17:30“).
@@ -22,17 +22,16 @@ from .dhw_rule import _c, _iso
 from .regulator import regulator
 from .values import local
 
-# Protokoll (control_log): Schalten über Control und die Zeilen des Ablaufs
-ACT_ON, ACT_OFF = "disinfect_on", "disinfect_off"
-ACT_DRY, ACT_RUN, ACT_DONE, ACT_FAIL, ACT_MISSED, ACT_ABORT, ACT_SWITCH, ACT_SKIP = (
-    "disinfect_dry", "disinfect_running", "disinfect_done", "disinfect_failed", "disinfect_missed",
-    "disinfect_aborted", "disinfect_switch", "disinfect_skipped")
-ACTIONS = (ACT_ON, ACT_OFF, ACT_DRY, ACT_RUN, ACT_DONE, ACT_FAIL, ACT_MISSED, ACT_ABORT, ACT_SWITCH, ACT_SKIP)
+# Protokoll (control_log): Einschalten über Control und die Zeilen des Ablaufs
+ACT_ON = "disinfect_on"
+ACT_DRY, ACT_DONE, ACT_FAIL, ACT_MISSED, ACT_ABORT, ACT_SKIP = (
+    "disinfect_dry", "disinfect_done", "disinfect_failed", "disinfect_missed", "disinfect_aborted", "disinfect_skipped")
+ACTIONS = (ACT_ON, ACT_DRY, ACT_DONE, ACT_FAIL, ACT_MISSED, ACT_ABORT, ACT_SKIP)
 LOG_ROOM, LOG_NAME = "disinfect", "Desinfektion"
 
 # Hinweis je Stand (Einstellungen → Kessel; die Kachel der Übersicht zeigt den Teil vor „ – “)
-HINT_HEATPILOT = ("HeatPilot löst sie aus – zum Termin schaltet es den Schalter „Desinfizieren“ und prüft, ob der "
-                  "Speicher die Desinfektionstemperatur erreicht")
+HINT_HEATPILOT = ("HeatPilot löst sie aus – zum Termin schaltet es den Schalter „Desinfizieren“ ein (der Kessel setzt "
+                  "ihn am Ende selbst zurück) und prüft, ob der Speicher die Desinfektionstemperatur erreicht")
 HINT_REGULATOR = ("Der Regler macht sie – er ist am Bus und desinfiziert selbst, seinen Termin hier eintragen; "
                   "HeatPilot löst sie erst aus, wenn kein Regler mehr am Bus ist")
 HINT_DRY = "Beobachten – zum Termin schreibt HeatPilot nur ins Protokoll, dass es die Desinfektion starten würde"
@@ -63,17 +62,14 @@ def _texts(cfg, who: str, label: str | None) -> tuple[str, str, str | None]:
     return "Desinfektion: aus", NOT_YET, why
 
 
-def _run(ctl, now_ts: int) -> dict | None:
-    """Laufender Ablauf für die Anzeige; ``off_wait``: Ausschalten offen und gerade gesperrt (Grund, seit wann)."""
+def _run(ctl) -> dict | None:
+    """Laufender Ablauf für die Anzeige."""
     run = (ctl.state.get("run") if ctl is not None else None) or None
     if not run:
         return None
-    off = run.get("off") if run.get("phase") == "off" else None
-    wait = {"why": off["why"], "since": _iso(off.get("since"))} if off and off.get("why") else None
-    text = f"läuft seit dem Termin {run['label']} – Speicher {_c(ctl.tank())} °C, Ziel {_c(rule.need(run))} °C"
-    return {"label": run["label"], "phase": run.get("phase"), "since": _iso(run["ts"]), "goal": rule.need(run),
-            "temp": run.get("temp"), "peak": run.get("peak"), "tank": ctl.tank(), "deadline": _iso(run.get("deadline")),
-            "off_wait": wait, "text": text + (f"; Ausschalten wartet – {wait['why']}" if wait else "")}
+    return {"label": run["label"], "since": _iso(run["ts"]), "goal": rule.need(run), "temp": run.get("temp"),
+            "peak": run.get("peak"), "tank": ctl.tank(), "deadline": _iso(run.get("deadline")),
+            "text": f"läuft seit dem Termin {run['label']} – Speicher {_c(ctl.tank())} °C, Ziel {_c(rule.need(run))} °C"}
 
 
 def _last(st: dict) -> dict | None:
@@ -112,13 +108,12 @@ def info(eng, ctl=None, now_ts: float | None = None) -> dict:
         "entity_problem": de.problem(entity, state, eng.found) if entity else None,
         "switch": (state or {}).get("state"),
         "waiting": None if not wait else {**wait, "since": _iso(wait.get("since"))},
-        "run": _run(ctl, now_ts), "last": _last(st), "detected": detected,
+        "run": _run(ctl), "last": _last(st), "detected": detected,
         # gescheiterter Termin: seine Wärme zählt im Warmwasser-Modell nicht (``DisinfectControl.triggered``)
         "uncounted": (f"Desinfektion {st['last']['label']} {RESULTS.get(st['last'].get('result'), 'nicht gelaufen')} – "
                       "ihre Wärme zählt im Warmwasser-Modell nicht") if failed else None,
-        "rules": {"check_s": rule.CHECK_S, "reach_k": rule.REACH_K, "extra_min": rule.EXTRA_S // 60,
-                  "catchup_h": rule.CATCHUP_S // 3600, "after_min": rule.AFTER_S // 60,
-                  "off_wait_min": rule.OFF_WAIT_S // 60, "gap_h": rule.GAP_S // 3600},
+        "rules": {"reach_k": rule.REACH_K, "extra_min": rule.EXTRA_S // 60, "catchup_h": rule.CATCHUP_S // 3600,
+                  "gap_h": rule.GAP_S // 3600},
     }
 
 

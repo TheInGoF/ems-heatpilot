@@ -64,7 +64,7 @@ K_FAIL, K_PAUSED, K_FOREIGN = "dhw_write_failed", "dhw_paused", "dhw_foreign"
 def special_running(eng, sample: dict) -> bool:
     """Sonderladung oder Desinfektion läuft: Kesselschalter im Messpunkt oder in HA (falls EMS-ESP nicht mehr
     antwortet und der Messpunkt dessen letzten Stand zeigt), vom Modell erkannt (samt Nachlauf) oder – seit 0.42 – von
-    HeatPilot ausgelöst (``disinfect_control``, vom Einschalten bis zum Ausschalten, auch bevor der Kessel es meldet).
+    HeatPilot ausgelöst (``disinfect_control``, vom Einschalten bis zum Ergebnis, auch bevor der Kessel es meldet).
     Auch für Weg B (0.41): solange fasst HeatPilot das Vorlauf-Soll nicht an."""
     roles = getattr(eng.found, "boiler", None) or {}
     in_ha = any(flag(eng._val(roles.get(r))) == 1 for r in ("dhw_disinfecting", "dhw_onetime"))
