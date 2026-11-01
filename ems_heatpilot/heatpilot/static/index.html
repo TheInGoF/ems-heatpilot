@@ -1768,8 +1768,8 @@ function ovLastHtml(c, d) {
   const w = l.kind === "dhw", k = l.kind === "boiler";
   const who = w ? esc(l.name || "Warmwasser-Soll") : k ? esc(l.name || "Kessel") : esc(shortName(l.name || l.room));
   const what = (w ? DHW_ACTION : k ? BOILER_ACTION : ACTION_NAME)[l.action] || esc(l.action);
-  const val = k ? boilerLogValue(l) : /^disinfect_(on|off)$/.test(l.action) || l.value === null || l.value === undefined ? ""
-    : fmt(l.value) + " °C";  // Desinfektion an/aus: die Aktion sagt es schon
+  const val = k ? boilerLogValue(l) : l.action === "disinfect_on" || l.value === null || l.value === undefined ? ""
+    : fmt(l.value) + " °C";  // Desinfektion eingeschaltet: die Aktion sagt es schon
   const bad = /failed|missed|aborted/.test(l.action);
   return statusLine(bad ? "err" : "off", `${esc(timeOf(l.time))} · ${who} · ${what}${val && val !== "–" ? " " + val : ""}` +
     (l.reason ? ` <span class="muted">(${esc(l.reason)})</span>` : ""), link);
@@ -1790,12 +1790,12 @@ function renderOvStatus(lines = true) {
 const ACTION_NAME = { set_temperature: "Soll", set_hvac_mode: "Betriebsart", set_climate_timer: "Tado-Timer" };
 // Weg W (0.38): Warmwasser-Zeilen im Protokoll (kind „dhw“, Name „Warmwasser-Soll“) mit eigenen Aktionen; Weg B (0.41):
 // Kessel-Zeilen (kind „boiler“, Name „Kessel“, BOILER_ACTION) – Vorlauf-Soll in °C, Heizbetrieb an/aus; seit 0.42 die
-// Zeilen der Desinfektion (kind „dhw“, Name „Desinfektion“) – Schalter an/aus, sonst die höchste Speichertemperatur
+// Zeilen der Desinfektion (kind „dhw“, Name „Desinfektion“) – eingeschaltet, sonst die höchste Speichertemperatur
 const DHW_ACTION = { set_value: "gesetzt", dry_run: "würde schreiben", check_failed: "nicht übernommen",
   foreign: "fremde Änderung", paused: "pausiert", resumed: "wieder eingeschaltet",
-  disinfect_on: "eingeschaltet", disinfect_off: "ausgeschaltet", disinfect_dry: "würde starten", disinfect_running: "läuft",
-  disinfect_done: "gelungen", disinfect_failed: "nicht gelaufen", disinfect_missed: "verpasst",
-  disinfect_aborted: "abgebrochen", disinfect_switch: "Schalter prüfen", disinfect_skipped: "übersprungen" };
+  disinfect_on: "eingeschaltet", disinfect_dry: "würde starten", disinfect_done: "gelungen",
+  disinfect_failed: "nicht gelaufen", disinfect_missed: "verpasst", disinfect_aborted: "abgebrochen",
+  disinfect_skipped: "übersprungen" };
 // Raum- und Warmwasser-Zeilen: control.log enthält seit 0.38 beide (neueste zuerst); ist es leer (keine
 // Regelschleife), die letzten Warmwasser-Zeilen aus dhw.log
 function heatLogRows(c, d) {
@@ -1811,7 +1811,7 @@ function renderHeatLog(c, d) {
     return `<tr${w ? ' class="log-dhw"' : k ? ' class="log-boiler"' : ""}><td style="white-space:nowrap">${esc(timeOf(l.time))}</td>` +
       `<td>${w ? DROP + esc(l.name || "Warmwasser-Soll") : k ? FLAME + esc(l.name || "Kessel") : esc(shortName(l.name || l.room))}</td>` +
       `<td>${(w ? DHW_ACTION : k ? BOILER_ACTION : ACTION_NAME)[l.action] || esc(l.action)}</td>` +
-      `<td>${k ? boilerLogValue(l) : l.action === "disinfect_on" ? "an" : l.action === "disinfect_off" ? "aus"
+      `<td>${k ? boilerLogValue(l) : l.action === "disinfect_on" ? "an"
         : l.value === null || l.value === undefined ? "–" : fmt(l.value) + " °C"}</td><td>${esc(l.reason || "")}</td></tr>`;
   }).join("");
 }
@@ -5168,9 +5168,7 @@ function disLast(l, detected) {
 }
 // Was gerade ist: läuft (Speicher und Ziel), wartet (Grund), gesperrt (Grund)
 function disNow(t) {
-  const ow = t.run && t.run.off_wait;  // Ausschalten offen, gerade gesperrt (0.42: HeatPilot versucht es weiter)
-  if (t.run) return `<b>läuft</b> seit ${clock(t.run.since)} – Speicher ${degC(t.run.tank)}, Ziel ${degC(t.run.goal)}` +
-    (ow ? ` · <span class="msg-warn">Ausschalten wartet seit ${clock(ow.since)}: ${esc(ow.why)}</span>` : "");
+  if (t.run) return `<b>läuft</b> seit ${clock(t.run.since)} – Speicher ${degC(t.run.tank)}, Ziel ${degC(t.run.goal)}`;
   if (t.waiting) return `wartet seit ${clock(t.waiting.since)}: ${esc(t.waiting.why)}`;
   return t.blocked ? `<span class="msg-warn">zurzeit gesperrt: ${esc(t.blocked)}</span>` : "";
 }

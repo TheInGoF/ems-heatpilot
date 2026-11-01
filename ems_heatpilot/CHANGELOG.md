@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.74.1
+- Desinfektion als Taster: nur einschalten, Schalter nicht mehr prüfen oder ausschalten
+- Ob sie gelungen ist, zeigt nur noch der Speicher
+
 ## 0.74.0
 - Vorheizen: lernt nicht aus Boost/Eingriffen, Soll nie unter einem noch kalten Raum
 - „Anwesend“/„Tag“ nachts bis zum Nachtende

@@ -436,8 +436,8 @@ async def valve_pid_step(app: App, now: float | None = None) -> int:
 
 
 async def disinfect_step(app: App, now: float | None = None) -> bool:
-    """Desinfektion auslösen (0.42) im 30-s-Takt: Termin fällig, prüfen, beobachten (``plan``), schalten (``apply``),
-    danach Meldungen und Problem-Sensor. True, wenn geschaltet wurde."""
+    """Desinfektion auslösen (0.42) im 30-s-Takt: Termin fällig, Speicher beobachten (``plan``), einschalten
+    (``apply``), danach Meldungen und Problem-Sensor. True, wenn eingeschaltet wurde."""
     eng = app.eng
     ctl = getattr(eng, "disinfect_control", None) if eng is not None else None
     if ctl is None:
@@ -447,7 +447,7 @@ async def disinfect_step(app: App, now: float | None = None) -> bool:
     except Exception:  # noqa: BLE001 – Lernen, Raumsteuerung und Kessel laufen weiter, es wird nichts geschaltet
         ctl.pending = None
         log.exception("Desinfektion: Schritt fehlgeschlagen – nichts geschaltet")
-    done = await ctl.apply(now)
+    done = await ctl.apply()
     await send_notes(app, eng)
     return done
 

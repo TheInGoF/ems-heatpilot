@@ -117,7 +117,7 @@ def test_trigger_row_ready_line_entities_power_and_log_are_wired():
             'minPowerHint(BPOW))}') in rs
     assert "BPOW = j.boiler_power || null;" in between(js, "async function loadSettings()", "let OV_STALE")
     log = source(js, "renderHeatLog")
-    assert 'l.action === "disinfect_on" ? "an" : l.action === "disinfect_off" ? "aus"' in log
+    assert 'l.action === "disinfect_on" ? "an"' in log and "disinfect_off" not in log  # 0.74.1: nie ausgeschaltet
     acts = between(js, "const DHW_ACTION = {", "};")
     assert set(re.findall(r"(disinfect_\w+):", acts)) == set(DIS_ACTIONS)  # jede Aktion des Backends beschriftet
     trig = source(js, "disinfectTriggerHtml")
@@ -203,8 +203,9 @@ def test_warmwasser_card_and_ready_block(tmp_path):
                          f"ready: dhwReadyHtml({json.dumps(rd)}, false) }});")
     card = plain(r["card"])
     assert "Auslösen: löst HeatPilot aus (So 17:30)" in card
-    assert card.endswith("HeatPilot löst sie aus – zum Termin schaltet es den Schalter „Desinfizieren“ und prüft, ob "
-                         "der Speicher die Desinfektionstemperatur erreicht")
+    assert card.endswith("HeatPilot löst sie aus – zum Termin schaltet es den Schalter „Desinfizieren“ ein (der Kessel "
+                         "setzt ihn am Ende selbst zurück) und prüft, ob der Speicher die Desinfektionstemperatur "
+                         "erreicht")
     assert card.index("Nächste Desinfektion") < card.index("Auslösen:") < card.index("Zeitvorschlag")
     line = plain(re.search(r'<p class="ready-dis" id="ready-dhw-dis">(.*?)</p>', r["ready"]).group(1))
     assert line == "Desinfektion: löst HeatPilot aus (So 17:30) · zuletzt So., 17:30: gelungen"
@@ -255,17 +256,13 @@ def test_heat_log_rows_for_the_disinfection(tmp_path):
     eng, x, rd, now = scene(tmp_path, "gelungen")
     loop = ControlLoop(eng, eng.disinfect_control.control)
     rows = as_json(loop.as_dict(now))["log"]
-    assert [r["kind"] for r in rows] == ["dhw"] * 3 and {r["name"] for r in rows} == {"Desinfektion"}
+    assert [r["kind"] for r in rows] == ["dhw"] * 2 and {r["name"] for r in rows} == {"Desinfektion"}
     r = js_run(tmp_path, f"""renderHeatLog({{ log: {json.dumps(rows)} }}, null);
       out($("heat-log").innerHTML);""")
     got = [plain(x) for x in re.findall(r'<tr class="log-dhw">(.*?)</tr>', r)]
-    assert [g.split(" Desinfektion ", 1)[1] for g in got] == [  # der Kessel setzte den Schalter selbst zurück
+    assert [g.split(" Desinfektion ", 1)[1] for g in got] == [  # nur einschalten, dann der Speicher (0.74.1)
         "gelungen 68 °C Desinfektion So 17:30 gelungen – 68 °C erreicht (Ziel 67 °C)",
-        "läuft – Desinfektion So 17:30 läuft (Schalter an) – Ziel 67 °C im Speicher",
         "eingeschaltet an Desinfektion So 17:30 (70 °C)"]
-    off = {**rows[0], "action": "disinfect_off", "value": 0, "reason": "Desinfektion So 17:30 vorbei – Schalter aus"}
-    r = js_run(tmp_path, f"""renderHeatLog({{ log: [{json.dumps(off)}] }}, null); out($("heat-log").innerHTML);""")
-    assert plain(r).endswith("Desinfektion ausgeschaltet aus Desinfektion So 17:30 vorbei – Schalter aus")
 
 
 def test_entities_page_offers_only_the_disinfect_switch(tmp_path):

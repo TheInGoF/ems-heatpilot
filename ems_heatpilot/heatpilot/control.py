@@ -28,8 +28,9 @@ darunter geschrieben hat (``_flow_safe``). Sind Vorlauf-Soll und Warmwasser-Soll
 Schreibwege gesperrt (``conflict``). Seit 0.48 dazu ``number.set_value`` auf die eine Entität der Antipendelzeit
 (``boiler_period.PeriodWrite``: nur mit „Antipendelzeit anpassen“, ganze Minuten 5–60, gesperrt wie das Vorlauf-Soll).
 
-Seit 0.42 (Desinfektion auslösen) genau ein weiterer: ``switch.turn_on``/``turn_off`` auf die eine Entität des Schalters
-„Desinfizieren“ (``set_disinfect``; ``disinfect_entity.check_call``: nur diese, ohne Daten, tauglich) – nur mit Termin
+Seit 0.42 (Desinfektion auslösen) genau ein weiterer: ``switch.turn_on`` auf die eine Entität des Schalters
+„Desinfizieren“ (``start_disinfect``; ``disinfect_entity.check_call``: nur diese, nur einschalten – seit 0.74.1, der
+Schalter ist ein Taster –, ohne Daten, tauglich) – nur mit Termin
 und Warmwasser-Soll „HeatPilot setzt“ gesetzt, und nur, solange nichts sperrt (``disinfect_lock``: kein Regler am Bus,
 keine Pause von Weg W). Nie dieselbe Entität wie der Heizbetrieb.
 
@@ -67,7 +68,7 @@ from .ha_client import HAConnectionLost
 log = logging.getLogger(__name__)
 
 # ("number", "set_value") nur für Warmwasser-Soll (0.38), Vorlauf-Soll (Weg B, 0.41) und Antipendelzeit (0.48),
-# ("switch", "turn_on"/"turn_off") nur für den Heizbetrieb (Weg B, 0.41) und den Schalter der Desinfektion (0.42)
+# ("switch", "turn_on"/"turn_off") nur für den Heizbetrieb (Weg B, 0.41), "turn_on" für den Schalter der Desinfektion (0.42)
 ALLOWED = {("tado", "set_climate_timer"), ("climate", "set_temperature"), ("climate", "set_hvac_mode"),
            ("number", "set_value"), ("switch", "turn_on"), ("switch", "turn_off")}
 SERVICES_S = 600                         # Dienste von HA (Rückfall auf notify.mobile_app_…) so lange merken
@@ -257,7 +258,7 @@ class Control(boiler_period.PeriodWrite):
         elif domain == "number":  # das eingestellte Warmwasser-Soll (0.38), in den Grenzen
             dhw_check_call(entity_id, self.dhw_entity, self.dhw_limits, data, self._state(entity_id))
         elif domain == "switch" and self.disinfect_entity and entity_id == self.disinfect_entity:  # Desinfektion (0.42)
-            disinfect_entity.check_call(entity_id, self.disinfect_entity, data, self._state(entity_id),
+            disinfect_entity.check_call(entity_id, self.disinfect_entity, service, data, self._state(entity_id),
                                         self.disinfect_lock() if self.disinfect_lock is not None else None)
         elif domain == "switch":
             self._check_heating(entity_id, data, service == "turn_on")  # nur der Heizbetrieb (Weg B, 0.41)
@@ -357,13 +358,13 @@ class Control(boiler_period.PeriodWrite):
         await self._call("switch", "turn_on" if on else "turn_off", self.heat_entity, {}, reason,
                          action="heating_on" if on else "heating_off")
 
-    async def set_disinfect(self, on: bool, reason: str) -> None:
-        """Schalter der Desinfektion (seit 0.42): ``switch.turn_on``/``turn_off`` – Prüfung in ``_call``."""
-        if not self.disinfect_entity or not isinstance(on, bool):
+    async def start_disinfect(self, reason: str) -> None:
+        """Desinfektion auslösen (seit 0.42): ``switch.turn_on`` auf den Schalter – ein Taster, den der Kessel am Ende
+        selbst zurücksetzt (0.74.1). Prüfung in ``_call``."""
+        if not self.disinfect_entity:
             raise PermissionError("Desinfektion: Schalten gesperrt (kein Termin, Warmwasser-Soll nicht „HeatPilot "
                                   "setzt“ oder keine Entität)")
-        await self._call("switch", "turn_on" if on else "turn_off", self.disinfect_entity, {}, reason,
-                         action="disinfect_on" if on else "disinfect_off")
+        await self._call("switch", "turn_on", self.disinfect_entity, {}, reason, action="disinfect_on")
 
     async def set_valve(self, entity_id: str, value: int, reason: str) -> None:
         """Ventilöffnung eines ventilgeführten Raums stellen (seit 0.51): ``number.set_value`` – die harten

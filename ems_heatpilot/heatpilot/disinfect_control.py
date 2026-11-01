@@ -1,8 +1,10 @@
-"""Desinfektion auslösen (seit 0.42): Ablauf zum Termin – einschalten, prüfen, beobachten, ausschalten.
+"""Desinfektion auslösen (seit 0.42): zum Termin einschalten, danach nur noch den Speicher beobachten.
 
 Wann HeatPilot schalten darf, steht in ``disinfect_rule`` (Termin, Warmwasser-Soll „HeatPilot setzt“, kein Regler am
 Bus, keine Pause von Weg W; Schalter tauglich – ``disinfect_entity``). Geschrieben wird nur über
-``Control.set_disinfect`` (``switch.turn_on``/``turn_off`` auf die eine Entität); EMS-ESP bleibt nur lesend.
+``Control.start_disinfect`` (``switch.turn_on`` auf die eine Entität); EMS-ESP bleibt nur lesend. Der Schalter ist ein
+**Taster** (seit 0.74.1): Er rastet ein, der Kessel heizt und setzt ihn am Ende seines Programms selbst zurück –
+HeatPilot schaltet nur ein, prüft den Schalter nicht und schaltet ihn nie aus.
 
 Je Schritt (30-s-Takt von ``main.disinfect_step``: ``plan``, danach ``apply``):
 
@@ -14,24 +16,16 @@ Je Schritt (30-s-Takt von ``main.disinfect_step``: ``plan``, danach ``apply``):
    ``disinfect_control.state``). Lief binnen 24 h schon eine (Termin verlegt), wird er übersprungen (``too_soon``).
 2. **Verpasst** (``disinfect_rule.missed``): Lief HeatPilot länger als 12 h nach dem Termin nicht bzw. war es so lange
    gesperrt: Meldung „Desinfektion … verpasst“, dann gilt der nächste Termin.
-3. **Prüfen** 60 s nach dem Einschalten: Schalter an bzw. EMS-ESP meldet Desinfektion oder Sonderladung → läuft. Fällt
-   der Schalter zurück: Fehlschlag. Unbekannt: bis 5 min weiter prüfen. Lief der Aufruf in einen Zeitüberlauf (Ausgang
-   unklar), entscheidet ebenfalls diese Prüfung.
-4. **Beobachten** (erst nach der Bestätigung durch den Kessel): Erreicht der Speicher die Desinfektionstemperatur − 3 K,
-   ist sie gelungen; sonst spätestens nach Ladedauer laut Modell + 60 min ein Fehlschlag mit Meldung (``K_FAIL``,
-   Problem-Sensor). Lag der Speicher schon beim Einschalten darüber, zählt erst die volle Desinfektionstemperatur oder
-   dass der Kessel den Schalter selbst zurücksetzt. Der nächste Erfolg meldet „wieder in Ordnung“.
-5. **Ausschalten**: Steht der Schalter danach noch an, schaltet HeatPilot ihn einmal aus und prüft nach 60 s; bleibt er
-   an, kommt eine Meldung. Nach einem Erfolg wartet HeatPilot damit 15 min (Nachlauf, meist setzt der Kessel den
-   Schalter mit der vollen Temperatur selbst zurück; war der Speicher schon beim Einschalten heiß, bis zur Frist des
-   Ablaufs), nach einem Fehlschlag nicht. Sperrt etwas nur kurz (Regler unbekannt, EMS-ESP antwortet nicht, Pause von
-   Weg W, Schalter unbekannt, Fehler beim Aufruf), versucht HeatPilot es weiter – erst nach 30 min kommt die Meldung
-   „nicht ausgeschaltet“.
+3. **Beobachten** vom Einschalten an: Erreicht der Speicher die Desinfektionstemperatur − 3 K, ist sie gelungen (lag
+   er schon beim Einschalten darüber, erst die volle Temperatur); sonst nach Ladedauer laut Modell + 60 min ein
+   Fehlschlag mit Meldung (``K_FAIL``, Problem-Sensor). Der nächste Erfolg meldet „wieder in Ordnung“. Scheitert schon
+   das Einschalten (gesperrt, Fehler von Home Assistant), ist das der Fehlschlag; ist sein Ausgang unklar
+   (Zeitüberlauf), entscheidet ebenso der Speicher.
 
-Solange ein Ablauf läuft (``active``), lassen Weg W (Speicher-Soll) und Weg B (Vorlauf-Soll) den Kessel in Ruhe –
-``dhw_control.special_running`` fragt das. Wird der Schalter von Weg W umgestellt, bricht der Ablauf ab (der Kessel
-beendet die Desinfektion selbst). Ein gescheiterter Termin zählt im Warmwasser-Modell nicht mehr (``triggered``). Die
-Anzeige steht in ``disinfect_status``.
+Solange ein Ablauf läuft (``active``: vom Einschalten bis zum Ergebnis), lassen Weg W (Speicher-Soll) und Weg B
+(Vorlauf-Soll) den Kessel in Ruhe – ``dhw_control.special_running`` fragt das, danach den Schalter selbst, solange der
+Kessel desinfiziert. Wird Weg W umgestellt, bricht der Ablauf ab (der Kessel beendet die Desinfektion selbst). Ein
+gescheiterter Termin zählt im Warmwasser-Modell nicht mehr (``triggered``). Die Anzeige steht in ``disinfect_status``.
 """
 
 from __future__ import annotations
@@ -46,15 +40,14 @@ from . import disinfect_rule as rule
 from .config import WEEKDAYS
 from .dhw_rule import EMS_FRESH_S, _c
 from .discovery_roles import BOILER_ROLES
-from .disinfect_status import (ACT_ABORT, ACT_DONE, ACT_DRY, ACT_FAIL, ACT_MISSED, ACT_RUN, ACT_SKIP,  # noqa: F401
-                               ACT_SWITCH, ACTIONS, LOG_ROOM, DisinfectStatus)
-from .values import flag, num
+from .disinfect_status import ACT_ABORT, ACT_DONE, ACT_DRY, ACT_FAIL, ACT_MISSED, ACT_SKIP, LOG_ROOM, DisinfectStatus
+from .values import num
 
 log = logging.getLogger(__name__)
 
 KV = "disinfect_control.state"
-# Schlüssel der Meldungen (notify.Notifier) – Anfang „disinfect_“ (``settle``)
-K_FAIL, K_MISSED, K_SWITCH = "disinfect_failed", "disinfect_missed", "disinfect_switch"
+# Schlüssel der Meldungen (notify.Notifier) – Anfang „disinfect_“ (``settle`` schließt alle anderen still)
+K_FAIL, K_MISSED = "disinfect_failed", "disinfect_missed"
 
 
 def _when(dt: datetime) -> str:
@@ -82,7 +75,7 @@ class DisinfectControl(DisinfectStatus):
         self.store = eng.store
         self.entity_id, self.entity_source = entity
         self.state: dict = carry.state if carry is not None else dict(self.store.get(KV) or {})
-        self.pending: tuple[str, str] | None = None
+        self.pending: str | None = None  # Kennung des Termins, der eingeschaltet werden soll
         self.planned_ts: int | None = None
         self.stopped = False
         self._saved: str | None = None
@@ -96,27 +89,14 @@ class DisinfectControl(DisinfectStatus):
         return rule.mode(self.eng.cfg)
 
     def active(self) -> bool:
-        """Läuft ein Ablauf (eingeschaltet bis wieder aus)? Dann fassen Weg W und Weg B den Kessel nicht an."""
+        """Läuft ein Ablauf (eingeschaltet bis zum Ergebnis)? Dann fassen Weg W und Weg B den Kessel nicht an."""
         return bool(self.state.get("run"))
 
     # -------------------------------------------------------------- Kessel lesen
-    def switch_on(self) -> bool | None:
-        """Schalter laut Home Assistant: an, aus oder unbekannt."""
-        st = (self.eng.states.get(self.entity_id) or {}).get("state") if self.entity_id else None
-        f = flag(st)
-        return None if f is None else bool(f)
-
     def _fresh(self) -> dict:
         """Kesselwerte direkt von EMS-ESP – nur frisch (höchstens 90 s alt), sonst leer."""
         ts = getattr(self.eng, "ems_ts", None)
         return (self.eng.ems.get("boiler") or {}) if ts is not None and time.time() - ts <= EMS_FRESH_S else {}
-
-    def boiler_says(self) -> bool | None:
-        """EMS-ESP direkt (nur frisch): meldet der Kessel Desinfektion oder Sonderladung? None = unbekannt."""
-        boiler = self._fresh()
-        vals = [flag(boiler[k]) for r in ("dhw_disinfecting", "dhw_onetime") for k in BOILER_ROLES[r] if k in boiler]
-        vals = [v for v in vals if v is not None]
-        return None if not vals else any(vals)
 
     def tank(self) -> float | None:
         """Speichertemperatur jetzt: EMS-ESP direkt (frisch), sonst die Entität in Home Assistant."""
@@ -201,7 +181,7 @@ class DisinfectControl(DisinfectStatus):
             st["waiting"] = {"due": k, "label": lab, "why": why, "since": (w or {}).get("since", ts)}
             return
         st.pop("waiting", None)
-        self.pending = ("on", k)
+        self.pending = k
 
     def _missed(self, ts: int) -> None:
         """Termin, der länger als 12 h her ist und nicht erledigt: verpasst – Meldung (nur „HeatPilot setzt“, ohne
@@ -241,78 +221,34 @@ class DisinfectControl(DisinfectStatus):
 
     # -------------------------------------------------------------- laufender Ablauf
     def _follow(self, ts: int, run: dict) -> None:
-        """Laufender Ablauf: prüfen, beobachten, Nachlauf, ausschalten. Schalter von Weg W umgestellt: abbrechen."""
-        phase = run.get("phase")
+        """Laufender Ablauf: den Speicher beobachten (siehe Modulbeschreibung). Weg W umgestellt: abbrechen."""
+        if (self.state.get("last") or {}).get("due") == run["due"]:  # Ergebnis steht schon fest (Ablauf von vor
+            self.state.pop("run", None)                              # 0.74.1 im Nachlauf bzw. beim Ausschalten)
+            return
         if self.mode != "heatpilot":
-            if phase in ("check", "running"):
-                self._finish(ts, run, None, "abgebrochen – Warmwasser-Soll nicht mehr „HeatPilot setzt“ bzw. kein "
-                                            "Termin; der Kessel beendet die Desinfektion selbst", switch_off=False)
-            else:
-                self._close(ts, run, None, "nicht ausgeschaltet – Schalter umgestellt, der Kessel beendet sie selbst")
+            self._finish(ts, run, None, "abgebrochen – Warmwasser-Soll nicht mehr „HeatPilot setzt“ bzw. kein Termin; "
+                                        "der Kessel beendet die Desinfektion selbst")
             return
         t = self.tank()
-        if t is not None and phase in ("check", "running"):
+        if t is not None:
             run["peak"] = max(run.get("peak") or t, t)
-        if phase == "check":
-            self._check_on(ts, run, t)
-        elif phase == "running":
-            self._watch(ts, run, t)
-        elif phase == "after":
-            self._after(ts, run)
-        elif phase == "off":
-            self._off(ts, run)  # Ausschalten noch offen (kurz gesperrt, Fehler im letzten Schritt, Neustart)
-        elif phase == "off_check":
-            self._check_off(ts, run)
-
-    def _check_on(self, ts: int, run: dict, t: float | None) -> None:
-        """60 s nach dem Einschalten: läuft sie? Nur die Bestätigung durch den Kessel zählt (Schalter an bzw. EMS-ESP
-        meldet sie) – ein schon heißer Speicher allein ist keine Desinfektion. Unbekannt: bis 5 min weiter prüfen."""
-        chk = run["check"]
-        if ts < chk["due"]:
-            return
-        sw, ems = self.switch_on(), self.boiler_says()
-        if sw or ems:
-            run["phase"], run["confirmed"] = "running", ts
-            how = "Schalter an" if sw else "EMS-ESP meldet die Desinfektion"
-            if run.get("unclear"):
-                how += f"; das Einschalten meldete „{run['unclear']}“"
-            self._log(ts, ACT_RUN, None, f"Desinfektion {run['label']} läuft ({how}) – Ziel {_c(rule.need(run))} °C "
-                                         f"im Speicher")
-            self._watch(ts, run, t)
-            return
-        if sw is None and ems is None and ts < chk["until"]:
-            return
-        off = sw is False or ems is False
-        if run.get("unclear"):  # Zeitüberlauf beim Einschalten – die Prüfung zeigt: nicht angekommen
-            why = f"nicht gestartet ({run['unclear']}) – " + (
-                "Schalter aus" if off else "Zustand des Schalters unbekannt")
-        else:
-            why = ("Schalter fällt sofort zurück – der Kessel nimmt die Desinfektion nicht an" if off
-                   else "Zustand des Schalters unbekannt – nicht bestätigt")
-        self._finish(ts, run, False, why)
-
-    def _watch(self, ts: int, run: dict, t: float | None) -> None:
-        """Beobachten (der Kessel hat bestätigt): Speicher bei der Erfolgsschwelle (``disinfect_rule.need``) →
-        gelungen; war er schon beim Einschalten heiß, auch, wenn der Kessel den Schalter selbst zurücksetzt (Programm
-        fertig); nach Ladedauer + 60 min → Fehlschlag."""
         need = rule.need(run)
         if t is not None and t >= need:
             self._finish(ts, run, True, f"{_c(t)} °C erreicht (Ziel {_c(need)} °C)")
-        elif rule.hot(run) and t is not None and t >= run["goal"] and self.switch_on() is False:
-            self._finish(ts, run, True, f"der Kessel hat sie beendet – Speicher {_c(t)} °C (war schon beim Einschalten "
-                                        f"{_c(run['from'])} °C)")
         elif ts >= run["deadline"]:
             peak = run.get("peak")
-            self._finish(ts, run, False, f"Speicher erreichte nur {_c(peak)} °C, nötig {_c(need)} °C"
-                         if peak is not None else "Speichertemperatur unbekannt – Erfolg nicht feststellbar")
+            why = (f"Speicher erreichte nur {_c(peak)} °C, nötig {_c(need)} °C" if peak is not None
+                   else "Speichertemperatur unbekannt – Erfolg nicht feststellbar")
+            self._finish(ts, run, False, why + (f" (das Einschalten meldete „{run['unclear']}“)"
+                                                if run.get("unclear") else ""))
 
-    def _finish(self, ts: int, run: dict, ok: bool | None, text: str, switch_off: bool = True) -> None:
-        """Ergebnis merken, protokollieren, melden. Steht der Schalter noch an: nach einem Erfolg darf der Kessel die
-        Desinfektion ``AFTER_S`` lang selbst beenden (Nachlauf), sonst gleich ausschalten."""
+    def _finish(self, ts: int, run: dict, ok: bool | None, text: str) -> None:
+        """Ergebnis merken, protokollieren, melden – damit ist der Ablauf vorbei (den Schalter setzt der Kessel zurück)."""
         st, lab = self.state, run["label"]
         st["last"] = {"due": run["due"], "label": lab, "ts": run["ts"], "end": ts, "ok": ok, "text": text,
                       "result": "gelungen" if ok else "abgebrochen" if ok is None else "fehlgeschlagen",
                       "peak": run.get("peak"), "temp": run.get("temp"), "goal": run.get("goal")}
+        st.pop("run", None)
         peak = None if run.get("peak") is None else round(run["peak"], 1)
         if ok:
             self._log(ts, ACT_DONE, peak, f"Desinfektion {lab} gelungen – {text}")
@@ -324,91 +260,23 @@ class DisinfectControl(DisinfectStatus):
             self._notify(K_FAIL, f"Desinfektion {lab} nicht gelaufen – {text}", ts)
         else:
             self._log(ts, ACT_ABORT, peak, f"Desinfektion {lab} {text}")
-        if not switch_off or self.switch_on() is False:
-            st.pop("run", None)
-        elif ok:  # Nachlauf – war der Speicher schon beim Einschalten heiß, bis zur Frist des Ablaufs
-            until = ts + rule.AFTER_S
-            run["phase"], run["after_until"] = "after", max(until, run.get("deadline") or 0) if rule.hot(run) else until
-        else:
-            self._to_off(ts, run)
-
-    def _after(self, ts: int, run: dict) -> None:
-        """Nachlauf nach dem Erfolg: Setzt der Kessel den Schalter selbst zurück, ist es erledigt; sonst ausschalten
-        (auch bei unbekanntem Schalter – ``_off`` wartet dann auf ihn)."""
-        if self.switch_on() is False:
-            self._close(ts, run, None, "Schalter aus (vom Kessel)")
-        elif ts >= run["after_until"]:
-            self._to_off(ts, run)
-
-    def _to_off(self, ts: int, run: dict) -> None:
-        """Ausschalten beginnt: ab jetzt höchstens ``OFF_WAIT_S`` lang versuchen."""
-        run["phase"], run["off"] = "off", {"since": ts}
-        self._off(ts, run)
-
-    def _off(self, ts: int, run: dict) -> None:
-        """Ausschalten offen: Schalter schon aus → fertig. Sperrt etwas (``disinfect_rule.lock``: Regler am Bus bzw.
-        unbekannt, EMS-ESP antwortet nicht, Pause von Weg W) oder ist der Schalter unbekannt, je Schritt neu versuchen;
-        nach einem gescheiterten Aufruf frühestens nach ``CHECK_S``. Erst nach ``OFF_WAIT_S`` Meldung."""
-        off = run.setdefault("off", {"since": ts})
-        sw = self.switch_on()
-        if sw is False:
-            self._close(ts, run, None, "Schalter aus")
-            return
-        why = rule.lock(self.eng) or (None if sw else "Zustand des Schalters unbekannt")
-        if why is None and ts >= (off.get("next") or 0):
-            self.pending = ("off", run["due"])
-            return
-        if why:
-            off["why"] = why
-        if ts - off["since"] >= rule.OFF_WAIT_S:
-            self._close(ts, run, f"Schalter nicht ausgeschaltet ({off.get('why') or 'unbekannt'})")
-
-    def _check_off(self, ts: int, run: dict) -> None:
-        """60 s nach dem Ausschalten: ist der Schalter aus? Unbekannt: bis 5 min weiter prüfen."""
-        chk = run["check"]
-        if ts < chk["due"]:
-            return
-        sw = self.switch_on()
-        if sw is None and ts < chk["until"]:
-            return
-        if sw is False:
-            self._close(ts, run, None, "Schalter aus")
-        else:
-            self._close(ts, run, "Schalter steht nach dem Ausschalten noch an" if sw
-                        else "Schalter nach dem Ausschalten unbekannt")
-
-    def _close(self, ts: int, run: dict, problem: str | None, note: str | None = None) -> None:
-        """Ablauf beenden. ``problem``: der Schalter blieb an bzw. durfte nicht ausgeschaltet werden – Meldung."""
-        st = self.state
-        last = st.get("last")
-        if last and last.get("due") == run["due"]:
-            last["switch"] = problem or note
-        st.pop("run", None)
-        if problem:
-            text = f"Desinfektion {run['label']}: {problem} – bitte in Home Assistant prüfen"
-            self._log(ts, ACT_SWITCH, None, text)
-            self._notify(K_SWITCH, text, ts)
 
     # -------------------------------------------------------------- Schalten
-    async def apply(self, now: float | None = None) -> bool:
-        """Vorgemerktes schalten – nur über ``Control.set_disinfect``, nur bei „HeatPilot setzt“, ohne Hindernis, nicht
-        nach einem Neuaufbau. True, wenn geschaltet wurde."""
-        pending, self.pending = self.pending, None
-        if pending is None:
+    async def apply(self) -> bool:
+        """Vorgemerktes Einschalten – nur über ``Control.start_disinfect``, nur bei „HeatPilot setzt“, ohne Hindernis,
+        nicht nach einem Neuaufbau. True, wenn eingeschaltet wurde."""
+        due_key, self.pending = self.pending, None
+        if due_key is None:
             return False
-        action, due_key = pending
         if self.stopped or self.control is None or self.mode != "heatpilot":
-            log.info("Desinfektion: Schaltvorgang verworfen – Schalter, Termin oder Neuaufbau")
+            log.info("Desinfektion: Einschalten verworfen – Schalter, Termin oder Neuaufbau")
             return False
-        ts = self.planned_ts or int(time.time())
-        if action == "on":
-            return await self._switch_on(ts, due_key, now)
-        return await self._switch_off(ts, now)
+        return await self._switch_on(self.planned_ts or int(time.time()), due_key)
 
-    async def _switch_on(self, ts: int, due_key: str, now: float | None) -> bool:
+    async def _switch_on(self, ts: int, due_key: str) -> bool:
         """Einschalten. Klar abgelehnt (gesperrt, Fehler von Home Assistant): Fehlschlag mit Meldung. Ausgang unklar
-        (Zeitüberlauf, Verbindung getrennt – ``Control.maybe_arrived``): der Ablauf beginnt trotzdem, die Prüfung nach
-        60 s entscheidet – sonst stünde ein doch angenommener Schalter unbeobachtet an."""
+        (Zeitüberlauf, Verbindung getrennt – ``Control.maybe_arrived``): der Ablauf beginnt trotzdem, der Speicher
+        entscheidet."""
         why = rule.blocker(self.eng, self.entity_id)
         if why:
             log.info("Desinfektion: Einschalten verworfen – %s", why)
@@ -417,24 +285,21 @@ class DisinfectControl(DisinfectStatus):
         temp, goal = rule.reach(self.eng)
         self._mark(due_key)  # höchstens einmal – auch wenn das Schalten scheitert oder HeatPilot gleich neu startet
         self._save()
-        run = {"due": due_key, "label": lab, "ts": ts, "phase": "check", "temp": temp, "goal": goal,
+        run = {"due": due_key, "label": lab, "ts": ts, "temp": temp, "goal": goal,
                "deadline": rule.deadline(self.eng, ts), "from": self.tank(), "peak": self.tank()}
         sent = True
         try:
-            await self.control.set_disinfect(True, f"Desinfektion {lab} ({_c(temp)} °C)")
+            await self.control.start_disinfect(f"Desinfektion {lab} ({_c(temp)} °C)")
         except Exception as err:  # noqa: BLE001 – Fehlschlag mit Meldung, kein neuer Versuch vor dem nächsten Termin
             if not self._unclear(err):
-                self._finish(ts, run, False, f"nicht gestartet ({_err(err)})", switch_off=False)
+                self._finish(ts, run, False, f"nicht gestartet ({_err(err)})")
                 self._save()
                 return False
             sent, run["unclear"] = False, _err(err)
-            log.warning("Desinfektion %s: Einschalten unklar (%s) – die Prüfung nach %d s entscheidet", lab,
-                        run["unclear"], rule.CHECK_S)
-        done = time.time() if now is None else now
-        run["check"] = {"due": done + rule.CHECK_S, "until": done + rule.CHECK_MAX_S}
+            log.warning("Desinfektion %s: Einschalten unklar (%s) – der Speicher entscheidet", lab, run["unclear"])
         self.state["run"], self.state["on"] = run, {"ts": ts, "due": due_key}
         if sent:
-            log.info("Desinfektion %s eingeschaltet (%s °C), Prüfung in %d s", lab, _c(temp), rule.CHECK_S)
+            log.info("Desinfektion %s eingeschaltet (%s °C) – der Kessel beendet sie selbst", lab, _c(temp))
         self._save()
         return sent
 
@@ -445,42 +310,15 @@ class DisinfectControl(DisinfectStatus):
         probe = getattr(self.control, "maybe_arrived", None)
         return bool(probe(err)) if probe is not None else isinstance(err, (asyncio.TimeoutError, TimeoutError))
 
-    async def _switch_off(self, ts: int, now: float | None) -> bool:
-        """Ausschalten (``_off`` hat es vorgemerkt). Scheitert es oder sperrt etwas gerade, bleibt es offen und
-        ``_off`` versucht es weiter – nach ``OFF_WAIT_S`` mit Meldung."""
-        run = self.state.get("run")
-        if not run or run.get("phase") != "off":
-            return False
-        off = run.setdefault("off", {"since": ts})
-        try:
-            why = rule.lock(self.eng)
-            if why:
-                raise PermissionError(why)
-            await self.control.set_disinfect(False, f"Desinfektion {run['label']} vorbei – Schalter aus")
-        except Exception as err:  # noqa: BLE001 – offen lassen, im nächsten Schritt (bzw. nach 60 s) erneut
-            off["why"], off["next"] = _err(err), ts + rule.CHECK_S
-            if ts - off["since"] >= rule.OFF_WAIT_S:
-                self._close(ts, run, f"Schalter nicht ausgeschaltet ({off['why']})")
-            else:
-                log.info("Desinfektion %s: Ausschalten gescheitert (%s) – neuer Versuch", run["label"], off["why"])
-            self._save()
-            return False
-        done = time.time() if now is None else now
-        run["phase"], run["check"] = "off_check", {"due": done + rule.CHECK_S, "until": done + rule.CHECK_MAX_S}
-        run.pop("off", None)
-        self._save()
-        return True
-
     # -------------------------------------------------------------- Meldungen, Protokoll, Zustand
     def _settle(self, ts: int) -> None:
-        """Ohne „HeatPilot setzt“ alle Meldungen still schließen; Schalter wieder aus → „wieder in Ordnung“."""
+        """Offene Meldungen abgleichen: bei „HeatPilot setzt“ bleiben nur „nicht gelaufen“ und „verpasst“ – alle
+        anderen schließen still (etwa „Schalter steht noch an“ von vor 0.74.1); sonst alle."""
         n = self.notifier
         if n is None:
             return
-        if self.mode != "heatpilot":
-            n.settle("disinfect_", {}, ts)
-        elif K_SWITCH in n.open_keys() and not self.active() and self.switch_on() is False:
-            n.solved(K_SWITCH, "Desinfektion: Schalter wieder aus", ts)
+        keep = {k: text for k, text in n.open_keys("disinfect_").items() if k in (K_FAIL, K_MISSED)}
+        n.settle("disinfect_", keep if self.mode == "heatpilot" else {}, ts)
 
     def _notify(self, key: str, text: str, ts: int) -> None:
         """Jedes Ereignis einmal melden – ein noch offenes vom letzten Termin vorher still schließen."""

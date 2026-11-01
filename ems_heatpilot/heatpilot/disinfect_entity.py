@@ -11,7 +11,7 @@ ab): ``switch``, verfügbar und an bzw. aus; kein Heizkreis, keine andere erkann
 Kesselschalter – nie die Einmalladung, die Zirkulation, der Heizbetrieb oder der Warmwasser-Betrieb (``wrong_role``);
 und der Name bzw. Anzeigename muss nach der Desinfektion aussehen (``NAME_HINT``). Anders als beim Warmwasser-Soll ist
 ein unpassender Name hier keine Einschränkung, sondern ein Hindernis: Geschaltet wird nur ein Schalter, der erkennbar
-die Desinfektion ist. ``check_call`` ist die letzte Prüfung in ``Control`` vor ``switch.turn_on``/``turn_off``.
+die Desinfektion ist. ``check_call`` ist die letzte Prüfung in ``Control`` vor ``switch.turn_on``.
 
 Dazu die Einstellung (``FIELDS``, ``clean_config`` – ``config`` bindet sie ein). Reine Funktionen, schreibt nichts.
 """
@@ -109,12 +109,16 @@ def ems_blocked(eng) -> str | None:
     return eg.ems_write_blocked(eng, EMS_KEY, WHAT)
 
 
-def check_call(entity_id: str, chosen: str | None, data: dict, state: dict | None, locked: str | None) -> None:
-    """Letzte Prüfung in ``Control`` vor ``switch.turn_on``/``turn_off``: nur die eine Entität, ohne Daten, sie muss
-    taugen, und nichts sperrt (``locked``: Termin, Warmwasser-Soll „HeatPilot setzt“, kein Regler am Bus, keine
-    Pause – ``disinfect_rule.lock``). Sonst ``PermissionError``."""
+def check_call(entity_id: str, chosen: str | None, service: str, data: dict, state: dict | None,
+               locked: str | None) -> None:
+    """Letzte Prüfung in ``Control`` vor ``switch.turn_on``: nur die eine Entität, nur einschalten (Taster – den Rest
+    macht der Kessel, 0.74.1), ohne Daten, sie muss taugen, und nichts sperrt (``locked``: Termin, Warmwasser-Soll
+    „HeatPilot setzt“, kein Regler am Bus, keine Pause – ``disinfect_rule.lock``). Sonst ``PermissionError``."""
     if not chosen or entity_id != chosen or data:
         raise PermissionError(f"switch auf {entity_id} ist gesperrt – nur der Schalter der Desinfektion zum Termin")
+    if service != "turn_on":
+        raise PermissionError(f"switch.{service} auf {entity_id} ist gesperrt – die Desinfektion wird nur ausgelöst, "
+                              "der Kessel beendet sie selbst")
     why = problem(entity_id, state)
     if why:
         raise PermissionError(f"{why} – gesperrt")

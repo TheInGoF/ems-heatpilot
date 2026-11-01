@@ -2310,43 +2310,37 @@ alles zutrifft:
   **Einstellungen → Kessel → Warmwasser steuern → „Desinfektion auslösen (Schalter)“** (die Auswahl bietet
   nur passende Schalter an).
 
-Geschrieben wird über Home Assistant – `switch.turn_on`/`turn_off` nur auf diese eine Entität, alles andere weist
-HeatPilot hart ab; an EMS-ESP gehen weiterhin nur Lese-Anfragen. **Ablauf zum Termin** (Ortszeit, auch in der Woche der
-Zeitumstellung – „So 13:00“ bleibt 13:00):
+Geschrieben wird über Home Assistant – nur `switch.turn_on` auf diese eine Entität, alles andere weist HeatPilot hart
+ab (seit 0.74.1 auch `turn_off`); an EMS-ESP gehen weiterhin nur Lese-Anfragen. Der Schalter ist ein **Taster**: Er
+rastet ein, der Kessel heizt und setzt ihn am Ende seines Programms selbst zurück. HeatPilot sagt nur „jetzt
+desinfizieren“ – es prüft den Schalter nicht und schaltet ihn nie aus. **Ablauf zum Termin** (Ortszeit, auch in der
+Woche der Zeitumstellung – „So 13:00“ bleibt 13:00):
 
 1. **Einschalten** – einmal je Termin; der Termin gilt damit als erledigt, auch nach einem Neustart und auch, wenn das
    Einschalten scheitert (dann Fehlschlag mit Meldung, kein neuer Versuch vor dem nächsten Termin). Läuft der Aufruf in
-   einen Zeitüberlauf, ist unklar, ob er ankam – dann entscheidet die Prüfung nach 60 s.
-2. **Nach 60 s prüfen:** Steht der Schalter an bzw. meldet EMS-ESP die Desinfektion (oder eine Sonderladung), läuft sie.
-   Fällt der Schalter sofort zurück, ist es ein Fehlschlag – auch wenn der Speicher schon heiß ist; ist der Zustand
-   unbekannt, prüft HeatPilot bis 5 min weiter.
-3. **Beobachten** (erst nach dieser Bestätigung): Erreicht der Speicher die **Desinfektionstemperatur − 3 K**, ist sie
-   gelungen. Lag er schon beim Einschalten darüber, zählt erst die volle Desinfektionstemperatur oder dass der Kessel den
-   Schalter selbst zurücksetzt (sein Programm ist fertig). Sonst spätestens nach der Ladedauer laut Modell + 60 min ein
-   Fehlschlag: Meldung „Desinfektion So 13:00 nicht gelaufen – Speicher erreichte nur 58 °C, nötig 67 °C“ über die
-   Benachrichtigungsziele und `binary_sensor.heatpilot_problem`. Die nächste gelungene meldet „wieder in Ordnung“.
-4. **Ausschalten:** Steht der Schalter danach noch an, schaltet HeatPilot ihn einmal aus und prüft nach 60 s – nach
-   einer gelungenen Desinfektion erst nach 15 min Nachlauf (meist setzt der Kessel ihn mit der vollen Temperatur selbst
-   zurück; war der Speicher schon beim Einschalten heiß, wartet HeatPilot bis zur Frist des Ablaufs), nach einem
-   Fehlschlag gleich. Ausgeschaltet wird unter denselben Bedingungen wie eingeschaltet. Sperrt etwas nur kurz (EMS-ESP
-   antwortet gerade nicht, Pause des Warmwasser-Solls), ist der Schalter kurz „nicht verfügbar“ oder scheitert der
-   Aufruf, versucht HeatPilot es weiter („Ausschalten wartet – Grund“); erst nach 30 min kommt die Meldung „Schalter
-   nicht ausgeschaltet (Grund)“. Bleibt er nach dem Ausschalten an, kommt ebenfalls eine Meldung.
+   einen Zeitüberlauf, ist unklar, ob er ankam – dann entscheidet der Speicher.
+2. **Speicher beobachten:** Erreicht er die **Desinfektionstemperatur − 3 K**, ist sie gelungen. Lag er schon beim
+   Einschalten darüber, zählt erst die volle Desinfektionstemperatur. Sonst spätestens nach der Ladedauer laut Modell
+   + 60 min ein Fehlschlag: Meldung „Desinfektion So 13:00 nicht gelaufen – Speicher erreichte nur 58 °C, nötig 67 °C“
+   über die Benachrichtigungsziele und `binary_sensor.heatpilot_problem`. Die nächste gelungene meldet „wieder in
+   Ordnung“. Bis 0.74.0 prüfte HeatPilot nach 60 s den Schalter und schaltete ihn nach dem Erfolg aus – bei einem
+   Taster, den der Kessel hält, kam dann „Schalter steht nach dem Ausschalten noch an“.
 
 Lief HeatPilot zum Termin nicht (Add-on gestoppt) oder war das Auslösen gesperrt, holt es den Termin **innerhalb von
 12 h** nach; danach meldet es „Desinfektion So 13:00 verpasst – … ; nächster Termin …“, und es gilt der nächste Termin.
 Ein eben eingetragener oder geänderter Termin, der schon vorbei ist, wird nicht ausgelöst. Höchstens eine Desinfektion
 je 24 h: Wird der Termin während oder kurz nach einem Ablauf auf später am selben Tag gelegt, gilt er erst in der
-nächsten Woche (Protokoll „übersprungen“) – außer der Ablauf schlug fehl. Solange der Ablauf läuft,
-schreibt Weg W das Speicher-Soll nicht und Weg B lässt das Vorlauf-Soll in Ruhe (wie bei einer Sonderladung). Wird das
+nächsten Woche (Protokoll „übersprungen“) – außer der Ablauf schlug fehl. Solange der Ablauf läuft (vom Einschalten
+bis zum Ergebnis) und solange der Kessel selbst „desinfiziert“ meldet, schreibt Weg W das Speicher-Soll nicht und Weg B
+lässt das Vorlauf-Soll in Ruhe (wie bei einer Sonderladung). Wird das
 Warmwasser-Soll mitten im Ablauf umgestellt, bricht er ab – der Kessel beendet die Desinfektion selbst.
 
 **Anzeige:** Einstellungen → Kessel zeigt unter dem Termin die Zeile **Auslösen** – „löst HeatPilot aus (So 13:00)“,
 „macht der Regler“, „Trockenlauf – würde … auslösen“ oder „aus“ mit Grund –, den Schalter (mit „ändern unter
 Entitäten“), was gerade läuft, wartet oder sperrt, und die letzte Desinfektion mit Ergebnis („zuletzt So., 13.10.,
 13:00: gelungen – 68 °C erreicht“). Dieselbe Zeile steht im Block „Warmwasser über HeatPilot“ von „Bereit für die
-Steuerung?“, die Schritte im Protokoll (Live → Diagnose) (Desinfektion: eingeschaltet, läuft, gelungen bzw. nicht
-gelaufen, verpasst, übersprungen, ausgeschaltet). Geschaltet wird nie aus der Oberfläche – nur zum Termin. Abfrage: `GET api/dhw` →
+Steuerung?“, die Schritte im Protokoll (Live → Diagnose) (Desinfektion: eingeschaltet, gelungen bzw. nicht gelaufen,
+abgebrochen, verpasst, übersprungen). Geschaltet wird nie aus der Oberfläche – nur zum Termin. Abfrage: `GET api/dhw` →
 `disinfect` (mit Protokoll).
 
 Eingeplant wird der Termin, wenn HeatPilot ihn auslöst (seit 0.42, siehe oben; ein gescheiterter oder verpasster

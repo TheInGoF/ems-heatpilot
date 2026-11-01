@@ -1,11 +1,11 @@
 """0.42: Desinfektion auslösen und Mindest-Brennerleistung vorschlagen.
 
-Sicherheitsregeln (jede hat einen Test): HeatPilot schaltet nur ``switch.turn_on``/``turn_off`` auf die eine Entität
-des Schalters „Desinfizieren“ – nur mit Termin, Warmwasser-Soll „HeatPilot setzt“, ohne Regler am Bus und ohne Pause von
-Weg W; im Trockenlauf nur Protokoll; ein Termin wird höchstens einmal ausgelöst (auch nach einem Neustart), verpasste
-werden binnen 12 h nachgeholt, sonst gemeldet; nach 60 s geprüft, Erfolg bei Desinfektionstemperatur − 3 K, sonst nach
-Ladedauer + 60 min Fehlschlag mit Meldung; danach ausschalten (einmal, mit Prüfung). Ortszeit auch in der Woche der
-Zeitumstellung. Weg W und Weg B lassen den Kessel währenddessen in Ruhe. Die Mindestleistung wird aus dem Bereich der
+Sicherheitsregeln (jede hat einen Test): HeatPilot schaltet nur ``switch.turn_on`` auf die eine Entität des Schalters
+„Desinfizieren“ (seit 0.74.1 ein Taster: nie ausschalten, Schalter nie prüfen) – nur mit Termin, Warmwasser-Soll
+„HeatPilot setzt“, ohne Regler am Bus und ohne Pause von Weg W; im Trockenlauf nur Protokoll; ein Termin wird höchstens
+einmal ausgelöst (auch nach einem Neustart), verpasste werden binnen 12 h nachgeholt, sonst gemeldet; Erfolg bei
+Desinfektionstemperatur − 3 K im Speicher, sonst nach Ladedauer + 60 min Fehlschlag mit Meldung. Ortszeit auch in der
+Woche der Zeitumstellung. Weg W und Weg B lassen den Kessel währenddessen in Ruhe. Die Mindestleistung wird aus dem Bereich der
 maximalen Brennerleistung nur vorgeschlagen, nie übernommen; ohne sie ist die Abnahme-Regel aus. EMS-ESP bleibt nur
 lesend.
 """
@@ -33,9 +33,8 @@ from heatpilot.config import Config, validate
 from heatpilot.control import ALLOWED, Control
 from heatpilot.dhw_control import DhwControl, special_running, target_entity
 from heatpilot.discovery import Discovered
-from heatpilot.disinfect_control import K_FAIL, K_MISSED, K_SWITCH, DisinfectControl
-from heatpilot.disinfect_status import (ACT_DONE, ACT_DRY, ACT_FAIL, ACT_MISSED, ACT_OFF, ACT_ON, ACT_RUN,
-                                        HINT_HEATPILOT, HINT_REGULATOR, NOBODY)
+from heatpilot.disinfect_control import K_FAIL, K_MISSED, DisinfectControl
+from heatpilot.disinfect_status import ACT_DONE, ACT_DRY, ACT_FAIL, ACT_MISSED, ACT_ON, HINT_HEATPILOT, HINT_REGULATOR, NOBODY
 from heatpilot.emsesp import BOILER_CONTROLS, POWER_CONTROLS, EmsEsp
 from heatpilot.engine import Engine
 from heatpilot.notify import Notifier
@@ -106,7 +105,7 @@ def step(eng, dc, ts, ems_alive=True):
         if ems_alive and eng.cfg.emsesp_host:
             eng.ems_ts = float(ts)
         dc.plan(ts)
-        done = asyncio.run(dc.apply(ts))
+        done = asyncio.run(dc.apply())
         asyncio.run(eng.notifier.flush())
     return done
 
@@ -145,146 +144,88 @@ def armed(eng, dc, before_h=24):
 
 
 # ------------------------------------------------------------------ Ablauf
-def test_triggers_once_checks_after_60s_success_and_switches_off(tmp_path):
+def test_triggers_once_then_only_watches_the_tank(tmp_path):
+    """Taster (0.74.1): zum Termin einmal einschalten, danach nur noch der Speicher – nie prüfen, nie ausschalten."""
     eng, ha, dc = house(tmp_path)
     t = ts_of(SUN)
     armed(eng, dc)
     assert not step(eng, dc, t - 60) and switches(ha) == []  # vor dem Termin nichts
     assert step(eng, dc, t) and switches(ha) == [("turn_on", SW)]  # zum Termin genau einmal
-    run = dc.state["run"]
-    assert run["phase"] == "check" and run["goal"] == 67.0 and dc.active()
-    shows(eng, switch="on")
-    step(eng, dc, t + 30)
-    assert dc.state["run"]["phase"] == "check"  # geprüft wird erst nach 60 s
-    step(eng, dc, t + 60)
-    assert dc.state["run"]["phase"] == "running" and actions(eng)[-1] == ACT_RUN
-    shows(eng, tank=63.0)
+    assert dc.state["run"]["goal"] == 67.0 and dc.active()
+    shows(eng, switch="on", tank=63.0)
     step(eng, dc, t + 1800)
-    assert dc.state["run"]["phase"] == "running" and dc.state["run"]["peak"] == 63.0
+    assert dc.active() and dc.state["run"]["peak"] == 63.0
     shows(eng, tank=67.5)  # Desinfektionstemperatur 70 − 3 K erreicht: gelungen
     step(eng, dc, t + 2400)
     last = dc.state["last"]
     assert last["ok"] is True and last["result"] == "gelungen" and last["text"] == "67,5 °C erreicht (Ziel 67 °C)"
-    assert dc.state["run"]["phase"] == "after" and switches(ha) == [("turn_on", SW)]  # Nachlauf 15 min
-    step(eng, dc, t + 2400 + rule.AFTER_S - 30)
-    assert switches(ha) == [("turn_on", SW)]
-    step(eng, dc, t + 2400 + rule.AFTER_S)  # steht noch an: einmal ausschalten …
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)] and dc.state["run"]["phase"] == "off_check"
-    shows(eng, switch="off")
-    step(eng, dc, t + 2400 + rule.AFTER_S + 60)  # … und nach 60 s prüfen
-    assert "run" not in dc.state and dc.state["last"]["switch"] == "Schalter aus" and not dc.active()
-    for k in range(1, 30):  # danach nichts mehr bis zum nächsten Termin
-        step(eng, dc, t + 4000 + k * 1800)
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]
-    assert actions(eng) == [ACT_ON, ACT_RUN, ACT_DONE, ACT_OFF]
+    assert "run" not in dc.state and not dc.active()
+    for k in range(1, 30):  # der Schalter steht noch lange an: HeatPilot fasst ihn nicht an und meldet nichts
+        step(eng, dc, t + 2400 + k * 1800)
+    assert switches(ha) == [("turn_on", SW)] and actions(eng) == [ACT_ON, ACT_DONE]
     assert notes(ha) == [] and eng.notifier.problem_state()["on"] is False
     log = {r["action"]: r for r in eng.store.control_log(10)}
     assert log[ACT_ON]["room"] == SW and log[ACT_ON]["reason"] == "Desinfektion So 17:30 (70 °C)"
     assert log[ACT_DONE]["value"] == 67.5
 
 
-def test_switch_stays_on_after_switching_off_is_reported(tmp_path):
-    """Ausschalten einmal, mit Prüfung: bleibt der Schalter an, kommt eine Meldung – kein zweiter Versuch."""
+@pytest.mark.parametrize("state", ["off", "unavailable"])
+def test_switch_state_is_never_checked(tmp_path, state):
+    """Fällt der Schalter gleich zurück oder ist er unbekannt, ist das kein Fehlschlag – es zählt nur der Speicher."""
     eng, ha, dc = house(tmp_path)
     t = ts_of(SUN)
     armed(eng, dc)
     step(eng, dc, t)
-    shows(eng, switch="on", tank=68)
-    step(eng, dc, t + 60)
-    step(eng, dc, t + 60 + rule.AFTER_S)
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]
-    step(eng, dc, t + 120 + rule.AFTER_S)  # 60 s danach: steht noch an
-    assert "run" not in dc.state and K_SWITCH in eng.notifier.open_keys()
-    assert notes(ha) == ["Desinfektion So 17:30: Schalter steht nach dem Ausschalten noch an – bitte in Home Assistant "
-                         "prüfen"]
+    shows(eng, switch=state)
+    eng.ems["boiler"]["wwdisinfecting"] = "off"  # auch EMS-ESP zählt nicht
     for k in range(1, 10):
-        step(eng, dc, t + 120 + rule.AFTER_S + k * 600)
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]
-    shows(eng, switch="off")  # von Hand ausgeschaltet: „wieder in Ordnung“
-    step(eng, dc, t + 8000)
-    assert K_SWITCH not in eng.notifier.open_keys() and notes(ha)[-1] == "Desinfektion: Schalter wieder aus"
+        step(eng, dc, t + k * 60)
+    assert dc.active() and "last" not in dc.state and notes(ha) == []
+    shows(eng, tank=68)
+    step(eng, dc, t + 1200)
+    assert dc.state["last"]["ok"] is True and switches(ha) == [("turn_on", SW)]
 
 
-def test_boiler_resets_switch_itself_in_after_run(tmp_path):
+def test_old_switch_message_is_closed_quietly(tmp_path):
+    """Offene Meldung „Schalter steht noch an“ von vor 0.74.1 schließt still; „nicht gelaufen“ bleibt offen."""
     eng, ha, dc = house(tmp_path)
-    t = ts_of(SUN)
-    armed(eng, dc)
-    step(eng, dc, t)
-    shows(eng, switch="on", tank=68)
-    step(eng, dc, t + 60)
-    assert dc.state["run"]["phase"] == "after"
-    shows(eng, switch="off")  # der Kessel setzt ihn mit der vollen Temperatur selbst zurück
-    step(eng, dc, t + 300)
-    assert "run" not in dc.state and switches(ha) == [("turn_on", SW)]
-    assert dc.state["last"]["switch"] == "Schalter aus (vom Kessel)"
+    eng.notifier.problem("disinfect_switch", "Desinfektion So 17:30: Schalter steht nach dem Ausschalten noch an", 0)
+    eng.notifier.problem(K_FAIL, "Desinfektion So 17:30 nicht gelaufen – x", 0)
+    step(eng, dc, ts_of(SUN) - 86400)
+    assert set(eng.notifier.open_keys("disinfect_")) == {K_FAIL}
+    eng.cfg.dhw_control = "aus"  # ohne „HeatPilot setzt“: alle still zu
+    step(eng, dc, ts_of(SUN) - 86000)
+    assert eng.notifier.open_keys("disinfect_") == {}
 
 
-def test_timeout_failure_message_switch_off_and_next_success_is_ok(tmp_path):
+def test_failure_at_deadline_message_and_next_success_is_ok(tmp_path):
     eng, ha, dc = house(tmp_path)
     t = ts_of(SUN)
     armed(eng, dc)
     step(eng, dc, t)
     shows(eng, switch="on", tank=55)
-    step(eng, dc, t + 60)
     deadline = dc.state["run"]["deadline"]
     assert deadline == t + int(eng.disinfect_ready_h() * 3600) + 3600  # Ladedauer laut Modell + 60 min
     step(eng, dc, deadline - 30)
-    assert dc.state["run"]["phase"] == "running" and notes(ha) == []
+    assert dc.active() and notes(ha) == []
     step(eng, dc, deadline)
-    assert dc.state["last"]["ok"] is False
+    assert dc.state["last"]["ok"] is False and "run" not in dc.state
     assert notes(ha) == ["Desinfektion So 17:30 nicht gelaufen – Speicher erreichte nur 55 °C, nötig 67 °C"]
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]  # nach einem Fehlschlag gleich aus
+    assert switches(ha) == [("turn_on", SW)]  # auch nach einem Fehlschlag nie ausgeschaltet
     assert eng.notifier.problem_state()["on"] and K_FAIL in eng.notifier.open_keys()
-    assert actions(eng)[-2:] == [ACT_FAIL, ACT_OFF]
-    shows(eng, switch="off")
-    step(eng, dc, deadline + 60)
-    assert "run" not in dc.state
+    assert actions(eng)[-1] == ACT_FAIL
     # kein neuer Versuch vor dem nächsten Termin; der nächste gelingt: „wieder in Ordnung“
     t2 = t + 7 * 86400
     for k in range(1, 300):
-        step(eng, dc, deadline + k * 1800) if deadline + k * 1800 < t2 else None
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]
+        if deadline + k * 1800 < t2:
+            step(eng, dc, deadline + k * 1800)
+    assert switches(ha) == [("turn_on", SW)]
     shows(eng, tank=52)
     step(eng, dc, t2)
-    shows(eng, switch="on", tank=68)
+    shows(eng, tank=68)
     step(eng, dc, t2 + 60)
     assert dc.state["last"]["ok"] is True and K_FAIL not in eng.notifier.open_keys()
     assert notes(ha)[-1] == "Desinfektion wieder in Ordnung – So 17:30 gelaufen (68 °C erreicht (Ziel 67 °C))"
-
-
-def test_switch_falls_back_or_unknown_is_failure(tmp_path):
-    eng, ha, dc = house(tmp_path / "a")
-    t = ts_of(SUN)
-    armed(eng, dc)
-    step(eng, dc, t)
-    eng.ems["boiler"]["wwdisinfecting"] = "off"  # EMS-ESP meldet frisch: keine Desinfektion
-    step(eng, dc, t + 60)  # Schalter steht (wieder) aus
-    assert dc.state["last"]["text"] == "Schalter fällt sofort zurück – der Kessel nimmt die Desinfektion nicht an"
-    assert "run" not in dc.state and switches(ha) == [("turn_on", SW)]  # nichts auszuschalten
-    assert notes(ha) == ["Desinfektion So 17:30 nicht gelaufen – Schalter fällt sofort zurück – der Kessel nimmt die "
-                         "Desinfektion nicht an"]
-    # Zustand unbekannt (Entität nicht verfügbar, EMS-ESP ohne Wert): bis 5 min weiter prüfen
-    eng, ha, dc = house(tmp_path / "b")
-    armed(eng, dc)
-    step(eng, dc, t)
-    shows(eng, switch="unavailable")
-    step(eng, dc, t + 60)
-    step(eng, dc, t + 240)
-    assert dc.state["run"]["phase"] == "check"
-    step(eng, dc, t + rule.CHECK_MAX_S + 1)
-    assert dc.state["last"]["text"] == "Zustand des Schalters unbekannt – nicht bestätigt"
-
-
-def test_ems_reports_disinfection_counts_as_running(tmp_path):
-    eng, ha, dc = house(tmp_path)
-    t = ts_of(SUN)
-    armed(eng, dc)
-    step(eng, dc, t)
-    shows(eng, switch="unavailable")
-    eng.ems["boiler"]["wwdisinfecting"] = "on"  # EMS-ESP meldet die Desinfektion
-    step(eng, dc, t + 60)
-    assert dc.state["run"]["phase"] == "running"
-    assert "EMS-ESP meldet die Desinfektion" in eng.store.control_log(1)[0]["reason"]
 
 
 # ------------------------------------------------------------------ nur unter allen Bedingungen
@@ -342,13 +283,15 @@ def test_once_per_termin_even_after_restart(tmp_path):
     armed(eng, dc)
     step(eng, dc, t)
     assert switches(ha) == [("turn_on", SW)]
-    # Neustart mitten im Ablauf: Zustand aus der Datenbank, es geht mit der Prüfung weiter – kein zweites Einschalten
+    # Neustart mitten im Ablauf: Zustand aus der Datenbank, der Speicher wird weiter beobachtet – kein zweites Einschalten
     eng2, ha2, dc2 = wire(Engine(eng.cfg, eng.store, eng.found), carry=eng)
     eng2.states.update(eng.states)
     eng2.ems, eng2.regulator_watch = eng.ems, eng.regulator_watch
-    shows(eng2, switch="on")
     step(eng2, dc2, t + 90)
-    assert dc2.state["run"]["phase"] == "running" and switches(ha2) == []
+    assert dc2.active() and switches(ha2) == []
+    shows(eng2, tank=68)
+    step(eng2, dc2, t + 600)
+    assert dc2.state["last"]["ok"] is True and switches(ha2) == []
     # auch wenn das Einschalten scheiterte, wird der Termin nicht noch einmal ausgelöst
     eng3, ha3, dc3 = house(tmp_path / "b")
     armed(eng3, dc3)
@@ -432,29 +375,27 @@ def test_control_allows_only_the_one_switch(tmp_path):
 
     with mock.patch("time.time", return_value=float(time.time())):
         eng.ems_ts = time.time()
-        asyncio.run(ctl.set_disinfect(True, "Test"))
-        asyncio.run(ctl.set_disinfect(False, "Test"))
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]
+        asyncio.run(ctl.start_disinfect("Test"))
+    assert switches(ha) == [("turn_on", SW)]
     for args in (("switch", "turn_on", "switch.boiler_wwonetime"), ("switch", "turn_on", "switch.boiler_wwcirc"),
-                 ("switch", "turn_on", SW, {"x": 1}), ("switch", "toggle", SW), ("number", "set_value", SW)):
+                 ("switch", "turn_on", SW, {"x": 1}), ("switch", "toggle", SW), ("number", "set_value", SW),
+                 ("switch", "turn_off", SW)):  # 0.74.1: ein Taster – ausgeschaltet wird nie
         with pytest.raises(PermissionError):
             call(*args)
     eng.ems["thermostat"] = {"hc1_seltemp": 21.0}  # Regler am Bus: gesperrt
     with pytest.raises(PermissionError, match="Regler"):
-        asyncio.run(ctl.set_disinfect(True, "Test"))
+        asyncio.run(ctl.start_disinfect("Test"))
     del eng.ems["thermostat"]
     eng.dhw_control.state["paused"] = {"ts": 0, "reason": "x"}
     with pytest.raises(PermissionError, match="pausiert"):
-        asyncio.run(ctl.set_disinfect(True, "Test"))
+        asyncio.run(ctl.start_disinfect("Test"))
     eng.dhw_control.state.pop("paused")
-    with pytest.raises(PermissionError):
-        asyncio.run(ctl.set_disinfect("ja", "Test"))
-    assert switches(ha) == [("turn_on", SW), ("turn_off", SW)]
+    assert switches(ha) == [("turn_on", SW)]
     # nie dieselbe Entität wie der Heizbetrieb; ohne Schalter gesperrt
     twin = Control(RecHA(), eng.store, [], states=eng.states, disinfect=SW, boiler={"heating": SW})
     assert twin.disinfect_entity is None
     with pytest.raises(PermissionError):
-        asyncio.run(Control(RecHA(), eng.store, [], states=eng.states).set_disinfect(True, "x"))
+        asyncio.run(Control(RecHA(), eng.store, [], states=eng.states).start_disinfect("x"))
 
 
 def test_weg_w_and_b_leave_the_boiler_alone_during_run(tmp_path):
@@ -473,12 +414,24 @@ def test_weg_w_and_b_leave_the_boiler_alone_during_run(tmp_path):
     with mock.patch("time.time", return_value=float(t + 30)):
         assert BoilerControl(eng, None, None, {}).charging()  # Weg B: Vorlauf-Soll bleibt unberührt
     shows(eng, switch="on", tank=68)
-    step(eng, dc, t + 60)
-    shows(eng, switch="off")
-    step(eng, dc, t + 120)
+    step(eng, dc, t + 60)  # gelungen: HeatPilots Ablauf ist vorbei – dieser Schalter ist keine Rolle des Kessels
     assert not dc.active() and not special_running(eng, {})
     with mock.patch("time.time", return_value=float(t + 120)):
         assert not BoilerControl(eng, None, None, {}).charging()
+
+
+def test_boiler_still_disinfecting_keeps_weg_w_and_b_out(tmp_path):
+    """Nach dem Erfolg desinfiziert der Kessel oft noch weiter: Solange sein Schalter an ist, bleiben Weg W und Weg B
+    draußen – bis er ihn selbst zurücksetzt."""
+    eng, ha, dc = house(tmp_path)
+    t = ts_of(SUN)
+    armed(eng, dc)
+    step(eng, dc, t)
+    shows(eng, switch="on", tank=68)
+    step(eng, dc, t + 600)
+    assert dc.state["last"]["ok"] is True and not dc.active() and special_running(eng, {})
+    shows(eng, switch="off")
+    assert not special_running(eng, {}) and switches(ha) == [("turn_on", SW)]
 
 
 def test_switch_mode_mid_run_aborts_without_writing(tmp_path):

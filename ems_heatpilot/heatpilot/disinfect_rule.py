@@ -18,13 +18,10 @@ Termine (Ortszeit, auch über die Zeitumstellung – ``Config.disinfections``):
 * ``too_soon`` – höchstens eine Desinfektion je ``GAP_S`` (24 h): Wird der Termin während oder kurz nach einem Ablauf
   auf später am selben Tag gelegt, gilt der neue Termin erst in der nächsten Woche (außer der Ablauf schlug fehl).
 
-Ablauf (``disinfect_control``): einschalten; nach ``CHECK_S`` prüfen (Schalter an bzw. EMS-ESP meldet die
-Desinfektion; unbekannt: bis ``CHECK_MAX_S`` weiter prüfen); beobachten, bis der Speicher die Desinfektionstemperatur
-− ``REACH_K`` erreicht (Erfolg, nur nachdem der Kessel sie bestätigt hat) – spätestens Ladedauer laut Modell +
-``EXTRA_S``, sonst Fehlschlag; danach den Schalter ausschalten, wenn er noch an ist (einmal, mit Prüfung) – nach einem
-Erfolg erst nach dem Nachlauf ``AFTER_S``: Meist setzt der Kessel ihn selbst zurück, sobald der Speicher die volle
-Temperatur hat. Sperrt dabei etwas nur kurz (``lock``, Schalter unbekannt, Fehler beim Aufruf), versucht HeatPilot es
-bis ``OFF_WAIT_S`` lang weiter, dann kommt eine Meldung. Reine Funktionen, schreibt nichts.
+Ablauf (``disinfect_control``): einschalten – der Schalter ist ein Taster, den der Kessel am Ende selbst zurücksetzt
+(seit 0.74.1 prüft HeatPilot ihn nicht und schaltet ihn nie aus); beobachten, bis der Speicher die
+Desinfektionstemperatur − ``REACH_K`` erreicht (Erfolg) – spätestens Ladedauer laut Modell + ``EXTRA_S``, sonst
+Fehlschlag. Reine Funktionen, schreibt nichts.
 """
 
 from __future__ import annotations
@@ -37,12 +34,8 @@ from .dhw_watch import SPECIAL_COVER_H
 from .regulator import regulator
 from .values import local
 
-CHECK_S = 60              # so lange nach dem Einschalten (bzw. Ausschalten) prüfen
-CHECK_MAX_S = 300         # Zustand unbekannt: so lange weiter prüfen, dann Fehlschlag
 REACH_K = 3.0             # Erfolg: Speicher mindestens Desinfektionstemperatur − so viel
 EXTRA_S = 3600            # spätestens Ladedauer laut Modell + so lange, sonst Fehlschlag
-AFTER_S = 900             # Nachlauf: so lange darf der Kessel nach dem Erfolg den Schalter selbst zurücksetzen
-OFF_WAIT_S = 1800         # Ausschalten kurz gesperrt bzw. Schalter unbekannt: so lange weiter versuchen, dann Meldung
 CATCHUP_S = 12 * 3600     # verpasster Termin (HeatPilot aus, gesperrt): so lange nach dem Beginn nachholen
 GAP_S = 24 * 3600         # höchstens eine Desinfektion in so langer Zeit (Termin während eines Ablaufs verlegt)
 KEEP = 8                  # so viele erledigte Termine merken
@@ -173,7 +166,7 @@ def hot(run: dict) -> bool:
 
 def need(run: dict) -> float:
     """Erfolgsschwelle eines Ablaufs: Desinfektionstemperatur − ``REACH_K``; lag der Speicher schon beim Einschalten
-    darüber (``hot``), die volle Desinfektionstemperatur – sonst gälte sie gleich nach der Bestätigung als gelungen."""
+    darüber (``hot``), die volle Desinfektionstemperatur – sonst gälte sie gleich nach dem Einschalten als gelungen."""
     return run["temp"] if hot(run) and run.get("temp") is not None else run["goal"]
 
 

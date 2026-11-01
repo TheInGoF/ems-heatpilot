@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.74.1
+- **Desinfektion als Taster:** HeatPilot schaltet den Schalter „Desinfizieren“ zum Termin nur noch ein – der Kessel heizt und setzt ihn am Ende seines Programms selbst zurück. Bisher prüfte HeatPilot den Schalter nach 60 s (fiel er zurück: Fehlschlag), schaltete ihn 15 min nach dem Erfolg aus und meldete „Schalter steht nach dem Ausschalten noch an“, wenn der Kessel ihn hielt (01.11.). Jetzt kein Prüfen, kein Ausschalten (`switch.turn_off` auf den Schalter ist hart gesperrt) und keine Meldungen zum Schalter; eine noch offene schließt das Update still
+- **Ergebnis nur am Speicher:** Desinfektionstemperatur − 3 K erreicht (lag er schon beim Einschalten darüber: die volle) → gelungen, sonst nach Ladedauer + 60 min „nicht gelaufen“. Weg W und Weg B bleiben draußen, solange der Ablauf läuft und solange der Kessel selbst „desinfiziert“ meldet
+- `Control.set_disinfect` heißt jetzt `start_disinfect` (nur einschalten); Einstellungen → Kessel ohne „Ausschalten wartet“, Protokoll ohne „läuft“, „ausgeschaltet“ und „Schalter prüfen“
+- Tests: `tests/test_disinfect42.py`, `tests/test_v42_review.py`, `tests/test_ui_v42.py` angepasst und neu
+
 ## 0.74.0
 Funde aus zwei Tagen 30-s-Werten (30.10.–01.11., Schichtbetrieb, Homeoffice, neues Flur-Ventil). Richtig lagen u. a. die GPS-Ankünfte (18:23 statt 18:25), Komfort am Homeoffice-Tag, das Absenken nach Entfernung, die Warmwasser-Ladung kurz vor dem Vorheizen und das Zurücknehmen des Flur-Ventils am Morgen. Behoben:
 - **Vorheizen lernt nicht aus Eingriffen** (`heatup.track`, `hands`): Ein Boost auf 22 °C während des Vorheizens sah wie Überschwingen aus – der Abstand der Küche wuchs von 1,0 auf 1,5 K. Ein Vorheizen mit Boost, eigener Betriebsart oder „nur jetzt“ lehrt jetzt nichts
