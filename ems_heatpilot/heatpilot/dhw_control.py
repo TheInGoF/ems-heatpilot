@@ -153,6 +153,9 @@ class DhwControl(DhwStatus):
         bei „heatpilot“ wird der Schreibvorgang für ``apply`` vorgemerkt, im Trockenlauf nur protokolliert."""
         mode, st = self.mode, self.state
         self.pending, self.planned_ts = None, ts
+        loop = self.eng.control_loop
+        if loop is not None and loop.planned_ts is None:  # 0.74: erster Takt nach dem Start – der Heizstart der Räume
+            return  # fehlt noch; das Soll wechselte sonst kurz auf „Nacht“ (31.10., 05:35 und 05:57 nach Updates)
         self._switch(mode, ts)
         self.verify(time.time() if now is None else now)
         r = self.readings()

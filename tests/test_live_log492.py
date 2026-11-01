@@ -42,8 +42,9 @@ def test_csv_has_boiler_values_and_named_rooms(tmp_path):
     rows = list(csv.reader(io.StringIO(text)))
     head = rows[0]
     assert head[:4] == ["zeit", "ts", *live_log.COLS[:2]] and "burn_starts" in head
-    assert head[-8:] == ["Wohnzimmer ist", "Wohnzimmer soll", "Wohnzimmer ventil", "Wohnzimmer feuchte",
-                         "climate.other ist", "climate.other soll", "climate.other ventil", "climate.other feuchte"]
+    assert head[-10:] == ["Wohnzimmer ist", "Wohnzimmer soll", "Wohnzimmer ventil", "Wohnzimmer feuchte",
+                          "Wohnzimmer modus", "climate.other ist", "climate.other soll", "climate.other ventil",
+                          "climate.other feuchte", "climate.other modus"]  # 0.74: Betriebsart des Thermostats
     assert "Bad ist" not in head  # nichts gemeldet: keine leeren Spalten
     assert len(rows) == 4
     first = dict(zip(head, rows[1]))
@@ -81,3 +82,13 @@ def test_download_route(tmp_path):
     status, disp, ctype, body, bad = asyncio.run(go())
     assert status == 200 and ctype == "text/csv" and 'filename="heatpilot-30s-' in disp
     assert body.startswith("zeit,ts,") and bad == 200
+
+
+def test_csv_has_the_thermostat_mode_and_old_points_stay_readable(tmp_path):
+    """0.74: die Betriebsart je Thermostat (Rücksprünge in die Tado-Automatik sichtbar); Punkte von vorher haben vier
+    Werte je Raum und bleiben lesbar."""
+    eng = _eng(tmp_path)
+    eng.store.add_live(NOW - 60, {"s": {}, "r": {"climate.wz": [20.0, 21.0, 0.0, 50.0]}}, 48 * 3600)  # wie bis 0.73
+    live_log.record(eng.store, NOW - 30, {}, [("climate.wz", 20.1, 21.0, 0.0, 50.0)], modes={"climate.wz": "auto"})
+    rows = list(csv.reader(io.StringIO(live_log.csv_text(eng, 1, NOW))))
+    assert [dict(zip(rows[0], r))["Wohnzimmer modus"] for r in rows[1:]] == ["", "auto"]
