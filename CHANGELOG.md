@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.74.0
+Funde aus zwei Tagen 30-s-Werten (30.10.–01.11., Schichtbetrieb, Homeoffice, neues Flur-Ventil). Richtig lagen u. a. die GPS-Ankünfte (18:23 statt 18:25), Komfort am Homeoffice-Tag, das Absenken nach Entfernung, die Warmwasser-Ladung kurz vor dem Vorheizen und das Zurücknehmen des Flur-Ventils am Morgen. Behoben:
+- **Vorheizen lernt nicht aus Eingriffen** (`heatup.track`, `hands`): Ein Boost auf 22 °C während des Vorheizens sah wie Überschwingen aus – der Abstand der Küche wuchs von 1,0 auf 1,5 K. Ein Vorheizen mit Boost, eigener Betriebsart oder „nur jetzt“ lehrt jetzt nichts
+- **Vorheiz-Soll nie unter einem Raum, der noch Wärme braucht** (`heatup.preheat_sp`): Am 01.11. bekam die Küche 18,5 °C bei 18,6 °C Ist – Tado heizte gar nicht, um 06:30 waren es 18,6 statt 20 °C. Liegt der Raum schon über dem abgesenkten Soll, aber noch über 0,3 K unter dem Ziel, gilt das Ziel selbst
+- **„Anwesend“ und „Tag“ nachts bis zum Nachtende** (`override`): „Anwesend“ endete um 05:15 mit dem ersten Raum, der vorzuheizen begann; Arbeitszimmer und Katzenzimmer fielen zurück auf 18 °C, obwohl alle wach waren. Vorheizen zählt außerdem nicht mehr als „der Plan ist von selbst so weit“
+- **Ventil-PID über dem Soll zu** (`valve_pid.OVER_K` 0,2 K): Die Vorsteuerung hielt das Flur-Ventil 4–13 % offen, obwohl der Raum über dem Soll war – 206 min Heizbetrieb nur für den Flur (151 min davon über Soll + 0,3 K), dazu ein Takt-Boost +6 K um 07:13. Über dem Soll ist das Ventil jetzt zu; der I-Anteil wird dabei nur kleiner
+- **Ventilräume fordern nur unter HeatPilots Soll Wärme an** (`boiler_flow._readings`, `_open`): Weg B maß sie am Soll des Shelly (5 °C) und zählte jeden Spalt Ventil als „Thermostat fordert Wärme an“ – fürs Einschalten des Heizbetriebs, den Takt-Boost und das sofortige Senken. Jetzt mit HeatPilots Wunsch-Soll, und über ihm gilt das Ventil nicht als offen – nur wo HeatPilots PID das Ventil stellt; ohne „macht mit“ gilt weiter das Soll am Thermostat
+- **Shelly-Schritte ab 5 %** (`valve_pid.DEAD_PCT` 3 → 5, Prüfung ±5 % statt ±1 %): 17 Fehlschläge der Ventilprüfung in zwei Tagen, meist bei Schritten von 3–7 %, die der Shelly nicht ausführt bzw. nicht genau meldet. Ganz zu geht immer (einmal – meldet das Ventil danach einen Rest, passt das)
+- **Neuer Raum ohne Raummodell: mindestens 45 °C** (`boiler_flow._new_rooms`): Der Flur bekam nach dem Thermostatwechsel 20 min lang 31 °C Vorlauf bei 93 % Ventil und kühlte von 21,5 auf 20,4 °C aus – ohne plausibles Raummodell fehlte sein Bedarf. Wartet ein solcher Raum mit dem Ventil ab 80 % mindestens 0,2 K unter Soll, gilt mindestens 45 °C (höchstens die Obergrenze)
+- **30-s-Werte mit der Betriebsart des Thermostats** (`live_log`, Spalte `… modus`): fehlte für die Auswertung. Ältere Punkte bleiben lesbar (leere Zelle)
+- **Warmwasser: kein Wechsel im ersten Takt nach dem Start** (`dhw_control.plan`): Der Heizstart der Räume fehlt dann noch, das Soll sprang kurz auf „Nacht“ (31.10., 05:35 und 05:57 nach Updates)
+- Tests: neu `tests/test_review74.py`; angepasst `tests/test_live_log492.py`
+
 ## 0.73.5
 - **Ventilräume auf der Kachel wie alle anderen:** statt „Ventil · Vorheizen 19,5° · 30 %“ nur der Betriebszustand („Vorheizen → 19,5°“); Betriebsart und „Manuell“ des Shelly-Climates fließen nicht mehr ein. Die Ventilstellung steht im Raum-Dialog. Ein eigener Boost zeigt seinen Text („Boost 24° bis …“) vor dem Soll des Thermostats
 - **„Zeitplan“ und „Ausschalten“ zählen nach dem eigenen Climate:** „0 von 7 Räumen“ zählte Thermostate in ihrer Automatik – seit Tado auf manuell bleibt, immer 0. Jetzt „6 von 7 im Plan“ bzw. „alle im Plan“ und „1 von 7 aus“ nach HeatPilots Betriebsart

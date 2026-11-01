@@ -5,7 +5,8 @@ Für Räume mit Führung „ventilgeführt“ (``room_lead``, z. B. Shelly BLU T
 
 1. **Fremde Hand** erkennen: Zeigt das Ventil einen anderen Wert als zuletzt geschrieben (ab ``HAND_PCT``), ohne dass
    HeatPilot gerade geschrieben hat, wartet der Raum ``HAND_HOLD_S`` – wer von Hand dreht, behält das Ventil so lange.
-2. **Prüfung** 60 s nach dem Schreiben: Zeigt die Entität den Wert (±1 %)? Nach ``MAX_FAILS`` Fehlschlägen in Folge
+2. **Prüfung** 60 s nach dem Schreiben: Zeigt die Entität den Wert (±``HAND_PCT``, seit 0.74 – vorher ±1 %, was ein
+   Shelly bei kleinen Schritten nie erfüllt)? Nach ``MAX_FAILS`` Fehlschlägen in Folge
    pausiert der Raum ``FAIL_HOLD_S`` (Meldung), dann geht es von selbst weiter.
 3. **PID-Schritt** (``valve_pid.step``): Wunsch-Soll und Phase kommen aus der Regelschleife (``controlloop``), die
    Raumtemperatur aus dem Raum (Zusatzsensor bzw. Thermostat), der Vorlauf vom Kessel. Der Öffnungs-Deckel kommt vom
@@ -120,7 +121,8 @@ class ValvePidControl:
         target = valve_pid.step(st.setdefault("pid", {}), float(sp), temp, flow, t_out,
                                 model if ok else None, ts, hi=cap)
         hold = max(int(st.get("hold_until") or 0), int(st.get("pause_until") or 0)) or None
-        d = valve_pid.decide(target, current, ts, (st.get("last") or {}).get("ts"), hold)
+        last = st.get("last") or {}
+        d = valve_pid.decide(target, current, ts, last.get("ts"), hold, last.get("value"))
         own = (info.get("own") or {}).get("mode")  # eigenes Climate (``room_modes``): steckt schon im Wunsch-Soll
         st["why"], st["want"], st["cap"] = (f"{room_modes.LABELS.get(own, own)} · {d.why}" if own else d.why), d.value, cap
         obs.append((room.climate, temp, float(sp), target, cap))
@@ -145,18 +147,19 @@ class ValvePidControl:
                                               f"HeatPilot wartet {HAND_HOLD_S // 60} min", ts)
 
     def _verify(self, room, st: dict, current: float | None, ts: int) -> None:
-        """Prüfung 60 s nach dem Schreiben: Zeigt die Entität den Wert (±1 %)? Fehlschläge zählen je Raum."""
+        """Prüfung 60 s nach dem Schreiben: Zeigt die Entität den Wert (±``HAND_PCT``)? Fehlschläge zählen je Raum."""
         chk = st.get("check")
         if not chk or ts < chk["due"]:
             return
         if current is None and ts < chk["until"]:
             return
         before = chk.get("before")
-        if (current is not None and before is not None and abs(current - before) <= 1.0
-                and abs(current - chk["value"]) > 1.0 and ts < chk["until"]):
+        ok = current is not None and abs(current - chk["value"]) <= HAND_PCT
+        if not ok and current is not None and before is not None and abs(current - before) <= HAND_PCT \
+                and ts < chk["until"]:
             return  # 0.73.4: noch der Wert von vorher – das Ventil meldet verzögert, weiter warten
         st.pop("check")
-        if current is not None and abs(current - chk["value"]) <= 1.0:
+        if ok:
             st["fails"] = 0
             if self.notifier is not None:
                 self.notifier.solved(K_FAIL, f"{room.name}: Ventil wieder in Ordnung – {chk['value']} % übernommen",

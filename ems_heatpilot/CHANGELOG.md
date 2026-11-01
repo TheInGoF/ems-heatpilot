@@ -2,6 +2,13 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.74.0
+- Vorheizen: lernt nicht aus Boost/Eingriffen, Soll nie unter einem noch kalten Raum
+- „Anwesend“/„Tag“ nachts bis zum Nachtende
+- Ventilräume: über dem Soll zu, Schritte ab 5 %, fordern nur unter Soll Wärme an
+- Neuer Raum ohne Raummodell: mindestens 45 °C Vorlauf
+- 30-s-Werte mit Betriebsart; Warmwasser springt nach Neustart nicht mehr
+
 ## 0.73.5
 - Ventilräume auf der Kachel wie alle anderen
 - „Zeitplan“/„Ausschalten“ zählen nach HeatPilots Betriebsart

@@ -257,7 +257,8 @@ Einstellungen in `/data` einmal, holt HeatPilot sie beim Start von dort zurück.
   kann zur Fehlersuche weitergegeben werden.
 - **30-s-Werte herunterladen** (seit 0.49.2) – die Werte der Live-Ansicht alle 30 s als CSV, wahlweise 12, 24 oder
   48 h: Zeit, Vorlauf, Rücklauf, Soll, Brennerleistung, Flamme, Pumpe, Warmwasser, Brennerstarts, Anlagendruck und je
-  Raum Ist, Soll, Ventil und Feuchte. HeatPilot hebt sie 48 h in der eigenen Datenbank auf (übersteht einen Neustart)
+  Raum Ist, Soll, Ventil, Feuchte und seit 0.74 die Betriebsart des Thermostats (`modus`, z. B. `heat`, `auto`,
+  `off`). HeatPilot hebt sie 48 h in der eigenen Datenbank auf (übersteht einen Neustart)
   und löscht Älteres laufend. Damit lässt sich etwa die umgewälzte Wassermenge aus Brennerleistung und Spreizung
   nachrechnen. Seit 0.50 steht in jeder Zeile auch, was HeatPilot für den Kessel entschieden hat (Spalten `hp_…`:
   Heizbetrieb, Ziel, Bedarf, Abnahme, Zuschlag, Boost, Starts je Stunde, mittlere Laufzeit, wartende und nicht
@@ -534,7 +535,8 @@ Phasenwechsel.
   oder spät heimkommen. **Tag** (seit 0.71) beendet die Nacht: Räume in Nacht oder Vorheizen bekommen, was tagsüber
   gälte – Komfort, wenn jemand zu Hause ist, sonst die Abwesenheitstemperatur.
   Alle Räume mit „macht mit“ bekommen die Nacht-, Komfort- bzw. Abwesenheitstemperatur, bis zum nächsten
-  Schaltpunkt des normalen Plans (höchstens 24 h). Früher endet es, wenn der Plan von selbst so weit ist (abends
+  Schaltpunkt des normalen Plans (höchstens 24 h); **Anwesend** und **Tag** nachts erst am Nachtende (seit 0.74 –
+  vorher endeten sie mit dem ersten Raum, der vorzuheizen begann, die übrigen fielen zurück auf Nacht). Früher endet es, wenn der Plan von selbst so weit ist (abends
   beginnt die Nacht), bei „Abwesend“ jemand heimkommt bzw. bei „Anwesend“ alle weg sind. Danach gilt wieder der
   normale Plan; noch einmal auf den aktiven Knopf tippen beendet es sofort. Ein Boost geht vor. **Die Knöpfe lehren
   nichts** (seit 0.71): Jeder Knopf wird mit Beginn und Ende gemerkt, und eine Nacht, in der einer aktiv war, zählt
@@ -737,7 +739,10 @@ Für jeden Raum mit „macht mit“ bestimmt HeatPilot eine Phase und das dazuge
    kommt – statt kurz mit dem höchsten Vorlauf (morgens 60 °C, danach wieder 35 °C). Schafft es auch der höchste
    Vorlauf nicht im Deckel, beginnt es mit dem Deckel. Ein begonnenes Vorheizen **bleibt bis zum Ziel**, auch wenn
    der Raum schneller warm wird als geplant – sonst sprängen Soll und Heizbetrieb zwischen Vorheizen und Nacht hin
-   und her. Ohne plausibles Raummodell pauschal 1 h. Folgt nach
+   und her. Ohne plausibles Raummodell pauschal 1 h. Das Thermostat bekommt dabei das Ziel minus einen je Raum
+   **gelernten Abstand** (0–1,5 K, anfangs 0,5 K) – die Restwärme des Heizkörpers bringt den Rest. Liegt der Raum
+   schon über diesem Soll, aber noch über 0,3 K unter dem Ziel, bekommt er seit 0.74 das Ziel selbst (sonst heizte
+   das Thermostat gar nicht); ein Vorheizen mit Boost, eigener Betriebsart oder „nur jetzt“ lehrt nichts. Folgt nach
    der Nacht Abwesenheit, wird nicht vorgeheizt. Seit 0.37 rechnet die Aufheizzeit mit der
    Außentemperatur **zum Zielzeitpunkt** (Nachtende, Ankunft, Rückkehr aus dem Urlaub) laut
    Vorhersage – höchstens 90 min daneben –, sonst wie bisher mit der aktuellen: Wird es bis zum Morgen
@@ -1350,6 +1355,9 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
      nimmt kaum etwas ab; seit 0.53 mit der Form des Raummodells) – vorher ließ ein Ventil, das gerade über 5 % ging, den Wert von 35 auf 49 °C springen.
      Liegt das über dem Wert aus 1., gilt es. Reicht auch der höchste Vorlauf nicht, gilt nichts: lieber lange Pausen –
      der Kessel taktet dann über seine eigene Sperre.
+     **Neuer Raum ohne Raummodell** (seit 0.74, z. B. nach einem Thermostatwechsel): Wartet er mit dem Ventil ab 80 %
+     mindestens 0,2 K unter Soll, gilt mindestens 45 °C – sein Bedarf fehlt sonst im Vorlauf (31.10.: 20 min bei
+     31 °C, der Flur kühlte aus).
      **Mindestleistung** (seit 0.42): Meldet der Kessel keine kleinste Brennerleistung (EMS-ESP `burnminpower`) und ist
      unter Einstellungen → Kessel nichts eingetragen, schlägt HeatPilot dort die Untergrenze des einstellbaren
      Bereichs der **maximalen Brennerleistung** vor (`burnmaxpower`, z. B. „Vorschlag 30 % – aus dem Bereich der
@@ -1374,6 +1382,10 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   5. **Fußboden-Grenze hart:** nie über der Grenze, die gerade gilt – auch bei Zuschlag, Boost und Vorheizen. Liegt sie
      unter 35 °C, ist der Heizbetrieb aus (darunter schreibt HeatPilot keinen Vorlauf).
   6. **Obergrenze:** der höchste Vorlauf der Einstellungen; das Ergebnis in ganzen Grad.
+
+  **Ventilgeführte Räume** zählen seit 0.74 mit HeatPilots Soll (nicht dem des Thermostats) und gelten nur darunter
+  als „Ventil offen“ – fürs Einschalten des Heizbetriebs, den Takt-Boost und das sofortige Senken. Ein Spalt Ventil
+  über dem Soll hält den Kessel nicht mehr an.
 - **Warmwasser lädt** (oder Sonderladung bzw. Desinfektion): Das Vorlauf-Soll bleibt unberührt – der Kessel lädt den
   Speicher über das 3-Wege-Ventil; auch die Prüfung wartet so lange. Nach einer Sonderladung bzw. Desinfektion
   (seit 0.56.5) bleibt das so, bis das Vorlauf-Soll des Kessels wieder niedrig ist (höchstens 4 h) – die Meldung fällt beim Halten der
@@ -1695,11 +1707,15 @@ Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
   dauerhaft hält (seit 0.53 mit der Form des Raummodells – bei Öffnung^0,5 kleinere Öffnungen als linear); der
   PI-Teil korrigiert den Rest. Die **Verstärkung lernt je Raum**: Pendelt der Raum (4
   Vorzeichenwechsel über ±0,15 K in 2 h), sinkt sie um 20 %; bleibt er trotz Luft nach oben 90 min mehr als 0,3 K
-  unter Soll, steigt sie um 15 % (0,3–3,0).
-- **Schreibregeln:** nur bei Änderung ab 3 Punkten, höchstens ein Schreiben je 5 min – Sprünge ab 15 Punkten sofort
+  unter Soll, steigt sie um 15 % (0,3–3,0). **Über dem Soll zu** (seit 0.74): ab 0,2 K über dem Soll schließt das
+  Ventil, auch wenn die Vorsteuerung noch Öffnung will; der I-Anteil wird dabei nur kleiner – vorher blieb es dort
+  4–13 % offen und hielt den Kessel allein am Laufen.
+- **Schreibregeln:** nur bei Änderung ab 5 Punkten (seit 0.74, vorher 3 – kleinere Schritte führte der Shelly oft
+  nicht aus), ganz zu immer, höchstens ein Schreiben je 5 min – Sprünge ab 15 Punkten sofort
   (schont Motor und Batterie). Geschrieben wird nur über die eine zugewiesene Entität, nur ganze Prozent 0–100,
   innerhalb der Grenzen der Entität; alles andere weist HeatPilot hart ab. 60 s nach dem Schreiben liest HeatPilot
-  zurück; nach **3 Fehlschlägen in Folge pausiert der Raum 1 h** (Meldung – Gateway/Batterie prüfen). **Wer von Hand
+  zurück (±5 Punkte gelten als angekommen; meldet das Ventil bis 15 min noch den Wert von vorher, kommt die Meldung
+  nur verzögert); nach **3 Fehlschlägen in Folge pausiert der Raum 1 h** (Meldung – Gateway/Batterie prüfen). **Wer von Hand
   dreht, behält das Ventil 1 h.** Die Nutzer-Pause der Steuerung hält auch diese Schiene an. Ohne Raumtemperatur
   stellt HeatPilot nach 30 min einmal den **sicheren Wert 40 %** (kein Frost, kein Überheizen) und wartet.
 - **Automatischer hydraulischer Abgleich:** Bleibt ein Raum am Anschlag unter Soll (mindestens 30 min am Tag),
@@ -2233,7 +2249,9 @@ rechnet HeatPilot mit 5 K und sagt das im Grund („Hysterese 5 K angenommen“)
 - **Nacht** laut Nachtplan (eingestellt bzw. gelernt) → Minimum („Nacht – Speicher darf bis … °C fallen“), bis die
   Ladung gerade noch **5 min vor dem frühesten Heizstart der Räume** fertig wird (seit 0.68; ohne Heizstart vor dem
   Nachtende). Die Ladedauer rechnet ab der aktuellen Speichertemperatur: Beginnt das Vorheizen um 4:13 und braucht das
-  Wasser 23 min, lädt der Speicher ab 3:45 – Warmwasser und Heizen kommen sich nicht in die Quere
+  Wasser 23 min, lädt der Speicher ab 3:45 – Warmwasser und Heizen kommen sich nicht in die Quere. Nach einem
+  Neustart wartet das Soll einen Takt, bis der Heizstart der Räume feststeht (seit 0.74 – sonst sprang es kurz auf
+  „Nacht“)
 - **sonst** – jemand zu Hause und wach, bzw. innerhalb der Aufheizdauer vor Ankunft oder Aufstehen („vor dem
   Aufstehen aufheizen“) → **Komfort** (+ gelernte Reserve) als Soll. Ist eine große Zapfung üblich, Soll =
   Minimum + Bedarf, wenn das höher ist – ohne Hysterese, denn während des Zapfens lädt der Kessel nach.

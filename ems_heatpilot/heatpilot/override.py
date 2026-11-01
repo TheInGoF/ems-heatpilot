@@ -6,7 +6,8 @@ Hause ist, sonst die Abwesenheitstemperatur. Es gibt nur diese eine Art:
 Der Override setzt das Gelernte vorübergehend außer Kraft und endet von selbst (``apply``):
 
 * am **nächsten Schaltpunkt** – dem frühesten geplanten Wechsel der Räume beim Setzen (``until``, aus dem Plan ohne
-  Override), höchstens nach ``MAX_H``;
+  Override), höchstens nach ``MAX_H``; „Anwesend“ und „Tag“ nachts erst am **Nachtende** (seit 0.74 – vorher endeten
+  sie am ersten Vorheiz-Beginn irgendeines Raums, und die übrigen fielen zurück auf Nacht, obwohl alle wach waren);
 * sobald der Plan **von selbst** dorthin kommt (alle Räume ohne Override schon in dieser Phase);
 * wenn das System erkennt, dass die Lage vorbei ist: bei „Abwesend“ kommt jemand heim, bei „Anwesend“ sind alle weg.
 
@@ -29,8 +30,8 @@ KV = "control.override"
 LOG, LOG_DAYS = "control.override.log", 60  # 0.71: [Beginn, Ende|None, Modus] – Nächte mit Override lernt nichts
 MODES = {"nacht": ("nacht", "Nacht"), "tag": ("komfort", "Tag"), "anwesend": ("komfort", "Anwesend"),
          "abwesend": ("abwesend", "Abwesend")}
-SAME = {"nacht": ("nacht",), "tag": ("komfort", "vorheizen", "abwesend", "urlaub"), "anwesend": ("komfort", "vorheizen"),
-        "abwesend": ("abwesend", "urlaub")}
+SAME = {"nacht": ("nacht",), "tag": ("komfort", "abwesend", "urlaub"), "anwesend": ("komfort",),  # 0.74: Vorheizen
+        "abwesend": ("abwesend", "urlaub")}                                                    # ist noch nicht da
 MAX_H = 24
 SENSOR = "sensor.heatpilot_modus"
 
@@ -89,6 +90,9 @@ def apply(loop, ts: int, first: dict, presence, rooms) -> dict:
     if ov.get("until") is None:  # erster Takt: der nächste Schaltpunkt des normalen Plans
         nxt = [d.until.timestamp() for d in natural if d.until is not None]
         ov["until"] = int(min(nxt)) if nxt else ov["since"] + MAX_H * 3600
+        now, night = datetime.fromtimestamp(ts).astimezone(), getattr(loop.eng.cfg, "is_night_at", None)
+        if mode in ("anwesend", "tag") and night is not None and night(now):  # 0.74: wach – bis zum Nachtende
+            ov["until"] = int(loop.eng.cfg.night_end_at(now).timestamp())
         ov["home"] = presence.home_count
         loop.store.put(KV, ov)
     home = presence.home_count

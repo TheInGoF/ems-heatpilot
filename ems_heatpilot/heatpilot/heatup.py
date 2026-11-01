@@ -75,13 +75,28 @@ def tune(st: dict) -> tuple[float, float]:
     return float(t.get("margin", MARGIN_DEFAULT)), float(t.get("speed", 1.0))
 
 
-def track(st: dict, phase: str, setpoint: float, until, temp: float | None, ts: int, vacation: bool) -> None:
+def preheat_sp(target: float, margin: float, temp: float | None) -> float:
+    """Soll beim Vorheizen: ``margin`` unter dem Ziel – die Restwärme bringt den Rest (0.50.5). Liegt der Raum schon
+    darüber, aber noch deutlich unter dem Ziel, das Ziel selbst (0.74): sonst heizt das Thermostat gar nicht (Küche,
+    01.11.: Vorheiz-Soll 18,5 °C bei 18,6 °C – zum Nachtende 18,6 statt 20 °C)."""
+    low = target - margin
+    return target if temp is not None and low <= temp < target - 0.3 else low
+
+
+def track(st: dict, phase: str, setpoint: float, until, temp: float | None, ts: int, vacation: bool,
+          hands: bool = False) -> None:
     """Tägliches Vorheizen beobachten (Beginn, geplantes Ende, wann das abgesenkte Soll erreicht war, höchste
     Temperatur bis ``COAST_S`` danach) und danach lernen: Geschwindigkeit = geplante / tatsächliche Dauer (nicht
-    erreicht: langsamer), Abstand so, dass die Spitze aufs Ziel fällt (Überschwingen → mehr Abstand)."""
+    erreicht: langsamer), Abstand so, dass die Spitze aufs Ziel fällt (Überschwingen → mehr Abstand). ``hands``
+    (0.74): Boost, eigene Betriebsart oder „nur jetzt“ – dieses Vorheizen lehrt nichts (ein Boost auf 22 °C sah sonst
+    wie Überschwingen aus, der Abstand wuchs, und am nächsten Morgen heizte das Thermostat nicht mehr vor)."""
     pre = st.get("pre")
+    if hands and pre is not None:
+        pre["spoiled"] = True
     if phase == "vorheizen" and not vacation and until is not None and temp is not None:
         if pre is None:
+            if hands:
+                return
             m = tune(st)[0]
             pre = st["pre"] = {"start": ts, "end": int(until.timestamp()), "sp": setpoint, "m": m, "peak": temp,
                                "reached": None}
@@ -95,6 +110,8 @@ def track(st: dict, phase: str, setpoint: float, until, temp: float | None, ts: 
         pre["peak"] = max(pre["peak"], temp)
         return
     st.pop("pre")
+    if pre.get("spoiled"):
+        return
     m, s = tune(st)
     planned = max(pre["end"] - pre["start"], 60)
     seen = s * planned / max(pre["reached"] - pre["start"], 60) if pre["reached"] else s * 0.8

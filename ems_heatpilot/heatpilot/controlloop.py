@@ -307,9 +307,10 @@ class ControlLoop:
             tn = heatup.tune(st)
             d = first[room.climate]
             if d.phase == "vorheizen" and not vac:  # 0.50.5: erst knapp unter dem Ziel – die Restwärme bringt den Rest
-                d = d._replace(setpoint=_clamp(d.setpoint - tn[0], float(room.comfort), cfg))
+                d = d._replace(setpoint=_clamp(heatup.preheat_sp(d.setpoint, tn[0], temp), float(room.comfort), cfg))
             d = room_modes.desired(st, d, ts)  # 0.72: eigenes Climate – Zeitplan, Manuell, Aus, Boost
-            heatup.track(st, d.phase, d.setpoint, d.until, temp, ts, vac)
+            hands = room.climate in boosts or bool(st.get("own")) or d.reason.startswith("nur jetzt")  # 0.74
+            heatup.track(st, d.phase, d.setpoint, d.until, temp, ts, vac, hands)
             desireds[room.climate] = d
             self.rooms[room.climate] = {
                 "managed": bool(room.managed), "phase": d.phase if managing else None,

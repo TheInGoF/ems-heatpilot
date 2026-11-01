@@ -6,12 +6,15 @@ statt ein Soll zu schreiben – das Thermostat kann dann nicht mehr zu spät sch
 * **Vorsteuerung** aus dem Raummodell (``feedforward``): die Öffnung, die das Soll beim aktuellen Vorlauf dauerhaft
   hält – ``(b·(Soll − außen) − c) / (a·(Vorlauf − Soll))``. Der PI-Teil korrigiert nur noch den Rest.
 * **PI mit Anti-Windup** (``step``): P = ``KP``·Verstärkung·Fehler, I wächst mit ``KP/TI_S``; läuft die Summe aus
-  0…Deckel hinaus, wird der I-Anteil zurückgerechnet (kein Aufziehen in der Sättigung).
+  0…Deckel hinaus, wird der I-Anteil zurückgerechnet (kein Aufziehen in der Sättigung). Seit 0.74 ist das Ventil
+  ``OVER_K`` über dem Soll zu – die Vorsteuerung hielt es sonst einen Spalt offen, der Raum forderte weiter Wärme an
+  und hielt den Kessel am Laufen (Flur, 31.10./01.11.: 151 min über Soll).
 * **Lernen je Raum** (in ``step``): Pendelt der Raum (mindestens ``OSC_N`` Vorzeichenwechsel des Fehlers über
   ±``OSC_BAND`` in 2 h), sinkt die Verstärkung um 20 % (bis ``GAIN_MIN``); bleibt er trotz Luft nach oben
   ``SLOW_S`` lang mehr als ``SLOW_K`` unter dem Soll, steigt sie um 15 % (bis ``GAIN_MAX``).
 * **Schreibregeln** (``decide``): nur bei Änderung ab ``DEAD_PCT``, höchstens ein Schreiben je ``GAP_S`` – ein großer
-  Sprung ab ``JUMP_PCT`` sofort (wer Wärme braucht, bekommt sie sofort); eine fremde Hand hält bis ``hold_until``.
+  Sprung ab ``JUMP_PCT`` sofort (wer Wärme braucht, bekommt sie sofort), ganz zu immer; eine fremde Hand hält bis
+  ``hold_until``. Seit 0.74 ``DEAD_PCT`` = 5: kleinere Schritte führt ein Shelly BLU nicht aus bzw. meldet sie nicht.
 
 Der Zustand je Raum ist ein JSON-fähiges dict {i, ts, out, gain, xs, sign, slow_since} und läuft über
 ``valve_pid_control`` (kv) weiter.
@@ -23,7 +26,8 @@ from .dhw_rule import Decision
 
 KP = 25.0           # P-Anteil: Prozent Öffnung je K Fehler (× gelernte Verstärkung)
 TI_S = 5400.0       # Nachstellzeit des I-Anteils (90 min)
-DEAD_PCT = 3        # schreiben nur bei Änderung ab so vielen Prozentpunkten (schont Motor und Batterie)
+DEAD_PCT = 5        # schreiben nur bei Änderung ab so vielen Prozentpunkten (schont Motor und Batterie; 0.74: 3 → 5)
+OVER_K = 0.2        # 0.74: so weit über dem Soll ist das Ventil zu
 JUMP_PCT = 15       # ab so viel Änderung sofort schreiben, ohne den Abstand abzuwarten
 GAP_S = 300         # sonst höchstens ein Schreiben je so viele Sekunden
 OSC_BAND = 0.15     # Pendeln: Fehler wechselt das Vorzeichen über ±so viel K hinaus …
@@ -56,9 +60,12 @@ def step(st: dict, sp: float, temp: float, flow: float | None, t_out: float | No
     dt = min(max(ts - st["ts"], 0), 300) if st.get("ts") is not None else 0
     ff = feedforward(model, sp, flow, t_out)
     st["i"] = float(st.get("i", 0.0)) + KP / TI_S * gain * err * dt
-    raw = (ff or 0.0) + KP * gain * err + st["i"]
-    out = max(0.0, min(raw, hi))
-    st["i"] -= raw - out  # Anti-Windup: der I-Anteil wächst nicht über die Sättigung hinaus
+    if err < -OVER_K:  # 0.74: über dem Soll zu – der I-Anteil wird dabei nur kleiner, nie aufgezogen
+        st["i"], out = min(st["i"], 0.0), 0.0
+    else:
+        raw = (ff or 0.0) + KP * gain * err + st["i"]
+        out = max(0.0, min(raw, hi))
+        st["i"] -= raw - out  # Anti-Windup: der I-Anteil wächst nicht über die Sättigung hinaus
     st["ts"], st["out"] = ts, round(out, 1)
     _learn(st, err, out, hi, ts)
     return out
@@ -86,9 +93,9 @@ def _learn(st: dict, err: float, out: float, hi: float, ts: int) -> None:
 
 
 def decide(target: float, current: float | None, ts: int, last_ts: int | None,
-           hold_until: int | None = None) -> Decision:
-    """Schreiben? Nur bei Änderung ab ``DEAD_PCT``, höchstens eins je ``GAP_S`` – Sprünge ab ``JUMP_PCT`` sofort;
-    eine fremde Hand (``hold_until``) hält auf."""
+           hold_until: int | None = None, last_value: int | None = None) -> Decision:
+    """Schreiben? Nur bei Änderung ab ``DEAD_PCT``, höchstens eins je ``GAP_S`` – Sprünge ab ``JUMP_PCT`` sofort, ganz
+    zu immer (einmal: steht ``last_value`` schon auf 0, passt ein Rest); eine fremde Hand (``hold_until``) hält auf."""
     value = int(round(target))
     if hold_until is not None and ts < hold_until:
         return Decision(False, value, f"von Hand verstellt – HeatPilot wartet noch "
@@ -96,7 +103,7 @@ def decide(target: float, current: float | None, ts: int, last_ts: int | None,
     if current is None:
         return Decision(True, value, f"Ventil unbekannt → {value} %")
     diff = abs(value - current)
-    if diff < DEAD_PCT:
+    if diff < DEAD_PCT and not (value == 0 and current > 0.5 and last_value != 0):  # ganz zu geht immer (0.74)
         return Decision(False, value, f"Ventil {current:.0f} % passt")
     if diff < JUMP_PCT and last_ts is not None and ts < last_ts + GAP_S:
         return Decision(False, value, f"höchstens ein Schreiben je {GAP_S // 60} min", until=int(last_ts + GAP_S))

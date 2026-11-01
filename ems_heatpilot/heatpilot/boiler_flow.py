@@ -15,7 +15,9 @@ Bei jedem Schritt (30 s) neu gerechnet, ohne eigenen Zustand – nur der Takt-Bo
    (Vorlauf − Raumtemperatur) aus dem Raummodell (seit 0.50 nach der Öffnung gewichtet – ein Ventil knapp über 5 % lässt
    den Wert nicht mehr springen), in kW umgerechnet mit dem Hausmodell (Wärmebedarf des Hauses jetzt verteilt auf den
    Bedarf der Räume mit Raummodell – Näherung: Räume gleicher Wärmespeicherung). Liegt der nötige Wert über dem aus 1.,
-   gilt er; reicht auch der höchste nicht, gilt nichts (lange Pausen, keine Sonderlogik).
+   gilt er; reicht auch der höchste nicht, gilt nichts (lange Pausen, keine Sonderlogik). Seit 0.74 bekommt ein Raum
+   ohne plausibles Raummodell (neues Thermostat), der mit Ventil ab ``NEW_ROOM_VALVE`` unter Soll wartet, mindestens
+   ``NEW_ROOM_FLOW`` (``_new_rooms``) – sein Bedarf fehlt sonst im Vorlauf.
 3. **Zuschlag „Raum kommt nicht hoch“** (seit 0.50, ``boiler_stall``) – unabhängig vom Takten: Bleibt ein Raum mit
    offenem Ventil unter Soll und steigt in 30 min nicht um 0,2 K, +2 K je 15 min über den Wert aus 1./2. bis zur
    Obergrenze; steigt er, bleibt die Stufe, am Soll geht es in 2-K-Schritten zurück.
@@ -29,6 +31,10 @@ Bei jedem Schritt (30 s) neu gerechnet, ohne eigenen Zustand – nur der Takt-Bo
    Ergebnis in ganzen Grad. ``Target.hi`` ist die Obergrenze jetzt – darüber schreibt ``boiler_control`` als Schutz
    sofort zurück. Seit 0.50 senkt ``boiler_control`` nicht, solange der Brenner noch keine 10 min läuft.
 
+Ventilgeführte Räume, deren Ventil der PID stellt (``_wish``), messen seit 0.74 an HeatPilots Wunsch-Soll statt an
+dem des Thermostats und fordern nur unter ihm Wärme an (``_readings``, ``_open``) – ein Spalt Ventil über dem Soll
+hält den Kessel nicht an.
+
 Läuft eine Warmwasser-Ladung oder Sonderladung (``charging``), fasst HeatPilot das Vorlauf-Soll nicht an – der Kessel
 lädt den Speicher über das 3-Wege-Ventil. Schreibt nichts.
 """
@@ -39,8 +45,11 @@ import math
 from dataclasses import dataclass, field
 
 from . import boiler_rule as br
-from . import balance_auto, boiler_power, boiler_stall, floor_limit, guards, preview, valve_dry
+from . import balance_auto, boiler_power, boiler_stall, floor_limit, guards, preview, room_lead, valve_dry
 from .dhw_control import special_running
+
+NEW_ROOM_FLOW = 45        # 0.74: Raum ohne Raummodell wartet mit weit offenem Ventil – mindestens so viel Vorlauf
+NEW_ROOM_VALVE = 80.0
 
 
 @dataclass
@@ -71,13 +80,47 @@ class Target:
     idle: bool = False               # kein Wärmebedarf: Heizbetrieb an, Vorlauf-Soll „nur Pumpe“ (0.46.5)
 
 
+def _wish(eng, room) -> float | None:
+    """HeatPilots Wunsch-Soll eines Raums, dessen Ventil der PID stellt (macht mit, „HeatPilot steuert“) – sonst None."""
+    if not (room.managed and room_lead.valve_led(room)):
+        return None
+    return ((getattr(eng.control_loop, "rooms", None) or {}).get(room.climate) or {}).get("desired")
+
+
 def _readings(eng) -> dict[str, tuple]:
-    return {r.climate: x for r in eng.found.rooms if not r.ems and (x := eng.room_reading(r)) is not None}
+    """(climate, Ist, Soll, Ventil, Feuchte) je Raum – stellt der PID das Ventil, mit HeatPilots Wunsch-Soll (0.74):
+    das Soll am Thermostat (Shelly) sagt dort nichts."""
+    out = {}
+    for r in eng.found.rooms:
+        if r.ems or (x := eng.room_reading(r)) is None:
+            continue
+        sp = _wish(eng, r)
+        out[r.climate] = x if sp is None else (*x[:2], sp, *x[3:])
+    return out
 
 
 def _open(eng, readings: dict) -> list[str]:
-    """Räume, deren Thermostat jetzt Wärme anfordert (Ventil über ``BOOST_VALVE_PCT`` – ohne Ventilsensor „heizt“)."""
-    return [r.name for r in eng.found.rooms if (readings.get(r.climate, (None,) * 5)[3] or 0) > br.BOOST_VALVE_PCT]
+    """Räume, deren Thermostat jetzt Wärme anfordert (Ventil über ``BOOST_VALVE_PCT`` – ohne Ventilsensor „heizt“);
+    stellt der PID das Ventil, nur unter HeatPilots Soll (0.74)."""
+    out = []
+    for r in eng.found.rooms:
+        _, temp, target, valve, _ = readings.get(r.climate, (None,) * 5)
+        warm = _wish(eng, r) is not None and None not in (temp, target) and temp >= target
+        if (valve or 0) > br.BOOST_VALVE_PCT and not warm:
+            out.append(r.name)
+    return out
+
+
+def _new_rooms(eng, readings: dict, value: int, hi: int, reason: str) -> tuple[int, str]:
+    """Mindest-Vorlauf ``NEW_ROOM_FLOW`` für Räume ohne plausibles Raummodell, die mit Ventil ab ``NEW_ROOM_VALVE`` unter
+    Soll warten (Flur nach dem Thermostatwechsel, 31.10.: 20 min bei 31 °C Vorlauf, der Raum kühlte aus)."""
+    names = [r.name for r in eng.found.rooms if (x := readings.get(r.climate)) and None not in x[1:4]
+             and x[1] < x[2] - br.BOOST_GAP_K and x[3] >= NEW_ROOM_VALVE
+             and not ((m := eng.rooms.get(r.climate)) is not None and guards.check_room(m)["ok"])]
+    floor = min(NEW_ROOM_FLOW, hi)
+    if not names or value >= floor:
+        return value, reason
+    return floor, f"{reason} · {', '.join(names)} ohne Raummodell: mindestens {floor} °C"
 
 
 def _waiting(eng, readings: dict, gap: float = br.BOOST_GAP_K) -> list[str]:
@@ -172,6 +215,7 @@ def compute(eng, now_ts: int, boost: dict | None = None, bounds: tuple | None = 
     value, reason = base, row["why"]
     if load is not None and load > value:
         value, reason = load, f"{reason} · {load_text}"
+    value, reason = _new_rooms(eng, readings, value, hi, reason)  # 0.74
     common["stall"], stalled = boiler_stall.step(stall, _stall_rooms(eng, readings, run.floors), now_ts, hi - value)
     sk = min(int(common["stall"]["k"]), hi - value)
     cyc = valve_dry.cycling(eng.store, now_ts)
