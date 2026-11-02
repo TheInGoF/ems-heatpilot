@@ -104,6 +104,13 @@ def apply(st: dict, sp: float, phase: str | None, ts: int) -> tuple[float, str |
     return (sp, None) if value is None else (float(value), f"{LABELS.get(mode, mode)} {value:g} °C")
 
 
+def planned(eng, climate: str, d, ts: int) -> float:
+    """Soll eines Raums zur Zeit ``ts`` mit der eigenen Betriebsart – für Vorschau und Vorlauf (0.74.2: „Aus“ über
+    HeatPilot braucht keinen Vorlauf, Manuell und Boost zählen); ändert den Zustand nicht."""
+    own = ((getattr(getattr(eng, "control_loop", None), "state", None) or {}).get(climate) or {}).get("own")
+    return apply({"own": own}, d.setpoint, d.phase, ts)[0]
+
+
 def boosts(loop, now: float | None = None) -> dict[str, dict]:
     """Laufende eigene Boosts je Raum – im Format von ``Control.active`` (Boost-Sensor, Karte, Raum-Anzeige)."""
     now = time.time() if now is None else now

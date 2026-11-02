@@ -5537,10 +5537,14 @@ function boilerEntityRef(what, s, x) {
 }
 // Antipendelzeit anpassen: Regel in zwei Sätzen + „mehr“, Entität (gewählt unter Entitäten) und Zeile für die Statusbox
 function boilerPeriodRule(r) {
-  r = { short_min: 10, long_min: 25, step_min: 5, hold_min: 15, check_s: 60, lo_min: 5, hi_min: 60, ...(r || {}) };
+  r = { short_min: 10, long_min: 25, step_min: 5, hold_min: 15, check_s: 60, lo_min: 5, hi_min: 60, wait_min: 5, extra_min: 45,
+    short_run_min: 5, raise_min: 30, ...(r || {}) };
   return `<details class="more"><summary>Kurz (${r.short_min} min), solange die Räume mit offenem Ventil die kleinste Brennerleistung abnehmen; ` +
-    `sonst der Wert vom Einschalten, mindestens ${r.long_min} min. Wirkt nur bei „HeatPilot steuert“ – bei „Beobachten“ steht im Protokoll, was HeatPilot schreiben würde. <span class="m"></span></summary>` +
-    `<div>Taktet der Kessel trotzdem, gilt sofort wieder der lange Wert; braucht kein Raum Wärme oder lädt Warmwasser, bleibt sie, wie sie ist. ` +
+    `sonst der Wert vom Einschalten, mindestens ${r.long_min} min – bei sehr kurzen Läufen ${r.extra_min} min. Wirkt nur bei „HeatPilot steuert“ – bei „Beobachten“ steht im Protokoll, was HeatPilot schreiben würde. <span class="m"></span></summary>` +
+    `<div>Wird ein Soll angehoben (heimkommen, hochdrehen, Nachtende) und wartet der Raum auf Wärme, gilt ${r.raise_min} min lang sofort die kürzeste Sperre (${r.wait_min} min); ` +
+    `ohne angehobenes Soll nur, wenn die Räume die Wärme auch abnehmen. Laufen die Brenner im Mittel unter ${r.short_run_min} min (die Räume nehmen kaum Wärme ab), ` +
+    `gilt ${r.extra_min} min (halb so viele Starts), solange kein Raum am Soll hängt. ` +
+    `Taktet der Kessel trotzdem, gilt sofort wieder der lange Wert; braucht kein Raum Wärme oder lädt Warmwasser, bleibt sie, wie sie ist. ` +
     `Geschrieben wird nur bei Änderung ab ${r.step_min} min, höchstens alle ${r.hold_min} min, ganze Minuten von ${r.lo_min} bis ${r.hi_min}; ` +
     `${r.check_s} s später prüft HeatPilot, ob der Kessel den Wert zeigt. Gesperrt wie das Vorlauf-Soll (Regler am Bus, „Heizen abschalten“). ` +
     "Ändert jemand anderes den Wert, gilt er als neuer Grundwert. Beim Ausschalten (auch von „HeatPilot steuert“) schreibt HeatPilot einmal den Grundwert zurück.</div></details>";

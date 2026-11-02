@@ -47,8 +47,8 @@ def test_period_switch_entity_rule_and_lines(tmp_path):
     field = sec.split('id="f-boiler_period"')[1]
     rule = plain(re.search(r"<summary>(.*?)<span class=\"m\">", field).group(1))
     assert rule == ("Kurz (10 min), solange die Räume mit offenem Ventil die kleinste Brennerleistung abnehmen; sonst der "
-                    "Wert vom Einschalten, mindestens 25 min. Wirkt nur bei „HeatPilot steuert“ – bei „Beobachten“ steht "
-                    "im Protokoll, was HeatPilot schreiben würde.")
+                    "Wert vom Einschalten, mindestens 25 min – bei sehr kurzen Läufen 45 min. Wirkt nur bei "
+                    "„HeatPilot steuert“ – bei „Beobachten“ steht im Protokoll, was HeatPilot schreiben würde.")
     assert rule.count(". ") + 1 == 2  # höchstens zwei Sätze, der Rest unter „mehr“
     ref = plain(re.search(r'<p class="em-ref" id="boiler-period-ref">(.*?)</p>', sec).group(1))
     assert ref == f"Antipendelzeit: {PER} (automatisch erkannt). jetzt 25 min · Grundwert 25 min"

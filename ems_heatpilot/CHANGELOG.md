@@ -2,6 +2,11 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.74.2
+- Weniger Takten: 5-min-Sperre nur bei reichender Abnahme oder angehobenem Soll, 45 min bei sehr kurzen Läufen
+- Tado „aus“ von selbst: HeatPilot stellt nach 30 min still den Wunsch wieder her
+- Raum über HeatPilot aus: kein Vorlauf mehr dafür
+
 ## 0.74.1
 - Desinfektion als Taster: nur einschalten, Schalter nicht mehr prüfen oder ausschalten
 - Ob sie gelungen ist, zeigt nur noch der Speicher

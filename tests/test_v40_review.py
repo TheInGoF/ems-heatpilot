@@ -1,7 +1,9 @@
 """Prüfung von 0.40 (Ventile führen): die nachgestellten Funde als Tests.
 
-1. Hand „aus“ (Raum-Dialog, „Alle aus“, Fenster-offen-Erkennung) während eines Schritts bleibt bis zum Phasenwechsel:
-   Die Führung verwirft ihren Schritt, das Wunschsoll gilt wieder als zuletzt geschrieben – wie 0.39.
+1. Hand „aus“ (Raum-Dialog, „Alle aus“, Fenster-offen-Erkennung) während eines Schritts: Die Führung verwirft ihren
+   Schritt, das Wunschsoll gilt wieder als zuletzt geschrieben – wie 0.39. Bis 0.74.1 blieb „aus“ bis zum
+   Phasenwechsel; seit 0.74.2 stellt HeatPilot nach ``OFF_GRACE_S`` still den Wunschzustand wieder her (Tado schaltet
+   sich auch von selbst aus).
 2. Ein eigener Schritt zählt nie als Hand: Teilfehler in einer Gruppe, Neuaufbau während des Schreibens, verzögerte
    Rückmeldung – spätestens nach 60 min steht wieder das Wunschsoll. Eine echte Hand bleibt Hand.
 3. Pause: Das Zurück aufs Wunschsoll geht trotzdem hinaus (wer Wärme braucht, sofort), neue Schritte nicht; der Knopf
@@ -38,25 +40,28 @@ def sp_of(eng, c=WZ):
 
 
 # ------------------------------------------------------------------ 1. Hand „aus“
-def test_off_by_hand_while_throttled_stays_until_phase_change(tmp_path):
+def test_off_by_hand_while_throttled_is_restored_after_the_grace(tmp_path):
     eng, ha, loop = setup(tmp_path)
     throttle_ready(eng)
     tick(loop, T0, {WZ: (20.72, 100.0), BAD: (21.2, 0.0)})
     assert temps(ha) == [(WZ, 20.5)]
     ha.calls.clear()
-    climate(eng, WZ, 20.8, 20.5, mode="off", target_temp_step=0.5)  # jemand schaltet den Raum aus
-    for k in range(2, 14):
+    climate(eng, WZ, 20.8, 20.5, mode="off", target_temp_step=0.5)  # jemand schaltet den Raum aus (Fenster offen)
+    grace = controlloop.OFF_GRACE_S // 300  # Takte à 5 min, gezählt ab dem ersten „aus“ (T0 + 10 min)
+    for k in range(2, 2 + grace):
         assert tick(loop, T0 + k * 300, {WZ: (20.8 - 0.02 * k, 0.0), BAD: (21.2, 0.0)}) == []
     assert ha.calls == [] and eng.states[WZ]["state"] == "off"
     assert loop.state[WZ]["last_written"] == 21.0 and WZ in loop.guide.st["hands"] and loop.guide.st["active"] == {}
-    # erst der Phasenwechsel beendet „aus“ (wie 0.39)
-    out = tick(loop, ts_of(MON, 21, 1), {WZ: (20.0, 0.0), BAD: (21.2, 0.0)})
-    assert (WZ, 18.0) in [(c, sp) for c, sp, _ in out]
+    # 0.74.2: nach der Karenz still zurück zum Wunschzustand (bis 0.74.1 erst beim Phasenwechsel)
+    out = tick(loop, T0 + (2 + grace) * 300, {WZ: (20.5, 0.0), BAD: (21.2, 0.0)})
+    assert (WZ, 21.0) in [(c, sp) for c, sp, _ in out]
     assert ("climate", "set_hvac_mode", WZ, {"hvac_mode": "heat"}) in ha.calls
 
 
-def test_all_off_button_while_raised(tmp_path):
-    """Heizen → „Alle aus“ (Control.set_mode off), während Bad gemeinsam anfordert: alle bleiben aus."""
+def test_all_off_at_the_thermostats_while_raised(tmp_path):
+    """„aus“ direkt an allen Thermostaten (Control.set_mode off; HeatPilots Knopf „Ausschalten“ geht seit 0.73 über das
+    eigene Climate), während Bad gemeinsam anfordert: in der Karenz bleibt alles aus, die Führung schreibt nichts;
+    danach (0.74.2) stellt HeatPilot die Räume, die mitmachen, still wieder her – der übrige bleibt aus."""
     rooms = [room("Wz", WZ, managed=False), room("Bad", BAD, managed=True), room("Kind", KIND, managed=True)]
     eng, ha, loop = setup(tmp_path, rooms=rooms)
     burner(eng, T0)
@@ -64,14 +69,17 @@ def test_all_off_button_while_raised(tmp_path):
     assert temps(ha) == [(BAD, 21.5)]
     run(loop.control.set_mode([WZ, BAD, KIND], "off"))
     ha.calls.clear()
-    for k in (2, 3, 6, 12):
+    for k in (2, 3, 6):
         burner(eng, T0 + k * 300)
         assert tick(loop, T0 + k * 300, {WZ: (20.4, 80.0), BAD: (20.9, 0.0), KIND: (22.4, 0.0)}) == []
     assert ha.calls == [] and {eng.states[c]["state"] for c in (WZ, BAD, KIND)} == {"off"}
+    burner(eng, T0 + 12 * 300)
+    out = tick(loop, T0 + 12 * 300, {WZ: (20.4, 80.0), BAD: (20.9, 0.0), KIND: (22.4, 0.0)})
+    assert {c for c, _, _ in out} == {BAD, KIND} and eng.states[WZ]["state"] == "off"
 
 
 def test_off_by_hand_baseline_039(tmp_path):
-    """Gegenprobe ohne Schalter: „aus“ bleibt bis zum Phasenwechsel."""
+    """Gegenprobe ohne Schalter: „aus“ bleibt stehen – seit 0.74.2 für die Karenz ``OFF_GRACE_S``."""
     eng, ha, loop = setup(tmp_path, cfg=Config(control_mode="heatpilot"))
     climate(eng, WZ, 20.8, 21.0, mode="off", target_temp_step=0.5)
     assert tick(loop, T0 + 600, {WZ: (20.8, 0.0), BAD: (21.2, 0.0)}) == [] and ha.calls == []

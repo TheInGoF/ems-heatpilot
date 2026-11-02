@@ -78,6 +78,7 @@ class Target:
     cap_off: bool = False            # Heizbetrieb aus, weil die Grenze unter 35 °C liegt (Schutz: sofort)
     opened: list = field(default_factory=list)    # 0.50.5: Räume mit offenem Ventil – keiner: sofort senken
     idle: bool = False               # kein Wärmebedarf: Heizbetrieb an, Vorlauf-Soll „nur Pumpe“ (0.46.5)
+    targets: dict = field(default_factory=dict)   # 0.74.2: Soll je Raum (Name) – Soll-Sprünge für die Antipendelzeit
 
 
 def _wish(eng, room) -> float | None:
@@ -193,7 +194,8 @@ def compute(eng, now_ts: int, boost: dict | None = None, bounds: tuple | None = 
     cap, cap_why = floor_limit.flow_cap(run.floors, floor_limit.read(run.floors, eng.states))
     lo, hi = br.flow_limits(eng.cfg, cap, bounds)
     common = {"cap": cap, "cap_why": cap_why, "charging": charging, "t_out": row["t_out"], "hi": hi,
-              "stall": boiler_stall.step(stall, [], now_ts, 0)[0]}
+              "stall": boiler_stall.step(stall, [], now_ts, 0)[0],
+              "targets": {r.name: x[2] for r in eng.found.rooms if (x := readings.get(r.climate)) and x[2] is not None}}
     reset = br.boost_step(boost, False, now_ts, 0)
     opened = _open(eng, readings)
     if row["heating"] is False and opened and lo <= hi:  # 0.47.2: ein Thermostat fordert jetzt Wärme an
