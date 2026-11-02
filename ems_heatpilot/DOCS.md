@@ -776,9 +776,13 @@ heißen solche Räume „akzeptiert“ – sie sind kein Hindernis.
   und nur über die drei erlaubten Dienste auf die gewählten Räume. Bei „Beobachten“ oder ohne
   „macht mit“ schreibt HeatPilot nie von selbst – das ist im Code hart abgesichert und getestet.
 - **Von Hand** gedreht (Soll weicht vom zuletzt geschriebenen ab, egal ob am Ventil, in der
-  Tado-App oder im Heizen-Reiter, auch „aus“): HeatPilot lässt es stehen bis zum nächsten
+  Tado-App oder im Heizen-Reiter): HeatPilot lässt es stehen bis zum nächsten
   Phasenwechsel („manuell bis …“) und schreibt dann den Wunschzustand – auch, wenn der sich beim
-  Wechsel nicht ändert (Vorheizen → Komfort). Ob ein Soll wirklich angekommen ist, prüft HeatPilot
+  Wechsel nicht ändert (Vorheizen → Komfort). **„aus“ am Thermostat** gilt seit 0.74.2 nicht mehr als Hand: Tado
+  schaltet Räume auch von selbst aus (02.11.: Arbeitszimmer und Katzenzimmer ab 08:01, den ganzen Tag). Steht ein Raum
+  30 min auf „aus“, stellt HeatPilot still den Wunschzustand wieder her (ohne Meldung, im Protokoll „Thermostat stand
+  auf aus“); die 30 min lassen Zeit zum Lüften. Ausschalten geht über HeatPilots eigenes Climate („Aus“). Ebenso seit
+  0.71 die Automatik am Thermostat – sofort. Ob ein Soll wirklich angekommen ist, prüft HeatPilot
   nicht nach; meldet Home Assistant danach etwas anderes, gilt das als Handänderung. Seit 0.40 nicht,
   solange Home Assistant bis zu zwei Takte nach dem Schreiben noch den Wert von vorher meldet (die
   Meldung kommt verzögert), und nicht, wenn dort steht, was HeatPilot zuletzt schreiben wollte (etwa
@@ -1340,7 +1344,9 @@ als Hinweis da; hält es 15 min an, kommt eine Meldung.
   1. **Bedarf:** dieselbe Rechnung wie die Vorschau – der nötige Vorlauf des anspruchsvollsten Raums aus den
      Raummodellen, Vorheizen, Aufheizzuschlag. **Untergrenze 35 °C, wenn geheizt wird**: Halten alle Räume nur und
      braucht keiner so viel, ist kein Bedarf; heizt ein Raum auf oder vor (z. B. nach einem Boost), gilt seit 0.46.5
-     mindestens 35 °C. Nacht und Abwesenheit folgen aus den Raum-Sollwerten der Steuerung.
+     mindestens 35 °C. Nacht und Abwesenheit folgen aus den Raum-Sollwerten der Steuerung – seit 0.74.2 mit HeatPilots
+     eigener Betriebsart je Raum: Ein Raum, der über HeatPilot **aus** ist, braucht keinen Vorlauf; Manuell und Boost
+     zählen mit ihrem Soll (bisher rechnete der Bedarf mit dem Plan, z. B. „Arbeitszimmer heizt auf 20 °C“).
      **Kein Bedarf** (seit 0.46.5, Einstellung **„Wenn kein Raum Wärme braucht“**): Standard **„Pumpe läuft weiter“** –
      der Heizbetrieb bleibt an, das Vorlauf-Soll geht auf **20 °C** (mindestens der Mindestwert der Entität; der Brenner
      springt nicht an, die Heizungspumpe läuft weiter; „kein Bedarf – Pumpe läuft, Vorlauf-Soll 20 °C“). Gesenkt wird
@@ -1418,7 +1424,10 @@ aus. Fest auf 25 min blockiert sie Starts auch dann, wenn gerade genug Wärme ab
 HeatPilot sie im selben 30-s-Schritt wie das Vorlauf-Soll mit:
 
 - **am kürzesten, 5 min** (seit 0.57.1), wenn Räume auf Wärme warten und der Kessel nicht mehr als 6-mal je Stunde
-  startet – der Kessel zählt die Sperre ab dem Schreiben neu, mit 5 min springt er nach einer Anforderung bald an,
+  startet – der Kessel zählt die Sperre ab dem Schreiben neu, mit 5 min springt er nach einer Anforderung bald an.
+  Seit 0.74.2 nur noch, wenn die Räume die Wärme auch abnehmen oder das Soll eines wartenden Raums in den letzten
+  30 min um mindestens 0,5 K stieg (heimkommen, hochdrehen, Nachtende) – dann sofort, ohne die 15 min Haltezeit.
+  Sonst sprang der Kessel für einen einzigen offenen Raum alle 5 min für 2 min an (02.11.: 5 Starts in 30 min),
 - **kurz, 10 min**, solange die Räume mit offenem Ventil die kleinste Brennerleistung beim Ziel-Vorlauf abnehmen
   (dieselbe Abnahme-Rechnung wie für den Mindest-Vorlauf) und der Kessel nicht taktet – der Brenner kann dann auf
   kleinster Stufe durchlaufen, und geht er doch aus, wartet ein neuer Start nicht 25 min. 10 min lassen auch im
@@ -1426,6 +1435,10 @@ HeatPilot sie im selben 30-s-Schritt wie das Vorlauf-Soll mit:
 - **lang = der Grundwert**: der Wert am Kessel beim Einschalten, **mindestens 25 min** (höchstens 60 min), wenn die
   Abnahme nicht reicht oder unbekannt ist (Mindestleistung, Hausmodell) oder der Kessel taktet (ab 3 Starts in 1 h mit
   Läufen unter 10 min),
+- **noch länger, 45 min** (seit 0.74.2; mindestens der Grundwert), wenn die Brennerläufe der letzten Stunde im Mittel
+  unter 5 min blieben und kein Raum am Soll hängt – die Räume nehmen dann kaum Wärme ab (02.11.: im Mittel 0,6 kW bei
+  5,8 kW kleinster Leistung). Halb so viele Starts, jeder Lauf etwas länger; die Räume merken es nicht, ihr Thermostat
+  regelt weiter,
 - **unverändert** ohne Wärmebedarf („nur Pumpe“, Heizbetrieb aus), ohne rechenbares Vorlauf-Soll und während einer
   Warmwasser-Ladung.
 

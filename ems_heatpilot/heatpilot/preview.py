@@ -9,10 +9,10 @@ Es wird nichts geschrieben, EMS-ESP bleibt nur lesend. ``preview`` rechnet in 5-
 * **Anwesenheit** (``household``): jetzt laut Home Assistant; wer da ist, bleibt bis zur nächsten gewohnten
   Abfahrt; wer weg ist, bis zur erwarteten Ankunft (GPS bzw. Gewohnheit, im Urlaub die Rückkehr), danach wieder
   nach Gewohnheit.
-* **Raum-Soll:** Räume mit „macht mit“ bei „HeatPilot steuert“ bekommen den Wunschzustand der Steuerung
-  (``controlloop.desired`` mit Vorhersage); die übrigen das, was Tado voraussichtlich will – Nacht und
-  Abwesenheit aus ``schedule.effective``, tagsüber das heutige Soll (nachts bzw. bei Abwesenheit abgefragt: das
-  gemessene Tages-Soll der letzten 48 h, ``_day_setpoints``).
+* **Raum-Soll:** Räume mit „macht mit“ bei „HeatPilot steuert“ bekommen den Wunschzustand der Steuerung (``desired``
+  mit Vorhersage) mit HeatPilots eigener Betriebsart (seit 0.74.2, ``room_modes.planned``: „Aus“ braucht keinen
+  Vorlauf); die übrigen das, was Tado voraussichtlich will – Nacht und Abwesenheit aus ``schedule.effective``, tagsüber
+  das heutige Soll (nachts bzw. bei Abwesenheit abgefragt: gemessenes Tages-Soll der letzten 48 h, ``_day_setpoints``).
 * **Raumtemperatur** läuft nach dem Raummodell mit (heizen mit dem Vorlauf, auskühlen ohne Wärme): daraus die
   Vorheizdauer und ob ein Raum gerade Wärme braucht. Räume, die nicht für den Vorlauf zählen, hält ihr
   Thermostat am Soll, solange der Heizbetrieb nicht sicher aus ist; ohne Raummodell bleibt der Messwert.
@@ -55,7 +55,7 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from . import boiler_rule, dhw_control, dhw_disinfect, floor_limit, guards, heatup
+from . import boiler_rule, dhw_control, dhw_disinfect, floor_limit, guards, heatup, room_modes
 from .config import Config
 from .controlloop import Presence, desired
 from .engine_summary import FORECAST_MAX_GAP_MIN
@@ -256,7 +256,7 @@ class _Run:
             c = r.room.climate
             d = desired(r.room, t, self.cfg, pres, r.model, r.temp, t_out, self.t_out_at, self.held.get(c))
             self.held[c] = d.until if d.phase == "vorheizen" else None
-            return d.setpoint, d.phase, d.until if d.phase == "vorheizen" else None
+            return room_modes.planned(self.eng, c, d, int(t.timestamp())), d.phase, self.held[c]
         sp, eff = r.day_sp, self.eng.eff
         if sp is None:
             return None, "aus", None

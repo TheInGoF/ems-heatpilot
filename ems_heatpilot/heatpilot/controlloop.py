@@ -14,12 +14,12 @@ Der Wunschzustand ist eine reine Funktion ``desired(...)`` (testbar) mit den Pha
    Ankunft offen (Gewohnheit lernt noch) → Komfort.
 4. Sonst Komfort.
 
-Geschrieben wird nur bei einer Änderung des Wunsch-Sollwerts (Phasenwechsel), nicht jeden Takt.
-Hat jemand von Hand gedreht (Soll ≠ zuletzt geschrieben, auch „aus“), bleibt das bis zum nächsten
-Phasenwechsel – dann schreibt HeatPilot den Wunschzustand auch, wenn er sich dabei nicht ändert
-(vorheizen → komfort). Pause hält alle Schreibvorgänge an; ein Boost, der in der Pause abläuft,
-endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS`` Hinweis, seit 0.38 auch als
-Meldung und im Problem-Sensor (``notify``), einmal je Ereignis; der erste Erfolg danach: „wieder in Ordnung“.
+Geschrieben wird nur bei einer Änderung des Wunsch-Sollwerts (Phasenwechsel), nicht jeden Takt. Hat jemand von Hand
+gedreht (Soll ≠ zuletzt geschrieben), bleibt das bis zum nächsten Phasenwechsel – dann schreibt HeatPilot den
+Wunschzustand auch, wenn er sich nicht ändert (vorheizen → komfort). Automatik (0.71) und „aus“ (0.74.2, nach
+``OFF_GRACE_S``) am Thermostat sind keine Hand: zurück zum Wunsch, ohne Meldung. Pause hält alle Schreibvorgänge an;
+ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS``
+Hinweis und Meldung (``notify``, einmal je Ereignis; der erste Erfolg danach: „wieder in Ordnung“).
 Seit 0.40 legt die Ventilführung (``valve_control``, eigener Schalter „Ventile führen“, Standard aus) höchstens einen
 Schritt auf das Wunsch-Soll (früh drosseln, gemeinsam anfordern): ``plan()`` fragt sie je Raum nach dem Soll
 (``Guide.plan``) – Phasenwechsel, Hand, Boost und Pause gehen vor –, geschrieben wird es auf demselben Weg, mit
@@ -43,7 +43,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import dhw_target, guards, override, room_lead, room_modes, valve_control
+from . import dhw_target, guards, heatup, override, room_lead, room_modes, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
@@ -52,7 +52,6 @@ from .dhw_control import LOG_NAME as DHW_LOG_NAME
 from .disinfect_status import ACTIONS as DISINFECT_ACTIONS
 from .disinfect_status import LOG_NAME as DISINFECT_LOG_NAME
 from .away import nearest_km, nobody_home
-from . import heatup
 from .heatup import PREHEAT_DEFAULT_H, PREHEAT_FLOW_FROM, PREHEAT_MIN_H, preheat_hours, shared_flow  # noqa: F401
 from .presence import arrival_unknown, next_arrival
 
@@ -69,6 +68,7 @@ KV_PAUSE = "control.pause_until"
 NOTIFY_KEY = "room_write_failed:"  # + climate: Schreibfehler eines Raums ab MAX_FAILS (notify, seit 0.38)
 SAME_K = 0.1 - 1e-6       # Sollwerte gleich, wenn näher beieinander (kleinster Schritt 0,1 K, Gleitkommareste)
 GRACE_TICKS = 2           # so viele Takte nach dem Schreiben darf das Thermostat noch den Wert von vorher melden
+OFF_GRACE_S = 1800        # 0.74.2: so lange darf ein Thermostat „aus“ stehen (Fenster lüften), dann zurück zum Wunsch
 
 
 def _same(a: float | None, b: float | None) -> bool:
@@ -389,9 +389,12 @@ class ControlLoop:
         elif manual and _same(current, st.get("before")) and not st.get("again"):  # 0.68: nie angekommen (Thermostat
             last, manual, st["again"] = None, False, True  # war weg) statt Hand – einmal erneut schreiben
         sp, reason, prop, write = d.setpoint, f"{d.phase}: {d.reason}", None, False
-        auto = (self.eng.states.get(c) or {}).get("state") == "auto"  # Tado-/Geräte-Automatik (0.50.2 nach Boost):
-        if auto and c not in boosts:  # seit 0.71 nie stehen lassen – keine Hand, zurück zum Wunsch, auf manuell
+        mode = (self.eng.states.get(c) or {}).get("state")  # Automatik (0.50.2, seit 0.71 nie stehen lassen) und
+        since = st.setdefault("off_since", ts) if mode == "off" else st.pop("off_since", None)  # „aus“ (0.74.2: Tado
+        auto, off = mode == "auto", mode == "off" and ts - since >= OFF_GRACE_S  # schaltet sich selbst aus)
+        if (auto or off) and c not in boosts:  # keine Hand – zurück zum Wunsch, auf manuell, ohne Meldung
             manual, st["boosted"] = False, True
+            reason += f" – Thermostat stand auf {'aus' if off else 'Automatik'}"
         if c in boosts:
             st["boosted"] = True
         elif c in expired:
@@ -419,6 +422,8 @@ class ControlLoop:
         if write:
             self.pending.append((c, sp, reason))
             st["tried"], st["before"] = sp, current  # eigen, auch wenn der Aufruf nur teilweise oder spät ankommt
+            if off:
+                st["off_since"] = ts  # steht es danach noch auf „aus“: nächster Versuch erst nach der Karenz
             if prop is not None:
                 self.props[c] = prop
         info.update({"manual": manual, "manual_until": _iso(d.until) if manual else None,

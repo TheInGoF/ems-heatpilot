@@ -36,7 +36,7 @@ log = logging.getLogger(__name__)
 
 KV = "boiler_period.state"
 K_FAIL, K_FOREIGN, K_PAUSED = "boiler_period_failed", "boiler_period_foreign", "boiler_period_paused"
-RESET = ("check", "dry", "seen", "base", "orig", "fails", "paused", "foreign", "rejected", "hold")
+RESET = ("check", "dry", "seen", "base", "orig", "fails", "paused", "foreign", "rejected", "hold", "sp", "raised")
 
 
 class PeriodControl:
@@ -88,10 +88,15 @@ class PeriodControl:
             st["base"], st["orig"] = bp.base_of(cur), cur
         if mode == "heatpilot":
             self._watch(ts, cur, blocked)
-        value, reason = (bp.want(target, st["base"]) if st.get("base") is not None
+        if target is not None:  # 0.74.2: Soll eben angehoben (heimkommen, hochdrehen) – schnell reagieren
+            st["raised"] = bp.raised(st.setdefault("sp", {}), getattr(target, "targets", None) or {},
+                                     st.get("raised") or {}, ts)
+        fast = bp.quick(target, st.get("raised") or {})
+        value, reason = (bp.want(target, st["base"], fast) if st.get("base") is not None
                          else (None, "Grundwert noch unbekannt – Antipendelzeit am Kessel nicht lesbar"))
         ref, last_ts = self._reference(mode, cur)
-        dec = bp.decide(value, ref, ts, last_ts, paused=bool(st.get("paused")), checking=bool(st.get("check")))
+        dec = bp.decide(value, ref, ts, last_ts, paused=bool(st.get("paused")), checking=bool(st.get("check")),
+                        urgent=bool(fast))
         if dec.write and mode == "trocken":
             st["dry"] = {"ts": ts, "value": value, "from": ref}
             self._log(ts, bp.ACT_DRY, value, f"Beobachten: würde Antipendelzeit {value} min schreiben ({reason})")
@@ -307,7 +312,9 @@ class PeriodControl:
             "foreign_last": _times(st.get("foreign_last")), "back": _times(st.get("back")),
             "rejected": _times(st.get("rejected")), "dry_last": _times(st.get("dry")), "status_text": self.line(),
             "rules": {"short_min": bp.SHORT_MIN, "long_min": bp.LONG_MIN, "lo_min": bp.LO_MIN, "hi_min": bp.HI_MIN,
-                      "step_min": bp.STEP_MIN, "hold_min": bp.HOLD_S // 60, "check_s": CHECK_S},
+                      "step_min": bp.STEP_MIN, "hold_min": bp.HOLD_S // 60, "check_s": CHECK_S,
+                      "wait_min": bp.WAIT_MIN, "extra_min": bp.EXTRA_MIN, "short_run_min": bp.SHORT_RUN_MIN,
+                      "raise_min": bp.RAISE_S // 60},
         }
 
     # -------------------------------------------------------------- Helfer
