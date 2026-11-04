@@ -20,6 +20,8 @@ from __future__ import annotations
 
 import time
 
+from . import mold
+
 FROST_C = 7.0
 LABELS = {"aus": "Aus (Frostschutz)", "manuell": "Manuell", "boost": "Boost"}
 
@@ -106,9 +108,12 @@ def apply(st: dict, sp: float, phase: str | None, ts: int) -> tuple[float, str |
 
 def planned(eng, climate: str, d, ts: int) -> float:
     """Soll eines Raums zur Zeit ``ts`` mit der eigenen Betriebsart – für Vorschau und Vorlauf (0.74.2: „Aus“ über
-    HeatPilot braucht keinen Vorlauf, Manuell und Boost zählen); ändert den Zustand nicht."""
-    own = ((getattr(getattr(eng, "control_loop", None), "state", None) or {}).get(climate) or {}).get("own")
-    return apply({"own": own}, d.setpoint, d.phase, ts)[0]
+    HeatPilot braucht keinen Vorlauf, Manuell und Boost zählen) und seit 0.75 mit dem Schimmelschutz (``mold.guard``,
+    wie in der Regelschleife); ändert den Zustand nicht."""
+    st = (getattr(getattr(eng, "control_loop", None), "state", None) or {}).get(climate) or {}
+    room = getattr(getattr(eng, "found", None), "room_of", lambda c: None)(climate)
+    d = mold.guard(st, None if room is None else float(room.comfort), d)
+    return apply({"own": st.get("own")}, d.setpoint, d.phase, ts)[0]
 
 
 def boosts(loop, now: float | None = None) -> dict[str, dict]:

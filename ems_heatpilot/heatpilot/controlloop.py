@@ -20,16 +20,14 @@ Wunschzustand auch, wenn er sich nicht ändert (vorheizen → komfort). Automati
 ``OFF_GRACE_S``) am Thermostat sind keine Hand: zurück zum Wunsch, ohne Meldung. Pause hält alle Schreibvorgänge an;
 ein Boost, der in der Pause abläuft, endet mit dem Soll von vorher. Fehler: nach ``RETRY_MIN`` erneut, ab ``MAX_FAILS``
 Hinweis und Meldung (``notify``, einmal je Ereignis; der erste Erfolg danach: „wieder in Ordnung“).
-Seit 0.40 legt die Ventilführung (``valve_control``, eigener Schalter „Ventile führen“, Standard aus) höchstens einen
-Schritt auf das Wunsch-Soll (früh drosseln, gemeinsam anfordern): ``plan()`` fragt sie je Raum nach dem Soll
-(``Guide.plan``) – Phasenwechsel, Hand, Boost und Pause gehen vor –, geschrieben wird es auf demselben Weg, mit
-denselben Fehlerregeln; erst ein erfolgreicher Schreibvorgang macht ihren Schritt gültig (``Guide.wrote``). Damit ein
-eigener Schritt nie als Hand zählt: Steht am Thermostat, was HeatPilot zuletzt schreiben wollte (``tried``, auch nach
-einem Teilfehler in einer Gruppe oder einem Neuaufbau während des Aufrufs) bzw. der laufende Schritt, gilt das als
-geschrieben; meldet es bis zu ``GRACE_TICKS`` Takte nach dem Schreiben noch den Wert von vorher, ist das Geschriebene
-noch nicht angekommen (``_observe``; danach einmal erneut geschrieben statt Hand, 0.68). Verwirft die Führung einen
-Schritt wegen Hand (auch „aus“), gilt das Wunschsoll als zuletzt geschrieben – die Hand bleibt dann wie oben bis zum
-Phasenwechsel. In der Pause geht nur das Zurück der Führung hinaus; vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt ``release`` laufende Schritte einmal zurück.
+Seit 0.40 legt die Ventilführung (``valve_control``, Schalter „Ventile führen“) höchstens einen Schritt auf das
+Wunsch-Soll: ``plan()`` fragt sie je Raum (``Guide.plan``) – Phasenwechsel, Hand, Boost und Pause gehen vor –,
+geschrieben wird auf demselben Weg; erst ein erfolgreicher Schreibvorgang macht den Schritt gültig (``Guide.wrote``).
+Ein eigener Schritt zählt nie als Hand: Steht am Thermostat, was HeatPilot zuletzt schreiben wollte (``tried``) bzw.
+der laufende Schritt, gilt das als geschrieben; meldet es bis zu ``GRACE_TICKS`` Takte danach noch den Wert von vorher,
+ist es noch nicht angekommen (``_observe``, danach einmal erneut, 0.68). Verwirft die Führung einen Schritt wegen Hand,
+gilt das Wunschsoll als zuletzt geschrieben; vor einer Pause, „Beobachten“ oder „macht mit“ aus nimmt ``release``
+laufende Schritte zurück. Seit 0.75 schützt ``mold`` zu feuchte Räume (Nacht und Abwesend höchstens 1 K unter Komfort).
 Sollwerte gelten ab 0,1 K als verschieden (``_same``, mit Toleranz für Gleitkommareste).
 ``plan()`` (Takt der Engine, nach ``dhw_step``) sammelt, ``apply()`` schreibt (nur über ``Control``), ``stop()`` hält es an.
 """
@@ -43,7 +41,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import NamedTuple
 
-from . import dhw_target, guards, heatup, override, room_lead, room_modes, valve_control
+from . import dhw_target, guards, heatup, mold, override, room_lead, room_modes, valve_control
 from .control import TEMP_MAX, TEMP_MIN
 from .boiler_status import ACTIONS as BOILER_ACTIONS
 from .boiler_status import LOG_NAME as BOILER_LOG_NAME
@@ -298,6 +296,7 @@ class ControlLoop:
                  for r in eng.found.rooms}  # 0.46.5: begonnenes Vorheizen bleibt
         first = heatup.start_together(first, lambda c, at: want(eng.found.room_of(c), at), now)  # 0.56.9
         first = override.apply(self, ts, first, presence, eng.found.rooms)  # 0.62: „nur jetzt“
+        house_rh = mold.house(rooms)  # 0.75: Feuchte für Räume ohne eigenen Fühler
         for room in eng.found.rooms:
             reading = readings.get(room.climate)
             temp = reading[1] if reading else None
@@ -308,6 +307,7 @@ class ControlLoop:
             d = first[room.climate]
             if d.phase == "vorheizen" and not vac:  # 0.50.5: erst knapp unter dem Ziel – die Restwärme bringt den Rest
                 d = d._replace(setpoint=_clamp(heatup.preheat_sp(d.setpoint, tn[0], temp), float(room.comfort), cfg))
+            d = mold.step(st, float(room.comfort), d, reading, house_rh, t_out, ts)  # 0.75: Schimmelschutz
             d = room_modes.desired(st, d, ts)  # 0.72: eigenes Climate – Zeitplan, Manuell, Aus, Boost
             hands = room.climate in boosts or bool(st.get("own")) or d.reason.startswith("nur jetzt")  # 0.74
             heatup.track(st, d.phase, d.setpoint, d.until, temp, ts, vac, hands)

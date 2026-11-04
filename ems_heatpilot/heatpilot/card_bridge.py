@@ -11,6 +11,8 @@ einen Helfer. Darum stellt HeatPilot bereit:
   Soll und Dauer, das Ergebnis des letzten Befehls (``last``).
 * ``sensor.heatpilot_modus`` (seit 0.62, ``override.sensor``): Override „nur jetzt“ – nacht, anwesend, abwesend
   oder auto, mit Ende (``until``).
+* ``sensor.heatpilot_hinweise`` (seit 0.75, ``hints``): anstehende Hinweise für die Karte „Hinweise“ – Zustand = Zahl,
+  Attribut ``items``: Lüften (``mold.hints``, nie als Meldung aufs Handy) und die offenen Probleme des Problem-Sensors.
 * ``input_text.heatpilot_befehl`` (``ensure_command``): legt HeatPilot einmal als Helfer an (WebSocket
   ``input_text/create``). Die Karte schreibt einen Befehl als JSON hinein, z. B.
   ``{"a": "boost", "rooms": ["climate.wohnzimmer"], "temp": 22, "minutes": 120, "n": 1730000000}`` (``n`` macht
@@ -33,13 +35,14 @@ import time
 import unicodedata
 
 from . import control as control_mod
-from . import heat_actions, override, room_modes
+from . import heat_actions, mold, override, room_modes
 from .values import num
 
 log = logging.getLogger(__name__)
 
 COMMAND = "input_text.heatpilot_befehl"
 BOOST = "sensor.heatpilot_boost"
+HINTS = "sensor.heatpilot_hinweise"
 ROOM_PREFIX = "sensor.heatpilot_raum_"
 CARD_ACTIONS = ("boost", "schedule", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
 REPO = "https://github.com/TheInGoF/heatpilot-card"
@@ -109,11 +112,21 @@ def boost(eng, ctl, last: dict | None) -> tuple[str, int, dict]:
         "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX, "command": COMMAND, "last": last}
 
 
+def hints(eng) -> tuple[str, int, dict]:
+    """Anstehende Hinweise (0.75): Lüften je zu feuchtem Raum, dazu die offenen Probleme – Zustand = Zahl."""
+    items = mold.hints(getattr(eng, "control_loop", None), eng.found.rooms)
+    notifier = getattr(eng, "notifier", None)
+    items += [{"kind": "problem", "room": None, "text": text}
+              for text in (notifier.open_keys().values() if notifier is not None else ())]
+    return HINTS, len(items), {"friendly_name": "HeatPilot Hinweise", "icon": "mdi:bell-badge-outline" if items
+                               else "mdi:bell-outline", "items": items}
+
+
 async def publish(app) -> int:
-    """Raum- und Boost-Sensoren setzen; Zahl der gesetzten Sensoren."""
+    """Raum-, Boost-, Modus- und Hinweis-Sensoren setzen; Zahl der gesetzten Sensoren."""
     eng = app.eng
     items = [*rooms(eng, app.control), boost(eng, app.control, getattr(app, "card_last", None)),
-             override.sensor(eng.store)]  # 0.62: Modus „nur jetzt“
+             override.sensor(eng.store), hints(eng)]  # 0.62: Modus „nur jetzt“, 0.75: Hinweise
     for entity, state, attrs in items:
         await app.ha.set_state(entity, state, attrs)
     keep = {e for e, _s, _a in items}  # Raum umbenannt oder entfernt, alte Namen (bis 0.56.2: nach Thermostat)

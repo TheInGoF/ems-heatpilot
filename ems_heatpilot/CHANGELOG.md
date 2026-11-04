@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.75.0
+- Schimmelschutz: zu feuchte Räume nachts und bei Abwesenheit nur 1 K absenken (Grenze nach Außentemperatur)
+- Neuer Sensor `sensor.heatpilot_hinweise` für die Karte „HeatPilot Hinweise“ – Lüften ohne Handy-Meldung
+
 ## 0.74.2
 - Weniger Takten: 5-min-Sperre nur bei reichender Abnahme oder angehobenem Soll, 45 min bei sehr kurzen Läufen
 - Tado „aus“ von selbst: HeatPilot stellt nach 30 min still den Wunsch wieder her

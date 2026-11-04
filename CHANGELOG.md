@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.75.0
+- **Schimmelschutz** (`mold`): Grenze der Raumfeuchte nach Außentemperatur – 50 % + 1 % je Grad, zwischen 40 und 60 % (bei +10 °C 60 %, bei 0 °C 50 %, bei −10 °C 40 %; DIN 4108-2 nachgerechnet: kälteste Wandstelle unter 80 %). Feuchte je Raum aus dem eigenen Fühler, geglättet über 1 h (Kochen, Duschen sind Spitzen), sonst der Hauswert (Median der Räume mit Fühler – Shelly-Thermostate messen keine Feuchte); zurück erst 3 % unter der Grenze
+- **Zu feuchte Räume nur 1 K absenken:** Nacht und Abwesenheit höchstens 1 K unter Komfort statt auf die Nacht- bzw. Abwesenheitstemperatur – wärmere Luft hat weniger relative Feuchte, die Wände bleiben wärmer. Im Urlaub nicht, eigene Betriebsarten gehen vor; Vorschau und Vorlauf rechnen ebenso (`room_modes.planned`). Anlass: am 02.11. Wohnzimmer 58–62 %, kleines Bad 62–64 % bei 8 °C draußen
+- **Hinweise statt Meldungen:** `sensor.heatpilot_hinweise` (Zahl, Attribut `items`) mit „Wohnzimmer: 62 % Luftfeuchte – bitte lüften (Grenze heute 58 %)“ und den offenen Problemen – für die neue Karte „HeatPilot Hinweise“ (HeatPilot Card 0.7.0, `custom:heatpilot-hints-card`). Aufs Handy geht dafür nichts
+- Tests: neu `tests/test_mold75.py`; angepasst `tests/test_card_bridge56.py`
+
 ## 0.74.2
 Aus den 30-s-Werten vom 02.11. (12 h, 28 Brennerstarts, Läufe meist 1–3 min): Das Haus nahm tagsüber im Mittel nur 0,6 kW ab, die kleinste Brennerleistung ist 5,8 kW – fast nur die Küche wollte Wärme. Die Pumpe lief in den Pausen schon durch, die Räume kühlten nicht schnell aus (Küche ganztags 20,0–20,1 °C); getaktet wird im Wasserkreis, den Rhythmus gibt die Antipendelzeit.
 - **Kürzeste Sperre (5 min) nur noch, wenn sie hilft** (`boiler_period.want`, `quick`, `raised`): wenn die offenen Räume die Wärme abnehmen oder das Soll eines wartenden Raums in den letzten 30 min um mindestens 0,5 K stieg – heimkommen, hochdrehen, Nachtende. Dann sofort, ohne die 15 min Haltezeit (`decide(urgent=…)`). Bisher reichte „ein Raum wartet“: Morgens lief der Kessel für die Küche allein alle 5 min für 2 min an (06:49–07:19: 5 Starts)
