@@ -98,7 +98,8 @@ def hints(loop, rooms) -> list[dict]:
 
 def _hint(room: str | None, damp: dict, what: str, guarded: bool) -> dict:
     """Ein Lüften-Hinweis; ``note`` sagt, was HeatPilot dagegen tut (nur bei Räumen, die mitmachen)."""
-    return {"kind": "lueften", "room": room, "rh": damp["rh"], "limit": damp["limit"], "since": _iso(damp["since"]),
+    return {"kind": "lueften", "group": "lueften", "room": room, "rh": damp["rh"], "limit": damp["limit"],
+            "since": _iso(damp["since"]),
             "text": f"{what} – bitte lüften (Grenze heute {damp['limit']} %)",
             "note": f"nachts und bei Abwesenheit nur {SETBACK_K:g} K abgesenkt" if guarded else None}
 

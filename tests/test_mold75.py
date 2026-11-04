@@ -92,12 +92,17 @@ def test_hints_for_the_card_not_the_phone():
         "Wohnzimmer: 62 % Luftfeuchte – bitte lüften (Grenze heute 58 %)",
         "Luftfeuchte im Haus 61 % (Flur ohne eigenen Fühler) – bitte lüften (Grenze heute 58 %)"]
     assert [i["note"] for i in mold.hints(loop, rooms)] == ["nachts und bei Abwesenheit nur 1 K abgesenkt", None]
-    notifier = SimpleNamespace(open_keys=lambda: {"disinfect_failed": "Desinfektion So 13:00 nicht gelaufen"})
+    notifier = SimpleNamespace(open_keys=lambda: {"disinfect_failed": "Desinfektion So 13:00 nicht gelaufen",
+                                                  "valve_leak:climate.flur": "Flur: Ventil schließt wohl nicht ganz",
+                                                  "ha_unbekannt": "x"})
     eng = SimpleNamespace(control_loop=loop, found=SimpleNamespace(rooms=rooms), notifier=notifier)
     entity, n, attrs = cb.hints(eng)
-    assert entity == cb.HINTS == "sensor.heatpilot_hinweise" and n == 3
-    assert [i["kind"] for i in attrs["items"]] == ["lueften", "lueften", "problem"]
-    assert attrs["items"][-1]["text"] == "Desinfektion So 13:00 nicht gelaufen"
+    assert entity == cb.HINTS == "sensor.heatpilot_hinweise" and n == 5
+    assert [i["kind"] for i in attrs["items"]] == ["lueften", "lueften", "problem", "problem", "problem"]
+    assert [i["group"] for i in attrs["items"]] == ["lueften", "lueften", "warmwasser", "ventile", "sonstiges"]
+    assert attrs["items"][2]["text"] == "Desinfektion So 13:00 nicht gelaufen"
+    assert {cb.group_of(k) for k in ("boiler_period_failed", "boiler_write_failed")} == {"kessel"}
+    assert cb.group_of("room_write_failed:climate.wz") == "thermostate" and cb.group_of("valve_pid_fail") == "ventile"
     assert attrs["icon"] == "mdi:bell-badge-outline"
     empty = cb.hints(SimpleNamespace(control_loop=None, found=SimpleNamespace(rooms=rooms), notifier=None))
     assert empty[1] == 0 and empty[2]["items"] == [] and empty[2]["icon"] == "mdi:bell-outline"

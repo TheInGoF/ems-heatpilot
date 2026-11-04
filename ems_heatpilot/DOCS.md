@@ -1662,7 +1662,7 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
 | `sensor.heatpilot_naechste_ankunft` | vorhergesagte Ankunft |
 | `sensor.heatpilot_vorheizen_start` | wann das Vorheizen beginnen müsste |
 | `binary_sensor.heatpilot_problem` | seit 0.38: an, solange ein Problem offen ist; Gründe im Attribut `reasons` (siehe [Benachrichtigungen](#benachrichtigungen)) |
-| `sensor.heatpilot_hinweise` | seit 0.75: Zahl der anstehenden Hinweise; Attribut `items` – Lüften (siehe [Schimmelschutz](#schimmelschutz-seit-075)) und die offenen Probleme; für die Karte „HeatPilot Hinweise“ |
+| `sensor.heatpilot_hinweise` | seit 0.75: Zahl der anstehenden Hinweise; Attribut `items` – Lüften (siehe [Schimmelschutz](#schimmelschutz-seit-075)) und die offenen Probleme, seit 0.75.1 je mit `group` (lueften, ventile, kessel, warmwasser, thermostate, sonstiges); für die Karte „HeatPilot Hinweise“ |
 | `sensor.heatpilot_heartbeat` | seit 0.41: Zeitstempel, jede Minute neu – für den Wächter in Home Assistant (siehe [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b)) |
 
 Hinweis: Diese Sensoren werden vom Add-on gesetzt und sind nach einem
@@ -1757,9 +1757,13 @@ Vorheizen) kommt weiter aus der Steuerung; neu ist nur das Stellglied:
   Raum weiter wie bisher – das gestellte Prozent ist sein Ventilwert. Die Raumkarte zeigt z. B.
   „Ventil · komfort 21° · 45 %“.
 - **Ventil schließt nicht** (seit 0.70, alle Räume mit Ventil in %, ohne Fußbodenheizung): Wird ein Raum bei 0 %
-  deutlich schneller warm, wenn die Heizung läuft, als wenn sie steht (mindestens 0,3 K/h, je mindestens 2 h in
-  7 Tagen), meldet HeatPilot „Ventil schließt wohl nicht ganz“ – Ventiladapter prüfen, Thermostat neu kalibrieren, ggf.
-  Unterlegscheibe. Sonne und Nachbarwärme kommen auch ohne Heizung und lösen die Meldung deshalb nicht aus.
+  deutlich schneller warm als die **anderen Räume mit geschlossenem Ventil**, sobald die Heizung läuft – mindestens
+  0,5 K/h mehr, an mindestens 3 Tagen der letzten 7 –, meldet HeatPilot „Ventil schließt wohl nicht ganz“
+  (Ventiladapter prüfen, Thermostat neu kalibrieren, ggf. Unterlegscheibe). Seit 0.75.1 gegen die Nachbarn: Bis 0.75
+  verglich HeatPilot mit „Heizung aus“ – läuft die Heizung, werden aber auch die übrigen Räume warm, ihr seid wach, es
+  wird gekocht; so sah fast jeder Raum undicht aus (30.10.–02.11.: Küche und Flur gemeldet, gegen die Nachbarn +0,1 bzw.
+  −0,03 K/h). Ein einzelner Back- oder Sonnentag reicht nicht. Bei sehr kleinen Heizkörpern ist ein leicht undichtes
+  Ventil an der Temperatur kaum zu sehen – gemeldet werden nur deutliche Fälle.
 
 ## Räume wechseln (z. B. Tado-Cloud → HomeKit)
 
@@ -1999,7 +2003,9 @@ Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
 - **`sensor.heatpilot_boost`**: Zahl der Räume mit Boost; Attribute: laufende Boosts, Grenzen für Soll und Dauer,
   Ergebnis des letzten Befehls (`last`).
 - **`sensor.heatpilot_hinweise`** (seit 0.75): anstehende Hinweise für die Karte `custom:heatpilot-hints-card`
-  (HeatPilot Card ab 0.7) – Lüften und offene Probleme, nur Anzeige.
+  (HeatPilot Card ab 0.7) – Lüften und offene Probleme, nur Anzeige. Seit 0.75.1 hat jeder Hinweis eine Gruppe; je
+  Dashboard blendet die Karte Gruppen aus (`hide: [ventile]`, Card ab 0.7.1) – etwa die Ventil-Meldungen für
+  Mitbewohner.
 - **`input_text.heatpilot_befehl`**: legt HeatPilot beim Start einmal als Helfer an. Die Karten schreiben Befehle als
   JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `mode` {rooms, mode} –,
   HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen, leert das Feld und meldet das Ergebnis. Die Pause bleibt

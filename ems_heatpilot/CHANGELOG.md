@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.75.1
+- „Ventil schließt nicht“ vergleicht mit den anderen Räumen – keine Fehlalarme durch Nachbarwärme und Kochen
+- Hinweise mit Gruppe: die Karte blendet z. B. Ventile je Dashboard aus
+
 ## 0.75.0
 - Schimmelschutz: zu feuchte Räume nachts und bei Abwesenheit nur 1 K absenken (Grenze nach Außentemperatur)
 - Neuer Sensor `sensor.heatpilot_hinweise` für die Karte „HeatPilot Hinweise“ – Lüften ohne Handy-Meldung

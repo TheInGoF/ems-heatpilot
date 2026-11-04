@@ -1,5 +1,6 @@
 """0.70: Ventile – Meldung „schließt nicht“, Reihenfolge Deckel → Abgleich → Vorlauf, gelernte Wirkungsgrenze."""
 
+from datetime import datetime
 from types import SimpleNamespace
 
 from heatpilot import balance_auto as ba
@@ -7,18 +8,20 @@ from heatpilot import valve_leak, valve_range
 from heatpilot.store import Store
 
 T0 = 1_790_000_000
+D0 = int(datetime(2026, 10, 26).astimezone().timestamp())  # Mitternacht Ortszeit: Tage der Erkennung sind Kalendertage
 
 
-def _fill(store, minutes, valve, rate_hot, rate_cold, room="climate.wz", target=21.0, start=20.0):
-    """Je Minute ein Punkt; Heizung 30 min an, 30 min aus; der Raum steigt bzw. fällt mit der jeweiligen Rate."""
-    temp = start
-    for i in range(minutes):
-        ts = T0 + i * 60
-        hot = (i // 30) % 2 == 0
-        v = valve(i) if callable(valve) else valve
-        store.add_sample(ts, {"flow": 55.0 if hot else 30.0, "heating": int(hot), "dhw": 0})
-        store.add_room_samples([(ts, room, round(temp, 3), target, v, None)])
-        temp += (rate_hot(v) if callable(rate_hot) else rate_hot if hot else rate_cold) / 60
+def _house(store, days, hot, start=20.0):
+    """Je Minute ein Punkt über ``days`` Tage, Ventile zu; Heizung 30 min an, 30 min aus. ``hot``: {Raum: K/h bei
+    laufender Heizung – Zahl oder Funktion des Tages}; ohne Heizung kühlt jeder Raum ebenso schnell aus."""
+    temps = dict.fromkeys(hot, start)
+    for i in range(days * 1440):
+        ts, heat = D0 + i * 60, (i // 30) % 2 == 0
+        store.add_sample(ts, {"flow": 55.0 if heat else 30.0, "heating": int(heat), "dhw": 0})
+        store.add_room_samples([(ts, r, round(t, 3), 21.0, 0.0, None) for r, t in temps.items()])
+        for r in temps:
+            rate = hot[r](i // 1440) if callable(hot[r]) else hot[r]
+            temps[r] += (rate if heat else -rate) / 60
     store.commit()
 
 
@@ -34,36 +37,44 @@ class _Notes:
             self.open.pop(k)
 
 
-# ------------------------------------------------------------------ Ventil schließt nicht
-def test_closed_valve_that_warms_the_room_while_heating_runs_is_reported(tmp_path):
+# ------------------------------------------------------------------ Ventil schließt nicht (0.75.1: gegen die Nachbarn)
+def test_room_warming_faster_than_the_other_closed_rooms_is_reported(tmp_path):
     s = Store(tmp_path / "a.db")
-    _fill(s, 8 * 60, 0.0, 0.6, -0.2)
-    r = valve_leak.rates(s, "climate.wz", T0)
-    assert abs(r["hot"][0] - 0.6) < 0.05 and abs(r["cold"][0] + 0.2) < 0.05
-    assert "schließt wohl nicht ganz" in valve_leak.finding(r)
+    _house(s, 4, {"climate.wz": 0.9, "climate.a": 0.1, "climate.b": 0.1})  # wz: 0,8 K/h mehr als die Nachbarn
+    by_room = valve_leak.excess(s, D0)
+    assert len(by_room["climate.wz"]) == 4 and all(abs(x - 0.8) < 0.05 for x, _ in by_room["climate.wz"].values())
+    text = valve_leak.finding(by_room["climate.wz"])
+    assert text.startswith("Ventil schließt wohl nicht ganz – bei 0 % wird der Raum an 4 von 4 Tagen schneller warm "
+                           "als die anderen Räume mit geschlossenem Ventil") and "(im Mittel +0,8 K/h)" in text
+    assert valve_leak.finding(by_room["climate.a"]) is None
 
 
-def test_tight_valve_and_sun_are_no_leak(tmp_path):
+def test_neighbour_heat_a_baking_day_and_a_lone_room_are_no_leak(tmp_path):
     s = Store(tmp_path / "b.db")
-    _fill(s, 8 * 60, 0.0, -0.2, -0.2)  # dicht: mit und ohne Heizung gleich
-    assert valve_leak.finding(valve_leak.rates(s, "climate.wz", T0)) is None
-    s2 = Store(tmp_path / "c.db")
-    _fill(s2, 8 * 60, 0.0, 0.0, 0.5)  # Sonne, während die Heizung aus ist
-    assert valve_leak.finding(valve_leak.rates(s2, "climate.wz", T0)) is None
+    _house(s, 4, {"climate.wz": 0.4, "climate.a": 0.4, "climate.b": 0.4})  # alle werden warm: Nachbarwärme, Anwesenheit
+    assert all(valve_leak.finding(d) is None for d in valve_leak.excess(s, D0).values())
+    s2 = Store(tmp_path / "c.db")  # 30.10.–02.11.: Küche, Flur – bis 0.75 gemeldet
+    _house(s2, 4, {"climate.kueche": lambda day: 1.0 if day == 1 else 0.2, "climate.a": 0.1, "climate.b": 0.1})
+    days = valve_leak.excess(s2, D0)["climate.kueche"]
+    assert sum(1 for x, _ in days.values() if x >= valve_leak.LEAK_KH) == 1 and valve_leak.finding(days) is None
+    s3 = Store(tmp_path / "d.db")
+    _house(s3, 4, {"climate.wz": 0.9})  # ohne Vergleichsraum kein Urteil
+    assert valve_leak.excess(s3, D0) == {}
 
 
 def test_check_opens_and_quietly_closes_the_problem(tmp_path):
-    s = Store(tmp_path / "d.db")
-    _fill(s, 8 * 60, 0.0, 0.6, -0.2)
+    s = Store(tmp_path / "e.db")
+    _house(s, 4, {"climate.wz": 0.9, "climate.a": 0.1, "climate.b": 0.1})
     notes = _Notes()
     from heatpilot.config import Config
     from heatpilot.discovery import Room
 
-    eng = SimpleNamespace(store=s, notifier=notes, cfg=Config(), found=SimpleNamespace(rooms=[Room("Küche", "climate.wz")]))
-    now = T0 + 8 * 3600
+    rooms = [Room("Küche", "climate.wz"), Room("A", "climate.a"), Room("B", "climate.b")]
+    eng = SimpleNamespace(store=s, notifier=notes, cfg=Config(), found=SimpleNamespace(rooms=rooms))
+    now = D0 + 4 * 86400
     assert set(valve_leak.check(eng, now)) == {"climate.wz"} and "Küche:" in notes.open["valve_leak:climate.wz"]
     assert valve_leak.check(eng, now + 60) == {}  # höchstens stündlich
-    eng.store = Store(tmp_path / "e.db")  # repariert: keine Befunde mehr
+    eng.store = Store(tmp_path / "f.db")  # repariert: keine Befunde mehr
     valve_leak.check(eng, now + 3600)
     assert notes.open == {}
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.75.1
+- **Ventil schließt nicht – gegen die Nachbarn** (`valve_leak.excess`): Bisher verglich HeatPilot, wie schnell ein Raum bei 0 % mit und ohne laufende Heizung warm wird. Läuft die Heizung, werden aber auch die übrigen Räume warm, die Bewohner sind wach, es wird gekocht – „ohne Heizung“ sind vor allem Nächte. So sah fast jeder Raum undicht aus (30.10.–02.11.: +0,12 bis +0,45 K/h; gemeldet Küche und Flur, beide mit zu kleinen Heizkörpern, der Flur wird übers Wohnzimmer mitgeheizt). Jetzt zählt nur, wie viel schneller der Raum warm wird als der Median der anderen Räume mit zugleich geschlossenem Ventil (Küche +0,11, Flur −0,03 K/h), und das mit mindestens 0,5 K/h an mindestens 3 Tagen der letzten 7 – ein einzelner Backtag reicht nicht. Die beiden offenen Meldungen schließen still
+- **Hinweise mit Gruppe** (`card_bridge.group_of`): Lüften, Ventile, Kessel, Warmwasser, Thermostate, Sonstiges – die Karte „HeatPilot Hinweise“ blendet je Dashboard Gruppen aus (HeatPilot Card 0.7.1, `hide`)
+- Tests: `tests/test_valve70.py` (Ventil schließt nicht neu), `tests/test_mold75.py`
+
 ## 0.75.0
 - **Schimmelschutz** (`mold`): Grenze der Raumfeuchte nach Außentemperatur – 50 % + 1 % je Grad, zwischen 40 und 60 % (bei +10 °C 60 %, bei 0 °C 50 %, bei −10 °C 40 %; DIN 4108-2 nachgerechnet: kälteste Wandstelle unter 80 %). Feuchte je Raum aus dem eigenen Fühler, geglättet über 1 h (Kochen, Duschen sind Spitzen), sonst der Hauswert (Median der Räume mit Fühler – Shelly-Thermostate messen keine Feuchte); zurück erst 3 % unter der Grenze
 - **Zu feuchte Räume nur 1 K absenken:** Nacht und Abwesenheit höchstens 1 K unter Komfort statt auf die Nacht- bzw. Abwesenheitstemperatur – wärmere Luft hat weniger relative Feuchte, die Wände bleiben wärmer. Im Urlaub nicht, eigene Betriebsarten gehen vor; Vorschau und Vorlauf rechnen ebenso (`room_modes.planned`). Anlass: am 02.11. Wohnzimmer 58–62 %, kleines Bad 62–64 % bei 8 °C draußen
