@@ -12,7 +12,9 @@ einen Helfer. Darum stellt HeatPilot bereit:
 * ``sensor.heatpilot_modus`` (seit 0.62, ``override.sensor``): Override „nur jetzt“ – nacht, anwesend, abwesend
   oder auto, mit Ende (``until``).
 * ``sensor.heatpilot_hinweise`` (seit 0.75, ``hints``): anstehende Hinweise für die Karte „Hinweise“ – Zustand = Zahl,
-  Attribut ``items``: Lüften (``mold.hints``, nie als Meldung aufs Handy) und die offenen Probleme des Problem-Sensors.
+  Attribut ``items``: Lüften (``mold.hints``, nie als Meldung aufs Handy) und die offenen Probleme des Problem-Sensors,
+  seit 0.75.1 je mit Gruppe (``group_of``: lueften, ventile, kessel, warmwasser, thermostate, sonstiges) – die Karte
+  zeigt nur die gewählten.
 * ``input_text.heatpilot_befehl`` (``ensure_command``): legt HeatPilot einmal als Helfer an (WebSocket
   ``input_text/create``). Die Karte schreibt einen Befehl als JSON hinein, z. B.
   ``{"a": "boost", "rooms": ["climate.wohnzimmer"], "temp": 22, "minutes": 120, "n": 1730000000}`` (``n`` macht
@@ -43,6 +45,8 @@ log = logging.getLogger(__name__)
 COMMAND = "input_text.heatpilot_befehl"
 BOOST = "sensor.heatpilot_boost"
 HINTS = "sensor.heatpilot_hinweise"
+GROUPS = (("valve_", "ventile"), ("room_write_failed", "thermostate"), ("boiler_", "kessel"), ("dhw_", "warmwasser"),
+          ("disinfect_", "warmwasser"))  # 0.75.1: Gruppe je Meldung (Anfang des Schlüssels), sonst „sonstiges“
 ROOM_PREFIX = "sensor.heatpilot_raum_"
 CARD_ACTIONS = ("boost", "schedule", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
 REPO = "https://github.com/TheInGoF/heatpilot-card"
@@ -112,12 +116,17 @@ def boost(eng, ctl, last: dict | None) -> tuple[str, int, dict]:
         "dur_min": control_mod.DUR_MIN, "dur_max": control_mod.DUR_MAX, "command": COMMAND, "last": last}
 
 
+def group_of(key: str) -> str:
+    """Gruppe einer Meldung für die Karte „Hinweise“ (0.75.1)."""
+    return next((group for prefix, group in GROUPS if key.startswith(prefix)), "sonstiges")
+
+
 def hints(eng) -> tuple[str, int, dict]:
     """Anstehende Hinweise (0.75): Lüften je zu feuchtem Raum, dazu die offenen Probleme – Zustand = Zahl."""
     items = mold.hints(getattr(eng, "control_loop", None), eng.found.rooms)
     notifier = getattr(eng, "notifier", None)
-    items += [{"kind": "problem", "room": None, "text": text}
-              for text in (notifier.open_keys().values() if notifier is not None else ())]
+    items += [{"kind": "problem", "group": group_of(key), "room": None, "text": text}
+              for key, text in (notifier.open_keys().items() if notifier is not None else ())]
     return HINTS, len(items), {"friendly_name": "HeatPilot Hinweise", "icon": "mdi:bell-badge-outline" if items
                                else "mdi:bell-outline", "items": items}
 
