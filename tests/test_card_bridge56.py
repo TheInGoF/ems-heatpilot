@@ -67,8 +67,9 @@ def run(coro):
 def test_room_and_boost_sensors_like_the_tile(monkeypatch):
     app = make_app()
     app.control.boosts["climate.wohnzimmer"] = {"temp": 23.0, "end": time.time() + 3600}
-    assert run(cb.publish(app)) == 3  # Raum, Boost und seit 0.62 sensor.heatpilot_modus
+    assert run(cb.publish(app)) == 4  # Raum, Boost, seit 0.62 sensor.heatpilot_modus, seit 0.75 die Hinweise
     assert app.ha.states["sensor.heatpilot_modus"][0] == "auto"
+    assert app.ha.states[cb.HINTS][0] == 0 and app.ha.states[cb.HINTS][1]["items"] == []
     state, a = app.ha.states["sensor.heatpilot_raum_wohnzimmer"]
     assert state == 20.4 and a["target"] == 21 and a["phase"] == "komfort" and a["humidity"] == 48
     assert a["action"] == "heating" and a["boost"]["temp"] == 23.0 and a["boost"]["left_min"] == 60

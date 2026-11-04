@@ -1662,6 +1662,7 @@ Attribut `reasons` (Liste) – für eigene Dashboards und Automationen.
 | `sensor.heatpilot_naechste_ankunft` | vorhergesagte Ankunft |
 | `sensor.heatpilot_vorheizen_start` | wann das Vorheizen beginnen müsste |
 | `binary_sensor.heatpilot_problem` | seit 0.38: an, solange ein Problem offen ist; Gründe im Attribut `reasons` (siehe [Benachrichtigungen](#benachrichtigungen)) |
+| `sensor.heatpilot_hinweise` | seit 0.75: Zahl der anstehenden Hinweise; Attribut `items` – Lüften (siehe [Schimmelschutz](#schimmelschutz-seit-075)) und die offenen Probleme; für die Karte „HeatPilot Hinweise“ |
 | `sensor.heatpilot_heartbeat` | seit 0.41: Zeitstempel, jede Minute neu – für den Wächter in Home Assistant (siehe [Kessel über HeatPilot](#kessel-über-heatpilot-weg-b)) |
 
 Hinweis: Diese Sensoren werden vom Add-on gesetzt und sind nach einem
@@ -1997,10 +1998,38 @@ Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
   Betriebsart, heizt, Ventil, Luftfeuchte, Phase und Wunsch-Soll der Steuerung, nächster Wechsel, Boost mit Ende.
 - **`sensor.heatpilot_boost`**: Zahl der Räume mit Boost; Attribute: laufende Boosts, Grenzen für Soll und Dauer,
   Ergebnis des letzten Befehls (`last`).
+- **`sensor.heatpilot_hinweise`** (seit 0.75): anstehende Hinweise für die Karte `custom:heatpilot-hints-card`
+  (HeatPilot Card ab 0.7) – Lüften und offene Probleme, nur Anzeige.
 - **`input_text.heatpilot_befehl`**: legt HeatPilot beim Start einmal als Helfer an. Die Karten schreiben Befehle als
   JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `mode` {rooms, mode} –,
   HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen, leert das Feld und meldet das Ergebnis. Die Pause bleibt
   der HeatPilot-Seite vorbehalten. Die Sensoren werden alle 30 s und direkt nach einem Befehl aktualisiert.
+
+## Schimmelschutz (seit 0.75)
+
+Schimmel wächst, wo die Luft an der kältesten Wandstelle – Außenecken, hinter Schränken – über 80 % Feuchte hat. Wie
+viel Raumfeuchte dafür reicht, hängt von draußen ab: Je kälter es ist, desto kälter die Ecke. HeatPilot rechnet mit der
+Faustregel **Grenze = 50 % + 1 % je Grad Außentemperatur, zwischen 40 und 60 %** (DIN 4108-2 nachgerechnet, Raum um
+20 °C): bei +10 °C 60 %, bei 0 °C 50 %, bei −10 °C 40 %.
+
+- **Feuchte je Raum:** aus dem eigenen Fühler (Thermostat bzw. „Feuchte“ unter Einstellungen → Räume), geglättet mit
+  einer Zeitkonstante von 1 h – Kochen und Duschen sind kurze Spitzen. Räume ohne eigenen Fühler bekommen den
+  **Hauswert** (Median der Räume mit Fühler). Shelly-Thermostate messen keine Feuchte: Wer alle Räume umstellt, braucht
+  mindestens einen Feuchtefühler (z. B. Shelly BLU H&T, je Raum oder je Etage plus Bad) – ohne jeden Fühler gelten die
+  festen Werte.
+- **Zu feucht** ist ein Raum über der Grenze; wieder in Ordnung erst 3 % darunter (kein Hin und Her).
+- **Absenken:** Nacht und Abwesenheit senken einen zu feuchten Raum **höchstens 1 K unter Komfort** statt auf die Nacht-
+  bzw. Abwesenheitstemperatur – wärmere Luft hat weniger relative Feuchte, die Wände bleiben wärmer. Im Urlaub nicht
+  (dann entsteht keine Feuchte); eigene Betriebsarten (Manuell, Aus, Boost) gehen vor. Der Grund steht beim Raum
+  („Feuchte 62 % (Grenze 58 %): nur 1 K abgesenkt“), die Vorschau und der Vorlauf rechnen ebenso. Nur bei „HeatPilot
+  steuert“.
+- **Hinweis statt Meldung:** „Wohnzimmer: 62 % Luftfeuchte – bitte lüften (Grenze heute 58 %)“ steht in
+  `sensor.heatpilot_hinweise` und auf der Karte **HeatPilot Hinweise** (`custom:heatpilot-hints-card`, HeatPilot Card
+  ab 0.7) – zusammen mit den offenen Problemen. Aufs Handy geht dafür nichts.
+
+Gute Werte ohne Schimmel: Nacht 18 °C (Schlafzimmer 17 °C), Abwesenheit 17–18 °C, Urlaub 16 °C (nie unter 15 °C) – bei
+Raumfeuchte unter der Grenze. Darüber hilft Lüften (3–4 × täglich 5–10 min quer, nach Duschen und Kochen sofort) mehr
+als Heizen.
 
 ## Wind (seit 0.54)
 

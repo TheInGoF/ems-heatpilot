@@ -6271,7 +6271,7 @@ function renderSettings() {
   setPage(SET_PAGE);  // Startliste bzw. Seitenleiste, Titel, Speicherleiste
 }
 // Einstellungen → Haus → „Karten für Home Assistant“ (0.56.4, GET api/cards): Stand, Einrichtung über HACS,
-// YAML der drei Karten zum Kopieren
+// YAML der Karten zum Kopieren (0.75: auch „Hinweise“)
 async function loadCards() {
   const box = $("cards-box"); if (!box) return;
   const c = await getJSON("api/cards");
@@ -6280,7 +6280,8 @@ async function loadCards() {
   const yamls = [["Räume", `type: custom:heatpilot-rooms-card\n# entities:            # weglassen = alle Räume\n${rooms.replace(/^ {2}/gm, "#   ")}`],
     ["Steuerung (mehrere Räume: Boost, Zeitplan, Aus)", "type: custom:heatpilot-control-card"],
     ["Wetter", `type: custom:heatpilot-weather-card\nentity: ${c.weather || "weather.…"}`],
-    ["Nur jetzt (Nacht, Anwesend, Abwesend)", "type: custom:heatpilot-mode-card"]];
+    ["Nur jetzt (Nacht, Anwesend, Abwesend)", "type: custom:heatpilot-mode-card"],
+    ["Hinweise (Lüften, offene Probleme – Card ab 0.7)", "type: custom:heatpilot-hints-card\n# hide_empty: true      # ausblenden, solange nichts ansteht"]];
   box.innerHTML = statusLine(c.helper ? "ok" : "err", c.helper ? `Bereit: Befehls-Helfer <code class="eid">${esc(c.command)}</code> und ${c.rooms.length} Raum-Sensoren`
       : `Befehls-Helfer <code class="eid">${esc(c.command)}</code> fehlt – die Karten können nur anzeigen. Add-on neu starten; hilft das nicht, Log prüfen.`) +
     `<p class="muted">Einmal in HACS: ⋮ › Benutzerdefinierte Repositories › <a href="${esc(c.repo)}" target="_blank" rel="noopener">${esc(c.repo)}</a>, Typ „Dashboard“, herunterladen, Seite neu laden. ` +
