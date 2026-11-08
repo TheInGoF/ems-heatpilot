@@ -2166,6 +2166,9 @@ wie sie angeschlossen ist. Davon hängt ab, wie heiß der Vorlauf werden darf:
   offen oder es meldet „heizt“ bzw. „heizt vor“ (`hvac_action: heating` oder `preheating`); bei mehreren Thermostaten
   in einem Raum genügt eines –, steht nur noch im Grund („fordert an“, „fordert nicht an“, „Anforderung
   unbekannt“) – auch in der Vorschau: Ist das Thermostat jetzt nicht verfügbar, gilt sie dort in jeder Stunde.
+  Seit 0.75.2 hält ein RTL-Raum am Soll den Heizbetrieb **nicht** an: Ist der Boden warm, macht das RTL-Ventil
+  selbst fast dicht, die übrigen Räume heizen ungehindert. Erst unter dem Soll (mehr als 0,3 K) bleibt der
+  Heizbetrieb seinetwegen an.
 - **direkt am Kessel** – ohne Mischer und ohne RTL: Der höchste Vorlauf gilt **immer**, auch ohne Raummodell und
   ohne Messwert.
 

@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.75.2
+- Fußboden mit RTL-Ventil hält am Soll den Heizbetrieb nicht mehr an – das Ventil macht selbst dicht
+
 ## 0.75.1
 - „Ventil schließt nicht“ vergleicht mit den anderen Räumen – keine Fehlalarme durch Nachbarwärme und Kochen
 - Hinweise mit Gruppe: die Karte blendet z. B. Ventile je Dashboard aus
