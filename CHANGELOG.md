@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.75.2
+Aus den Lerndaten vom 25.10.–08.11.: Das Badezimmer (Fußboden am RTL-Ventil, Komfort 21,5 °C) hielt den Heizbetrieb dauernd an („Badezimmer hält 21,5 °C (Fußbodenheizung) – Heizbetrieb bleibt an“, Vorlauf 35 °C) und lag die halbe Zeit mehr als 1 K über dem Soll (im Mittel +1,1 K).
+- **RTL-Raum am Soll hält den Heizbetrieb nicht an** (`preview._other_need`, `floor_rtl`): Ist der Boden warm, macht das RTL-Ventil selbst fast dicht – die übrigen Räume heizen ungehindert, ohne Bedarf geht der Heizbetrieb aus. Erst unter dem Soll (mehr als 0,3 K) bleibt er seinetwegen an. Mit Mischer und direkt am Kessel wie bisher; die Grenze (`floor_max_flow`, beim Bad 55 °C) gilt unverändert
+- Tests: neu `tests/test_floor_rtl752.py`
+
 ## 0.75.1
 - **Ventil schließt nicht – gegen die Nachbarn** (`valve_leak.excess`): Bisher verglich HeatPilot, wie schnell ein Raum bei 0 % mit und ohne laufende Heizung warm wird. Läuft die Heizung, werden aber auch die übrigen Räume warm, die Bewohner sind wach, es wird gekocht – „ohne Heizung“ sind vor allem Nächte. So sah fast jeder Raum undicht aus (30.10.–02.11.: +0,12 bis +0,45 K/h; gemeldet Küche und Flur, beide mit zu kleinen Heizkörpern, der Flur wird übers Wohnzimmer mitgeheizt). Jetzt zählt nur, wie viel schneller der Raum warm wird als der Median der anderen Räume mit zugleich geschlossenem Ventil (Küche +0,11, Flur −0,03 K/h), und das mit mindestens 0,5 K/h an mindestens 3 Tagen der letzten 7 – ein einzelner Backtag reicht nicht. Die beiden offenen Meldungen schließen still
 - **Hinweise mit Gruppe** (`card_bridge.group_of`): Lüften, Ventile, Kessel, Warmwasser, Thermostate, Sonstiges – die Karte „HeatPilot Hinweise“ blendet je Dashboard Gruppen aus (HeatPilot Card 0.7.1, `hide`)

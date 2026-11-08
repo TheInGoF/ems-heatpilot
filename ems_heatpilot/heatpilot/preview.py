@@ -182,11 +182,11 @@ class _Run:
         self.preheat: dict = {}
         st = getattr(getattr(eng, "control_loop", None), "state", None)  # 0.46.5: laufendes Vorheizen (Ziel) je Raum
         self.held = {c: local(x["preheat"]) for c, x in st.items() if x.get("preheat")} if isinstance(st, dict) else {}
-        # Fußboden-Grenze (0.39.1): Räume, Anforderung jetzt aus den Messwerten, Räume mit einem Gerät ohne Zustand
-        self.floors = floor_limit.floor_rooms(self.cfg, eng.found.rooms)
+        self.floors = floor_limit.floor_rooms(self.cfg, eng.found.rooms)  # Fußboden-Grenze (0.39.1)
         seen = floor_limit.read(self.floors, eng.states)
         self.floor_now = {f.climate: floor_limit.demand(f, seen) for f in self.floors}
         self.floor_blind = {f.climate for f in self.floors if floor_limit.blind(f, seen)}
+        self.floor_rtl = {f.climate for f in self.floors if f.kind == "rtl"}  # 0.75.2: am Soll dicht (_other_need)
         self.floor_sp0: dict = {}  # Soll jetzt (erster Schritt) je Fußboden-Raum
 
     def _rooms(self, readings: list[tuple]) -> list[_Room]:
@@ -293,7 +293,7 @@ class _Run:
         """Braucht ein Raum Wärme, der nicht für den Vorlauf zählt? Den Vorlauf bestimmt er nicht, aber solange
         er Wärme braucht, bleibt der Heizbetrieb an. Mit plausiblem Modell (Fußbodenheizung) wie die übrigen
         Räume: Halten braucht Wärme, außer Fremdwärme reicht; ohne Modell nach dem Messwert – unter dem Soll
-        (Regelgenauigkeit) oder Temperatur unbekannt."""
+        (Regelgenauigkeit) oder Temperatur unbekannt. RTL-Ventil am Soll (0.75.2): macht selbst dicht – hält nicht an."""
         m, kind = r.model, "Fußbodenheizung" if r.model is not None else "ohne Raummodell"
         if r.temp is None:
             return None, f"ohne Raumtemperatur ({kind}) – Heizbetrieb bleibt an"
@@ -301,7 +301,7 @@ class _Run:
             if m.b * (sp - t_out) - m.c <= 0 or r.temp > sp + HOLD_BAND_K:
                 return None
             if r.temp >= sp - HEATUP_GAP_K:
-                return None, f"hält {_de(sp)} °C ({kind}) – Heizbetrieb bleibt an"
+                return None if r.room.climate in self.floor_rtl else (None, f"hält {_de(sp)} °C ({kind}) – Heizbetrieb bleibt an")
         elif r.temp >= sp - HEATUP_GAP_K:
             return None
         return None, f"unter Soll ({kind}) – Heizbetrieb bleibt an"
