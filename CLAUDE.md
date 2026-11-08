@@ -6,3 +6,4 @@
 - Version gleich in `ems_heatpilot/config.yaml`, `heatpilot/__init__.py`, `CHANGELOG.md` (ausführlich) und
   `ems_heatpilot/CHANGELOG.md` (Stichworte für Home Assistant); `tests/test_struktur.py` prüft das und die Längen.
 - Tests gezielt, die volle Reihe einmal vor dem Push.
+- Fertige Versionen direkt auf `main` pushen (Home Assistant liest dort), ohne Pull Request – es gibt nur einen Nutzer.
