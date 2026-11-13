@@ -2,6 +2,10 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.75.3
+- Karte: Soll −/+ im Pop-up der Raumkachel funktioniert („Keine Antwort von HeatPilot“ behoben)
+- Karte: Befehle für viele Räume passen in den Helfer (HeatPilot Card ab 0.8.2)
+
 ## 0.75.2
 - Fußboden mit RTL-Ventil hält am Soll den Heizbetrieb nicht mehr an – das Ventil macht selbst dicht
 
