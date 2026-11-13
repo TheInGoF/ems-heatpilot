@@ -19,8 +19,9 @@ einen Helfer. Darum stellt HeatPilot bereit:
   ``input_text/create``). Die Karte schreibt einen Befehl als JSON hinein, z. B.
   ``{"a": "boost", "rooms": ["climate.wohnzimmer"], "temp": 22, "minutes": 120, "n": 1730000000}`` (``n`` macht
   gleiche Befehle unterscheidbar). HeatPilot führt ihn aus (``heat_actions`` – dieselbe Stelle wie die Seite), leert
-  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, mode, override (das Soll
-  eines Raums stellt die Karte über das Thermostat-Pop-up von Home Assistant).
+  das Feld und meldet das Ergebnis in ``sensor.heatpilot_boost`` → ``last``. Aktionen: boost, schedule, temp, mode,
+  override. Seit 0.75.3 nennt die Karte Räume auch als Nummer (``order`` des Raum-Sensors, ``_climates``): Der Helfer
+  fasst 255 Zeichen, mehrere lange Entitäten passten nicht hinein.
 * ``GET api/cards`` (``routes``, seit 0.56.4): Stand für Einstellungen → Haus → „Karten für Home Assistant“ –
   Helfer vorhanden, Raum-Sensoren, Wetter-Entität, Link zum Repository.
 
@@ -48,7 +49,7 @@ HINTS = "sensor.heatpilot_hinweise"
 GROUPS = (("valve_", "ventile"), ("room_write_failed", "thermostate"), ("boiler_", "kessel"), ("dhw_", "warmwasser"),
           ("disinfect_", "warmwasser"))  # 0.75.1: Gruppe je Meldung (Anfang des Schlüssels), sonst „sonstiges“
 ROOM_PREFIX = "sensor.heatpilot_raum_"
-CARD_ACTIONS = ("boost", "schedule", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
+CARD_ACTIONS = ("boost", "schedule", "temp", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
 REPO = "https://github.com/TheInGoF/heatpilot-card"
 EVERY_S = 30
 
@@ -182,13 +183,31 @@ def parse(value) -> dict | None:
     return cmd if isinstance(cmd, dict) and cmd.get("a") in CARD_ACTIONS else None
 
 
+def _climates(eng, cmd: dict) -> dict:
+    """Räume als Nummer (``order`` des Raum-Sensors) in ihre Entität übersetzen – ``room`` und ``rooms``."""
+    found = eng.found.rooms
+
+    def one(v):
+        if not isinstance(v, int) or isinstance(v, bool):
+            return v
+        if not 0 <= v < len(found):
+            raise control_mod.ControlError("Raum unbekannt – Seite neu laden")
+        return found[v].climate
+    out = dict(cmd)
+    if "room" in out:
+        out["room"] = one(out["room"])
+    if isinstance(out.get("rooms"), list):
+        out["rooms"] = [one(v) for v in out["rooms"]]
+    return out
+
+
 async def handle(app, value) -> dict | None:
     """Befehl ausführen, Feld leeren, Ergebnis melden und die Sensoren gleich neu setzen."""
     cmd = parse(value)
     if cmd is None or app.eng is None or app.control is None:
         return None
     try:
-        res = await heat_actions.run(app, cmd["a"], cmd)
+        res = await heat_actions.run(app, cmd["a"], _climates(app.eng, cmd))
         errs = [str(e) for e in res.get("errors") or []]
         last = {"ok": bool(res.get("ok", True)), "action": cmd["a"], "text": "; ".join(errs) or res.get("hint")}
     except control_mod.ControlError as err:

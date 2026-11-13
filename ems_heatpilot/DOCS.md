@@ -2007,7 +2007,8 @@ Repositories, Typ „Dashboard“), nutzbar aber auch mit Standard-Karten:
   Dashboard blendet die Karte Gruppen aus (`hide: [ventile]`, Card ab 0.7.1) – etwa die Ventil-Meldungen für
   Mitbewohner.
 - **`input_text.heatpilot_befehl`**: legt HeatPilot beim Start einmal als Helfer an. Die Karten schreiben Befehle als
-  JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `mode` {rooms, mode} –,
+  JSON hinein – `boost` {rooms, temp, minutes}, `schedule` {rooms}, `temp` {room, temp} (seit 0.75.3, das Pop-up der
+  Raumkachel), `mode` {rooms, mode}; Räume als Entität oder seit 0.75.3 als Nummer (`order` des Raum-Sensors) –,
   HeatPilot führt sie aus wie die Knöpfe im Reiter Heizen, leert das Feld und meldet das Ergebnis. Die Pause bleibt
   der HeatPilot-Seite vorbehalten. Die Sensoren werden alle 30 s und direkt nach einem Befehl aktualisiert.
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.75.3
+- **Soll über die Raumkachel der Karte** (`card_bridge.CARD_ACTIONS`): Das Pop-up der Raumkachel (HeatPilot Card ab 0.6) schickt für −/+ den Befehl `temp` – den nahm der Helfer seit 0.56.4 nicht mehr an. Die Karte zeigte „Wird gesendet …“ und nach 20 s „Keine Antwort von HeatPilot“, das Soll blieb. Jetzt führt HeatPilot ihn aus wie −/+ im Reiter Heizen
+- **Räume als Nummer** (`card_bridge._climates`): Der Helfer `input_text.heatpilot_befehl` fasst 255 Zeichen – ein Befehl für mehrere Räume mit langen Entitäten (Tado: über 50 Zeichen je Raum) passte nicht hinein. Die Karte (ab 0.8.2) nennt Räume jetzt mit ihrer Nummer (`order` des Raum-Sensors); Entitäten gehen weiter
+- Tests: `tests/test_cards564.py`
+
 ## 0.75.2
 Aus den Lerndaten vom 25.10.–08.11.: Das Badezimmer (Fußboden am RTL-Ventil, Komfort 21,5 °C) hielt den Heizbetrieb dauernd an („Badezimmer hält 21,5 °C (Fußbodenheizung) – Heizbetrieb bleibt an“, Vorlauf 35 °C) und lag die halbe Zeit mehr als 1 K über dem Soll (im Mittel +1,1 K).
 - **RTL-Raum am Soll hält den Heizbetrieb nicht an** (`preview._other_need`, `floor_rtl`): Ist der Boden warm, macht das RTL-Ventil selbst fast dicht – die übrigen Räume heizen ungehindert, ohne Bedarf geht der Heizbetrieb aus. Erst unter dem Soll (mehr als 0,3 K) bleibt er seinetwegen an. Mit Mischer und direkt am Kessel wie bisher; die Grenze (`floor_max_flow`, beim Bad 55 °C) gilt unverändert
