@@ -10,11 +10,14 @@ Climate; das Thermostat bekommt keine Betriebsart (Tado bleibt auf manuell, ein 
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from . import control as control_mod
 from . import override as override_mod
 from . import room_modes
+
+log = logging.getLogger(__name__)
 
 ACTIONS = ("boost", "schedule", "temp", "mode", "pause", "override")
 
@@ -26,11 +29,25 @@ async def run(app, action: str, body: dict) -> dict:
             body, own = room_modes.take(app, action, body)
         except (TypeError, ValueError) as err:
             raise control_mod.ControlError(str(err) or "Wert fehlt") from None
+        if own:
+            await _write_now(app)
         if body is None:
             return {"ok": True, "done": own, "errors": []}
         res = await _run(app, action, body)
         return {**res, "done": own + list(res.get("done") or [])} if own else res
     return await _run(app, action, body)
+
+
+async def _write_now(app) -> None:
+    """Geführte Räume (0.75.4): das neue Soll gleich ans Thermostat schreiben statt erst im nächsten Takt (bis 5 min)."""
+    now = getattr(app.eng, "control_now", None)  # Testhäuser ohne Regelschleife
+    if now is None:
+        return
+    try:
+        now()
+        await app.eng.control_loop.apply()
+    except Exception:  # noqa: BLE001 – der nächste Takt schreibt es
+        log.exception("Soll nach dem Knopf nicht sofort geschrieben")
 
 
 async def _run(app, action: str, body: dict) -> dict:

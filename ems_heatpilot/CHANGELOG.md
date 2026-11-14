@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.75.4
+- Boost, Soll und Betriebsart gehen sofort ans Thermostat, nicht erst mit dem nächsten Takt (bis 5 min)
+
 ## 0.75.3
 - Karte: Soll −/+ im Pop-up der Raumkachel funktioniert („Keine Antwort von HeatPilot“ behoben)
 - Karte: Befehle für viele Räume passen in den Helfer (HeatPilot Card ab 0.8.2)

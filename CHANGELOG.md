@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.75.4
+- **Knopf wirkt sofort am Thermostat** (`heat_actions._write_now`, `Engine.control_now`): Boost, Soll und Betriebsart eines geführten Raums standen sofort in HeatPilots eigenem Climate, ans Thermostat ging das neue Soll aber erst mit dem nächsten Takt – bis zu 5 min später („Tado übernimmt den Boost nicht“). Jetzt bestimmt HeatPilot die Wunschzustände gleich nach dem Knopf neu und schreibt; gespeichert und gelernt wird dabei nichts. Gilt für die Seite und die Karten
+- Tests: `tests/test_room_modes72.py`
+
 ## 0.75.3
 - **Soll über die Raumkachel der Karte** (`card_bridge.CARD_ACTIONS`): Das Pop-up der Raumkachel (HeatPilot Card ab 0.6) schickt für −/+ den Befehl `temp` – den nahm der Helfer seit 0.56.4 nicht mehr an. Die Karte zeigte „Wird gesendet …“ und nach 20 s „Keine Antwort von HeatPilot“, das Soll blieb. Jetzt führt HeatPilot ihn aus wie −/+ im Reiter Heizen
 - **Räume als Nummer** (`card_bridge._climates`): Der Helfer `input_text.heatpilot_befehl` fasst 255 Zeichen – ein Befehl für mehrere Räume mit langen Entitäten (Tado: über 50 Zeichen je Raum) passte nicht hinein. Die Karte (ab 0.8.2) nennt Räume jetzt mit ihrer Nummer (`order` des Raum-Sensors); Entitäten gehen weiter

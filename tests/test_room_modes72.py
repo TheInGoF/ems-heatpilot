@@ -175,3 +175,13 @@ def test_schedule_after_own_boost_clears_every_boost_display(tmp_path):
     assert card_bridge.boost(eng, ctl, None)[1] == 0
     room = next(a for _e, _s, a in card_bridge.rooms(eng, ctl) if a["climate"] == "climate.wz")
     assert room["boost"] is None and room["own"] is None
+
+
+def test_button_writes_the_setpoint_at_once_not_at_the_next_tick(tmp_path):
+    """0.75.4: Boost bzw. Soll über die Karte kam erst mit dem nächsten Takt (bis 5 min) am Thermostat an."""
+    from test_control34 import climate, make
+    eng, ha, ctl, loop = make(tmp_path)
+    climate(eng, "climate.wz", 20.0, 21.0)
+    app = SimpleNamespace(eng=eng, control=ctl, cfg=eng.cfg)
+    run(heat_actions.run(app, "boost", {"rooms": ["climate.wz"], "temp": 24, "minutes": 30}))
+    assert ("climate", "set_temperature", "climate.wz", {"temperature": 24.0}) in ha.calls
