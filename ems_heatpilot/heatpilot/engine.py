@@ -224,6 +224,14 @@ class Engine(SampleMixin, BoilerMixin, DhwMixin, LearnMixin, SummaryMixin):
         if self.vacation.note_presence(local(ts), anyone, self._vacation_entity_state()):
             self.store.put("vacation_returned", sorted(self.vacation.returned))
 
+    def control_now(self, now_ts: int | None = None) -> None:
+        """Wunschzustände sofort neu bestimmen (0.75.4) – nach einem Knopf (Boost, Soll, Betriebsart) wartet das Soll
+        sonst bis zum nächsten Takt (5 min). Merkt nur vor (``ControlLoop.plan``), speichert und lernt nichts."""
+        ts = now_ts or int(time.time())
+        sample, rooms, _ = self.snapshot()
+        sample["vacation"] = int(self.on_vacation(ts))
+        self.control_loop.plan(ts, sample, rooms)
+
     # ------------------------------------------------------------------ Takt
     def tick(self, now_ts: int | None = None) -> None:
         now_ts = now_ts or int(time.time())
