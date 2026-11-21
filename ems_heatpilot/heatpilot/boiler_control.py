@@ -69,6 +69,7 @@ _same = same  # wie bisher hier zu holen
 DHW_AFTER_S = 180  # 0.49.3: so lange nach „lädt“ gehört das Kessel-Soll noch der Warmwasser-Ladung
 DHW_JUMP_K = 5     # 0.49.3: so weit über dem eigenen Vorlauf-Soll gilt ein Kessel-Soll als Lade-Soll
 SPECIAL_HOLD_MAX_S = 4 * 3600  # 0.56.5: nach einer Sonderladung höchstens so lange warten
+SAY_AGAIN_S = 3600  # 0.76: dieselbe Zeile (Vorlauf-Soll erneuert, übernommen) höchstens so oft im INFO-Log
 
 
 def _resting(flow) -> bool:
@@ -464,8 +465,18 @@ class BoilerControl(BoilerStatus, BoilerWatch):
             self.state.pop("rejected")
         done = time.time() if now is None else now
         ch["check"] = {"ts": ts, "value": value, "due": done + CHECK_S, "until": done + CHECK_MAX_S}
-        log.info("Kessel über HeatPilot: %s → %s (%s), Prüfung in %d s", br.LABELS[what], shown(what, value), why,
-                 CHECK_S)
+        (log.info if self._say(what, "set", (value, why)) else log.debug)(
+            "Kessel über HeatPilot: %s → %s (%s), Prüfung in %d s", br.LABELS[what], shown(what, value), why, CHECK_S)
+        return True
+
+    def _say(self, what: str, kind: str, key) -> bool:
+        """0.76: Das Erneuern im Minutentakt (``KEEPALIVE_S``) füllte das Log (2600 Zeilen am Tag) – ins INFO-Log nur
+        ein neuer Wert bzw. Grund, sonst höchstens stündlich; der Rest ins Debug-Log."""
+        said, now = self.__dict__.setdefault("_said", {}), time.time()
+        prev = said.get((what, kind))
+        if prev is not None and prev[0] == key and now - prev[1] < SAY_AGAIN_S:
+            return False
+        said[(what, kind)] = (key, now)
         return True
 
     def verify(self, now: float | None = None) -> bool:
@@ -489,6 +500,7 @@ class BoilerControl(BoilerStatus, BoilerWatch):
                 continue
             self._ch(what).pop("check")
             if what == "flow" and seen is not None and seen <= br.PUMP_FLOW + 0.5 and chk["value"] >= br.FLOW_MIN:
+                self._dropped(int(now), chk["value"])  # 0.76: hält es an, heizt der Kessel nicht – melden
                 continue  # 0.48.1: Kessel hat das Soll schon wieder verworfen – kein Fehlschlag, wird neu geschrieben
             if what == "heating" and seen and not chk["value"] and _resting(self.current("flow")):
                 continue  # 0.49.1: Kessel lässt den Heizbetrieb an, steht aber auf dem Ruhewert – heizt nicht
@@ -507,8 +519,10 @@ class BoilerControl(BoilerStatus, BoilerWatch):
 
     def _accepted(self, ts: int, what: str, value, late: bool = False) -> None:
         self.state["fails"] = 0
-        log.info("Kessel über HeatPilot: %s %s %sübernommen", br.LABELS[what], shown(what, value),
-                 "verspätet " if late else "")
+        if what == "flow":
+            self._dropped_clear(ts, value)
+        (log.info if late or self._say(what, "ok", value) else log.debug)(
+            "Kessel über HeatPilot: %s %s %sübernommen", br.LABELS[what], shown(what, value), "verspätet " if late else "")
         if self.notifier is not None:
             self.notifier.solved(K_FAIL, f"Kessel wieder in Ordnung – {br.LABELS[what]} {shown(what, value)} "
                                          "übernommen", ts)

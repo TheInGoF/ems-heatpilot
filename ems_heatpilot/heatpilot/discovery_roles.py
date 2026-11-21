@@ -57,6 +57,9 @@ BOILER_ROLES: dict[str, tuple[str, ...]] = {
     "last_code": ("lastcode", "last_error_code"),
     "maint_msg": ("maintenancemessage", "maintenance_message"),
     "maint_date": ("maintenancedate", "next_maintenance_date"),
+    # seit 0.76: Nummer zum Servicecode (Störung „CE“ mit 207) und Zapfung – fürs Anlagen-Protokoll (boiler_health)
+    "service_num": ("servicecodenumber", "service_code_number"),
+    "tap_active": ("tapwateractive", "tapwater_active"),
 }
 
 # Regler (ES73/RC35 …), Heizkreis 1
@@ -121,6 +124,8 @@ ROLE_LABELS: dict[str, str] = {
     "last_code": "Letzter Fehler",
     "maint_msg": "Wartungsmeldung",
     "maint_date": "Wartungstermin",
+    "service_num": "Kesselstatus (Nummer)",
+    "tap_active": "Warmwasser wird gezapft",
     "hc_designtemp": "Regler: Auslegungstemperatur (Heizkurve)",
     "hc_offsettemp": "Regler: Offset Heizkurve",
     "hc_minexttemp": "Regler: tiefste Außentemperatur (Auslegung)",

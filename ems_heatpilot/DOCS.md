@@ -500,6 +500,13 @@ Liefert der Kessel sie (Diagnose → Alle Sensoren), nutzt HeatPilot außerdem:
 - **Kesselstatus, Anlagendruck, Wartung, Fehlercodes** – in Live und Diagnose. Eine
   erledigte Wartung muss im Kessel bzw. in EMS-ESP zurückgesetzt werden, sonst bleibt die
   Meldung stehen.
+- **Anlage im Blick** (seit 0.76): Jeder Wechsel des Kesselstatus und jeder neue Fehler steht
+  mit Uhrzeit und Anlagendruck im Protokoll der Diagnose. Eine Störung (alles außer den
+  Betriebsmeldungen wie „-H“, „=H“, „0A“, „0H“) meldet HeatPilot ans Handy, ebenso einen
+  Anlagendruck unter 1,0 bar, einen stetigen Druckverlust (ab 0,05 bar am Tag über mindestens
+  drei Tage, gemessen bei stehender Pumpe) und einen Kessel, der das Vorlauf-Soll 15 min lang
+  nicht annimmt. Nachfüllen erkennt HeatPilot am Druckanstieg; der Verlust zählt ab dann neu.
+  Nachts gehen die Meldungen wie alle anderen erst am Morgen hinaus.
 
 Was der Kessel gar nicht kennt, steht unter „Alle Sensoren“ als „Kessel liefert nicht“ –
 da lässt sich nichts freischalten.

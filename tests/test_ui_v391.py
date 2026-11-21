@@ -386,7 +386,7 @@ def test_rows_render_status_and_escape(tmp_path):
     # 0.58: Startseite mit drei Kacheln – rot je Seite nur, wenn Nötiges fehlt (2 beim Kessel)
     assert re.findall(r'data-page="(\w+)"', r["nav"]) == ["raeume", "kessel", "haus"] and 'class="nav-list set-tiles"' in r["nav"]
     assert '<span class="em-alert" id="em-alert-kessel">2</span>' in r["nav"] and 'id="em-alert-haus" hidden' in r["nav"]
-    assert r["sum"] == "6 von 39 gefunden · 2 nötige fehlen · 2 nicht verfügbar"  # 0.41: Heizbetrieb aktiviert
+    assert r["sum"] == "6 von 41 gefunden · 2 nötige fehlen · 2 nicht verfügbar"  # 0.41: Heizbetrieb aktiviert; 0.76: +2 Rollen
     assert "<i>" not in r["extra"] and "&lt;i>=sensor.z" in r["extra"] and 'x&quot;>&lt;b>=sensor.y' in r["extra"]
     groups = re.findall(r'<details class="card em-group" id="em-g-(\w+)"', r["page"])
     # 0.43: „Entitäten“ zeigt nur gelesene Werte; Schreib-Entitäten, Räume, Personen und Ziele stehen bei ihrer Funktion

@@ -33,6 +33,7 @@ from .app_jobs import JobsMixin
 from .backfill import run_backfill
 from . import room_lead
 from .boiler_control import BoilerControl
+from .boiler_health import BoilerHealth
 from .valve_pid_control import ValvePidControl
 from .boiler_entity import flow_target, heat_target, regulator_block, same_entity
 from .control import Control
@@ -266,6 +267,7 @@ class App(JobsMixin):
                                                  carry=getattr(old, "disinfect_control", None))
         eng.valve_pid = ValvePidControl(eng, self.control, eng.notifier,
                                         carry=getattr(old, "valve_pid", None))  # 0.51: ventilgeführte Räume
+        eng.boiler_health = BoilerHealth(eng, eng.notifier)  # 0.76: Kesselstatus, Fehler, Anlagendruck
         # zählt der Termin im Warmwasser-Modell (HeatPilot löst ihn aus, der letzte ist nicht eben gescheitert)? Gleich,
         # nicht erst im nächsten 30-s-Schritt
         cfg.disinfect_triggered = eng.disinfect_control.triggered(time.time())
@@ -389,7 +391,8 @@ async def live_loop(app: App) -> None:
                 app.eng.record_live()
         except Exception:  # noqa: BLE001
             log.exception("Live-Werte nicht erfasst")
-        for name, step in (("Prüfung des Warmwasser-Solls", check_dhw), ("Kessel über HeatPilot", boiler_step),
+        for name, step in (("Prüfung des Warmwasser-Solls", check_dhw), ("Anlage", health_step),
+                           ("Kessel über HeatPilot", boiler_step),
                            ("Ventilgeführte Räume", valve_pid_step),
                            ("Desinfektion", disinfect_step), ("Heartbeat", heartbeat),
                            ("Wächter lesen", scan_watchdog), ("Karten-Sensoren", card_bridge.step)):
@@ -398,6 +401,15 @@ async def live_loop(app: App) -> None:
             except Exception:  # noqa: BLE001
                 log.exception("%s fehlgeschlagen", name)
         await asyncio.sleep(LIVE_STEP_S)
+
+
+async def health_step(app: App, now: float | None = None) -> None:
+    """Kesselstatus, Fehler und Anlagendruck (0.76, ``boiler_health``) – nur Protokoll und Meldungen."""
+    eng = app.eng
+    health = getattr(eng, "boiler_health", None) if eng is not None else None
+    if health is not None:
+        health.step(now)
+        await send_notes(app, eng)
 
 
 async def boiler_step(app: App, now: float | None = None) -> int:

@@ -9,6 +9,9 @@ dessen ``state``, ``notifier``, ``eng``, ``paused``, ``_ch``, ``_log``, ``_save`
 * ``_rejected`` – ``Control`` weist einen Schreibvorgang ab (Schutzregel, z. B. Grenze der Entität): Hinweis, nach
   ``REJECT_NOTE_S`` Meldung; erledigt, sobald 5 min nichts mehr abgewiesen wurde.
 * ``_blocked_note`` – nach dem ersten Schreiben 15 min gesperrt (EMS-ESP antwortet nicht, Regler wieder dran): Meldung.
+* ``_dropped`` – der Kessel verwirft das Vorlauf-Soll gleich wieder (zeigt seinen Ruhewert): einzeln normal, hält es
+  ``IGNORE_NOTE_S`` an, ohne dass ein Wert übernommen wurde, heizt er nicht (Störung, zu wenig Wasser) – Meldung mit
+  Anlagendruck und Kesselstatus (seit 0.76, Anlass: 21.11.2026, 6 h ohne Heizen und ohne Hinweis).
 * ``_settle`` – Meldungen abgleichen (Schalter nicht „heatpilot“, Pause aufgehoben, seit 1 h nichts Fremdes).
 """
 
@@ -17,6 +20,7 @@ from __future__ import annotations
 import logging
 import time
 
+from . import boiler_health
 from . import boiler_rule as br
 from .boiler_rule import CHECK_TOL_K, FOREIGN_MAX, FOREIGN_WINDOW_S, HINT_S, PUMP_FLOW, shown
 from .boiler_status import ACT_FOREIGN, ACT_PAUSE, ACT_RESUME
@@ -25,10 +29,12 @@ log = logging.getLogger(__name__)
 
 # Schlüssel der Meldungen (notify.Notifier)
 K_FAIL, K_PAUSED, K_FOREIGN, K_BLOCKED = "boiler_write_failed", "boiler_paused", "boiler_foreign", "boiler_blocked"
-K_REJECTED, K_BLIND = "boiler_rejected", "boiler_blind"
+K_REJECTED, K_BLIND, K_IGNORED = "boiler_rejected", "boiler_blind", "boiler_ignored"
 BLOCKED_NOTE_S = 900   # gesperrt, nachdem HeatPilot schon geschrieben hat: nach so langer Zeit melden
 REJECT_NOTE_S = 900    # Control weist ab: nach so langer Zeit melden …
 REJECT_CLEAR_S = 300   # … erledigt, wenn so lange nichts mehr abgewiesen wurde
+IGNORE_NOTE_S = 900    # 0.76: Kessel verwirft das Vorlauf-Soll so lange, ohne eines zu übernehmen: melden …
+IGNORE_GAP_S = 300     # … ein Verwerfen zählt zur selben Folge, wenn das letzte höchstens so lange her ist
 
 
 def same(what: str, a, b) -> bool:
@@ -169,6 +175,37 @@ class BoilerWatch:
             self._notify(K_REJECTED, f"Kessel: {br.LABELS[rej['what']]} {shown(rej['what'], rej['value'])} wird seit "
                                      f"{REJECT_NOTE_S // 60} min abgewiesen ({rej['text']}) – bitte prüfen", ts)
 
+    # -------------------------------------------------------------- Kessel verwirft das Soll
+    def _dropped(self, ts: int, value) -> None:
+        """Der Kessel hat das Vorlauf-Soll schon wieder verworfen (kein Fehlschlag, es wird neu geschrieben). Seit
+        ``IGNORE_NOTE_S`` ohne ein übernommenes Soll: Protokoll, Warnung, Meldung – mit Druck und Kesselstatus."""
+        st = self.state
+        d = st.get("dropped")
+        if d is None or ts - d["last"] > IGNORE_GAP_S:
+            d = st["dropped"] = {"since": ts, "n": 0}
+        d["n"], d["last"], d["value"] = d["n"] + 1, ts, value
+        mins = (ts - d["since"]) // 60
+        if ts - d["since"] < IGNORE_NOTE_S:
+            return
+        plant = boiler_health.plant_text(self.eng)
+        text = (f"Kessel nimmt das Vorlauf-Soll ({value} °C) seit {mins} min nicht an und heizt nicht – {plant}. "
+                "Kessel gestört oder gesperrt? Display ablesen, ggf. entstören bzw. Wasser nachfüllen")
+        if not d.get("noted"):
+            d["noted"] = ts
+            log.warning("Kessel über HeatPilot: %s", text)
+            self.store.add_boiler_event(ts, "ignored", None, value, text)  # Anlagen-Protokoll (boiler_health)
+        self._notify(K_IGNORED, text, ts)
+
+    def _dropped_clear(self, ts: int, value) -> None:
+        """Ein Soll wurde übernommen: die Folge ist vorbei; war sie gemeldet, „wieder in Ordnung“."""
+        d = self.state.pop("dropped", None)
+        if d and d.get("noted"):
+            mins = round((ts - d["since"]) / 60)
+            log.info("Kessel über HeatPilot: Kessel nimmt das Vorlauf-Soll wieder an (nach %d min)", mins)
+            if self.notifier is not None:
+                self.notifier.solved(K_IGNORED, f"Kessel nimmt das Vorlauf-Soll wieder an ({value} °C, nach {mins} min)",
+                                     ts)
+
     # -------------------------------------------------------------- Meldungen
     def _settle(self, ts: int) -> None:
         """Meldungen abgleichen: ohne „heatpilot“ alle still schließen, Pause aufgehoben → still, seit 1 h keine
@@ -177,6 +214,7 @@ class BoilerWatch:
         if n is None:
             return
         if self.mode != "heatpilot":
+            self.state.pop("dropped", None)
             n.settle("boiler_", {}, ts)
             return
         if not self.paused():

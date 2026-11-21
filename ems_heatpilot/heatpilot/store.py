@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS room_stats(
     ts INTEGER, room TEXT, temp REAL, valve REAL, flow REAL,
     PRIMARY KEY(ts, room)
 );
+CREATE TABLE IF NOT EXISTS boiler_events(ts INTEGER, kind TEXT, code TEXT, value REAL, text TEXT);
+CREATE INDEX IF NOT EXISTS idx_boiler_events_ts ON boiler_events(ts);
 CREATE INDEX IF NOT EXISTS idx_room_ts ON room_samples(ts);
 CREATE INDEX IF NOT EXISTS idx_valve_dry_ts ON valve_dry_log(ts);
 CREATE INDEX IF NOT EXISTS idx_control_ts ON control_log(ts);
@@ -115,6 +117,8 @@ SAMPLE_COLS = (
     "wind",
     # seit 0.63: wie viele Entitäten des Sensor-Eimers (Aktivität) gerade an sind
     "activity_n",
+    # seit 0.76: Heizungspumpe an (1/0) und Warmwasser-Zapfung – der Druckverlauf neben Pumpe und Zapfungen
+    "pump_on", "tap",
 )
 # gas_spike_kwh: Zählersprung/Nachtrag – zählt im Verbrauch, wird nicht gelernt (seit 0.14)
 HOURLY_COLS = ("ts", "t_out", "t_in", "gas_kwh", "dhw_frac", "home_frac", "vacation_frac", "gas_spike_kwh",
@@ -447,6 +451,12 @@ class Store:
     def set_valve_dry_actual(self, entry_id: int, over_k: float | None, starts: float | None) -> None:
         self.db.execute("UPDATE valve_dry_log SET act_over_k = ?, act_starts = ?, checked = 1 WHERE rowid = ?",
                         (over_k, starts, int(entry_id)))
+
+    def add_boiler_event(self, ts: int, kind: str, code: str | None, value: float | None, text: str) -> None:
+        """Anlagen-Protokoll (0.76, ``boiler_health``): Kesselstatus, Fehler, Störung, Nachfüllen, Druck."""
+        self.db.execute("INSERT INTO boiler_events(ts, kind, code, value, text) VALUES(?,?,?,?,?)",
+                        (int(ts), kind, code, value, text))
+        self.db.commit()
 
     def add_burner_event(self, ts: int, state: bool) -> None:
         self.db.execute("INSERT INTO burner_events VALUES(?, ?)", (ts, int(state)))

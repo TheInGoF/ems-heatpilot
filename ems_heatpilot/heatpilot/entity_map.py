@@ -152,6 +152,8 @@ ROLES: dict[str, tuple[str, str]] = {
     "last_code": ("text", "Hinweis in der Diagnose."),
     "maint_msg": ("text", "Hinweis in der Diagnose."),
     "maint_date": ("text", "Hinweis in der Diagnose."),
+    "service_num": ("count", "Nummer zur Störung im Anlagen-Protokoll."),
+    "tap_active": ("flag", "Aufgezeichnet – Druckverlauf neben Zapfungen."),
     "hc_seltemp": ("temp", "Raum-Soll des Reglers – aufgezeichnet und angezeigt."),
     "hc_calc_flow": ("temp", "Vorlauf des Reglers – Vergleich „Plan gegen Regler“ in der Vorschau."),
     "hc_mode": ("choice", "Heizfreigabe des Reglers (Tag = heizen) erkennen."),

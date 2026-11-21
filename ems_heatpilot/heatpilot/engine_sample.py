@@ -133,8 +133,8 @@ class SampleMixin:
             "power_ex_w": self.power_sum(self.found.power_exclude, strict=False), "activity_n": self.activity_count(),
             # nur fürs Warmwasser-Modell (nicht in der Datenbank, 0.36.3): meldet der Kessel die Desinfektion?
             # Unterscheidet sie von der Einmalladung – nur sie bestätigt den Desinfektionstermin
-            "dhw_disinfecting": flag(self._boiler("dhw_disinfecting")),
-            # nur für die Live-Ansicht (nicht in der Datenbank): läuft die Heizungspumpe?
+            "dhw_disinfecting": flag(self._boiler("dhw_disinfecting")), "tap": flag(self._boiler("tap_active")),
+            # läuft die Heizungspumpe? Seit 0.76 in der Datenbank wie die Zapfung „tap“ (Druckverlauf, boiler_health)
             "pump_on": (int(num(self._boiler("pump_mod")) > 0) if num(self._boiler("pump_mod")) is not None
                         else flag(self._boiler("heating_pump"))),
         }

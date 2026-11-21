@@ -21,7 +21,7 @@ from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import __version__, guards, valve_control
+from . import __version__, boiler_health, guards, valve_control
 from .discovery import BOILER_ROLES, ROLE_LABELS, THERMOSTAT_ROLES
 from .entity_map import regulator_removed
 from .engine import num
@@ -254,7 +254,6 @@ def self_check(app) -> list[dict]:
 
 
 # ---------------------------------------------------------------- Diagnose-Datei
-PRESS_LOW, PRESS_CRIT, PRESS_HIGH = 1.0, 0.8, 2.5
 _DATE = re.compile(r"(\d{2})\.(\d{2})\.(\d{4})")
 
 
@@ -269,21 +268,8 @@ def _code_date(text) -> datetime | None:
 
 
 def plant_checks(eng, add) -> None:
-    """Anlagendruck, Wartungsmeldung und letzter Fehler des Kessels/Reglers (nur Hinweise)."""
-    press = num(eng._boiler("sys_press"))
-    if press is not None:
-        rows = eng.store.query("SELECT MIN(syspress) AS lo FROM samples WHERE ts >= ? AND syspress IS NOT NULL",
-                               (int(time.time()) - 7 * 86400,))
-        low = rows[0]["lo"] if rows and rows[0]["lo"] is not None else press
-        if press < PRESS_CRIT:
-            add("error", "Anlagendruck", f"{press:.1f} bar – zu wenig Wasser in der Heizung, Heizungsbauer bzw. nachfüllen")
-        elif press < PRESS_LOW or low < PRESS_LOW:
-            add("warn", "Anlagendruck", f"{press:.1f} bar (7-Tage-Minimum {low:.1f} bar) – unter {PRESS_LOW:.1f} bar, "
-                                        "bitte nachfüllen lassen")
-        elif press > PRESS_HIGH:
-            add("warn", "Anlagendruck", f"{press:.1f} bar – ungewöhnlich hoch (Ausdehnungsgefäß prüfen lassen)")
-        else:
-            add("ok", "Anlagendruck", f"{press:.1f} bar (7-Tage-Minimum {low:.1f} bar)")
+    """Anlagendruck (``boiler_health``), Wartungsmeldung und letzter Fehler des Kessels/Reglers (nur Hinweise)."""
+    boiler_health.checks(eng, add)  # 0.76: Druck, Störung, Druckverlust, Nachfüllen
     msg, date = eng._boiler("maint_msg"), eng._boiler("maint_date")
     if msg not in (None, "", "-", "0", "keine", "none", "unknown", "unavailable"):
         add("info", "Wartung", f"Kessel meldet „{msg}“" + (f" (Termin {date})" if date else "") +
@@ -328,6 +314,7 @@ def bundle(app, hours: int = 48) -> dict:
         | set(eng.found.persons) | {eng.found.weather}
     }
     data["summary"] = eng.summary()
+    data["anlagendruck"] = _safe(lambda: boiler_health.report(eng))  # 0.76: Druck je Stunde, Kesselprotokoll
     data["models"] = {
         "house": eng.house.to_dict(),
         "rooms": {c: m.to_dict() for c, m in eng.rooms.items()},

@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.76.0
+Aus der Diagnose vom 21.11.2026: Der Anlagendruck lag zwei Tage bei 0,1–0,2 bar (mit laufender Pumpe 0,4–0,5 bar). Um 01:10 ging der Kessel auf Störung und heizte bis 07:20 nicht – bis nachgefüllt war. HeatPilot schrieb sechs Stunden lang jede Minute das Vorlauf-Soll, der Kessel verwarf es jedes Mal (zeigte 7 °C), gemeldet wurde nichts; Störungscode und Uhrzeit waren nirgends festgehalten.
+- **Anlagen-Protokoll** (`boiler_health`, Tabelle `boiler_events`): Jeder Wechsel des Kesselstatus (Servicecode mit Nummer, neu die Rolle `service_num`), jeder neue Eintrag unter „letzter Fehler“, Störung und ihr Ende (mit Dauer), Nachfüllen und Druck unter 1,0 bar stehen mit Uhrzeit und Anlagendruck im Protokoll
+- **Störung melden:** Alles außer den Betriebsmeldungen (`-H`, `=H`, `0A`, `0H`, `0Y` …) gilt nach 60 s als Störung bzw. Sperre – Warnung im Log, Meldung mit Code, Nummer und Druck („Kessel meldet Störung CE (207) und heizt nicht – Anlagendruck 0,1 bar“), „wieder in Betrieb“ mit Dauer. Ein neuer Fehlereintrag ohne laufende Störung kommt einmal als Meldung
+- **Anlagendruck:** Meldung unter 1,0 bar seit 10 min (unter 0,8 bar „der Kessel schaltet bald auf Störung“), erledigt ab 1,2 bar. Nachfüllen erkannt am Anstieg um 0,4 bar gegenüber dem letzten Wert mit gleichem Pumpenzustand (die Pumpe hebt die Anzeige um 0,2–0,3 bar). **Druckverlust:** stündlich die Gerade durch den Ruhedruck (Pumpe aus) seit dem letzten Nachfüllen; ab 0,05 bar/Tag über mindestens 3 Tage und 0,2 bar Meldung mit der Zeit bis 1,0 bar. Nachgespielt mit dem 19.–21.11.: Warnung am 19.11. 08:25, Nachfüllen am 21.11. 07:20 erkannt
+- **Kessel nimmt das Vorlauf-Soll nicht an** (`boiler_watch._dropped`): Verwirft der Kessel das geschriebene Soll 15 min lang jedes Mal (zeigt seinen Ruhewert), heizt er nicht – Warnung, Eintrag im Anlagen-Protokoll und Meldung mit Anlagendruck und Kesselstatus; „wieder in Ordnung“, sobald ein Soll übernommen wird. Bisher galt jedes Verwerfen einzeln als harmlos
+- **Aufgezeichnet:** Heizungspumpe an/aus (`pump_on`) und Warmwasser-Zapfung (`tap`, neue Rolle `tap_active`) in den Messwerten
+- **Diagnose:** neuer Teil `anlagendruck` – Zustand, Protokoll und je Stunde (30 Tage) Druck (min/max, Ruhedruck), Pumpe, Brenner, Warmwasser, Zapfung, Vor-/Rücklauf, Außentemperatur und Ventil/Temperatur der Fußboden-Räume – um zu sehen, wobei der Druck fällt. Selbsttest zusätzlich mit Störung, Druckverlust und letztem Nachfüllen
+- **Weniger Log:** Das Erneuern des Vorlauf-Solls im Minutentakt („→ 55 °C“ und „übernommen“, rund 2600 Zeilen am Tag – der Log-Puffer reichte nur noch 28 h) steht nur noch bei neuem Wert oder Grund, sonst höchstens stündlich im Log
+- Hinweise-Karte: Meldungen der Anlage in der Gruppe „Kessel“
+- Tests: neu `tests/test_anlage76.py`; angepasst `tests/test_ui_v391.py` (zwei Rollen mehr)
+
 ## 0.75.4
 - **Knopf wirkt sofort am Thermostat** (`heat_actions._write_now`, `Engine.control_now`): Boost, Soll und Betriebsart eines geführten Raums standen sofort in HeatPilots eigenem Climate, ans Thermostat ging das neue Soll aber erst mit dem nächsten Takt – bis zu 5 min später („Tado übernimmt den Boost nicht“). Jetzt bestimmt HeatPilot die Wunschzustände gleich nach dem Knopf neu und schreibt; gespeichert und gelernt wird dabei nichts. Gilt für die Seite und die Karten
 - Tests: `tests/test_room_modes72.py`

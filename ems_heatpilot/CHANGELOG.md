@@ -2,6 +2,14 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.76.0
+- Störungen des Kessels werden mit Code, Uhrzeit und Anlagendruck festgehalten und ans Handy gemeldet
+- Anlagendruck: Warnung unter 1,0 bar, Meldung bei stetigem Druckverlust, Nachfüllen wird erkannt
+- Meldung, wenn der Kessel das Vorlauf-Soll 15 min nicht annimmt (heizt nicht)
+- Diagnose: Druckverlauf je Stunde neben Pumpe, Brenner, Warmwasser, Außentemperatur und Fußboden
+- Pumpe und Warmwasser-Zapfung werden aufgezeichnet
+- Behoben: Log lief mit Minutenzeilen zum Vorlauf-Soll voll
+
 ## 0.75.4
 - Boost, Soll und Betriebsart gehen sofort ans Thermostat, nicht erst mit dem nächsten Takt (bis 5 min)
 

@@ -46,8 +46,8 @@ log = logging.getLogger(__name__)
 COMMAND = "input_text.heatpilot_befehl"
 BOOST = "sensor.heatpilot_boost"
 HINTS = "sensor.heatpilot_hinweise"
-GROUPS = (("valve_", "ventile"), ("room_write_failed", "thermostate"), ("boiler_", "kessel"), ("dhw_", "warmwasser"),
-          ("disinfect_", "warmwasser"))  # 0.75.1: Gruppe je Meldung (Anfang des Schlüssels), sonst „sonstiges“
+GROUPS = (("valve_", "ventile"), ("room_write_failed", "thermostate"), ("boiler_", "kessel"), ("plant_", "kessel"),
+          ("dhw_", "warmwasser"), ("disinfect_", "warmwasser"))  # 0.75.1: Gruppe je Meldung (Anfang des Schlüssels), sonst „sonstiges“
 ROOM_PREFIX = "sensor.heatpilot_raum_"
 CARD_ACTIONS = ("boost", "schedule", "temp", "mode", "override")  # Pause bleibt der HeatPilot-Seite (Admins) vorbehalten
 REPO = "https://github.com/TheInGoF/heatpilot-card"
