@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.76.2
+- **Temperatur-Feld springt nicht mehr** (`.stepper b`): Im Boost-Dialog brach „18,5 °C“ in zwei Zeilen um, „19 °C“ nicht – das ganze Feld sprang beim Drücken von −/+ hin und her. Jetzt steht der Wert immer in einer Zeile, mit fester Breite und gleich breiten Ziffern; gilt für alle −/+-Felder
+
 ## 0.76.1
 - **Behoben: Add-on nicht bedienbar, „Live-Daten nicht ermittelbar“** (`room_reading`): Meldete das Thermostat eines Raumreglers (Wohnzimmer) keine Raumtemperatur (`current_temperature` fehlt, z. B. offline), brach jede Rechnung mit den Raumwerten ab (TypeError) – Live, Heizen, Übersicht, Diagnose, Karten-Sensoren und Kessel über HeatPilot standen. Jetzt gilt dann das Mittel der übrigen Geräte des Raums, ohne solche bleibt die Temperatur leer
 - Tests: neu `tests/test_room_reading761.py`

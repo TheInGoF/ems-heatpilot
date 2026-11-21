@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.76.2
+- Boost: Temperatur mit Komma steht in einer Zeile, das Feld springt nicht mehr
+
 ## 0.76.1
 - Behoben: Add-on stand mit „Live-Daten nicht ermittelbar“, wenn ein Raumregler-Thermostat keine Temperatur meldete
 

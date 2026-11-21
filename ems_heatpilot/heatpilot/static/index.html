@@ -135,7 +135,7 @@ select.sel { padding: 5px; border-radius: var(--r-s); border: 1px solid var(--bo
 .boost-grid { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; align-items: end; }
 @media (max-width: 520px) { .boost-grid { grid-template-columns: 1fr; } }
 .stepper { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-.stepper b { font-size: var(--fs-num); min-width: 76px; text-align: center; }
+.stepper b { font-size: var(--fs-num); min-width: 4.6em; text-align: center; white-space: nowrap; font-variant-numeric: tabular-nums; }  /* 0.76.2: „18,5 °C“ in einer Zeile, Feld springt nicht */
 .stepper .btn, .tile-ctl .btn { min-width: 40px; min-height: 36px; font-size: var(--fs-title); padding: 4px 10px; }
 .btn.big { padding: 10px 18px; font-size: var(--fs-text); }
 #boost-start:disabled { opacity: .45; cursor: default; }
