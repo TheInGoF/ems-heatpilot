@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.76.1
+- **Behoben: Add-on nicht bedienbar, „Live-Daten nicht ermittelbar“** (`room_reading`): Meldete das Thermostat eines Raumreglers (Wohnzimmer) keine Raumtemperatur (`current_temperature` fehlt, z. B. offline), brach jede Rechnung mit den Raumwerten ab (TypeError) – Live, Heizen, Übersicht, Diagnose, Karten-Sensoren und Kessel über HeatPilot standen. Jetzt gilt dann das Mittel der übrigen Geräte des Raums, ohne solche bleibt die Temperatur leer
+- Tests: neu `tests/test_room_reading761.py`
+
 ## 0.76.0
 Aus der Diagnose vom 21.11.2026: Der Anlagendruck lag zwei Tage bei 0,1–0,2 bar (mit laufender Pumpe 0,4–0,5 bar). Um 01:10 ging der Kessel auf Störung und heizte bis 07:20 nicht – bis nachgefüllt war. HeatPilot schrieb sechs Stunden lang jede Minute das Vorlauf-Soll, der Kessel verwarf es jedes Mal (zeigte 7 °C), gemeldet wurde nichts; Störungscode und Uhrzeit waren nirgends festgehalten.
 - **Anlagen-Protokoll** (`boiler_health`, Tabelle `boiler_events`): Jeder Wechsel des Kesselstatus (Servicecode mit Nummer, neu die Rolle `service_num`), jeder neue Eintrag unter „letzter Fehler“, Störung und ihr Ende (mit Dauer), Nachfüllen und Druck unter 1,0 bar stehen mit Uhrzeit und Anlagendruck im Protokoll

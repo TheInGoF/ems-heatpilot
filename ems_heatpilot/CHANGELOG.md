@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.76.1
+- Behoben: Add-on stand mit „Live-Daten nicht ermittelbar“, wenn ein Raumregler-Thermostat keine Temperatur meldete
+
 ## 0.76.0
 - Störungen des Kessels werden mit Code, Uhrzeit und Anlagendruck festgehalten und ans Handy gemeldet
 - Anlagendruck: Warnung unter 1,0 bar, Meldung bei stetigem Druckverlust, Nachfüllen wird erkannt

@@ -190,7 +190,9 @@ class SampleMixin:
         others = [x for x in (self._device_reading(d) for d in r.members) if x is not None]
         if any(x[4] for x in (head, *others)):
             self.__dict__.setdefault("valve_subst", set()).add(r.climate)
-        temps = [head[0]] if r.controller else [x[0] for x in (head, *others) if x[0] is not None]
+        temps = [x[0] for x in (head, *others) if x[0] is not None]  # 0.76.1: ohne Wert (Thermostat offline) kein Absturz
+        if r.controller and head[0] is not None:
+            temps = [head[0]]
         real = [x[2] for x in (head, *others) if x[5]]
         valves = real or [x[2] for x in (head, *others) if x[2] is not None]
         hums = [x[3] for x in (head, *others) if x[3] is not None]
