@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 from collections import deque
+from datetime import datetime
 
 STEP_S = 30
 KEEP_H = 12
@@ -107,6 +108,7 @@ def now(eng) -> dict:
         "nom_kw": nom,  # 0.50.6: abgenommene Wärme aus der Spreizung (Live-Kachel Rücklauf)
         "dhw_hyst": _dhw_hyst(eng),  # 0.50.6: Einschaltschwelle Warmwasser = Soll − Hysterese
         "syspress": num(eng._boiler("sys_press")),
+        **gas_now(eng, sample.get("gas")),  # 0.76.3: Gaszählerstand, heute verbraucht
         "service_code": eng._boiler("service_code"),
         "pump_delay": num(eng._boiler("pump_delay")),
         "hc_mode": eng._thermo("hc_mode"),
@@ -120,6 +122,23 @@ def now(eng) -> dict:
         "rooms": [{"climate": c, "name": names.get(c, c), "temp": t, "target": tg, "valve": v, "humidity": h}
                   for c, t, tg, v, h in rooms],
     }
+
+
+def gas_now(eng, gas: float | None) -> dict:
+    """Gaszähler für die Kachel (0.76.3): Stand, Einheit des Sensors, seit Mitternacht verbraucht (aus den Messwerten)
+    und das in kWh (m³ mal Brennwert und Zustandszahl; zählt der Sensor schon kWh, dasselbe)."""
+    sensor = getattr(eng.found, "gas", None)
+    unit = ((eng.states.get(sensor) or {}).get("attributes") or {}).get("unit_of_measurement") if sensor else None
+    out = {"gas": gas, "gas_unit": unit or "m³", "gas_today": None, "gas_today_kwh": None}
+    if gas is None:
+        return out
+    midnight = int(datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp())
+    rows = eng.store.query("SELECT gas FROM samples WHERE ts >= ? AND gas IS NOT NULL ORDER BY ts LIMIT 1", (midnight,))
+    if rows and rows[0]["gas"] is not None and gas >= rows[0]["gas"]:
+        used = round(gas - rows[0]["gas"], 3)
+        kwh = used if str(unit or "").lower() == "kwh" else used * eng.cfg.gas_kwh_per_m3
+        out.update(gas_today=used, gas_today_kwh=round(kwh, 1))
+    return out
 
 
 def _dhw_hyst(eng) -> float:

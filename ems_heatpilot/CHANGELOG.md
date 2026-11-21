@@ -2,6 +2,9 @@
 
 Kurzfassung der letzten Versionen. Ausführlich: CHANGELOG.md im Repository.
 
+## 0.76.3
+- Live: neue Kachel Gaszähler mit aktuellem Stand und dem Verbrauch seit Mitternacht (m³ und kWh)
+
 ## 0.76.2
 - Boost: Temperatur mit Komma steht in einer Zeile, das Feld springt nicht mehr
 

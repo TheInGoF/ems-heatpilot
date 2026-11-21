@@ -1443,6 +1443,11 @@ async function loadLive() {
     kpi("Außen", fmt(n.t_out), "°C"),
     kpi("Innen Ø", fmt(n.t_in), "°C", `${n.rooms.length} Räume`),
     kpi("Zu Hause", n.home === null ? "–" : fmt(n.home, 0), n.persons ? `von ${n.persons}` : ""),
+    // 0.76.3: Gaszählerstand – Einheit in der Bezeichnung, ohne Tausenderpunkt: passt auch am Handy in eine Zeile
+    kpi(`Gaszähler (${esc(n.gas_unit || "m³")})`, n.gas === null || n.gas === undefined ? "–"
+      : Number(n.gas).toLocaleString("de-DE", { maximumFractionDigits: 1, minimumFractionDigits: 1, useGrouping: false }), "",
+      n.gas_today === null || n.gas_today === undefined ? "" : `heute ${fmt(n.gas_today)} ${esc(n.gas_unit || "m³")}`
+        + (n.gas_unit === "kWh" ? "" : ` · ${fmt(n.gas_today_kwh, 0)} kWh`)),
   ].join("");
   const press = n.syspress === null || n.syspress === undefined ? "–" : `${fmt(n.syspress, 1)} bar` + (n.syspress < 1 ? " ⚠ niedrig – nachfüllen lassen" : n.syspress > 2.5 ? " ⚠ hoch" : "");
   $("live-kessel-head").innerHTML = [

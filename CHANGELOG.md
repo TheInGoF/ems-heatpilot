@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.76.3
+- **Live: Kachel „Gaszähler“** (`live.gas_now`): aktueller Zählerstand des eingestellten Gassensors (Einheit aus dem Sensor in der Bezeichnung, eine Nachkommastelle ohne Tausenderpunkt – passt auch am Handy in eine Zeile) und darunter, was seit Mitternacht verbraucht wurde, in m³ und kWh (Brennwert × Zustandszahl; zählt der Sensor kWh, nur das). Die neunte Kachel füllt das 3×3-Raster
+- Tests: neu `tests/test_live_gas763.py`
+
 ## 0.76.2
 - **Temperatur-Feld springt nicht mehr** (`.stepper b`): Im Boost-Dialog brach „18,5 °C“ in zwei Zeilen um, „19 °C“ nicht – das ganze Feld sprang beim Drücken von −/+ hin und her. Jetzt steht der Wert immer in einer Zeile, mit fester Breite und gleich breiten Ziffern; gilt für alle −/+-Felder
 
